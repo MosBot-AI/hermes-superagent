@@ -1,176 +1,178 @@
-# 08. 路线图、项目拆解与验收
+# 08. Roadmap, Project Breakdown, and Acceptance
 
-## 1. 规划原则
+English | [简体中文](08-roadmap-and-acceptance-zh.md)
 
-这是实现计划，不是完成报告。未经过代码、测试、部署和用户验收的项不得标 Done。本次文档任务完成不等于 E0–E8 的实现已经完成。
+## 1. Planning Principles
 
-优先完成一个安全可靠纵切，再增加连接器、入口和主动性。阶段按依赖与 gate 推进，不在未知团队规模和可用时间时编造工期。GitHub Projects 管研发交付，运行时 Hermes Projects/Kanban 管用户事务。
+This is an implementation plan, not a completion report. Items that have not passed code, testing, deployment, and user acceptance must not be marked Done. See [12](12-foundation-progress.md) for the current E0.1/E0.2/E0.5 foundation-slice progress; this does not mean E0/M0 or the entire personal agent is complete.
 
-## 2. 里程碑
+Complete a safe, reliable vertical slice first, then add connectors, entry points, and proactivity. Advance phases according to dependencies and gates; do not invent timelines when team size and availability are unknown. GitHub Projects manages engineering delivery; runtime Hermes Projects/Kanban manages the user's affairs.
 
-| Milestone | 交付结果 | 进入条件 | 退出门槛 |
+## 2. Milestones
+
+| Milestone | Deliverable | Entry criteria | Exit gate |
 |---|---|---|---|
-| M0 设计与契约 | 固定基线、可运行的合成测试、最小公共 API 映射、写路径覆盖清单 | 本设计完成 | 缺口和适配路径清楚；没有依赖虚构 API；未覆盖写集合默认关闭 |
-| M1 可靠纵切 | 单 owner、单项目、单手机文字入口、一个提醒、受控动作 | E0、E1.1–E1.5 及恢复/对账基础完成 | 重启/重复/拒绝/撤权测试通过；没有已知绕过 action gate 的启用写路径 |
-| M2 个人事务 | 事实/承诺、原生多任务、主动观察与可靠通知；可选 E9 路由 shadow | M1；E9 shadow 另需可信约束基线 | 真实场景闭环，资料纠错和遗忘有效；shadow 不改变实际模型 |
-| M3 连接与语音 | 最小读写 MCP 集合、手机语音消息、可选实时语音验证及 E9 有界模型路由 | M2 + connector 风险评审；路由另需 E9.5/E9.6 gate | 语音关键字段确认、身份与费用可控；路由质量/隐私/预算门槛通过 |
-| M4 发布硬化 | 恢复、备份、升级、回滚、安全评测和文档 | 核心场景完成 | 发布门禁全部满足，没有未处理 P0 |
+| M0 Design and contracts | Pinned baseline, runnable synthetic tests, minimal public API mapping, write-path coverage inventory | This design is complete | Gaps and adaptation paths are clear; no reliance on imaginary APIs; uncovered write capability sets are disabled by default |
+| M1 Reliable vertical slice | One owner, one project, one mobile text entry point, one reminder, controlled actions | E0, E1.1–E1.5, and recovery/reconciliation foundations are complete | Restart/duplicate/denial/revocation tests pass; no enabled write path is known to bypass the action gate |
+| M2 Personal affairs | Facts/commitments, native multitasking, proactive observation, and reliable notifications; optional E9 routing shadow mode | M1; E9 shadow also requires a trusted-constraint baseline | Real-world scenarios work end to end; information correction and forgetting work; shadow mode does not change the actual model |
+| M3 Connections and voice | Minimal read/write MCP set, mobile voice messages, optional real-time voice validation and E9 bounded model routing | M2 + connector risk review; routing also requires E9.5/E9.6 gates | Confirmation of critical voice fields, identity, and costs are controlled; routing quality/privacy/budget gates pass |
+| M4 Release hardening | Recovery, backup, upgrades, rollback, security evaluations, and documentation | Core scenarios are complete | All release gates pass, with no unresolved P0 issues |
 
-## 3. Epics 与工作包
+## 3. Epics and Work Packages
 
-### E0. 核验上游兼容契约（P0，M0）
+### E0. Verify Upstream Compatibility Contracts (P0, M0)
 
-- E0.1：固定 Hermes 支持版本/SHA，建立源码能力矩阵与 license/notice 记录。
-- E0.2：最小原生插件注册、config_schema、plugin_data_dir、工具/hook/ctx 契约测试。
-- E0.3：验证 Project/Kanban/cron 创建、查询、取消与 receipt 的公共操作路径；缺口记录为 upstream seam，不直接写宿主 DB。
-- E0.4：测试 pre_tool_call callback 与 dispatcher 异常、middleware fallback；覆盖原生工具、裸 MCP、shell/browser、execute_code/RPC、批量调用和 worker，未受 action gate 保护的写集合默认关闭或只读降级。专项验证 troubleshooting safe mode 跳过 hooks 时只读降级，以及普通 managed worker 的 frozen config 不影响读取当前持久 policy revision。
-- E0.5：建立离线合成 source/connector fixtures，测试不依赖真实个人账号。
+- E0.1: Pin the supported Hermes version/SHA; establish a source capability matrix and license/notice records.
+- E0.2: Minimal native plugin registration, config_schema, plugin_data_dir, and tool/hook/ctx contract tests.
+- E0.3: Verify public operations for Project/Kanban/cron creation, querying, cancellation, and receipts; record gaps as upstream seams rather than writing directly to the host DB.
+- E0.4: Test pre_tool_call callback and dispatcher exceptions and middleware fallback; cover native tools, raw MCP, shell/browser, execute_code/RPC, batch calls, and workers. Disable write capability sets not protected by the action gate by default, or degrade them to read-only. Specifically verify read-only degradation when troubleshooting safe mode skips hooks, and that ordinary managed workers' frozen config does not prevent reading the current persistent policy revision.
+- E0.5: Build offline synthetic source/connector fixtures so tests do not depend on real personal accounts.
 
-验收：每个复用点有一个行为测试或明确 blocker；首次 `requires_hermes` 范围来自测试，不用随意版本号。输出逐工具/逐路径 enforcement 清单；有未知或可绕过的写路径时不得启用该集合，不能用 prompt 约束替代。
+Acceptance: Every reuse point has a behavioral test or an explicit blocker; the initial `requires_hermes` range comes from tests, not arbitrary version numbers. Produce a per-tool, per-path enforcement inventory. A capability set must not be enabled while it has unknown or bypassable write paths; prompt constraints cannot substitute for enforcement.
 
-### E1. 建立身份授权审计（P0，M1）
+### E1. Establish Identity, Authorization, and Audit (P0, M1)
 
-依赖 E0.2/E0.4。
+Depends on E0.2/E0.4.
 
-- E1.1：Owner 与 verified channel binding；群/第三方/转发/机器人身份分类。
-- E1.2：ActionIntent、grant、approval schema 与 revision；批准绑定 payload/target/expiry。
-- E1.3：领域 handler 操作级检查与原生 approval 适配；拒绝后禁止替代路径绕行。
-- E1.4：soft pause、hard revoke、emergency stop，建立授权准入/撤权事务线性化点，取消未准入 effect，对已准入/已发出的在途请求保留真实状态和尽力取消语义。
-- E1.5：脱敏审计、敏感数据分类与最小凭据暴露。
+- E1.1: Owner and verified channel binding; classify group/third-party/forwarded/bot identities.
+- E1.2: ActionIntent, grant, and approval schemas and revisions; bind approval to payload/target/expiry.
+- E1.3: Operation-level checks in domain handlers and native approval adaptation; prohibit bypass through alternate paths after denial.
+- E1.4: Soft pause, hard revoke, and emergency stop; establish transactional linearization points for authorization admission and revocation, cancel effects not yet admitted, and preserve truthful status and best-effort cancellation semantics for in-flight requests already admitted/sent.
+- E1.5: Redacted audit, sensitive-data classification, and minimal credential exposure.
 
-验收：所有发布范围内写操作均被覆盖；伪造身份、旧批准、审批后改 payload、policy 故障均无未经授权副作用。撤权 race 测试覆盖“撤权先提交/准入先提交但未发送/远端已接受而本地未知/撤权后下一动作”，依据 admission 与 revoke 的事务顺序断言，不承诺撤回已获许可的远端请求。denied intent 不可复活，新指令须新建并重新授权。
+Acceptance: All write operations in release scope are covered; spoofed identities, stale approvals, payload changes after approval, and policy failures cause no unauthorized side effects. Revocation race tests cover “revocation commits first/admission commits first but nothing has been sent/the remote has accepted but local outcome is unknown/the next action after revocation.” Assert against the transactional ordering of admission and revocation; do not promise to retract already authorized remote requests. A denied intent cannot be revived; a new instruction requires a new intent and fresh authorization.
 
-### E2. 建立个人领域与记忆（P0/P1，M1–M2）
+### E2. Establish the Personal Domain and Memory (P0/P1, M1–M2)
 
-依赖 E1.1/E1.5。
+Depends on E1.1/E1.5.
 
-- E2.1：SQLite schema/migration、projects/commitments/facts/sources、revision 更新。
-- E2.2：按 scope 检索，明确事实/推断/冲突，原生记忆只放有界摘要。
-- E2.3：更正、过期、遗忘、导出与备份恢复 tombstone。
-- E2.4：人物/项目消歧与任务来源关联，不把第三方转述当 owner 指令。
-- E2.5：可选 memory provider 适配评估；兼容用户现有单 provider，不强制替换。
+- E2.1: SQLite schema/migrations, projects/commitments/facts/sources, and revision updates.
+- E2.2: Scope-based retrieval, explicit facts/inferences/conflicts, and only bounded summaries in native memory.
+- E2.3: Correction, expiration, forgetting, export, and backup/restore tombstones.
+- E2.4: Person/project disambiguation and task-source associations; do not treat third-party reports as owner instructions.
+- E2.5: Evaluate optional memory provider adaptation; remain compatible with the user's existing single provider rather than forcing replacement.
 
-验收：长期事实都有 provenance 或 inference 标记；跨 profile/群聊不可读；纠错与删除后的检索测试通过。
+Acceptance: Long-term facts have provenance or inference labels; they are not readable across profiles/group chats; retrieval tests after correction and deletion pass.
 
-### E3. 接通原生项目任务（P0/P1，M1–M2）
+### E3. Connect Native Projects and Tasks (P0/P1, M1–M2)
 
-依赖 E0.3、E1.1–E1.5、E2.1。
+Depends on E0.3, E1.1–E1.5, and E2.1.
 
-- E3.1：领域 Project 对接原生 Project/board，保留业务与工作目录差异。
-- E3.2：Task ↔ Kanban card/run 映射，acceptance contract、依赖、阻塞与 review。
-- E3.3：临时子 agent 的公共 lifecycle API，最小上下文和工具集，父任务汇总。
-- E3.4：owner follow-up 优先，线程到任务关联、context-only 和 handback。
-- E3.5：重启对账、未知结果、完成证据与取消状态。
+- E3.1: Connect domain Projects to native Projects/boards, preserving the distinction between business context and working directories.
+- E3.2: Task ↔ Kanban card/run mapping, acceptance contracts, dependencies, blockers, and review.
+- E3.3: Public lifecycle API for temporary subagents, minimal context and toolsets, and parent-task aggregation.
+- E3.4: Prioritize owner follow-ups, thread-to-task associations, context-only, and handback.
+- E3.5: Restart reconciliation, unknown outcomes, completion evidence, and cancellation states.
 
-验收：一条输入去重为一个任务；多个项目不串上下文；短子任务退出不虚报整个任务完成；长期任务跨重启可查且不会重复派工。
+Acceptance: Deduplicate one input into one task; do not mix context across projects; a short subtask exiting must not falsely report the whole task complete; long-running tasks remain queryable across restarts without duplicate dispatch.
 
-### E4. 实现提醒与可靠交付（P0/P1，M1–M2）
+### E4. Implement Reminders and Reliable Delivery (P0/P1, M1–M2)
 
-依赖 E0.3、E1.1–E1.5、E2.1。
+Depends on E0.3, E1.1–E1.5, and E2.1.
 
-- E4.1：一次/周期提醒和 IANA timezone，明确 DST、错过窗口、停止条件。
-- E4.2：复用 cron/heartbeat，记录 native job/run/occurrence 与领域目标。
-- E4.3：插件自有 effect/outbox/receipt，明确原生 delivery 唯一责任方。
-- E4.4：结果未知对账、去重、失效路由、dead letter 与恢复入口。
-- E4.5：quiet hours、通知合并、变化检测、attention/compute 双预算。
+- E4.1: One-time/recurring reminders and IANA timezones, with explicit DST, missed-window, and stopping semantics.
+- E4.2: Reuse cron/heartbeat; record native job/run/occurrence references and domain objectives.
+- E4.3: Plugin-owned effect/outbox/receipt records, with a clearly designated sole owner for native delivery.
+- E4.4: Reconcile unknown outcomes, deduplicate, handle invalid routes and dead letters, and provide recovery entry points.
+- E4.5: Quiet hours, notification coalescing, change detection, and separate attention/compute budgets.
 
-验收：重复触发、进程中断、发送超时、重启与取消不会导致盲目重复外发；无变化可静默；accepted 不冒充 delivered。
+Acceptance: Duplicate triggers, process interruption, send timeouts, restarts, and cancellation do not cause blind duplicate outbound sends; no change may remain silent; accepted is not presented as delivered.
 
-### E5. 治理 MCP 与插件（P1，M2–M3）
+### E5. Govern MCP and Plugins (P1, M2–M3)
 
-依赖 E1/E4.3。
+Depends on E1/E4.3.
 
-- E5.1：connector capability registry：账号、读写工具、数据类、成本、幂等与健康。
-- E5.2：一个只读连接器和一个受控写连接器纵切，服务端语义验证。
-- E5.3：最小工具集、MCP trust/filters/OAuth、断连/撤销处理。
-- E5.4：插件来源、固定版本、依赖更新、扩权 consent 与供应链清单。
-- E5.5：持久预算和 connector receipt，不以原生会话估算代替账单。
+- E5.1: Connector capability registry: accounts, read/write tools, data classes, costs, idempotency, and health.
+- E5.2: One read-only connector and one controlled-write connector vertical slice, with server-side semantic validation.
+- E5.3: Minimal toolsets, MCP trust/filters/OAuth, and disconnection/revocation handling.
+- E5.4: Plugin sources, pinned versions, dependency updates, consent for expanded access, and a supply-chain inventory.
+- E5.5: Persistent budgets and connector receipts; do not substitute native session estimates for billing records.
 
-验收：伪 read-only、错误 scope、凭据撤销、恶意 tool result 不能产生越权；新连接器必须完成风险与恢复契约后才启用写操作。
+Acceptance: False read-only claims, incorrect scope, revoked credentials, and malicious tool results cannot produce unauthorized behavior; new connectors must complete risk and recovery contracts before writes are enabled.
 
-### E6. 打通手机工作入口（P1，M1–M3）
+### E6. Enable a Mobile Work Entry Point (P1, M1–M3)
 
-依赖 E1.1/E3/E4。
+Depends on E1.1/E3/E4.
 
-- E6.1：一个主手机消息渠道，身份绑定、文字/附件、任务与提醒路由。
-- E6.2：跨桌面/手机接续和短候选消歧，重复消息与审批按钮幂等。
-- E6.3：personal overview，优先复用原生 dashboard/plugin UI；验证移动布局。
-- E6.4：TLS/auth/session 撤销、附件访问、小屏和弱网测试。
+- E6.1: One primary mobile messaging channel, identity binding, text/attachments, and task/reminder routing.
+- E6.2: Desktop/mobile continuity and short candidate lists for disambiguation; idempotency for duplicate messages and approval buttons.
+- E6.3: Personal overview, preferably reusing native dashboard/plugin UI; validate mobile layout.
+- E6.4: TLS/auth/session revocation, attachment access, small-screen, and poor-network tests.
 
-验收：目标真实手机上完成“创建项目 → 提醒 → 查看/取消 → 批准受控动作”；旧设备与转发批准不能操作。
+Acceptance: Complete “create project → reminder → inspect/cancel → approve controlled action” on the target physical phone; old devices and forwarded approvals cannot perform operations.
 
-### E7. 保持语音任务连续性（P1/P2，M3）
+### E7. Preserve Voice Task Continuity (P1/P2, M3)
 
-依赖 E6/E1.3。
+Depends on E6/E1.3.
 
-- E7.1：复用 STT/TTS 完成手机语音消息，支持中文、时间/姓名纠正。
-- E7.2：语音 action intent 与可见确认，barge-in/停止播放/取消执行分离。
-- E7.3：音频隐私与保留、host relay/短时凭据、provider 费用可见。
-- E7.4：实时语音路径可行性验证，只有设备和费用达标才扩大发布。
+- E7.1: Reuse STT/TTS for mobile voice messages, supporting Chinese and time/name corrections.
+- E7.2: Voice action intents and visible confirmation; distinguish barge-in, stopping playback, and cancelling execution.
+- E7.3: Audio privacy and retention, host relay/short-lived credentials, and visible provider costs.
+- E7.4: Validate real-time voice feasibility; expand release only if device and cost criteria are met.
 
-验收：误识别不造成高影响外发；同任务可在文字/语音切换；断网或停止语音不会伪报外部动作已取消。实时语音是单独 gate，不阻塞已完成的语音消息 MVP。
+Acceptance: Misrecognition does not cause high-impact outbound actions; the same task can switch between text and voice; network loss or stopping voice does not falsely report cancellation of an external action. Real-time voice is a separate gate and does not block a completed voice-message MVP.
 
-### E8. 完成运维评测发布（P0/P1，横贯 M0–M4）
+### E8. Complete Operations, Evaluation, and Release (P0/P1, Across M0–M4)
 
-依赖随各能力逐步接入，发布前覆盖全部。
+Dependencies are integrated as each capability arrives; cover all of them before release.
 
-- E8.1：correlation ids、脱敏日志、健康/预算/未知结果面板。
-- E8.2：崩溃注入、并发、provider/MCP/channel 故障矩阵。
-- E8.3：backup/restore、migration、升级兼容、回滚与数据保留。
-- E8.4：固定场景集、observe-mode 评估、误报和成本报告。
-- E8.5：安装、配置、停用、权限、隐私与故障排查文档。
+- E8.1: Correlation IDs, redacted logs, and health/budget/unknown-outcome dashboards.
+- E8.2: Crash injection, concurrency, and provider/MCP/channel failure matrices.
+- E8.3: Backup/restore, migrations, upgrade compatibility, rollback, and data retention.
+- E8.4: Fixed scenario suites, observe-mode evaluation, false-positive and cost reports.
+- E8.5: Installation, configuration, deactivation, permissions, privacy, and troubleshooting documentation.
 
-验收：以同一发布 SHA 运行全套 gate；披露跳过/失败项，不把静态检查当运行验证。
+Acceptance: Run the full set of gates on the same release SHA; disclose skipped/failed items and do not present static checks as runtime verification.
 
-### E9. 设计并验证 Worker 路由插件（P1，M0–M3）
+### E9. Design and Validate the Worker Routing Plugin (P1, M0–M3)
 
-详细设计：[Worker 模型与思考强度路由插件](11-worker-model-routing.md)。复用 Hermes delegation backend，按任务在用户配置且允许的 provider/model/effort 集合中选择，不改变主 agent 模型，不强制部署网关。以下都是待实施工作包，当前为 Backlog。
+Detailed design: [Worker Model and Reasoning-Effort Routing Plugin](11-worker-model-routing.md). Reuse the Hermes delegation backend to choose per task from the provider/model/effort set configured and permitted by the user, without changing the main agent model or requiring a gateway deployment. All work packages below remain to be implemented and are currently Backlog.
 
-| ID | 英文工作包标题 | 主里程碑 | 交付与依赖 |
+| ID | English work package title | Primary milestone | Deliverable and dependencies |
 |---|---|---|---|
-| E9.1 | Verify Hermes Routing Contracts | M0 | 依赖 E0；插件注册/route_task/schema pin、模型能力清单、未覆盖路径与兼容测试 |
-| E9.2 | Define Trusted Route Context and Constraints | M1 | 依赖 E9.1、E1.1/E1.2/E1.4/E1.5 的身份/grant/撤权/数据 scope 契约，以及 E3.2 的 task/attempt 标识契约；不等待整个 E3 |
-| E9.3 | Build Shadow Routing and Audit | M2 | 依赖 E9.1/E9.2；不改变实际 route 的建议选择、脱敏审计与基线评测 |
-| E9.4 | Enable Bounded Worker Routing | M3 | 依赖 E9.3、E9.5/E9.6 的启用 gate；有限任务、尝试/截止时间/费用上限、可控回退 |
-| E9.5 | Validate Effort and Fallback Policies | M2 | 依赖 E9.1/E9.2；provider wire 映射、未知能力拒绝、fallback 隐私/权限、取消和不重复副作用；M3 重测 |
-| E9.6 | Integrate Budget Admission and Release Gates | M3 | 依赖 E9.2、E1.3/E1.4 的准入/撤权、E3.2/E3.5 的 attempt/对账契约、E8.1 审计计量与 E8.2 故障 fixture；完成预算与路由发布 gate，不等待整个 E8/M4 |
+| E9.1 | Verify Hermes Routing Contracts | M0 | Depends on E0; plugin registration/route_task/schema pin, model capability inventory, uncovered paths, and compatibility tests |
+| E9.2 | Define Trusted Route Context and Constraints | M1 | Depends on E9.1, the identity/grant/revocation/data-scope contracts in E1.1/E1.2/E1.4/E1.5, and the task/attempt identifier contract in E3.2; does not wait for all of E3 |
+| E9.3 | Build Shadow Routing and Audit | M2 | Depends on E9.1/E9.2; advisory selection that does not change the actual route, redacted audit, and baseline evaluation |
+| E9.4 | Enable Bounded Worker Routing | M3 | Depends on E9.3 and the E9.5/E9.6 enablement gates; bounded tasks, attempt/deadline/cost limits, and controlled fallback |
+| E9.5 | Validate Effort and Fallback Policies | M2 | Depends on E9.1/E9.2; provider wire mappings, rejection of unknown capabilities, fallback privacy/permissions, cancellation, and no duplicate side effects; retest in M3 |
+| E9.6 | Integrate Budget Admission and Release Gates | M3 | Depends on E9.2, admission/revocation in E1.3/E1.4, attempt/reconciliation contracts in E3.2/E3.5, audit metering in E8.1, and failure fixtures in E8.2; complete budget and routing release gates without waiting for all of E8/M4 |
 
-验收：只选已许可候选；精确用户 pin 不被覆盖；classifier/reviewer/fallback 同样受隐私与预算约束；requested 与有效 wire effort 可区分，未知明确标注。缺可信上下文/预算 enforcement 时保持 shadow 或拒绝相应自动路由。Shadow 结果不能冒充新模型实际成功率，启用须独立回放/任务验证证据。安全与费用限制未通过不能以“成本优化”理由发布。
+Acceptance: Select only permitted candidates; do not override exact user pins; classifiers/reviewers/fallbacks are also subject to privacy and budget constraints; distinguish requested effort from effective wire effort and explicitly label unknowns. Without trusted context/budget enforcement, remain in shadow mode or reject the relevant automatic routing. Shadow results must not be presented as actual success rates for a new model; enablement requires independent replay/task-validation evidence. Failure to pass safety and cost limits cannot be excused by “cost optimization.”
 
-## 4. 首次可用纵切顺序
+## 4. Sequence for the First Usable Vertical Slice
 
-E0（含写路径覆盖与关闭未覆盖集合）→ E1.1–E1.5（身份、授权、执行检查、硬撤权、审计/数据分类）→ E2.1 → E3.1/E3.2/E3.5 + E4.1–E4.4（含任务恢复、结果未知与交付对账）→ E6.1 → E8.1/E8.2 对应的 crash/revoke/delivery 测试 → M1。
+E0 (including write-path coverage and disabling uncovered capability sets) → E1.1–E1.5 (identity, authorization, execution checks, hard revocation, audit/data classification) → E2.1 → E3.1/E3.2/E3.5 + E4.1–E4.4 (including task recovery, unknown outcomes, and delivery reconciliation) → E6.1 → corresponding crash/revoke/delivery tests in E8.1/E8.2 → M1.
 
-E2.1 在 E1.5 的数据分类与审计约定明确后进入。M1 不能跳过 E1.4 再宣称 revoke 通过，也不能把 E3.5/E4.4 的恢复对账留到后面却宣称可靠纵切完成。随后才做更广泛自动主动性和更多 connectors。身份、安全、恢复不是“最后补一层”。
+Start E2.1 once the E1.5 data classification and audit conventions are clear. M1 cannot skip E1.4 and still claim revocation passes, nor defer recovery/reconciliation in E3.5/E4.4 and claim the reliable vertical slice is complete. Only then add broader automatic proactivity and more connectors. Identity, safety, and recovery are not “a final layer to add later.”
 
-E9 是可选增强，不把第一版固定模型委派变成依赖新网关的系统。其独立顺序为 E9.1 → E9.2 → E9.3 shadow；E9.5/E9.6 可并行验证，全部 gate 通过后才启用 E9.4，不能先上线自动切换再补可信 scope 和费用控制。
+E9 is an optional enhancement; it must not turn the first version's fixed-model delegation into a system dependent on a new gateway. Its independent sequence is E9.1 → E9.2 → E9.3 shadow; E9.5/E9.6 may be validated in parallel, and E9.4 is enabled only after all gates pass. Do not launch automatic switching first and add trusted scope and cost controls later.
 
-## 5. GitHub Projects 配置建议
+## 5. Suggested GitHub Projects Configuration
 
-- 主 Project：Hermes Personal Agent，描述目标、设计基线和未实现状态。
-- Status：Backlog、Ready、In Progress、Blocked、In Review、Done。Blocked 必须有原因与下一步，不把等待确认写成 In Progress。
-- 字段：Epic（E0–E9）、Milestone（M0–M4）、Priority（P0/P1/P2）、Area、Risk、Effort、Dependencies、Acceptance evidence。E9 的 Epic/工作包标题采用英文，docs 正文继续中文。
-- Views：Roadmap（Milestone）、Execution（Status board）、Security/Blockers、Mobile/Voice、Ready next。
-- 先建 epics 和能独立验收的工作包，不用数百条碎任务淹没计划。
-- Issue 模板包含 outcome、scope/non-goals、依赖、设计链接、验收、测试/安全、完成证据。父 epic 只有所有必要工作包及验收完成才关闭。
+- Main Project: Hermes Personal Agent, describing objectives, the design baseline, and unimplemented status.
+- Status: Backlog, Ready, In Progress, Blocked, In Review, Done. Blocked must include a reason and next step; do not label waiting for confirmation as In Progress.
+- Fields: Epic (E0–E9), Milestone (M0–M4), Priority (P0/P1/P2), Area, Risk, Effort, Dependencies, Acceptance evidence. E9 Epic/work package titles use English; the documentation body continues in Chinese in the Chinese version.
+- Views: Roadmap (Milestone), Execution (Status board), Security/Blockers, Mobile/Voice, Ready next.
+- Create epics and independently acceptable work packages first; do not swamp the plan with hundreds of tiny tasks.
+- Issue templates include outcome, scope/non-goals, dependencies, design links, acceptance, tests/security, and completion evidence. Close a parent epic only after all required work packages and acceptance checks are complete.
 
-Project 链接、Issue 号与最终字段以实际创建结果为准。若 API/权限限制导致只建 Issues 而没建 Project，应明确记录差异，不把 docs 内的规划表冒充 GitHub Project 已配置。
+Project links, Issue numbers, and final fields must reflect actual creation results. If API/permission restrictions allow only Issues to be created, not a Project, explicitly record the discrepancy; do not present planning tables in docs as proof that a GitHub Project has been configured.
 
-## 6. 建议 SLO 与测试门禁
+## 6. Proposed SLOs and Test Gates
 
-这些是待测目标，不是已经达到的承诺。用固定设备、网络和 provider 分别报告，不用供应商异常掩盖本地排队问题。
+These are targets to be measured, not commitments already achieved. Report separately using fixed devices, networks, and providers; do not use provider incidents to conceal local queueing problems.
 
-| 指标 | 初始目标/门槛 | 测法 |
+| Metric | Initial target/gate | Measurement |
 |---|---|---|
-| 未授权副作用 | 发布测试集为 0，任一失败阻断发布 | adversarial/故障注入 |
-| 重复输入 | 相同幂等键不重复创建任务/已知外发 | 重放、并发、重启 |
-| 用户新消息排队 | 主机正常时不被后台无限阻塞；初始 p95 < 2s 进入处理 | 测量 intake 到 turn admission，不含模型答复 |
-| 提醒触发 | 主机/渠道健康时初始 p95 ≤ 60s 调度迟到 | 记录 due、admitted、delivered，分段测量 |
-| 记忆质量 | source 覆盖 100%；测试集跨 scope 泄露为 0 | 合成冲突/删除/隔离用例 |
-| 恢复 | 所有 crash 点有终态或可见 unknown，不能静默丢失 | 每个事务/远端边界注入退出 |
-| 语音 | 测首个可听音频、转写和取消延迟；设设备基线后定数值 | 中文/噪声/弱网/打断集 |
-| 费用 | 每任务与每天可查；到上限不再自动新增收费动作 | provider/mcp 模拟与账单抽样 |
+| Unauthorized side effects | 0 in the release test suite; any failure blocks release | Adversarial/fault injection |
+| Duplicate inputs | The same idempotency key does not duplicate tasks/known outbound sends | Replay, concurrency, restart |
+| Queueing of new user messages | No indefinite blocking by background work when the host is healthy; initially p95 < 2s to enter processing | Measure intake to turn admission, excluding model response |
+| Reminder triggering | Initially p95 ≤ 60s scheduling lateness when host/channel are healthy | Record due, admitted, delivered; measure each segment |
+| Memory quality | 100% source coverage; 0 cross-scope leaks in the test suite | Synthetic conflict/deletion/isolation cases |
+| Recovery | Every crash point has a terminal state or visible unknown; no silent loss | Inject exit at every transaction/remote boundary |
+| Voice | Measure first audible audio, transcription, and cancellation latency; set numeric targets after establishing device baselines | Chinese/noise/poor-network/interruption suite |
+| Costs | Queryable per task and per day; no new automatic chargeable actions at the limit | Provider/MCP simulation and billing samples |
 
 ## 7. Definition of Done
 
-代码审阅 + 对应设计/ADR 更新 + 单元/契约/集成测试 + 安全反例 + 恢复测试 + 用户可见失败路径 + 兼容版本记录 + 真实验收证据。涉及外部系统时保留可脱敏的 receipt/读回，不以模型文字作为证明。任何未执行测试写明原因和风险。
+Code review + corresponding design/ADR updates + unit/contract/integration tests + adversarial security cases + recovery tests + user-visible failure paths + compatibility version records + real acceptance evidence. For external systems, retain redactable receipts/readbacks rather than treating model prose as proof. State the reason and risk for every test not run.

@@ -1,61 +1,63 @@
-# 01. 产品目标与范围
+# 01. Product Goals and Scope
 
-## 1. 用户要得到什么
+English | [简体中文](01-product-and-scope-zh.md)
 
-用户不想维护一群 agent，而是希望有一个了解自己、记得进度、能持续推进事务的助手。主 agent 负责跨项目的优先级、上下文和对外沟通；项目线程和 worker 是完成工作的内部手段。部署形态优先为个人自托管 Hermes，后续支持少量独立 profiles，不在第一阶段建设多租户 SaaS。
+## 1. What the User Should Get
 
-核心闭环是：**接住请求 → 明确目标与边界 → 保存事务 → 获取证据 → 执行许可内动作 → 记录真实结果 → 交付 → 必要时继续跟进**。只回答一次而丢失后续承诺，不算完成 personal-agent 目标。
+Users do not want to maintain a fleet of agents. They want an assistant that understands them, remembers progress, and keeps moving their affairs forward. The main agent owns cross-project priorities, context, and external communication; project threads and workers are internal means of getting work done. The preferred deployment is a personal, self-hosted Hermes instance, with support for a small number of independent profiles later. Building a multi-tenant SaaS is outside the first phase.
 
-## 2. 核心用户场景
+The core loop is: **receive the request → clarify the goal and boundaries → persist the work → gather evidence → execute authorized actions → record actual results → deliver → follow up when necessary**. Answering once and losing subsequent commitments does not meet the personal-agent goal.
 
-| 场景 | 输入示例 | 应有行为 | 完成证据 |
+## 2. Core User Scenarios
+
+| Scenario | Example input | Expected behavior | Completion evidence |
 |---|---|---|---|
-| 管项目 | “帮我把项目 A 的下一步排好，盯住阻塞” | 关联现有项目，区分行动与参考资料，产出有负责人/依赖/验收的任务 | 可见任务及来源；完成项有证据 |
-| 管承诺 | “我答应周五给对方方案” | 记录承诺与时区；需要时准备材料；对外发送另走授权 | 承诺状态、期限、交付结果 |
-| 管个人信息 | “以后这类报告用中文，越短越好” | 保存明确偏好及适用范围，支持查看、更正、删除 | 下一相关任务正确采用，而非全局过度推断 |
-| 提醒/跟踪 | “明早九点提醒我；查到变化再告诉我” | 区分一次提醒与条件监控；建立持久 job、有效期和目的地 | 可查计划、运行记录和交付状态 |
-| 连插件 | “接入我的日历和项目工具” | 明确所需数据、账号、scope 和操作权限；优先已有 Hermes MCP/插件能力 | 连接健康；读写权限可见，可撤销 |
-| 手机上继续 | “刚才那个项目进展如何” | 验证本人身份，找到对应项目与会话，不把群聊内容混入私人记忆 | 同一任务状态，同一来源与权限 |
-| 语音交流 | “把今天要做的给我讲一下；第二件推迟” | 语音负责交互，领域工具完成真实修改；歧义只问最小问题 | 结构化确认和修改后的真实状态 |
+| Manage projects | “Plan the next steps for project A and watch its blockers” | Link the existing project, distinguish actions from reference material, and produce tasks with owners, dependencies, and acceptance criteria | Visible tasks and sources; evidence for completed items |
+| Manage commitments | “I promised to send them a proposal on Friday” | Record the commitment and time zone; prepare material when needed; authorize external sending separately | Commitment status, deadline, and delivery outcome |
+| Manage personal information | “Use Chinese for reports like this from now on, and keep them as short as possible” | Save the explicit preference and its scope; support viewing, correcting, and deleting it | Correct application to the next relevant task, without overgeneralizing globally |
+| Remind/monitor | “Remind me at nine tomorrow morning; tell me when you find a change” | Distinguish a one-time reminder from conditional monitoring; establish a durable job, expiry, and destination | Inspectable schedule, run history, and delivery status |
+| Connect plugins | “Connect my calendar and project tools” | Identify required data, account, scopes, and operation permissions; prefer existing Hermes MCP/plugin capabilities | Healthy connections; visible, revocable read/write permissions |
+| Continue on mobile | “How is that project from earlier going?” | Verify the owner's identity, locate the corresponding project and conversation, and keep group-chat content out of private memory | The same task state, sources, and permissions |
+| Interact by voice | “Tell me what I need to do today; postpone the second item” | Use voice for interaction and domain tools for actual changes; ask only the smallest necessary question when ambiguous | Structured confirmation and the actual updated state |
 
-以上仅为合成场景，不能作为向第三方发送数据或调用服务的预先授权。
+These are synthetic scenarios only. They do not constitute pre-authorization to send data to third parties or call services.
 
-## 3. 产品对象
+## 3. Product Objects
 
-- **Person/Owner**：唯一可授权的个人主体及其已验证渠道绑定。
-- **Project**：具有目标、范围、资料和相关任务的长期工作上下文，可关联 Hermes 原生 Project。
-- **Commitment**：用户或他人的承诺，包含负责人、期限、依赖与最新证据。
-- **Task**：可执行工作项；需要持久执行的任务映射 Hermes Kanban 卡片。
-- **Fact/Preference**：有来源和适用范围的个人信息，不与任务状态混成一份记忆。
-- **Automation**：触发、观察/行动范围、目的地、预算、停止条件的组合，映射原生 cron/heartbeat。
-- **ActionIntent/Approval**：一个精确动作及其授权证据，不能把“做项目”解释为无限外发和消费授权。
-- **Artifact/Delivery**：成果及其接收对象、外部引用、可访问性和发送结果。
+- **Person/Owner**: The sole individual authorized to grant permission, together with their verified channel bindings.
+- **Project**: A long-lived work context with goals, scope, material, and related tasks; it may link to a native Hermes Project.
+- **Commitment**: A promise made by the user or another person, including an owner, deadline, dependencies, and the latest evidence.
+- **Task**: An actionable work item; tasks requiring durable execution map to Hermes Kanban cards.
+- **Fact/Preference**: Personal information with a source and scope, kept separate from task state rather than mixed into one memory store.
+- **Automation**: A combination of trigger, observation/action scope, destination, budget, and stop conditions, mapped to native cron/heartbeat.
+- **ActionIntent/Approval**: A precise action and its authorization evidence. “Work on the project” must not be interpreted as unlimited permission to send externally or spend money.
+- **Artifact/Delivery**: An output and its recipients, external references, accessibility, and sending outcome.
 
-## 4. 一个或少量主 agent 的策略
+## 4. Strategy for One or a Few Main Agents
 
-默认一个 `personal` 主 profile。研究、代码、整理等 worker 按任务临时启动，完成后回收，不给每个项目创建一个长期“总管”。只有数据、凭据或工作身份确实需要隔离时才增加第二个主 profile，例如个人与公司。
+Use one `personal` main profile by default. Start research, coding, and organizing workers temporarily for each task and release them afterward, rather than creating a long-lived “manager” for every project. Add a second main profile only when data, credentials, or work identities genuinely require isolation, such as personal versus company work.
 
-主 agent 保留优先级与用户沟通权；worker 得到最小任务说明、必要事实和窄工具集，不能自行扩大 scope、变更长期偏好、建立永久授权或向用户重复汇报。长期执行用原生 durable Kanban，不把内存中的子 agent 句柄当作可靠任务队列。
+The main agent retains control of priorities and user communication. Workers receive a minimal task description, necessary facts, and a narrow tool set. They cannot expand scope, change lasting preferences, establish permanent authorization, or duplicate reports to the user. Use native durable Kanban for long-running execution; do not treat in-memory subagent handles as a reliable task queue.
 
-## 5. 第一版必须完成的纵向闭环
+## 5. End-to-End Flows Required in the First Version
 
-1. 一个受验证的手机消息入口和 Hermes 桌面/CLI 入口。
-2. 同一用户的项目、承诺、偏好可查、可改、可追溯。
-3. 一次提醒与一条条件监控可跨 gateway 重启恢复，停止后不会“复活”。
-4. 一个只读 MCP 场景和一个需要审批的写入场景，拒绝后不换工具绕行。
-5. 主 agent 可启动受限 worker，读取真实结果并合并到任务状态。
-6. 用户能看见“正在做、等我确认、等外部、失败、已完成”的差异。
-7. 手机语音消息可以进入同一会话，误识别不触发高风险动作。
+1. One verified mobile messaging entry point and a Hermes desktop/CLI entry point.
+2. Searchable, editable, traceable projects, commitments, and preferences for the same user.
+3. One one-time reminder and one conditional monitor that recover across gateway restarts and do not “come back to life” after being stopped.
+4. One read-only MCP scenario and one write scenario requiring approval, without switching tools to bypass a denial.
+5. A main agent that can start restricted workers, read actual results, and merge them into task state.
+6. User-visible distinctions between “working,” “waiting for my confirmation,” “waiting externally,” “failed,” and “completed.”
+7. Mobile voice messages entering the same conversation, without recognition errors triggering high-risk actions.
 
-## 6. 不做什么
+## 6. Non-Goals
 
-- 不另造长期 agent runtime，也不让外部 orchestration framework 反过来控制 Hermes。
-- 不把每条邮件、消息都自动转成任务，不默认全天候读取或录制。
-- 不在第一版自研通用插件市场、移动操作系统助手、电话拨号、实时通话基础设施或全能知识图谱。
-- 不把模型的自我检查当作权限边界，也不承诺外部系统端到端 exactly-once。
-- 不默认开放任意终端、浏览器、未知 MCP 与敏感凭据给所有 worker。
-- 不用自动购买、金融交易、医疗决策等高影响场景验证第一版。
+- Do not build another long-running agent runtime or let an external orchestration framework take control of Hermes.
+- Do not automatically turn every email or message into a task, or default to continuous reading or recording.
+- Do not build a general-purpose plugin marketplace, mobile operating-system assistant, telephone dialing, real-time calling infrastructure, or all-purpose knowledge graph in the first version.
+- Do not treat a model's self-check as a permission boundary or promise end-to-end exactly-once behavior across external systems.
+- Do not give every worker arbitrary terminal, browser, unknown MCP, or sensitive-credential access by default.
+- Do not validate the first version with high-impact scenarios such as automatic purchasing, financial trading, or medical decisions.
 
-## 7. 衡量方式
+## 7. Measurement
 
-验收优先看事务是否真实闭环：遗漏承诺数、提醒迟到/重复/误投、未经批准的副作用、记忆纠错生效、恢复后状态一致、用户打断延迟、每完成任务成本。主观“聪明”评分只能补充，不能替代安全与可靠性测试。具体 SLO 与测试见 [08](08-roadmap-and-acceptance.md)。
+Acceptance primarily asks whether work actually reaches completion: missed commitments; late, duplicate, or misrouted reminders; unapproved side effects; effective memory corrections; consistent state after recovery; user-interruption latency; and cost per completed task. Subjective “intelligence” scores can supplement but cannot replace safety and reliability tests. See [08](08-roadmap-and-acceptance.md) for specific SLOs and tests.

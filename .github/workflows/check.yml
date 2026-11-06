@@ -1,0 +1,41 @@
+name: Foundation checks
+
+on:
+  pull_request:
+  push:
+    branches: [main, 'feat/**']
+
+permissions:
+  contents: read
+
+jobs:
+  native-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.14.9'
+      - name: Prepare the pinned Hermes test environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          upstream="$RUNNER_TEMP/hermes"
+          git init "$upstream"
+          git -C "$upstream" remote add origin https://github.com/NousResearch/hermes-agent.git
+          git -C "$upstream" fetch --depth=1 origin 90d6b98fd86d20981ee06ddd5b7d93e4320f26a4
+          git -C "$upstream" checkout --detach FETCH_HEAD
+          export HERMES_HOME="$RUNNER_TEMP/hermes-build-home"
+          export HERMES_RUNTIME_DIR="$RUNNER_TEMP/hermes-build-runtime"
+          cd "$upstream"
+          python -m pm.build_env --source . --out "$RUNNER_TEMP/hermes-test-venv" \
+            --group dev --group test --python "$(command -v python)"
+      - name: Check the plugin and real native contracts
+        shell: bash
+        run: |
+          "$RUNNER_TEMP/hermes-test-venv/bin/python" scripts/check.py \
+            --hermes "$RUNNER_TEMP/hermes" \
+            --hermes-python "$RUNNER_TEMP/hermes-test-venv/bin/python"

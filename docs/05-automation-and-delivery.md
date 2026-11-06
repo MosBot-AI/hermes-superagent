@@ -1,79 +1,81 @@
-# 05. 主动工作、调度与交付
+# 05. Proactive Work, Scheduling, and Delivery
 
-## 1. 主动不是无限自主
+English | [简体中文](05-automation-and-delivery-zh.md)
 
-主动模块负责发现值得推进的事务，并在用户授权范围内行动。每个 automation 都有目标、数据来源、动作范围、目的地、频率、预算、到期/停止条件。默认是读取、整理和向 owner 报告；给第三方发消息、修改外部系统和消费需要匹配的权限。
+## 1. Proactivity Is Not Unlimited Autonomy
 
-后台检查不到有用变化时保持安静。它不能为了证明“在工作”新造任务，也不能因收到外部内容而接受其中的指令。用户的停用、撤权和新消息优先于后台继续执行。
+The proactive module identifies work worth advancing and acts within the user’s authorization. Every automation has a goal, data sources, action scope, destination, frequency, budget, and expiration/stop conditions. The default is reading, organizing, and reporting to the owner. Messaging third parties, modifying external systems, and spending require matching permissions.
 
-## 2. 三类机制严格分工
+Background checks remain quiet when there are no useful changes. They must not invent tasks to demonstrate that they are “working,” or accept instructions embedded in external content. User disablement, revocation, and new messages take priority over continued background execution.
 
-| 类型 | 原生机制 | 生命周期 | 例子 |
+## 2. Three Mechanisms with Distinct Responsibilities
+
+| Type | Native mechanism | Lifecycle | Example |
 |---|---|---|---|
-| 当前会话内观察 | session `/heartbeat` | 一个 session 一条；只在空闲轮次执行；reset/switch 等边界有明确清理语义 | 看当前 PR 是否结束 |
-| 站立式提醒/报告/监控 | Hermes cron | 持久 job、时区、执行账本、结果投递 | 明早九点、每周五简报 |
-| 需要持续推进的工作 | Hermes Kanban/goal | 依赖、worker attempt、验收、阻塞与恢复 | 多步骤调研、项目交付 |
+| Observation within the current session | session `/heartbeat` | One per session; runs only on idle turns; explicit cleanup semantics at reset/switch and other boundaries | Check whether the current PR has finished |
+| Standing reminders/reports/monitoring | Hermes cron | Persistent jobs, timezones, execution ledger, result delivery | Tomorrow at 9 a.m.; Friday briefings |
+| Work requiring sustained progress | Hermes Kanban/goal | Dependencies, worker attempts, acceptance, blocking, and recovery | Multi-step research; project delivery |
 
-不要用一个高频 cron 轮询所有任务，也不要把一个长任务塞进无穷 `/goal`。Heartbeat 保存状态并不意味着在没有存活 CLI/gateway 时仍会运行。安装和服务健康必须可见。
+Do not poll every task with a single high-frequency cron or put a long task into an endless `/goal`. Persisted heartbeat state does not mean it runs without a live CLI/gateway. Installation and service health must be visible.
 
-## 3. 建立 automation 的最小记录
+## 3. Minimum Automation Record
 
-`goal`、`trigger_spec`、`timezone`、`source_scope`、`allowed_effects`、`destination_binding`、`quiet_hours`、`priority`、`dedupe_window`、`max_runs/cost`、`expires_at`、`stop_when`、`native_job_id`、`created_from_source`。
+`goal`, `trigger_spec`, `timezone`, `source_scope`, `allowed_effects`, `destination_binding`, `quiet_hours`, `priority`, `dedupe_window`, `max_runs/cost`, `expires_at`, `stop_when`, `native_job_id`, `created_from_source`.
 
-相对时间保留创建时刻与解析后的绝对时间；“每天九点”保存当地日历语义和 IANA zone。跨 DST 必须有明确歧义/不存在时间策略，不能只存 UTC offset。用户旅行后，固定时区提醒不自动跟随定位；跟随型需明确模式。
+For relative times, retain the creation instant and resolved absolute time. For “every day at nine,” retain local calendar semantics and the IANA zone. DST transitions need explicit policies for ambiguous/nonexistent times; storing only a UTC offset is insufficient. Fixed-timezone reminders do not automatically follow the user’s location after travel; location-following reminders require an explicit mode.
 
-## 4. 可靠执行链
+## 4. Reliable Execution Chain
 
 ```text
-原生触发 + native occurrence/run id
-  → 验证 automation 仍有效、未撤权、预算足够
-  → 幂等领取领域评估（必要时）
-  → 读取增量证据
-  → 生成 observation / action proposal
-  → 确认是否值得打扰
+Native trigger + native occurrence/run id
+  → Verify automation is still valid, authorization is not revoked, and budget is sufficient
+  → Idempotently claim domain evaluation (when needed)
+  → Read incremental evidence
+  → Generate observation / action proposal
+  → Decide whether it warrants an interruption
   → effect / delivery outbox
-  → 原生渠道发送或连接器动作
+  → Native channel send or connector action
   → receipt / unknown / retryable failure
-  → 对账 + stop condition
+  → Reconciliation + stop condition
 ```
 
-插件的 outbox 只承担其拥有的领域副作用，不能重复接管 Hermes 已有 cron delivery queue。适配器必须选定一个交付责任方：使用 native cron delivery 时以其 receipt 同步；插件自有交付时禁用该 job 的自动重复投递。一次成果不能由两方同时发。
+The plugin outbox handles only domain side effects it owns; it must not duplicate responsibility for Hermes’s existing cron delivery queue. Adapters must choose one delivery owner: when using native cron delivery, synchronize from its receipts; when using plugin-owned delivery, disable that job’s automatic duplicate delivery. A single result must not be sent by both.
 
-## 5. 幂等与未知结果
+## 5. Idempotency and Unknown Outcomes
 
-- 调度去重 key：`profile + automation_id + native_occurrence_id`，不使用会因重试改变的时间戳。
-- 外部动作 key：`intent_id + payload_hash + destination`；接收端有 idempotency key 则传递，并保存 receipt。
-- 接收端没有幂等功能时，先查询目标是否已有指定对象/marker。查询不充分则把结果标 unknown，请求必要确认，而不是盲目重发。
-- 标记“已入队”“平台接受”“确认投递”“用户已读”是不同状态；很多平台没有 delivery/read receipt，界面必须承认未知。
-- 崩溃在“远端成功、本地未提交”之间时，需要 remote reconciliation。事务 outbox 不能提供端到端 exactly-once 保证。
+- Scheduling deduplication key: `profile + automation_id + native_occurrence_id`, not a timestamp that changes on retry.
+- External action key: `intent_id + payload_hash + destination`. Pass an idempotency key when supported by the receiver and save its receipt.
+- If the receiver lacks idempotency support, first query whether the target already contains the specified object/marker. If the query is inconclusive, mark the outcome unknown and request necessary confirmation rather than blindly resending.
+- “Queued,” “accepted by the platform,” “confirmed delivered,” and “read by the user” are distinct states. Many platforms lack delivery/read receipts; the UI must acknowledge uncertainty.
+- A crash between remote success and local commit requires remote reconciliation. A transactional outbox cannot guarantee end-to-end exactly-once execution.
 
-Hermes 已有 cron 执行、occurrence、delivery 等可靠性机制；本项目先测并复用，不重复实现其 tick lock、worker reclaim 和 next_run_at 算法。
+Hermes already has reliability mechanisms for cron execution, occurrences, and delivery. Test and reuse them first rather than reimplementing its tick lock, worker reclaim, or next_run_at algorithms.
 
-## 6. 提醒去重与打扰预算
+## 6. Reminder Deduplication and Interruption Budgets
 
-通知前检查最新源数据、任务是否已完成、最近一次同义通知、用户 quiet hours、目的地权限以及信息有效期。默认优先级：紧急且有明确影响 > 有截止时间的阻塞 > 定时简报 > 建议。频率与配额是可配置产品规则，不写成隐藏魔法值。
+Before notifying, check the latest source data, whether the task is complete, the most recent equivalent notification, user quiet hours, destination permissions, and information validity. Default priority: urgent with clear impact > deadline-bound blockers > scheduled briefings > suggestions. Frequency and quotas are configurable product rules, not hidden magic values.
 
-先做 rule-based shortlist，再给模型判断内容价值。用户未回复不等于同意继续催促，也不等于永久关闭全部主动功能；只按该 automation 的重复与升级规则处理。过期信息不发送。无变化只写运行账本。
+Build a rule-based shortlist before having the model assess content value. No reply does not mean consent to keep nudging, nor does it permanently disable all proactive features. Follow only that automation’s repetition and escalation rules. Do not send expired information. If nothing changes, record only the run ledger entry.
 
-## 7. 用户打断、暂停与撤销
+## 7. User Interruption, Pausing, and Revocation
 
-暂停 automation 先更新持久状态和 policy revision，再停止未来触发并取消仍可取消的待执行 intent。已经提交给外部服务的动作无法“撤回历史”，应记录事实、检查能否补偿并如实提示。
+To pause an automation, first update persistent state and the policy revision, then stop future triggers and cancel pending intents that are still cancellable. Actions already submitted to external services cannot “undo history.” Record what happened, check whether compensation is possible, and explain truthfully.
 
-运行中的 worker 在每个有副作用的工具准入前检查当前持久授权；不能像只发送一条“权限改了”的通知或修改 profile 快照那样假设它已停止。准入与撤权按 [06 §8](06-plugins-mcp-and-security.md#8-撤权审计与应急停止) 的事务线性化点排序；已经准入的在途请求只能尽力取消，不能保证撤回远端执行。取消是请求状态，只有 worker/外部回执确认后才标 cancelled。手机离线、会话 reset 或旧消息回复不能自动恢复失效授权。
+Running workers check current persistent authorization before every tool admission that can produce side effects. Do not assume a worker has stopped merely because it received a “permissions changed” notification or a profile snapshot was edited. Admission and revocation are ordered at the transactional linearization point in [06 §8](06-plugins-mcp-and-security.md#8-revocation-audit-and-emergency-stop). Already-admitted in-flight requests can only be cancelled on a best-effort basis; remote execution cannot be guaranteed to be withdrawn. Cancellation is a request state; mark cancelled only after confirmation from the worker/external receipt. A phone going offline, session reset, or reply to an old message must not automatically restore invalid authorization.
 
-## 8. 故障分类
+## 8. Failure Categories
 
-| 故障 | 处理 |
+| Failure | Handling |
 |---|---|
-| 读取临时超时/429 | 有界指数退避，尊重 retry-after，保留 cursor |
-| 凭据撤销/权限不足 | 停用对应动作，标 blocked，不换凭据/渠道绕过 |
-| 模型失败 | 降级为模板化提醒或保留待处理，不伪造完成结果 |
-| policy/approval 服务不可用 | 有副作用动作 fail-closed；只读与普通聊天可降级 |
-| 外发超时但可能已成功 | 标 unknown，读回/人工决策后再继续 |
-| gateway 重启 | 用原生恢复 + 领域对账，不能重播所有旧通知 |
-| 接收者/群变化 | 重新验证 route，敏感内容不自动跟随未知新群 |
-| 预算到顶 | 暂停后台，给 owner 一个合并后的可操作提示 |
+| Temporary read timeout/429 | Bounded exponential backoff, respect retry-after, retain cursor |
+| Revoked credentials/insufficient permissions | Disable the affected action, mark blocked, and do not bypass using different credentials/channels |
+| Model failure | Fall back to a templated reminder or leave pending; never fabricate completion |
+| policy/approval service unavailable | Fail closed for side-effecting actions; read-only operations and ordinary chat may degrade gracefully |
+| Outbound timeout with possible success | Mark unknown; continue only after read-back or a human decision |
+| gateway restart | Use native recovery plus domain reconciliation; do not replay all old notifications |
+| Recipient/group changes | Revalidate the route; sensitive content does not automatically follow an unknown new group |
+| Budget exhausted | Pause background work and send the owner one consolidated, actionable notice |
 
-## 9. 最小可观测性
+## 9. Minimum Observability
 
-每次运行串起 `automation_id / native_job_id / native_run_id / intent_id / effect_id / delivery_id`。可查最后成功读取、下次触发、最后通知、停止原因、重试次数和费用估计。日志不存完整个人文档或 token。健康页应区分“调度正常但投递失败”与“从未运行”。
+Correlate every run using `automation_id / native_job_id / native_run_id / intent_id / effect_id / delivery_id`. Expose the last successful read, next trigger, last notification, stop reason, retry count, and cost estimate. Logs must not store complete personal documents or tokens. The health page must distinguish “scheduling works but delivery failed” from “never ran.”

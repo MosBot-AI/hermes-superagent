@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "hermes_repository": "https://github.com/NousResearch/hermes-agent",
+  "hermes_commit": "90d6b98fd86d20981ee06ddd5b7d93e4320f26a4",
+  "python": "3.14",
+  "status": "development_baseline",
+  "semver_support_range": null,
+  "note": "No broad requires_hermes range is claimed from one tested commit."
+}

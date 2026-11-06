@@ -1,0 +1,15 @@
+manifest_version: 2
+name: hermes-personal-agent
+version: "0.1.0"
+description: Read-only foundation for a Hermes-native personal agent
+author: MosBot.AI
+license: MIT
+homepage: https://github.com/MosBot-AI/hermes-superagent
+kind: standalone
+provides_tools:
+  - personal_agent_status
+config_schema:
+  mode:
+    type: str
+    default: read_only
+    description: Only read_only is supported in the foundation release.

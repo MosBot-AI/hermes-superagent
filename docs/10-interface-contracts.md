@@ -1,6 +1,8 @@
-# 10. 拟议接口与端到端契约
+# 10. Proposed Interfaces and End-to-End Contracts
 
-本页全部是本项目的**拟议契约**，不是宣称 Hermes 已提供同名 API。具体命名在 E0 后冻结。领域服务应与 UI/模型解耦；无论由 agent tool、手机按钮还是后台调度进入，必须走相同状态和权限检查。
+English | [简体中文](10-interface-contracts-zh.md)
+
+Everything on this page is a **proposed contract** for this project, not a claim that Hermes already provides APIs with these names. Exact naming will be frozen after E0. Domain services should be decoupled from UI/models; entry through an agent tool, a mobile button, or background scheduling must use the same state and permission checks.
 
 ## 1. EventEnvelope
 
@@ -25,34 +27,34 @@
 }
 ```
 
-actor/auth metadata 由 connector/平台可信通道给出，body 中自称的姓名不覆盖它。owner_binding_id 由本机身份服务解析，不接受远端任意填入。关联只帮助检索，不继承授权。
+Actor/auth metadata comes from the connector/platform's trusted channel; names claimed in the body do not override it. The local identity service resolves owner_binding_id rather than accepting arbitrary values supplied remotely. Correlations aid retrieval only; they do not inherit authorization.
 
-去重以 source_instance_id + event_id 为基础。对支持编辑的源，另存 revision/content_hash；同一事件被编辑需要更新证据，但不会直接重复执行旧动作。cursor/watermark 只能在该批事件已经可靠落盘后推进，轮询与 webhook overlap 必须去重。
+Deduplication is based on source_instance_id + event_id. For sources that support edits, also store revision/content_hash; an edited event requires updated evidence but does not directly repeat an old action. Advance cursors/watermarks only after that batch of events has been durably persisted, and deduplicate overlap between polling and webhooks.
 
-## 2. 最小领域工具面
+## 2. Minimal Domain Tool Surface
 
-不把所有数据库 CRUD 暴露给模型。初始工具可分为以下小集合，具体暴露随任务动态缩减：
+Do not expose all database CRUD to the model. Initial tools can be grouped into the following small sets, with the exposed set dynamically reduced for each task:
 
-| 拟议工具 | 输入重点 | 输出/副作用 |
+| Proposed tool | Key inputs | Output/side effects |
 |---|---|---|
-| `personal_context` | query、project/task ref、scope、limit | 有界事实与来源，无权限的条目不返回 |
-| `personal_project` | action、project ref、expected_revision | 建立/更新业务项目，必要时通过原生 adapter 关联 |
-| `personal_commitment` | action、content、due、timezone、source refs | 承诺状态修改，返回 revision 和审计引用 |
-| `personal_task` | action、outcome、acceptance、constraints、task ref | 映射原生 Kanban/worker，不直接创建平行 executor |
-| `personal_fact` | propose/correct/forget、fact ref、scope、sources | 明确事实/推断；敏感/冲突路径可要求确认 |
-| `personal_automation` | create/inspect/pause/resume/cancel、trigger、destination | 由原生 cron/heartbeat 执行，返回 native ref 和计划预览 |
-| `personal_action` | prepare/inspect/cancel、action kind、target、payload | 生成准确 intent；批准不是模型可自行传 true 的参数 |
+| `personal_context` | query, project/task ref, scope, limit | Bounded facts and sources; unauthorized entries are not returned |
+| `personal_project` | action, project ref, expected_revision | Create/update business projects, linking through a native adapter when needed |
+| `personal_commitment` | action, content, due, timezone, source refs | Modify commitment state; return revision and audit references |
+| `personal_task` | action, outcome, acceptance, constraints, task ref | Map to native Kanban/workers rather than directly creating a parallel executor |
+| `personal_fact` | propose/correct/forget, fact ref, scope, sources | Explicit facts/inferences; sensitive/conflict paths may require confirmation |
+| `personal_automation` | create/inspect/pause/resume/cancel, trigger, destination | Execute through native cron/heartbeat; return native ref and schedule preview |
+| `personal_action` | prepare/inspect/cancel, action kind, target, payload | Produce a precise intent; approval is not a parameter the model can set to true itself |
 
-执行受控动作的能力不暴露成 `approved: true` 或“忽略策略”参数。Approval receipt 来自受验证的人机交互与宿主审批路径，服务端按 principal、hash、expiry 和 policy revision 重新验证。受控 connector 若可以被另一裸工具绕开，必须缩减当前工具集/凭据 scope，或者标为未达到发布门槛。
+The ability to execute controlled actions is not exposed as an `approved: true` or “ignore policy” parameter. Approval receipts come from verified human interaction and host approval paths; the server revalidates principal, hash, expiry, and policy revision. If a controlled connector can be bypassed through another raw tool, reduce the current toolset/credential scope or mark it as failing the release gate.
 
-## 3. 通用结果结构
+## 3. Common Result Structure
 
 ```json
 {
   "status": "awaiting_approval",
   "object_ref": "intent-id",
   "revision": 3,
-  "summary": "需要你确认接收者和要发送的内容。",
+  "summary": "Please confirm the recipient and the content to send.",
   "evidence_refs": ["source-id"],
   "native_refs": {},
   "next_action": {
@@ -63,37 +65,37 @@ actor/auth metadata 由 connector/平台可信通道给出，body 中自称的�
 }
 ```
 
-`status` 使用结构化枚举：ok、awaiting_approval、denied、blocked、conflict、not_found、retryable_failure、unknown_outcome、cancel_requested、cancelled。denied 是当前 intent 的终态，不按 retryable_failure 处理。`summary` 只是用户可读文字，不能靠解析它判断业务状态。错误包含稳定 code、是否可重试和必要的补救，不泄露 token/原始敏感 payload。
+`status` uses a structured enum: ok, awaiting_approval, denied, blocked, conflict, not_found, retryable_failure, unknown_outcome, cancel_requested, cancelled. Denied is terminal for the current intent and is not handled as retryable_failure. `summary` is human-readable text only; business state must not be inferred by parsing it. Errors include stable codes, retryability, and necessary remediation without exposing tokens/raw sensitive payloads.
 
-## 4. NativeAdapter 契约
+## 4. NativeAdapter Contracts
 
-领域服务通过适配器对接 Hermes；E0 测试决定调用官方 ctx/tool dispatch/CLI/API 中哪条受支持路径。
+Domain services integrate with Hermes through adapters; E0 tests determine which supported path to use among official ctx/tool dispatch/CLI/API interfaces.
 
-| Adapter | 所需行为 | 不能假设的能力 |
+| Adapter | Required behavior | Capabilities that must not be assumed |
 |---|---|---|
-| ProjectAdapter | list/resolve/create/link，返回稳定 native id | 手机天然拥有 desktop_project 工具 |
-| TaskAdapter | create with idempotency、get state/attempt、request cancel、read result | 任意私有 DB import 稳定；succeeded 等于业务 done |
-| ScheduleAdapter | create/update/pause/cancel/read next-run/read execution | 可直接改 jobs.json；cron 自动运行 MemoryProvider |
-| DeliveryAdapter | resolve verified route、submit、get receipt/reconcile | 每个平台都能证明已送达/已读 |
-| ShortWorkerAdapter | launch/status/cancel/result，受限 toolsets | lifecycle handle 能跨进程存活；所有 request 字段都可用 |
-| ConnectorAdapter | read/write capability、auth health、idempotency/reconcile | read-only annotation 保证服务端语义 |
+| ProjectAdapter | list/resolve/create/link, returning stable native IDs | Mobile inherently has the desktop_project tool |
+| TaskAdapter | create with idempotency, get state/attempt, request cancel, read result | Arbitrary private DB imports are stable; succeeded means business done |
+| ScheduleAdapter | create/update/pause/cancel/read next-run/read execution | Directly editing jobs.json is supported; cron automatically runs MemoryProvider |
+| DeliveryAdapter | resolve verified route, submit, get receipt/reconcile | Every platform can prove delivery/read status |
+| ShortWorkerAdapter | launch/status/cancel/result, restricted toolsets | Lifecycle handles survive across processes; all request fields are available |
+| ConnectorAdapter | read/write capability, auth health, idempotency/reconcile | Read-only annotations guarantee server-side semantics |
 
-所有 adapter 返回稳定 external refs 和 capability flags。缺少幂等或 receipt 的服务须明确报告，而不是构造假的成功保证。原生 API 更改通过 adapter compatibility test 发现，领域 schema 不随内部模块重构频繁变动。
+All adapters return stable external refs and capability flags. Services lacking idempotency or receipts must explicitly report that limitation rather than inventing success guarantees. Adapter compatibility tests detect native API changes; the domain schema should not change frequently with internal module refactors.
 
-## 5. 三条验收路径
+## 5. Three Acceptance Paths
 
-### A. 创建提醒
+### A. Create a Reminder
 
-owner 发请求 → Event 去重/身份验证 → 解析时间与 timezone → 领域 automation prepared → 原生 scheduler 建 job → 保存 native ref/对账 key → 给 owner 展示计划 → occurrence 到达 → 检查仍有效 → 唯一 delivery owner 发送 → 保存 receipt。若 native job 已创建但领域写回失败，重试先按 idempotency/关联读取，而非新建第二个 job。
+Owner sends request → Event deduplication/identity verification → Parse time and timezone → Domain automation prepared → Native scheduler creates job → Save native ref/reconciliation key → Show schedule to owner → Occurrence arrives → Check that it remains valid → Sole delivery owner sends → Save receipt. If the native job was created but the domain writeback failed, a retry first reads by idempotency/correlation rather than creating a second job.
 
-### B. 准备并发送内容
+### B. Prepare and Send Content
 
-owner 请求 → 获取已授权源 → 形成草稿/artifact → 准确 action intent → 判断现有 grant 是否覆盖 → 如需则展示接收者/内容/附件/影响 → 验证 approval → 执行前重读 revision → 连接器发送 → 记录 receipt → 对外确认实际结果。发送超时走 unknown/reconcile，审批后修改正文关键内容或收件人使旧 approval 失效。
+Owner request → Retrieve authorized sources → Produce draft/artifact → Precise action intent → Determine whether an existing grant covers it → If needed, show recipients/content/attachments/impact → Verify approval → Reread revision before execution → Connector sends → Record receipt → Confirm the actual result externally. A send timeout enters unknown/reconcile; changing critical body content or recipients after approval invalidates the old approval.
 
-### C. 项目 worker 被打断
+### C. Interrupt a Project Worker
 
-主 agent 建 task 与验收 → 原生 Kanban 派工/短 worker → owner 新消息抢占前台 → 解释/修改原任务 → 更新 scope/revision → worker 下一副作用前验证 → cancel_requested 或继续窄 scope → 根据原生结果与验收进入 review/done。worker 结束不能复用已过期 grant；后续第三方事件只提供证据，不自动恢复任务。
+Main agent creates task and acceptance criteria → Native Kanban dispatches work/short worker → Owner's new message preempts the foreground → Explain/modify original task → Update scope/revision → Worker verifies before its next side effect → cancel_requested or continue within narrower scope → Enter review/done according to native results and acceptance criteria. A worker finishing cannot reuse an expired grant; later third-party events provide evidence only and do not automatically resume the task.
 
-## 6. 协议演进
+## 6. Protocol Evolution
 
-schema_version 按对象契约独立管理；新增字段可选，改变语义需 migration。opaque ids 不让客户端解析字符串结构。对象引用、来源权限、状态枚举和错误代码通过契约测试冻结。迁移前可备份和 dry-run，失败保持旧可用状态，不让半升级开始外发动作。
+Manage schema_version independently for each object contract; new fields are optional, while semantic changes require migration. Clients must not parse the string structure of opaque IDs. Freeze object references, source permissions, state enums, and error codes through contract tests. Allow backup and dry-run before migration; on failure preserve the old working state rather than allowing a partially upgraded system to start outbound actions.

@@ -1,77 +1,79 @@
-# 架构决策记录
+# Architecture Decision Records
 
-状态：设计采纳，等待实现验证。日期：2026-11-06。
+English | [简体中文](README-zh.md)
 
-## ADR-001：Hermes 原生插件，不建平行 agent runtime
+Status: design adopted, pending implementation validation. Date: 2026-11-06.
 
-**选择**：以 `plugin.yaml + register(ctx)`、原生工具/skills/公共 ctx 与 ABC 扩展 Hermes，复用 agent loop、gateway、SessionDB、cron、Kanban、MCP 和语音。
+## ADR-001: Native Hermes Plugin, No Parallel Agent Runtime
 
-**原因**：用户需要 Hermes 自身成为 personal agent。复制执行/会话/调度系统会产生双状态、升级成本和权限裂缝。DSH/Cordis 只作为设计参考。
+**Decision:** Extend Hermes through `plugin.yaml + register(ctx)`, native tools/skills, public ctx APIs, and ABCs. Reuse the agent loop, gateway, SessionDB, cron, Kanban, MCP, and voice.
 
-**代价**：受官方扩展面约束；先做契约 spike，缺能力时提出最小通用上游扩展，不直接修改 core 或私写宿主数据库。见 [03](../03-native-architecture.md)。
+**Rationale:** The user wants Hermes itself to become a personal agent. Duplicating execution, session, and scheduling systems creates dual state, upgrade costs, and gaps in permission enforcement. DSH/Cordis serves only as a design reference.
 
-## ADR-002：一个主身份，任务与 session 分离
+**Trade-off:** Stay within official extension surfaces. Start with contract spikes; where capabilities are missing, propose minimal general-purpose upstream extensions instead of directly changing the core or writing privately to host databases. See [03](../03-native-architecture.md).
 
-**选择**：默认一个主 profile/owner，项目是上下文，worker 是临时或 Kanban 管理的执行资源。业务 Task 关联原生 card/run，不等于聊天 session。
+## ADR-002: One Main Identity, Tasks Separate from Sessions
 
-**原因**：任务应跨会话、设备和重启存在，session idle/结束不证明任务完成。多 persona 会增加用户协调负担。
+**Decision:** Default to one main profile/owner. Projects are context, and workers are temporary or Kanban-managed execution resources. A business Task links to native cards/runs and is not a chat session.
 
-**代价**：需要任务引用、验收和状态对账；只在数据/身份隔离必要时增加主 profile。见 [01](../01-product-and-scope.md)、[04](../04-domain-data-and-memory.md)。
+**Rationale:** Tasks must survive across sessions, devices, and restarts. An idle or ended session does not prove task completion. Multiple personas increase the user's coordination burden.
 
-## ADR-003：准入与操作授权两道门
+**Trade-off:** Task references, acceptance checks, and state reconciliation are required. Add main profiles only when data/identity isolation requires them. See [01](../01-product-and-scope.md) and [04](../04-domain-data-and-memory.md).
 
-**选择**：IntakeGate 决定候选工作；ActionGate 在每次副作用提交前检查 owner、grant、scope、payload、recipient、限额和最新 policy revision。
+## ADR-003: Separate Intake and Action-Authorization Gates
 
-**原因**：DSH Mandate 的任务级边界有价值，但不能替代个人敏感数据场景下的动作级 enforcement。提示词和自动摘要不能授予权限。
+**Decision:** IntakeGate determines candidate work. Before each side effect is committed, ActionGate checks owner, grant, scope, payload, recipient, limits, and the latest policy revision.
 
-**代价**：连接器需实现细分动作语义与审批；部分动作必须由人完成。pre_tool_call callback fail-closed 与 middleware fail-open 精确区分，handler 再检查。见 [06](../06-plugins-mcp-and-security.md)。
+**Rationale:** DSH Mandate provides a useful task-level boundary, but cannot replace action-level enforcement for personal sensitive data. Prompts and automatic summaries cannot grant permission.
 
-## ADR-004：领域事务加 outbox，不承诺端到端 exactly-once
+**Trade-off:** Connectors must implement fine-grained action semantics and approvals; some actions must be completed by a human. Distinguish precisely between fail-closed pre_tool_call callbacks and fail-open middleware, and recheck in the handler. See [06](../06-plugins-mcp-and-security.md).
 
-**选择**：插件自有状态与自有 effects 同 SQLite 事务；原生调度/交付仍以 Hermes 为权威；外部 action 采用 idempotency、receipt 和 unknown/reconcile。
+## ADR-004: Domain Transactions with an Outbox, No End-to-End Exactly-Once Promise
 
-**原因**：跨数据库与外部服务没有共同事务；“请求超时”不证明没执行。不能把 LLM 恢复提示当可靠性保证。
+**Decision:** Commit plugin-owned state and plugin-owned effects in the same SQLite transaction. Hermes remains authoritative for native scheduling/delivery. External actions use idempotency, receipts, and unknown/reconcile states.
 
-**代价**：需要对账和人工处理少量 unknown；不能重复接管原生 delivery queue。见 [05](../05-automation-and-delivery.md)。
+**Rationale:** There is no shared transaction across databases and external services. A request timeout does not prove that execution did not occur. LLM recovery prompts are not reliability guarantees.
 
-## ADR-005：记忆是带来源的数据，不是授权数据库
+**Trade-off:** Reconciliation and human handling of a small number of unknown outcomes are necessary. Do not take over the native delivery queue a second time. See [05](../05-automation-and-delivery.md).
 
-**选择**：原生会话/稳定摘要 + 结构化事实/承诺 + 按需项目知识；默认保留用户已有 memory provider。
+## ADR-005: Memory Is Sourced Data, Not an Authorization Database
 
-**原因**：事实会过期、冲突和被撤回；长期权限不能靠模型摘要恢复。Hermes 仅一个外部 provider，cron 默认 skip_memory。
+**Decision:** Combine native sessions/stable summaries, structured facts/commitments, and on-demand project knowledge. Keep the user's existing memory provider by default.
 
-**代价**：需要纠错、遗忘、索引清理和 scope 检索；不在 MVP 自建庞大知识图谱。见 [04](../04-domain-data-and-memory.md)。
+**Rationale:** Facts can expire, conflict, or be withdrawn. Long-term permissions cannot be restored from model summaries. Hermes allows only one external provider, and cron defaults to skip_memory.
 
-## ADR-006：Observe-first，硬撤权独立于 soft pause
+**Trade-off:** Correction, forgetting, index cleanup, and scope-aware retrieval are required. Do not build a large knowledge graph in the MVP. See [04](../04-domain-data-and-memory.md).
 
-**选择**：主动功能先只读观察/提案，再按场景和风险启用。暂停停止新工作；撤权与动作准入以同一权威存储的事务提交顺序为线性化依据，阻止后续新准入并使旧 approval 失效。先前已准入的在途请求尽力取消，不承诺撤回远端已接受动作。
+## ADR-006: Observe First; Hard Revocation Is Separate from Soft Pause
 
-**原因**：减轻注意力负担不能靠扩大无限自主权实现；通知运行中 worker“权限变了”不等于执行层已撤权。
+**Decision:** Proactive features start with read-only observation/proposals and are enabled later by scenario and risk. Pause stops new work. Revocation and action admission are linearized by transaction commit order in the same authoritative store, blocking subsequent admissions and invalidating old approvals. Cancellation of previously admitted in-flight requests is best effort; do not promise to retract actions already accepted remotely.
 
-**代价**：需要持久 budget、dedupe、policy revision 和撤权 race 测试。见 [05](../05-automation-and-delivery.md)、[06](../06-plugins-mcp-and-security.md)。
+**Rationale:** Reducing the user's attention burden must not depend on granting unlimited autonomy. Telling a running worker that permissions changed does not mean the execution layer has revoked them.
 
-## ADR-007：手机先复用消息入口，语音与执行解耦
+**Trade-off:** Durable budgets, deduplication, policy revisions, and revocation-race tests are required. See [05](../05-automation-and-delivery.md) and [06](../06-plugins-mcp-and-security.md).
 
-**选择**：先官方 gateway 手机文字/语音消息，再验证原生 web/mobile 和实时语音。语音前端无独立副作用授权通道。
+## ADR-007: Reuse Messaging for Mobile First; Decouple Voice from Execution
 
-**原因**：原生已有多种入口；自建移动聊天/通话栈会分散可靠闭环工作。停止播放与取消外部动作必须区分。
+**Decision:** Start with mobile text/voice messages through official gateways, then validate native web/mobile and real-time voice. The voice frontend has no separate channel for authorizing side effects.
 
-**代价**：目标渠道和设备逐个验证，不宣称全平台即时可用。见 [07](../07-mobile-and-voice.md)。
+**Rationale:** Native entry points already exist. Building a new mobile chat/calling stack would distract from reliable end-to-end workflows. Stopping playback must be distinguished from canceling an external action.
 
-## ADR-008：先做单机可靠性，再做多执行环境
+**Trade-off:** Validate each target channel and device separately rather than claiming immediate availability on every platform. See [07](../07-mobile-and-voice.md).
 
-**选择**：一个持续在线 Hermes host 为默认；用原生可用执行后端，在需求明确后引入远端 lease/fencing/reconnect 契约。
+## ADR-008: Single-Host Reliability Before Multiple Execution Environments
 
-**原因**：单机锁和 SQLite 不等于分布式一致性；文章里的未来架构不能直接当 MVP 已实现。
+**Decision:** Default to one continuously online Hermes host. Use available native execution backends, introducing remote lease/fencing/reconnect contracts only when requirements are clear.
 
-**代价**：单 host 故障时暂不可用，需要清楚服务健康、备份和恢复目标。见 [08](../08-roadmap-and-acceptance.md)。
+**Rationale:** A single-host lock and SQLite do not provide distributed consistency. A future architecture described in an article cannot be treated as an implemented MVP.
 
-## ADR-009：Worker 模型路由以原生插件交付，先 shadow
+**Trade-off:** Failure of the single host temporarily makes the service unavailable. Service health, backups, and recovery targets must be explicit. See [08](../08-roadmap-and-acceptance.md).
 
-**选择**：复用 DelegationProvider.route_task，在用户配置且允许的 provider/model/effort 中选择；主 agent 保持原模型与职责。先本地 shadow，可信上下文、隐私、预算、effort/fallback 与质量 gate 通过后有界启用。
+## ADR-009: Deliver Worker Model Routing as a Native Plugin, Starting with Shadow Mode
 
-安装/启用插件不自动改 backend；owner 明确选择后默认 shadow，且必须有已获准静态基线。没有基线先配置，不能从父 route 猜一个；真实自动选择另行明确开启。
+**Decision:** Reuse DelegationProvider.route_task to choose among provider/model/effort combinations the user has configured and permitted. Keep the main agent's model and responsibilities unchanged. Start with local shadow mode, then enable bounded routing only after trusted context, privacy, budget, effort/fallback, and quality gates pass.
 
-**原因**：任务级模型分流无需新建 API 网关或第二主脑。当前接口不足以承载完整可信 RouteContext 和预算原子准入，必须明确最小通用宿主扩展，而非把模型参数当授权。Switchyard/LiteLLM/vLLM SR 是可选参考，不是强制 runtime 依赖。
+Installing/enabling the plugin does not automatically change the backend. Explicit owner selection defaults to shadow mode and requires an authorized static baseline. Configure a missing baseline first instead of guessing one from the parent route. Actual automatic selection requires a separate explicit setting.
 
-**代价**：需要固定 provider 能力、记录 requested/effective effort、计入 classifier/reviewer/retry 总成本，并覆盖原生 backend 未接管的路径。未知能力或硬限制无法证明时保持 shadow/拒绝对应自动选择。用户 pin、数据接收范围和费用上限优先于自动优化。见 [11](../11-worker-model-routing.md)。
+**Rationale:** Task-level model routing needs neither a new API gateway nor a second brain. The current interface cannot carry a complete trusted RouteContext or atomic budget admission, so define minimal general-purpose host extensions rather than treating model parameters as authorization. Switchyard/LiteLLM/vLLM SR are optional references, not mandatory runtime dependencies.
+
+**Trade-off:** Pin provider capabilities, record requested/effective effort, count classifier/reviewer/retry costs in the total, and cover paths not controlled by the native backend. If capabilities are unknown or hard limits cannot be demonstrated, remain in shadow mode or refuse the affected automatic selection. User pins, data-recipient scope, and cost limits take precedence over automatic optimization. See [11](../11-worker-model-routing.md).

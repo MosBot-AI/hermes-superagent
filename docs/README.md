@@ -1,46 +1,49 @@
-# Hermes Superagent 设计文档
+# Hermes Superagent Design Documents
 
-状态：**设计基线，尚未实现**。核验日期：2026-11-06。目标仓库：`MosBot-AI/hermes-superagent`。
+English | [简体中文](README-zh.md)
 
-## 一句话定位
+Status: **Design baseline, with E0 read-only plugin foundation development started; product capabilities are not yet implemented.** Verification date: 2026-11-06. Repository: `MosBot-AI/hermes-superagent`. See the [first development slice](12-foundation-progress.md) for current code and verification boundaries.
 
-把 Hermes 扩展成一个长期服务于单个用户的 personal agent：一个主 agent 统一理解项目、事务、个人资料、提醒与沟通，必要时调用少量受限 worker；使用 Hermes 原生运行时、插件、记忆、任务、调度、MCP、消息和语音能力，不再构建一个外部独立代理。
+## Purpose
 
-## 阅读顺序
+Extend Hermes into a long-lived personal agent for one user: one main agent understands projects, affairs, personal information, reminders, and communication, with a small number of constrained workers when needed. Reuse Hermes's native runtime, plugins, memory, tasks, scheduling, MCP, messaging, and voice rather than building a separate external agent.
 
-1. [产品目标与范围](01-product-and-scope.md)：服务谁，做什么，哪些明确不做。
-2. [DSH 研究与取舍](02-dsh-research-and-decisions.md)：从代码和报道中借鉴什么、修正什么。
-3. [Hermes 原生架构](03-native-architecture.md)：宿主、插件、领域状态和执行之间的边界。
-4. [领域数据与记忆](04-domain-data-and-memory.md)：项目、承诺、资料、来源、纠错与遗忘。
-5. [主动工作、调度与交付](05-automation-and-delivery.md)：可靠提醒、重启恢复、幂等与消息交付。
-6. [插件、MCP 与安全](06-plugins-mcp-and-security.md)：开放扩展、动作授权、身份和撤权。
-7. [手机与语音](07-mobile-and-voice.md)：优先复用现有入口，保证同一个 agent 的连续性。
-8. [路线图与验收](08-roadmap-and-acceptance.md)：按依赖排序的 epics、任务和可测试验收。
-9. [上游证据与核验边界](09-upstream-evidence.md)：固定源码版本、链接和需要再验证的契约。
-10. [接口与端到端契约](10-interface-contracts.md)：拟议事件、工具、适配器和关键纵向流程。
-11. [Worker 模型路由插件](11-worker-model-routing.md)：按任务需求选择已许可 provider/model/effort，先 shadow 再启用。
-12. [架构决策记录](adr/README.md)：为什么选择这些约束。
+## Reading order
 
-## 三类陈述必须分开
+1. [Product goals and scope](01-product-and-scope.md): users, capabilities, and explicit exclusions.
+2. [DSH research and decisions](02-dsh-research-and-decisions.md): lessons from the source and reporting, with necessary corrections.
+3. [Hermes-native architecture](03-native-architecture.md): boundaries between the host, plugin, domain state, and execution.
+4. [Domain data and memory](04-domain-data-and-memory.md): projects, commitments, information, provenance, corrections, and forgetting.
+5. [Proactivity, scheduling, and delivery](05-automation-and-delivery.md): reliable reminders, recovery, idempotency, and messages.
+6. [Plugins, MCP, and security](06-plugins-mcp-and-security.md): open extensions, action authorization, identity, and revocation.
+7. [Mobile and voice](07-mobile-and-voice.md): reuse existing entry points while preserving one agent's continuity.
+8. [Roadmap and acceptance](08-roadmap-and-acceptance.md): dependency-ordered epics, work packages, and testable criteria.
+9. [Upstream evidence and verification boundaries](09-upstream-evidence.md): pinned sources, links, and contracts needing further tests.
+10. [Interfaces and end-to-end contracts](10-interface-contracts.md): proposed events, tools, adapters, and vertical flows.
+11. [Worker model routing plugin](11-worker-model-routing.md): select authorized provider/model/effort routes, starting in shadow mode.
+12. [First development slice](12-foundation-progress.md): the native read-only plugin, real contract tests, and remaining gates.
+13. [Architecture decision records](adr/README.md): reasons for the constraints.
 
-- **已核验的上游能力**：在固定 Hermes/DSH 源码或官方文档中发现；不等于本仓库已具备。
-- **本项目设计**：待实现的领域模型、策略、界面和适配。文中的工具名、数据表和事件名是拟议接口。
-- **待验证事项**：需用最小原型和集成测试确认，不用想象补齐上游 API。
+## Keep three kinds of statements separate
 
-研究基线为 Hermes `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`，DSH Superagent `8c32a9dc5d72c033816c6a8110b37f40cf94fba4`。`main` 持续变化；实施时先选择通过兼容测试的发布版本，再记录其精确 SHA。本文不是“最新版全部行为”的长期保证。
+- **Verified upstream capabilities:** found in pinned Hermes/DSH source or official documentation; this does not mean this repository implements them.
+- **Project design:** domain models, policies, interfaces, and adapters still to build. Tool names, tables, and events in the design are proposed interfaces.
+- **Unverified items:** need prototypes and integration tests, not invented upstream APIs.
 
-## 设计的硬约束
+Research baselines: Hermes `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4` and DSH Superagent `8c32a9dc5d72c033816c6a8110b37f40cf94fba4`. `main` changes continuously. Implementation must select a compatibility-tested release and record its exact SHA. These documents are not a permanent guarantee about all behavior in the latest release.
 
-1. 一个主身份和一个授权主体，项目/会话不各自变成独立人格。
-2. 不复制 Hermes agent loop、session store、cron scheduler、Kanban dispatcher 或 OAuth 栈。
-3. 外部资料是证据，不是授权；消息来自用户账号不等于消息内引用的指令是用户命令。
-4. 不能用提示词、Mandate、MCP 的 read-only hint 或 Python 插件加载方式代替安全隔离。
-5. 任何外发、修改、消费等动作都先构造可核验的 intent，执行前重新验证授权；重试不能扩大权限。
-6. 用户请求优先于后台工作。主动功能可解释、可暂停、有预算、有静默和去重规则。
-7. 运行状态、个人数据、凭据不进入本公开仓库；仓库只收方案、合成样例和未来代码。
+## Hard design constraints
 
-## 当前交付范围
+1. One main identity and authorization principal; projects and sessions do not become separate personas.
+2. Do not duplicate the Hermes agent loop, session store, cron scheduler, Kanban dispatcher, or OAuth stack.
+3. External material is evidence, not authorization. A message arriving through the user's account does not make quoted instructions owner-authored.
+4. Prompts, Mandates, MCP read-only hints, and Python plugin loading are not security isolation.
+5. External sends, modifications, spending, and similar actions require a verifiable intent and renewed authorization checks before execution. Retries cannot expand permissions.
+6. New user requests take priority over background work. Proactivity must be explainable, pausable, budgeted, quiet when appropriate, and deduplicated.
+7. Runtime state, personal data, and credentials do not belong in this public repository. It contains designs, synthetic examples, and implementation code.
 
-本次提交只建设方案文档与项目规划。没有部署、没有安装插件、没有接入真实个人数据，也没有宣称权限、提醒或手机语音已经可用。GitHub Projects 是研发计划；Hermes 原生 Projects/Kanban 是未来产品运行时的工作对象，二者不能混淆。
+## Current deliverables
 
-新增 E9 为原生 worker 模型路由插件设计：用户已审阅并选择插件方向，仍未实现。主 agent 保持原有职责；完整约束、宿主能力缺口、开源参考和验收见 [11](11-worker-model-routing.md)。
+The design and project plan are established. The E0 native read-only plugin foundation is now being built and loaded in temporary test homes. There is no production deployment or connection to real personal data, and no claim that authorization, reminders, or mobile voice are usable. GitHub Projects tracks development; native Hermes Projects/Kanban will represent runtime work. They are different systems.
+
+E9 remains a design for the native worker model routing plugin. The user reviewed and selected the plugin approach, but it is not implemented. The main agent keeps its responsibilities. See [11](11-worker-model-routing.md) for constraints, host gaps, references, and acceptance criteria.

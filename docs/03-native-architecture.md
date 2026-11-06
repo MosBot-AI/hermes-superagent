@@ -1,94 +1,96 @@
-# 03. Hermes 原生架构
+# 03. Hermes-Native Architecture
 
-## 1. 总体选择
+English | [简体中文](03-native-architecture-zh.md)
 
-本仓库交付一个 **Hermes 原生 personal-agent 插件及配套 skills**。插件由 Hermes 发现、启用和调度，注册工具、上下文、命令与必要 UI 扩展。Hermes 负责 LLM 循环、会话、provider、工具调用、原生审批、gateway、cron、Kanban、MCP 和语音。
+## 1. Overall Approach
+
+This repository delivers a **Hermes-native personal-agent plugin and supporting skills**. Hermes discovers, enables, and schedules the plugin, which registers tools, context, commands, and necessary UI extensions. Hermes owns the LLM loop, sessions, providers, tool calls, native approvals, gateway, cron, Kanban, MCP, and voice.
 
 ```text
-用户：Desktop / CLI / 手机消息 / 语音
-                  │ 已验证身份 + 会话路由
+User: Desktop / CLI / Mobile messaging / Voice
+                  │ Verified identity + session routing
                   ▼
 Hermes Gateway / Session / Agent Loop
                   │
-      personal-agent 原生插件
-      ├─ Context：项目、承诺、偏好、任务摘要
-      ├─ Domain：事务模型、证据、授权、提案
-      ├─ Policy：操作级 scope、审批绑定、撤权检查
-      ├─ Adapters：Project / Kanban / cron / MCP / delivery
-      └─ Storage：插件自己的 SQLite + 附件引用
+      personal-agent native plugin
+      ├─ Context: Projects, commitments, preferences, task summaries
+      ├─ Domain: Work models, evidence, authorization, proposals
+      ├─ Policy: Operation-level scope, approval binding, revocation checks
+      ├─ Adapters: Project / Kanban / cron / MCP / delivery
+      └─ Storage: Plugin-owned SQLite + attachment references
                   │
-Hermes 原生工具 / MCP / 官方平台适配器 / 受限 workers
+Hermes native tools / MCP / official platform adapters / restricted workers
                   │
-外部服务或隔离执行环境
+External services or isolated execution environments
 ```
 
-主 agent 是 Hermes session 本身，不是插件里嵌套运行的另一个“人格”。插件内也不复制独立 agent loop。辅助 LLM 调用优先使用官方 `ctx.llm` 和其凭据/预算规则；具体能力先通过 E0 契约测试。
+The main agent is the Hermes session itself, not another “persona” running inside the plugin. The plugin does not duplicate a separate agent loop either. Auxiliary LLM calls should prefer the official `ctx.llm` and its credential/budget rules; verify specific capabilities through E0 contract tests first.
 
-## 2. 已有能力与新增价值
+## 2. Existing Capabilities and Added Value
 
-| 层 | 复用 Hermes | 本项目新增 | 明确不做 |
+| Layer | Reuse from Hermes | Added by this project | Explicit non-goals |
 |---|---|---|---|
-| 推理 | agent loop、provider、打断、压缩 | 个人事务的工具和工作协议 | 第二套 loop/provider 栈 |
-| 会话 | SessionDB、gateway route、profile | owner 绑定和领域对象引用 | 替换 transcript store |
-| 项目 | Projects/workspace、Kanban board | 非代码项目、承诺与资料的领域补充 | 直接改宿主数据库 schema |
-| 长任务 | Kanban dispatcher、goal contract | 任务映射、结果验收、跨任务汇总 | 自建 worker supervisor |
-| 短并行 | `ctx.subagent_lifecycle` 或原生 delegation | 最小上下文与权限裁剪 | 声称句柄可跨重启恢复 |
-| Worker 模型选择 | `DelegationProvider.route_task` 与宿主 provider/effort 编码 | 可选原生路由插件、能力清单、shadow/预算/审计 | 第二个 agent 主脑或必需网关；假设所有 worker 路径已覆盖 |
-| 调度 | cron、session heartbeat | 用户意图、预算、停止与外发策略 | 平行 cron daemon |
-| 记忆 | MEMORY/USER、session search、单个外部 provider | 结构化事实、来源、纠错、按权限检索 | 默认同时激活多个 memory provider |
-| 连接 | MCP、OAuth、插件 catalog | connector 风险清单与最小工具集 | 第三套 OAuth/token store |
-| 入口 | 官方消息适配、web/desktop、STT/TTS | personal overview、移动流程验收 | 第一版自建手机聊天和通话栈 |
+| Reasoning | Agent loop, providers, interruption, compression | Tools and working protocols for personal affairs | A second loop/provider stack |
+| Sessions | SessionDB, gateway routes, profiles | Owner bindings and domain-object references | Replacing the transcript store |
+| Projects | Projects/workspaces, Kanban boards | Domain support for non-code projects, commitments, and material | Directly changing the host database schema |
+| Long-running tasks | Kanban dispatcher, goal contract | Task mapping, result acceptance, cross-task summaries | A custom worker supervisor |
+| Short parallel work | `ctx.subagent_lifecycle` or native delegation | Minimal context and reduced permissions | Claiming handles can recover across restarts |
+| Worker model selection | `DelegationProvider.route_task` and host provider/effort encoding | Optional native routing plugin, capability inventory, shadow mode/budgets/audit | A second agent controller or mandatory gateway; assuming all worker paths are covered |
+| Scheduling | Cron, session heartbeat | User intent, budgets, stop and external-send policies | A parallel cron daemon |
+| Memory | MEMORY/USER, session search, a single external provider | Structured facts, sources, corrections, permission-aware retrieval | Activating multiple memory providers simultaneously by default |
+| Connections | MCP, OAuth, plugin catalog | Connector risk inventory and minimal tool sets | A third OAuth/token store |
+| Entry points | Official messaging adapters, web/desktop, STT/TTS | Personal overview, acceptance testing for mobile flows | A custom mobile chat and calling stack in the first version |
 
-## 3. 插件模块边界（拟议）
+## 3. Plugin Module Boundaries (Proposed)
 
 ```text
-plugin.yaml                     # manifest、依赖、配置和能力声明
-__init__.py                     # register(ctx)，薄注册层
+plugin.yaml                     # Manifest, dependencies, configuration, capability declarations
+__init__.py                     # register(ctx), thin registration layer
 personal_agent/
-  domain/                      # 项目/承诺/事实/自动化/审批对象
-  services/                    # 领域动作与事务边界
-  policy/                      # 身份、授权、动作哈希、撤权版本
-  adapters/                    # 只调用已验证 Hermes 公共扩展面
-  storage/                     # migration、repositories、outbox
-  tools/                       # 小而明确的工具 schema 与 handler
-  context/                     # 有界、带来源的动态上下文
-  observability/               # 脱敏事件、指标、诊断
-skills/                        # inbox-review、project-review、weekly-review 等
-tests/                         # 单元、契约、恢复、安全、渠道测试
+  domain/                      # Project/commitment/fact/automation/approval objects
+  services/                    # Domain actions and transaction boundaries
+  policy/                      # Identity, authorization, action hashes, revocation revisions
+  adapters/                    # Calls only verified public Hermes extension surfaces
+  storage/                     # Migrations, repositories, outbox
+  tools/                       # Small, explicit tool schemas and handlers
+  context/                     # Bounded dynamic context with sources
+  observability/               # Redacted events, metrics, diagnostics
+skills/                        # inbox-review, project-review, weekly-review, etc.
+tests/                         # Unit, contract, recovery, security, channel tests
 ```
 
-这是未来目录建议，本次不创建可执行实现。先用一个插件包避免无意义微服务。需要独立 memory provider 时再分离可选包，不让安装基础功能就替换用户当前 provider。
+This is a proposed target directory structure. Only the thin registration layer and read-only status tool are currently implemented; other modules have not yet been created. See [12](12-foundation-progress.md) for actual progress. Start with one plugin package to avoid unnecessary microservices. Split out an optional package only if an independent memory provider becomes necessary, so installing the basic functionality does not replace the user's current provider.
 
-## 4. 数据与执行的唯一权威
+## 4. Single Authorities for Data and Execution
 
-1. 对话与模型执行状态以 Hermes 为准。
-2. worker 状态以原生 Kanban/run 为准；领域 `task` 保存引用与业务验收，不再维护一套 competing worker lifecycle。
-3. 计划触发以原生 cron/heartbeat 为准；领域 automation 保存目标和策略，不自己再次计算并派发同一 occurrence。
-4. 个人事实、承诺、授权提案、来源映射与外部动作账本以插件数据库为准。
-5. 外部动作是否成功以外部 receipt/读回为准，不以“模型说已经发了”为准。
+1. Hermes is authoritative for conversation and model-execution state.
+2. Native Kanban/run state is authoritative for workers; the domain `task` stores references and business acceptance, without maintaining a competing worker lifecycle.
+3. Native cron/heartbeat is authoritative for scheduled triggers; domain automations store goals and policies without independently recalculating and dispatching the same occurrence.
+4. The plugin database is authoritative for personal facts, commitments, authorization proposals, source mappings, and the external-action ledger.
+5. External receipts/read-back determine whether an external action succeeded, not “the model says it sent it.”
 
-跨 SQLite/远端系统不能假装有全局事务。领域事务先写 intent 和 outbox，再交给适配器执行；完成后写 receipt。远端结果未知时进入 `unknown` 并对账，不立即重发。
+Do not pretend that SQLite and remote systems share a global transaction. A domain transaction first writes the intent and outbox entry, then hands execution to an adapter and records the receipt afterward. An unknown remote result enters `unknown` and is reconciled, rather than immediately resent.
 
-## 5. Hermes 扩展点使用规则
+## 5. Rules for Using Hermes Extension Points
 
-- 通过 `register(ctx)` 注册工具、hook、命令、skills；运行数据使用官方 `plugin_data_dir` / `plugin_db`，不写安装目录。
-- 通用兼容边界是官方文档化 ctx/ABC/事件行为，不依赖任意内部 Python import 永久稳定。
-- `pre_llm_call` 只注入有界、相关、带来源的数据。失败时允许主对话继续，但不因此放行受限写操作。
-- `pre_tool_call` 在本次固定源码中对 callback 异常/超时/still-running **fail-closed**。`tool_request` 和 `tool_execution` middleware 失败可继续下游，不能拿它们做唯一权限边界。
-- hook 回调不执行外发副作用；有副作用的领域 handler 自身再次检查权限、版本、幂等和审批。
-- `ctx.subagent_lifecycle` 仅在活动父 turn 中可用；进程退出后 `reconnect` 不会恢复执行。长期工作使用 Kanban。
-- worker 路由插件优先通过 `delegate_task` backend 接入，主 agent 模型不变。公共 lifecycle、Kanban 初始 worker、cron 和辅助调用不自动经过该 backend；当前 route_task 没有完整可信 RouteContext 或原子预算准入。所需最小通用扩展、effort 映射与启用门槛见 [11](11-worker-model-routing.md)。
-- 原生 `desktop_project` 当前是 GUI 工具集，不能假设手机 session 默认可见。跨入口项目操作需要 E0 验证可用适配路径。
-- 不直接导入 `hermes_cli.projects_db` / `kanban_db` 修改数据，不直接写 `jobs.json` / SessionDB。缺公共写入入口时，先验证官方命令/dispatch 支持；确实缺 seam 时提出最小通用上游扩展。
+- Register tools, hooks, commands, and skills through `register(ctx)`; use the official `plugin_data_dir` / `plugin_db` for runtime data, not the installation directory.
+- The general compatibility boundary is officially documented ctx/ABC/event behavior, not an assumption that arbitrary internal Python imports remain stable forever.
+- `pre_llm_call` injects only bounded, relevant, sourced data. If it fails, the main conversation may continue, but restricted writes must not be allowed as a consequence.
+- In the pinned source reviewed here, `pre_tool_call` is **fail-closed** for callback exceptions, timeouts, and still-running callbacks. Failures in `tool_request` and `tool_execution` middleware may allow downstream execution to continue, so they cannot serve as the sole permission boundary.
+- Hook callbacks do not perform external side effects. Domain handlers that produce side effects recheck permissions, revisions, idempotency, and approvals themselves.
+- `ctx.subagent_lifecycle` is available only during an active parent turn; after process exit, `reconnect` does not restore execution. Use Kanban for long-running work.
+- Prefer integrating a worker-routing plugin through the `delegate_task` backend, leaving the main agent's model unchanged. The public lifecycle, initial Kanban workers, cron, and auxiliary calls do not automatically pass through that backend; current route_task lacks a complete trusted RouteContext and atomic budget admission. See [11](11-worker-model-routing.md) for the minimum general extensions required, effort mapping, and activation gates.
+- Native `desktop_project` is currently a GUI tool set; do not assume it is visible to mobile sessions by default. Project operations across entry points require E0 verification of an available adapter path.
+- Do not directly import `hermes_cli.projects_db` / `kanban_db` to modify data or write directly to `jobs.json` / SessionDB. If a public write entry point is missing, first verify official command/dispatch support; propose the smallest general upstream extension only when the required seam is genuinely absent.
 
-## 6. 上下文组装
+## 6. Context Assembly
 
-每轮只给主 agent：身份与当前 scope、当前项目摘要、相关承诺、少量事实、活跃任务变化、未决审批。长文档按需检索。每个片段标注来源、时间和可信级别；检索出的外部文本与用户命令分区。
+For each turn, give the main agent only identity and current scope, a current project summary, relevant commitments, a few facts, active-task changes, and pending approvals. Retrieve long documents on demand. Label each fragment with its source, time, and trust level; separate retrieved external text from user commands.
 
-上下文预算初始设为可配置上限，按实际模型测试确定，不能为了“全都记得”把全部个人资料放入所有请求。跨 profile 默认不共享。worker 只拿 handoff snapshot，不拿整份用户档案与全量聊天。
+Begin with a configurable context-budget cap and tune it through tests on actual models. Do not place all personal data in every request just to “remember everything.” Profiles do not share context by default. Workers receive only a handoff snapshot, not the entire user profile and complete chat history.
 
-## 7. 部署与升级
+## 7. Deployment and Upgrades
 
-个人版最小部署是一台持续在线的 Hermes host、一个 owner profile、插件数据目录和一个主要手机渠道。执行不可信代码时使用 Hermes 支持的受限环境并单独验证 filesystem/network/credential 隔离；进程隔离本身不等于沙箱。
+The minimum personal deployment is one continuously online Hermes host, one owner profile, a plugin data directory, and one primary mobile channel. Run untrusted code in a restricted environment supported by Hermes, and separately verify filesystem/network/credential isolation; process isolation alone is not a sandbox.
 
-版本锁记录 Hermes SHA、插件版本、schema version、启用连接器及测试结果。升级先备份插件数据库与配置，跑契约和恢复测试，再小范围启用。禁止自动升级到未经验证的 `main` 后宣称兼容。回滚代码不等于回滚数据；migration 必须声明可逆性和恢复方案。
+The version lock records the Hermes SHA, plugin version, schema version, enabled connectors, and test results. Before upgrading, back up the plugin database and configuration, run contract and recovery tests, then enable the upgrade on a limited basis. Do not automatically upgrade to an unverified `main` and claim compatibility. Rolling back code is not the same as rolling back data; migrations must state their reversibility and recovery plan.
