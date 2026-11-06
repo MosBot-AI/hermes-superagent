@@ -43,9 +43,11 @@ Hermes 原生工具 / MCP / 官方平台适配器 / 受限 workers
 | 短并行 | `ctx.subagent_lifecycle` 或原生 delegation | 最小上下文与权限裁剪 | 声称句柄可跨重启恢复 |
 | Worker 模型选择 | `DelegationProvider.route_task` 与宿主 provider/effort 编码 | 可选原生路由插件、能力清单、shadow/预算/审计 | 第二个 agent 主脑或必需网关；假设所有 worker 路径已覆盖 |
 | 调度 | cron、session heartbeat | 用户意图、预算、停止与外发策略 | 平行 cron daemon |
-| 记忆 | MEMORY/USER、session search、单个外部 provider | 结构化事实、来源、纠错、按权限检索 | 默认同时激活多个 memory provider |
+| 记忆 | MEMORY/USER、会话搜索、单一外部 provider | 可替换的项目 MemoryBackend、结构化事实/来源、纠错与权限感知检索；可选原生桥接 | 多个原生外部 provider、第二套聊天记录库，或由 provider 生成的权限 |
 | 连接 | MCP、OAuth、插件 catalog | connector 风险清单与最小工具集 | 第三套 OAuth/token store |
 | 入口 | 官方消息适配、web/desktop、STT/TTS | personal overview、移动流程验收 | 第一版自建手机聊天和通话栈 |
+
+[30](30-pluggable-memory-contracts-zh.md) 定义拟议的可替换记忆合同。默认后端使用权威 SQLite 记录/事件/FTS 加生成的 Markdown 视图。项目后端不是新的原生 MemoryProvider 槽位；可选桥接需要显式选择，在获准替换前保留用户现有 provider。当前任务工具并未实现这套记忆流水线。
 
 ## 3. 插件模块边界（拟议）
 

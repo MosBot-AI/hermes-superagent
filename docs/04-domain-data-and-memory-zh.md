@@ -2,11 +2,15 @@
 
 [English](04-domain-data-and-memory.md) | 简体中文
 
+完整的拟议可替换记忆设计见 [30](30-pluggable-memory-contracts-zh.md)：项目自有的 MemoryService/MemoryBackend 合同、本地 SQLite 加 Markdown 默认实现、可选的实际 Hermes MemoryProvider 桥接、生命周期/checkpoint、有界检索与迁移。本文保留领域模型；记忆记录 namespace 和后端特定的提交语义遵循文档 30。当前本地任务实现并不是完整的个人事实/记忆库。
+
 ## 1. 原则
 
 “记忆”不能承担所有状态。项目任务需要确定性状态机，个人事实需要来源和纠错，授权需要可撤销的严格作用域，聊天记录需要原样保留。它们可以互相引用，但不能压缩成一份由模型任意覆盖的长文本。
 
 所有表默认包含 `id`、`owner_id`、`profile_id`、`created_at`、`updated_at`、`revision`。时间点用 UTC 保存，面向人的期限另外保存 IANA timezone 和原始表述。结构化数据存于 `$HERMES_HOME/plugin-data/<plugin-id>/`，不提交 Git；大附件保存受控引用与哈希，不复制进所有数据库行。
+
+在记忆路径中，可信 profile namespace 不会伪造经过认证的 owner_id。未来 verified-owner namespace 有独立的真实身份与数据采用门禁。任务、授权和原生运行时对象仍是各自状态的权威来源；记忆摘要不能隐式修改它们。
 
 ## 2. 最小数据模型（拟议）
 
@@ -49,7 +53,7 @@
 4. **项目知识**：任务相关材料、决策、成果引用；没有权限时不可被召回。
 5. **可选外部 memory provider**：只有一个可激活外部 provider，用户已有 provider 时保留它。高级语义检索属于后续选择，不是第一版前置条件。
 
-默认基于 SQLite 索引/全文检索，按需再做向量索引；事实库是权威，向量只是可重建索引。检索后先做权限、scope、过期与来源过滤，再进入模型上下文，不能仅靠提示词要求模型忽略越权结果。
+默认后端使用 SQLite 权威记录/事件、全文索引，以及生成的人类可读 Markdown 投影。Markdown 编辑成为显式、基于版本的变更提案，不构成第二个并发权威来源。向量索引是可选且可重建的。在任何外部查询或私有载荷读取之前，先确定获准 namespace、数据类别与范围；返回有界模型上下文前再检查当前权限、删除标记、有效性和来源。仅提示模型忽略未授权结果并不足够。原生 session_search 可显式读取另一个本地 profile，所以默认 profile 选择并不是通用隐私屏障。适配器、token 预算和迁移合同见 [30](30-pluggable-memory-contracts-zh.md)。
 
 ## 5. 写记忆流程
 

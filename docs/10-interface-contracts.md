@@ -10,6 +10,8 @@ For concrete client HTTP routes, host authentication, canonical session transpor
 
 [19](19-unified-voice-provider-contracts.md) defines the proposed common voice-session/component interface for local and configured online speech backends. Media frames, provider cancellation and playback recovery are separate from durable domain commands; a voice-provider tool/delegation event remains a proposal to Hermes, not a direct action executor.
 
+[30](30-pluggable-memory-contracts.md) defines the proposed project MemoryService/MemoryBackend contracts, record/event/receipt and deletion semantics, bounded context packs, adapter authoring and portable migration. These methods are not native Hermes CRUD APIs. An optional actual MemoryProvider bridge follows the single external-provider and trusted-context constraints; remembered text cannot issue grants or substitute for current task/effect truth.
+
 ## 1. EventEnvelope
 
 ```json

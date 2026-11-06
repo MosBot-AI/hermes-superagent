@@ -8,6 +8,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Added the bilingual pluggable-memory design, user-written adapter contract, default SQLite/Markdown authority rules, native single-provider compatibility, checkpoint/recall/deletion/migration gates, and E0.9/E2.6–E2.9 planning. Documentation only; no memory backend or ingestion is enabled.
+
 - Added separately opted-in local task read/write model tools and 30-minute native session activation, live turn/route/profile/task checks, revocation and unload gates. Ordinary in-process mode only; no real-model acceptance or cross-process activation.
 - Corrected pinned cron memory evidence: actual `skip_memory=False`, provider-owned cron write restrictions, and memory reload after compression.
 

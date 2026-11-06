@@ -33,11 +33,13 @@ Complete a safe, reliable vertical slice first, then add connectors, entry point
 
 - E0.8: Verify Voice Provider Contracts (M0, In progress; offline subset only): depends on E0.1/E0.2, using E0.4/E0.7 identity findings where applicable. Verify pinned ASR/TTS, native audio/live protocols, credentials, cancellation/streaming contracts, public adapter seams and unsupported modes. See [19](19-unified-voice-provider-contracts.md).
 
+- E0.9: Verify Memory Provider Contracts (M0, Backlog): depends on E0.1/E0.2/E0.5. Verify actual native loading/lifecycle/single-external-provider, profile/cron/worker context, compression checkpoint and source-reference contracts, including unsupported isolation modes. This gate applies when personal memory is enabled; it does not block the existing local task loop. See [30](30-pluggable-memory-contracts.md).
+
 Acceptance: Every reuse point has a behavioral test or an explicit blocker; the initial `requires_hermes` range comes from tests, not arbitrary version numbers. Produce a per-tool, per-path enforcement inventory. A capability set must not be enabled while it has unknown or bypassable write paths; prompt constraints cannot substitute for enforcement.
 
 Current E0.4 progress: [synthetic failure contracts and a blocked-write inventory](13-enforcement-contracts.md) are implemented. This is partial evidence, not complete path coverage or permission to enable writes.
 
-E0.6 is an independent optional-client contract lane. It does not gate the profile-first local M0/M1 exit; existing general E0 dependencies mean the applicable E0.1–E0.5 gates unless E0.6, E0.7 or E0.8 is explicitly named. E0.7/E1.6/E3.6 are conditional gates for an enabled Primary Bot capability; they do not silently become prerequisites for the local inbox or an unbound local baseline.
+E0.6 is an independent optional-client contract lane. It does not gate the profile-first local M0/M1 exit; existing general E0 dependencies mean the applicable E0.1–E0.5 gates unless E0.6, E0.7, E0.8 or E0.9 is explicitly named. E0.7/E1.6/E3.6 are conditional gates for an enabled Primary Bot capability; they do not silently become prerequisites for the local inbox or an unbound local baseline.
 
 ### E1. Establish Identity, Authorization, and Audit (P0, M1)
 
@@ -58,15 +60,21 @@ The [host-context experiment](23-host-command-context-experiment.md) packages a 
 
 The [fenced read-admission core](27-fenced-read-admission.md) adds an internal default-denied coordinator and actual policy/revoke transaction guard, with synthetic authority/resource fixtures. This is partial E1.3/E1.4 preparation, not production identity, activation, task adoption or complete read audit.
 
-### E2. Establish the Personal Domain and Memory (P0/P1, M1–M2)
+### E2. Establish the Personal Domain and Memory (P0/P1, M1–M3)
 
-Depends on E1.1/E1.5.
+Dependencies follow the trust mode. Explicit trusted-profile local memory reuses the profile-first deployment contract and local E1.5 audit/data-classification/secret-reference rules, not fabricated owner identity. Verified remote-owner exposure additionally requires applicable E1.1–E1.4 and explicit resource adoption. HTTP, Primary Bot and voice gates apply only to their selected modes.
 
-- E2.1: SQLite schema/migrations, projects/commitments/facts/sources, and revision updates.
-- E2.2: Scope-based retrieval, explicit facts/inferences/conflicts, and only bounded summaries in native memory.
-- E2.3: Correction, expiration, forgetting, export, and backup/restore tombstones.
-- E2.4: Person/project disambiguation and task-source associations; do not treat third-party reports as owner instructions.
-- E2.5: Evaluate optional memory provider adaptation; remain compatible with the user's existing single provider rather than forcing replacement.
+- E2.1: SQLite schema/migrations, projects/commitments/facts/sources, and revision updates. Memory records/events/receipts distinguish trusted-profile and verified-owner namespaces; native tasks and transcripts retain authority.
+- E2.2: Scope-based retrieval, explicit facts/inferences/conflicts, and only bounded summaries in native memory. Authorize before external queries and validate current revisions/deletions/sources before bounded context assembly; evaluate token limits and Chinese retrieval.
+- E2.3: Correction, expiration, forgetting, export, and backup/restore tombstones. Preserve deletion precedence over re-extraction and require projection/index/provider purge receipts, retention-safe event payloads and restore suppression.
+- E2.4: Person/project disambiguation and task-source associations; do not treat third-party reports as owner instructions. Distinguish semantic/episodic/procedural/task references, temporal conflicts and Chinese names/aliases; similarity is not identity proof.
+- E2.5: Evaluate optional memory provider adaptation; remain compatible with the user's existing single provider rather than forcing replacement. Evaluate replaceable project MemoryBackend adapters and the optional native MemoryProvider bridge separately; users may supply a conforming adapter, with explicit selection/migration.
+- E2.6: Define Pluggable Memory Contracts (M1, Backlog): depends on E0.9, local E1.5 audit/data-classification/secret-reference contracts and applicable local E2.1/E2.2 contracts. Define the versioned service/backend SDK, records/events/receipts, deletion semantics and conformance fixtures.
+- E2.7: Build Local Memory Backend (M2, Backlog): depends on E2.6, local E2.1/E2.2 and applicable E8.1/E8.2 harness. Implement canonical SQLite records/events/FTS, generated Markdown, bounded retrieval, correction/forgetting and explicit local commands.
+- E2.8: Integrate Native Memory Lifecycle (M2, Backlog): depends on E0.9/E2.6/E2.7 and applicable E6.8/E6.9 entry contracts. Add the optional single-slot bridge, consented source-bound candidates/recall and durable lifecycle/checkpoint handling with budgets. The bridge is not required for explicit local memory tools.
+- E2.9: Validate Memory Migration and Recall (M3, Backlog): depends on E2.7/E2.8 and E8.1/E8.2/E8.3 harness. Validate adapter conformance, fenced export/cutover/restore/delete races and Chinese/long-horizon recall.
+
+These five new memory packages, including E0.9, are planned and remain Backlog. [30](30-pluggable-memory-contracts.md) is the complete design, not an implementation report. Existing E2.1–E2.5 retain their checklist IDs and local-task evidence; no duplicate work packages are created.
 
 Acceptance: Long-term facts have provenance or inference labels; they are not readable across profiles/group chats; retrieval tests after correction and deletion pass.
 
@@ -166,6 +174,8 @@ Dependencies are integrated as each capability arrives; cover all of them before
 For Primary Bot releases, extend E8.2 with identity/epoch/receipt and clone/restore fault cases, E8.3 with source-fenced owner-directed migration, and E8.5 with selection/pause/recovery procedures. Concurrent cloned authorities without an external fence remain unsupported, not a passing recovery scenario.
 
 Acceptance: Run the full set of gates on the same release SHA; disclose skipped/failed items and do not present static checks as runtime verification.
+
+For enabled memory, extend E8.1 with redacted source coverage, lag, tokens/costs and pending commit/purge metrics; E8.2 with checkpoint, unknown-commit and delayed-publication-after-forgetting races; E8.3 with source-fenced migration, inactive import, tombstone-preserving rollback and stale-generation invalidation; E8.5 with adapter authoring, selection, trust/retention and recovery guidance. These extend existing Epic checklists, not new IDs or completion claims.
 
 ### E9. Design and Validate the Worker Routing Plugin (P1, M0–M3)
 

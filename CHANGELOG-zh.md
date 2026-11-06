@@ -8,6 +8,8 @@
 
 ### 新增
 
+- 新增双语可插拔记忆方案、用户自写适配器契约、默认 SQLite/Markdown 权威规则、原生单 provider 兼容、checkpoint/召回/删除/迁移门禁及 E0.9/E2.6–E2.9 规划。仅文档，不启用记忆后端或摄取。
+
 - 新增单独启用的本地任务读/写模型工具及30分钟原生会话激活，实时 turn/route/profile/task 校验、撤销与卸载门禁；支持普通进程内模式，无真实模型验收或跨进程激活。
 - 修正固定上游 cron memory 事实：实际 `skip_memory=False`，cron 写入限制由 provider 契约承担；压缩后 memory 可从磁盘重载。
 

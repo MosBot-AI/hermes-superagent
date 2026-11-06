@@ -40,6 +40,8 @@ Hermes 原生 personal-agent 插件，目标是让一个主 agent 管理项目�
 
 [会话范围任务工具](docs/29-session-scoped-task-tools-zh.md)进一步支持 `personal_tasks_read` / `personal_tasks_write`。单独启用 `local_model_tools: true` 后，在原生会话中使用 `/personal-tools enable-read` 或 `enable-write` 激活30分钟。任务结果进入已配置模型上下文；所有该会话模型活动共享访问，并非逐条用户意图验证。仅支持正常原生进程内模式，不支持 managed worker/hosted plugin，不能为此关闭隔离。真实模型验收尚未运行。
 
+[可插拔记忆方案](docs/30-pluggable-memory-contracts-zh.md)定义可替换的项目后端与用户自写适配器 SDK，默认采用 SQLite 记录/事件/FTS 加 Markdown 投影，并可选桥接实际 Hermes MemoryProvider。获准替换前保留现有原生 provider。当前任务工具**尚未实现**记忆摄取、生命周期集成、检索与迁移。
+
 ## 开发验证
 
 基线为 `compatibility.json` 内的 Hermes commit；当前实际运行目标是 Python 3.14。没有根据单一 SHA 宣称宽泛的 `requires_hermes` 版本范围。

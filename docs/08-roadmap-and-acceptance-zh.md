@@ -33,11 +33,13 @@
 
 - E0.8：Verify Voice Provider Contracts（M0，In progress，仅离线子集）：依赖 E0.1/E0.2，适用时采用 E0.4/E0.7 身份发现。核验固定 ASR/TTS、原生音频/live 协议、凭据、取消和流式契约，列明公开 adapter seam 与不支持模式。见 [19](19-unified-voice-provider-contracts-zh.md)。
 
+- E0.9：Verify Memory Provider Contracts（M0，Backlog）：依赖 E0.1/E0.2/E0.5。核验真实原生加载/生命周期/单外部 provider、profile/cron/worker 上下文、压缩 checkpoint 与来源引用契约，包括不支持的隔离模式。此门禁仅适用于启用个人记忆，不阻塞已有本地任务闭环。见 [30](30-pluggable-memory-contracts-zh.md)。
+
 验收：每个复用点有一个行为测试或明确 blocker；首次 `requires_hermes` 范围来自测试，不用随意版本号。输出逐工具/逐路径 enforcement 清单；有未知或可绕过的写路径时不得启用该集合，不能用 prompt 约束替代。
 
 当前 E0.4 进度：[合成失败契约与阻断写清单](13-enforcement-contracts-zh.md) 已实现。这只是部分证据，不代表路径全部覆盖，也不允许启用写操作。
 
-E0.6 是独立的可选客户端契约路线，不阻塞 profile-first local M0/M1 退出；除非明确列出 E0.6、E0.7 或 E0.8，现有一般 E0 依赖均指适用的 E0.1–E0.5 门禁。E0.7/E1.6/E3.6 是启用 Primary Bot 能力时的条件门槛，不会静默成为本地收件箱或未绑定本地基线的前置条件。
+E0.6 是独立的可选客户端契约路线，不阻塞 profile-first local M0/M1 退出；除非明确列出 E0.6、E0.7、E0.8 或 E0.9，现有一般 E0 依赖均指适用的 E0.1–E0.5 门禁。E0.7/E1.6/E3.6 是启用 Primary Bot 能力时的条件门槛，不会静默成为本地收件箱或未绑定本地基线的前置条件。
 
 ### E1. 建立身份授权审计（P0，M1）
 
@@ -60,15 +62,21 @@ E0.6 是独立的可选客户端契约路线，不阻塞 profile-first local M0/
 
 [带栅栏的读取准入核心](27-fenced-read-admission-zh.md)增加内部默认拒绝协调器和实际策略/撤权事务守卫，采用合成 authority/资源 fixture。这只是 E1.3/E1.4 的部分准备，不是生产身份、激活、任务接管或完整读取审计。
 
-### E2. 建立个人领域与记忆（P0/P1，M1–M2）
+### E2. 建立个人领域与记忆（P0/P1，M1–M3）
 
-依赖 E1.1/E1.5。
+依赖按信任模式确定。显式可信 profile 本地记忆复用 profile-first 部署契约及 E1.5 的本地审计/数据分类/secret 引用规则，不伪造 owner 身份。已验证远程 owner 开放另需适用的 E1.1–E1.4 和明确资源采用。HTTP、Primary Bot 与语音门禁仅适用于选中的对应模式。
 
-- E2.1：SQLite schema/migration、projects/commitments/facts/sources、revision 更新。
-- E2.2：按 scope 检索，明确事实/推断/冲突，原生记忆只放有界摘要。
-- E2.3：更正、过期、遗忘、导出与备份恢复 tombstone。
-- E2.4：人物/项目消歧与任务来源关联，不把第三方转述当 owner 指令。
-- E2.5：可选 memory provider 适配评估；兼容用户现有单 provider，不强制替换。
+- E2.1：SQLite schema/migration、projects/commitments/facts/sources、revision 更新。 记忆 record/event/receipt 区分 trusted-profile 与 verified-owner namespace；原生任务与会话保留各自权威。
+- E2.2：按 scope 检索，明确事实/推断/冲突，原生记忆只放有界摘要。 外部查询前授权，组装有界上下文前验证当前 revision/删除/来源，并评估 token 限额与中文检索。
+- E2.3：更正、过期、遗忘、导出与备份恢复 tombstone。 删除优先于重新提取；要求投影/索引/provider purge receipt、符合保留规则的事件载荷及恢复抑制。
+- E2.4：人物/项目消歧与任务来源关联，不把第三方转述当 owner 指令。 区分 semantic/episodic/procedural/task 引用、时间冲突及中文姓名/别名；相似度不证明身份。
+- E2.5：可选 memory provider 适配评估；兼容用户现有单 provider，不强制替换。 分别评估可替换项目 MemoryBackend 适配器与可选原生 MemoryProvider 桥接；用户可提供合规适配器，并显式选择/迁移。
+- E2.6：Define Pluggable Memory Contracts（M1，Backlog）：依赖 E0.9、E1.5 本地审计/数据分类/secret 引用合同及适用本地 E2.1/E2.2 合同。定义版本化 service/backend SDK、record/event/receipt、删除语义与符合性 fixture。
+- E2.7：Build Local Memory Backend（M2，Backlog）：依赖 E2.6、本地 E2.1/E2.2 及适用 E8.1/E8.2 harness。实现权威 SQLite record/event/FTS、生成 Markdown、有界检索、纠错/遗忘与显式本地命令。
+- E2.8：Integrate Native Memory Lifecycle（M2，Backlog）：依赖 E0.9/E2.6/E2.7 及适用 E6.8/E6.9 入口合同。增加可选单槽桥接、经同意的来源绑定候选/召回，以及带预算的持久生命周期/checkpoint 处理。显式本地记忆工具不要求启用桥接。
+- E2.9：Validate Memory Migration and Recall（M3，Backlog）：依赖 E2.7/E2.8 及 E8.1/E8.2/E8.3 harness。验证适配器符合性、带栅栏的导出/切换/恢复/删除竞态及中文/长期召回。
+
+包括 E0.9 在内的五个新记忆工作包均为规划，保持 Backlog。[30](30-pluggable-memory-contracts-zh.md) 是完整方案，不是实现报告。现有 E2.1–E2.5 保留其清单 ID 和本地任务证据，不重复创建工作包。
 
 验收：长期事实都有 provenance 或 inference 标记；跨 profile/群聊不可读；纠错与删除后的检索测试通过。
 
@@ -168,6 +176,8 @@ E6.1–E6.7 保留适用的 E1.1/E3/E4 远程/手机依赖。E6.8/E6.9 是下述
 发布 Primary Bot 时，E8.2 增加身份/epoch/receipt、clone/restore 故障用例；E8.3 增加 source 先 fence 的 owner-directed 迁移；E8.5 增加选择/暂停/恢复流程。缺少外部 fence 的并发克隆 authority 仍不支持，不能标为恢复通过。
 
 验收：以同一发布 SHA 运行全套 gate；披露跳过/失败项，不把静态检查当运行验证。
+
+启用记忆时，为 E8.1 扩充脱敏来源覆盖、延迟、token/费用及待定提交/清除指标；为 E8.2 增加 checkpoint、未知提交、遗忘后延迟发布的竞态；为 E8.3 增加来源栅栏迁移、非活动导入、保留 tombstone 的回滚与旧 generation 失效；为 E8.5 增加适配器编写、选择、信任/保留及恢复指南。这些只是扩充现有 Epic 清单，不新增 ID 或宣称完成。
 
 ### E9. 设计并验证 Worker 路由插件（P1，M0–M3）
 

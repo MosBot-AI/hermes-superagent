@@ -56,6 +56,8 @@ Verification date: 2026-11-06 UTC. Pinned Hermes baseline: `90d6b98fd86d20981ee0
 
 Note that the lifecycle semantics of a general plugin’s `on_session_end` and the identically named MemoryProvider method must not be conflated. Test each against its own documentation and call path.
 
+[MemoryManager.add_provider](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/agent/memory_manager.py#L283-L321) rejects a second external provider; builtin coexistence is not permission to rename a project adapter builtin. [Compression invalidation](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/agent/system_prompt.py#L802-L837) reloads memory, despite the user guide's stronger frozen-session wording. [session_search](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/tools/session_search_tool.py#L603-L649) permits explicit cross-profile reads. The proposed [replaceable memory contract](30-pluggable-memory-contracts.md) separates project backends from the optional native bridge and requires its own bounded, permission-aware retrieval and checkpoint tests.
+
 ## H11. MCP and Costs
 
 [MCP](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/website/docs/user-guide/features/mcp.md) includes stdio/HTTP, OAuth, filtering, dynamic discovery, sampling, elicitation, and experimental events. `tool_costs/spend_limit` are in-session estimates that reset on restart, not a persistent monthly ledger. `readOnlyHint`/trust declarations do not prove that the server actually has no side effects; new tools require semantic review.

@@ -40,6 +40,8 @@ The [fenced read-admission core](docs/27-fenced-read-admission.md) adds current-
 
 [Session-scoped task tools](docs/29-session-scoped-task-tools.md) add `personal_tasks_read` / `personal_tasks_write`. Separately enable `local_model_tools: true`, then activate 30 minutes with `/personal-tools enable-read` or `enable-write` in the native session. Task results enter the configured model context; all model activity in that session shares access, not per-instruction human-intent verification. Only ordinary native in-process mode is supported, not managed workers/hosted plugins; do not disable isolation. Real-model acceptance has not run.
 
+The [pluggable memory design](docs/30-pluggable-memory-contracts.md) specifies a replaceable project backend and user-written adapter SDK, default SQLite records/events/FTS with Markdown projections, and an optional real Hermes MemoryProvider bridge. Existing native providers remain selected until an approved replacement. Memory ingestion, lifecycle integration, retrieval and migration are **planned, not implemented** by the current task tools.
+
 ## Development checks
 
 `compatibility.json` records the Hermes baseline commit. The current runtime target is Python 3.14. A single tested SHA does not justify a broad `requires_hermes` version range.

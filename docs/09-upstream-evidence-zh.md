@@ -56,6 +56,8 @@
 
 注意 general plugin `on_session_end` 与 MemoryProvider 同名方法的生命周期语义不能混用，应按对应文档和调用路径测试。
 
+[MemoryManager.add_provider](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/agent/memory_manager.py#L283-L321) 拒绝第二个外部 provider；允许与 builtin 共存，不代表可以把项目适配器改名为 builtin。[压缩失效处理](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/agent/system_prompt.py#L802-L837) 会重新加载记忆，与用户指南更绝对的会话冻结措辞不同。[session_search](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/tools/session_search_tool.py#L603-L649) 允许显式跨 profile 读取。拟议[可替换记忆合同](30-pluggable-memory-contracts-zh.md) 区分项目后端与可选原生桥接，并要求独立验证有界、权限感知的检索与 checkpoint。
+
 ## H11. MCP 与费用
 
 [MCP](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/website/docs/user-guide/features/mcp.md)包含 stdio/HTTP、OAuth、筛选、动态发现、sampling、elicitation 和实验性 events。`tool_costs/spend_limit` 是会话内估算，重启会重置，不能当作持久月账本。`readOnlyHint`/trust 声明不证明服务端实际无副作用；新工具需要语义审核。

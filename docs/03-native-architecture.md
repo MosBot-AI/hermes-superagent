@@ -43,9 +43,11 @@ Binding an existing native **Bot Mode Bot** to its verified profile and canonica
 | Short parallel work | `ctx.subagent_lifecycle` or native delegation | Minimal context and reduced permissions | Claiming handles can recover across restarts |
 | Worker model selection | `DelegationProvider.route_task` and host provider/effort encoding | Optional native routing plugin, capability inventory, shadow mode/budgets/audit | A second agent controller or mandatory gateway; assuming all worker paths are covered |
 | Scheduling | Cron, session heartbeat | User intent, budgets, stop and external-send policies | A parallel cron daemon |
-| Memory | MEMORY/USER, session search, a single external provider | Structured facts, sources, corrections, permission-aware retrieval | Activating multiple memory providers simultaneously by default |
+| Memory | MEMORY/USER, session search, a single external provider | Replaceable project MemoryBackend, structured facts/sources, correction and permission-aware retrieval; optional native bridge | Multiple native external providers, a second transcript store, or provider-generated permission |
 | Connections | MCP, OAuth, plugin catalog | Connector risk inventory and minimal tool sets | A third OAuth/token store |
 | Entry points | Official messaging adapters, web/desktop, STT/TTS | Personal overview, acceptance testing for mobile flows | A custom mobile chat and calling stack in the first version |
+
+[30](30-pluggable-memory-contracts.md) defines the proposed replaceable memory contract. The default backend uses canonical SQLite records/events/FTS plus generated Markdown views. A project backend is not a new native MemoryProvider slot; the optional bridge requires explicit selection and preserves the user's existing provider until an approved replacement. None of this memory pipeline is implemented by the current task tools.
 
 ## 3. Plugin Module Boundaries (Proposed)
 

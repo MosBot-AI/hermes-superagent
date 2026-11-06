@@ -10,6 +10,8 @@
 
 [19](19-unified-voice-provider-contracts-zh.md) 定义本地与配置好的在线语音后端共用的拟议会话/组件接口。媒体帧、provider 取消和播放恢复独立于持久领域命令；语音 provider 的工具/委托事件仍是交给 Hermes 评估的提议，不是直接执行操作的入口。
 
+[30](30-pluggable-memory-contracts-zh.md) 定义拟议的项目 MemoryService/MemoryBackend 合同、记录/事件/回执与删除语义、有界上下文包、适配器编写及可移植迁移。这些方法不是原生 Hermes CRUD API。可选的实际 MemoryProvider 桥接遵循单一外部 provider 和可信上下文约束；记住的文字不能签发 grant，也不能替代当前任务/效果状态。
+
 ## 1. EventEnvelope
 
 ```json

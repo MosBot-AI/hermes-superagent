@@ -41,7 +41,8 @@
 27. [带栅栏的读取准入](27-fenced-read-admission-zh.md)：默认拒绝的确认/快照契约、实际策略事务排序及未实现的生产 adapter。
 28. [Profile 优先的本地任务对话](28-profile-first-local-conversations-zh.md)：显式启用原生会话命令、任务/项目标签闭环和可信单用户部署边界。
 29. [会话范围任务工具](29-session-scoped-task-tools-zh.md)：明确激活的原生进程内模型任务访问、隐私/撤销边界及待完成真实模型验收。
-30. [架构决策记录](adr/README-zh.md)：为什么选择这些约束。
+30. [可插拔记忆契约](30-pluggable-memory-contracts-zh.md)：拟议的可替换后端/SDK、SQLite 权威与 Markdown 投影、可选原生桥接、有界召回、删除与迁移。
+31. [架构决策记录](adr/README-zh.md)：为什么选择这些约束。
 
 ## 三类陈述必须分开
 

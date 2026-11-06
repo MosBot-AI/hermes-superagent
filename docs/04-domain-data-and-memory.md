@@ -2,11 +2,15 @@
 
 English | [简体中文](04-domain-data-and-memory-zh.md)
 
+The complete proposed replaceable memory design is in [30](30-pluggable-memory-contracts.md): a project-owned MemoryService/MemoryBackend contract, local SQLite plus Markdown default, optional actual Hermes MemoryProvider bridge, lifecycle/checkpoints, bounded retrieval and migration. This page remains the domain model; memory record namespaces and backend-specific commit semantics follow document 30. The current local task implementation is not the full personal fact/memory store.
+
 ## 1. Principles
 
 “Memory” cannot carry all state. Project tasks need deterministic state machines; personal facts need provenance and correction; authorization needs revocable, strict scopes; and chat records must remain intact. These can reference one another, but must not be compressed into a single long text that the model can arbitrarily overwrite.
 
 All tables include `id`, `owner_id`, `profile_id`, `created_at`, `updated_at`, and `revision` by default. Store instants in UTC; also retain the IANA timezone and original wording for human-facing deadlines. Structured data lives in `$HERMES_HOME/plugin-data/<plugin-id>/` and is not committed to Git. Store controlled references and hashes for large attachments rather than copying them into every database row.
+
+For the memory lane, a trusted-profile namespace does not fabricate an authenticated owner_id. A future verified-owner namespace has its own real identity/adoption gates. Task, authorization and native runtime objects remain authoritative for their own state; a memory summary cannot update them implicitly.
 
 ## 2. Minimal Data Model (Proposed)
 
@@ -49,7 +53,7 @@ All changes use revision/compare-and-set to prevent concurrent overwrites from m
 4. **Project knowledge**: Task-related materials, decisions, and result references; never retrieved without permission.
 5. **Optional external memory provider**: Only one external provider can be active. Preserve the user’s existing provider. Advanced semantic retrieval is a later option, not a prerequisite for the first release.
 
-Use SQLite indexes/full-text search by default, adding vector indexes only as needed. The fact store is authoritative; vectors are only rebuildable indexes. After retrieval, filter permissions, scope, expiration, and provenance before entering model context. Prompting the model to ignore unauthorized results is not sufficient.
+The default backend uses SQLite canonical records/events with full-text indexes and generated human-readable Markdown projections. Markdown edits become explicit revision-based proposals, not a second concurrent authority. Vector indexes are optional and rebuildable. Derive the authorized namespace, data classes and scope before any external query or private payload fetch; then recheck current permissions, tombstones, validity and provenance before returning bounded model context. Prompting the model to ignore unauthorized results is insufficient. Native session_search can explicitly read another local profile, so default profile selection is not a universal privacy barrier. See [30](30-pluggable-memory-contracts.md) for adapter, token-budget and migration contracts.
 
 ## 5. Memory Write Workflow
 

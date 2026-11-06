@@ -41,7 +41,8 @@ Extend Hermes into a long-lived personal agent for one user: one main agent unde
 27. [Fenced read admission](27-fenced-read-admission.md): default-denied confirmation/snapshot seams, actual policy transaction ordering and unimplemented production adapters.
 28. [Profile-first local task conversations](28-profile-first-local-conversations.md): opt-in native commands, task/project-label lifecycle and trusted single-user deployment boundary.
 29. [Session-scoped task tools](29-session-scoped-task-tools.md): explicitly activated in-process model task access, privacy/revocation boundaries and pending real-model acceptance.
-30. [Architecture decision records](adr/README.md): reasons for the constraints.
+30. [Pluggable memory contracts](30-pluggable-memory-contracts.md): proposed replaceable backend/SDK, SQLite authority and Markdown projections, optional native bridge, bounded recall, deletion and migration.
+31. [Architecture decision records](adr/README.md): reasons for the constraints.
 
 ## Keep three kinds of statements separate
 
