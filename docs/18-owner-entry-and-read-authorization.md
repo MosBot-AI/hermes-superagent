@@ -2,11 +2,13 @@
 
 English | [简体中文](18-owner-entry-and-read-authorization-zh.md)
 
-**Implemented: a deterministic internal read evaluator and a non-personal access diagnostic. Not implemented: a production identity issuer, owner enrollment, live private reads, grants/policy storage, Primary Bot binding or controlled writes.** This advances E0.7 and preparatory portions of E1.1/E1.2; it does not complete their release gates. The [Primary Bot design](15-primary-bot-binding.md) remains gated.
+**Implemented: a deterministic internal read evaluator and a non-personal access diagnostic. Not implemented: a production identity issuer, owner enrollment, live private reads, live grant/policy authority, Primary Bot binding or controlled writes.** This advances E0.7 and preparatory portions of E1.1/E1.2; it does not complete their release gates. The [Primary Bot design](15-primary-bot-binding.md) remains gated.
 
 The baseline is Hermes `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`. No API Key is needed to test this slice. Missing trustworthy host contracts cannot be repaired by supplying a model credential.
 
 A separate [review-only host-context experiment](23-host-command-context-experiment.md) records a prototype transport-observation seam and unresolved integration gates. It is not applied to the compatibility checkout or installed with this plugin, and does not change the denied production behavior described here.
+
+The follow-on [pending enrollment/policy core](26-pending-enrollment-policy.md) now persists prospective administrative records only. The live owner enrollment, current authenticated policy and grant issuance gaps described here remain open.
 
 ## 1. Why Channel Identity Is Not Yet Enough
 
@@ -91,7 +93,7 @@ Unit tests cover strict types/immutability, exact identity/scope/ownership, wron
 
 Pinned-host contracts exercise real plugin registration/dispatch/reload/unload and serialization behavior. They show the lost receiving-adapter reference rather than pretending it survives. Injection tests exercise the native resolver and quick/plugin dispatch sink for `allow_gateway_control=False`; they do not exercise the full inbound pipeline. Direct callback fixtures alone are not proof of a secure ingress path. Hosted HTTP's admission boolean remains insufficient [I4]. No real personal account or production binding is tested.
 
-Run the [full repository checker](../README.md#development-checks) at the tested commit. E0.7 remains partial, E1 owner enrollment/current-policy persistence remains unimplemented, and Primary Bot/read/write release gates stay closed. Future connection setup and any persistent access must use the authorized native secure flow; do not ask the user to paste secrets into chat.
+Run the [full repository checker](../README.md#development-checks) at the tested commit. E0.7 remains partial, E1 owner enrollment/current authenticated-policy admission remains unimplemented, and Primary Bot/read/write release gates stay closed. Future connection setup and any persistent access must use the authorized native secure flow; do not ask the user to paste secrets into chat.
 
 ## 7. Pinned Evidence
 

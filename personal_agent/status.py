@@ -63,6 +63,15 @@ def build_status(*, mode: str = "read_only") -> dict[str, object]:
                 "current_read_policy",
             ],
         },
+        "enrollment_policy": {
+            "persistence_core_implemented": True,
+            "production_adapter_enabled": False,
+            "activation_supported": False,
+            "grant_issuance_supported": False,
+            "scope": (
+                "Unwired pending/revoked metadata only; profiles are not authenticated owners."
+            ),
+        },
         "voice": {
             "synthetic_self_test_implemented": True,
             "live_voice_enabled": False,

@@ -48,6 +48,8 @@ This file distinguishes design work, development changes, and released capabilit
 - Documented the minimum gated owner-summary path, including explicit local-data adoption and atomic host/policy admission.
 - Preserve unified patch context whitespace through scoped Git attributes; upstream source whitespace checks still run.
 
+- Added a default-disabled pending enrollment/policy persistence core, exact scoped CAS, terminal revocation, transactional audit and private POSIX storage checks. No activation, grant issuance, task adoption or production read entry point.
+
 ### Boundaries
 
 - E0.3, full E0.4 coverage, E0.6, identity/authorization, full domain storage, reminders, connectors, mobile, voice, and E9 model routing remain unimplemented.

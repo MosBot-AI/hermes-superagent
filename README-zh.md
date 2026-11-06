@@ -30,6 +30,8 @@ Hermes 原生 personal-agent 插件，目标是让一个主 agent 管理项目�
 
 显式启用的[原生计划 blueprint](docs/25-native-planning-blueprint-zh.md)可通过 Hermes 已有 Blueprint/Cron 界面使用。加载只注册模板，不创建 job。原生排程可能产生模型费用，已有 job 在移除插件后仍会运行。默认投递为本地，不是工具或隐私沙箱。
 
+[待确认身份登记与策略核心](docs/26-pending-enrollment-policy-zh.md)现可持久化拟议映射和范围，包含事务版本、终止性撤销及审计。内部 opener 默认禁用，没有注册运行入口。这些记录不认证 owner、不签发 grant，也不接管本地任务。
+
 ## 开发验证
 
 基线为 `compatibility.json` 内的 Hermes commit；当前实际运行目标是 Python 3.14。没有根据单一 SHA 宣称宽泛的 `requires_hermes` 版本范围。

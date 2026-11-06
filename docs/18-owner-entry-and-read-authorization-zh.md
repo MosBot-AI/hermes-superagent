@@ -2,11 +2,13 @@
 
 [English](18-owner-entry-and-read-authorization.md) | 简体中文
 
-**已实现：确定性的内部读取评估器，以及不读取个人数据的访问诊断。尚未实现：生产身份签发入口、owner 登记、真实私人读取、grant/policy 存储、主 Bot 绑定或受控写入。** 本切片推进 E0.7 和 E1.1/E1.2 的准备部分，不代表其发布门禁完成。[主 Bot 方案](15-primary-bot-binding-zh.md)仍受门禁约束。
+**已实现：确定性的内部读取评估器，以及不读取个人数据的访问诊断。尚未实现：生产身份签发入口、owner 登记、真实私人读取、实际 grant/policy authority、主 Bot 绑定或受控写入。** 本切片推进 E0.7 和 E1.1/E1.2 的准备部分，不代表其发布门禁完成。[主 Bot 方案](15-primary-bot-binding-zh.md)仍受门禁约束。
 
 基线为 Hermes `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`。测试本切片不需要 API Key；补充模型凭据也不能解决宿主可信契约缺失。
 
 另有[仅供审阅的 host 上下文实验](23-host-command-context-experiment-zh.md)，记录原型传输观察接口与尚未解决的集成门禁。它未应用到兼容性副本，也不会随插件安装，不改变本文所述生产路径拒绝行为。
+
+后续[待确认身份登记/策略核心](26-pending-enrollment-policy-zh.md)现已持久化拟议管理记录。本篇所述实际 owner 登记、当前经过认证的 policy 及 grant 签发缺口仍未关闭。
 
 ## 1. 为什么渠道身份仍然不够
 
@@ -91,7 +93,7 @@ Context 缺失或不受支持时，插件必须 fail closed。私有 adapter 导
 
 固定宿主契约验证真实插件注册/派发/重载/卸载和序列化行为，展示接收 adapter 引用丢失，而非假装它被保留。注入测试覆盖 `allow_gateway_control=False` 下的原生 resolver 与 quick/plugin dispatch sink，不覆盖完整 inbound pipeline。只调用回调的 fixture 不等于验证安全入口。Hosted HTTP 的 admission 布尔值仍不充分 [I4]。未测试真实个人账号或生产绑定。
 
-请在待验证 commit 上运行[全仓检查器](../README-zh.md#开发验证)。E0.7 仍是部分进展，E1 owner 登记/当前 policy 持久化仍未实现，主 Bot、私人读写发布门禁继续关闭。未来连接配置及任何持久访问应使用获准的原生安全流程，不应要求用户在聊天中粘贴秘密。
+请在待验证 commit 上运行[全仓检查器](../README-zh.md#开发验证)。E0.7 仍是部分进展，E1 owner 登记/当前经过认证的 policy 准入仍未实现，主 Bot、私人读写发布门禁继续关闭。未来连接配置及任何持久访问应使用获准的原生安全流程，不应要求用户在聊天中粘贴秘密。
 
 ## 7. 固定源码证据
 

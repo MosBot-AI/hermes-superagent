@@ -35,7 +35,8 @@ Extend Hermes into a long-lived personal agent for one user: one main agent unde
 23. [Host command-context experiment](23-host-command-context-experiment.md): review-only command-specific identity-observation patch, guarded evidence and the minimum owner-summary integration path.
 24. [Local project groups](24-local-project-groups.md): task labels, exact filters, progress counts and schema-v3 migration.
 25. [Native planning blueprint](25-native-planning-blueprint.md): opt-in integration with native planning forms and explicit job lifecycle/cost boundaries.
-26. [Architecture decision records](adr/README.md): reasons for the constraints.
+26. [Pending enrollment and policy persistence](26-pending-enrollment-policy.md): unwired administrative metadata, CAS/revocation, private storage and remaining owner-admission gates.
+27. [Architecture decision records](adr/README.md): reasons for the constraints.
 
 ## Keep three kinds of statements separate
 

@@ -30,6 +30,8 @@ The [local project groups](docs/24-local-project-groups.md) add explicit task la
 
 The opt-in [native planning blueprint](docs/25-native-planning-blueprint.md) is available through Hermes’s existing Blueprint/Cron interfaces. Loading registers a template only, not a job. Native scheduling can incur model costs; existing jobs survive plugin removal. Default delivery is local, not a tool or privacy sandbox.
 
+The [pending enrollment/policy core](docs/26-pending-enrollment-policy.md) now persists prospective mappings and scopes with transactional revisions, terminal revocation and audit. Its internal opener is disabled by default and has no registered runtime entry point. These records do not authenticate an owner, issue grants or adopt local tasks.
+
 ## Development checks
 
 `compatibility.json` records the Hermes baseline commit. The current runtime target is Python 3.14. A single tested SHA does not justify a broad `requires_hermes` version range.
