@@ -51,7 +51,7 @@ def status_tool(args: dict[str, object], **_context: object) -> str:
     return _status_result(args, "read_only")
 
 
-def _status_result(args: dict[str, object], mode: str) -> str:
+def _status_result(args: dict[str, object], mode: str, *, local_conversation: bool = False) -> str:
     if not isinstance(args, dict) or args:
         return json.dumps(
             {
@@ -60,7 +60,11 @@ def _status_result(args: dict[str, object], mode: str) -> str:
                 "summary": "personal_agent_status takes no arguments.",
             }
         )
-    return json.dumps(build_status(mode=mode), ensure_ascii=False, sort_keys=True)
+    return json.dumps(
+        build_status(mode=mode, local_conversation=local_conversation),
+        ensure_ascii=False,
+        sort_keys=True,
+    )
 
 
 def setup_cli(parser: argparse.ArgumentParser) -> None:
@@ -84,12 +88,17 @@ def run_cli(args: argparse.Namespace) -> int | None:
 
 
 def register(ctx: PluginContext) -> None:
-    """Local storage is opt-in and CLI-only; register no personal-data tools."""
+    """Local storage/conversation commands are opt-in; no personal-data model tools."""
     if ctx.get_config("mode", "read_only") not in ("read_only", "local_tasks"):
         raise ValueError("hermes-personal-agent supports only read_only or local_tasks mode")
     planning_enabled = ctx.get_config("planning_blueprint", False)
     if type(planning_enabled) is not bool:
         raise ValueError("planning_blueprint must be a boolean")
+    conversation_enabled = ctx.get_config("local_conversation", False)
+    if type(conversation_enabled) is not bool:
+        raise ValueError("local_conversation must be a boolean")
+    if conversation_enabled and ctx.get_config("mode", "read_only") != "local_tasks":
+        raise ValueError("local_conversation requires local_tasks mode")
     bound_home = current_profile_home()
 
     def registered_status(args: dict[str, object], **_context: object) -> str:
@@ -103,7 +112,12 @@ def register(ctx: PluginContext) -> None:
             mode = ctx.get_config("mode", "read_only")
             if mode not in ("read_only", "local_tasks"):
                 raise ValueError("invalid mode")
-            return _status_result(args, mode)
+            local_conversation = ctx.get_config("local_conversation", False)
+            if type(local_conversation) is not bool or (
+                local_conversation and mode != "local_tasks"
+            ):
+                raise ValueError("invalid local conversation configuration")
+            return _status_result(args, mode, local_conversation=local_conversation)
         except Exception:
             return json.dumps({"status": "blocked", "error": {"code": "invalid_configuration"}})
 
@@ -159,3 +173,33 @@ def register(ctx: PluginContext) -> None:
         from .blueprints import planning_check_in
 
         ctx.register_automation_blueprint(**planning_check_in())
+
+    if conversation_enabled:
+        from .conversation_tasks import run_conversation_tasks
+
+        def local_tasks_command(
+            raw_args: str,
+            *,
+            platform: str = "",
+            source: object = None,
+            session_id: str = "",
+            session_key: str = "",
+        ) -> str:
+            return run_conversation_tasks(
+                raw_args,
+                read_config=ctx.get_config,
+                bound_home=bound_home,
+                platform=platform,
+                source=source,
+                session_id=session_id,
+                session_key=session_key,
+            )
+
+        ctx.register_command(
+            "personal-tasks",
+            handler=local_tasks_command,
+            description=(
+                "Manage tasks/project groups in an explicitly trusted single-user local session."
+            ),
+            args_hint="<command> [arguments]",
+        )

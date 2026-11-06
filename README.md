@@ -6,7 +6,7 @@ A Hermes-native personal-agent plugin designed for one main agent to manage proj
 
 ## Current status
 
-Implemented development slices include the **E0 native foundation** and an **opt-in local CLI task inbox**. This is not yet a complete personal-agent MVP.
+The current priority is a **profile-first single-user local MVP**, without mandatory Primary Bot binding. E0 foundations, local task storage and an opt-in native conversation `/personal-tasks` command are implemented; this is not yet a complete natural-language personal assistant.
 
 - Native loading through `plugin.yaml` and synchronous `register(ctx)`.
 - A read-only `personal_agent_status` tool and, in `in_process` plugin mode, the `hermes personal-agent status` CLI.
@@ -16,11 +16,11 @@ Implemented development slices include the **E0 native foundation** and an **opt
 
 This plugin **does not disable or secure other Hermes tools**. E0.4 write-path coverage and E1 identity/authorization are incomplete, so this foundation must not be used to enable agent-driven or external write operations. Local task edits are separate explicit local-operator commands. Its status explicitly reports `release_gate: blocked`. See the [first-slice implementation record](docs/12-foundation-progress.md), [enforcement contracts](docs/13-enforcement-contracts.md), and [changelog](CHANGELOG.md).
 
-The detailed [client and connector API contracts](docs/14-client-api-contracts.md) are design work only. No HTTP API is registered by this plugin yet. M1 uses an existing mobile messaging channel; a custom native phone app has separate authentication and recovery gates.
+The detailed [client and connector API contracts](docs/14-client-api-contracts.md) are design work only. No HTTP API is registered by this plugin yet. M1 prioritizes existing native local sessions; mobile channels, a custom app and a selected Primary Bot are optional later lanes with separate authentication/recovery gates.
 
 The [local task inbox guide](docs/16-local-task-inbox.md) documents opt-in, commands, persistence and privacy limits. [Due dates and agenda](docs/17-local-task-agenda.md) explain date semantics and the original v1→v2 store upgrade; they do not deliver reminders. The [primary Bot binding design](docs/15-primary-bot-binding.md) selects an existing native Bot/canonical chat, but binding and owner authentication are not implemented.
 
-The [owner-entry/read-authorization foundation](docs/18-owner-entry-and-read-authorization.md) adds a pure internal evaluator and `/personal-access` / `hermes personal-agent access` denial diagnostics. Public source context lacks verified receiving-Bot/account provenance, so production identity issuance and private reads remain disabled; this is not completed owner authorization.
+The [owner-entry/read-authorization foundation](docs/18-owner-entry-and-read-authorization.md) adds a pure internal evaluator and `/personal-access` / `hermes personal-agent access` denial diagnostics. Public source context lacks verified receiving-Bot/account provenance, so production identity issuance and that protected-read lane remain disabled; this is not completed owner authorization. Separately opted-in single-user local commands do not depend on this future remote protocol.
 
 The [unified voice design](docs/19-unified-voice-provider-contracts.md) covers local ASR/TTS/VAD, user-configured online APIs and explicitly adapted realtime frontends under shared lifecycle/recovery contracts, preserving real backend differences. The [offline voice simulator](docs/20-voice-contract-simulator.md) now exercises a narrow synthetic contract through `hermes personal-agent voice self-test`. It uses generated silence only, with no microphone, speech model, provider call or native turn. Account connections and live voice remain unimplemented.
 
@@ -33,6 +33,9 @@ The opt-in [native planning blueprint](docs/25-native-planning-blueprint.md) is 
 The [pending enrollment/policy core](docs/26-pending-enrollment-policy.md) now persists prospective mappings and scopes with transactional revisions, terminal revocation and audit. Its internal opener is disabled by default and has no registered runtime entry point. These records do not authenticate an owner, issue grants or adopt local tasks.
 
 The [fenced read-admission core](docs/27-fenced-read-admission.md) adds current-policy transaction ordering and bounded immutable summary coordination. Only synthetic tests supply trusted confirmations/resources; no production adapters, runtime entry point or task adoption are enabled.
+
+
+[Native local task conversations](docs/28-profile-first-local-conversations.md) connect the existing store to Hermes sessions. In a trusted single-user installation, explicitly set `mode: local_tasks` and `local_conversation: true`, then use `/personal-tasks add "Prepare demo" --project "Personal Agent"`, `list`, `projects`, `update` and `done`. Commands rely on native host session authorization; already-authorized owner/operator controllers share access, and `LOCAL` does not prove physical locality. Do not enable on an exposed/shared gateway. No personal-data model tool, model call or new remote entry is added; projects remain task labels.
 
 ## Development checks
 

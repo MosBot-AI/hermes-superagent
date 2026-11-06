@@ -97,3 +97,28 @@ def test_cli_rejects_missing_or_unknown_actions(args):
     with pytest.raises(SystemExit) as exc:
         parser.parse_args(args)
     assert exc.value.code == 2
+
+
+def test_local_conversation_status_distinguishes_host_authorized_commands_from_owner_proof():
+    result = build_status(mode="local_tasks", local_conversation=True)
+    section = result["local_conversation"]
+    assert section["configured"] is True
+    assert section["enabled"] is result["local_task_inbox"]["enabled"]
+    assert section["surface"] == "trusted_native_local_session"
+    assert section["model_tools_enabled"] is False
+    assert section["new_remote_entry_enabled"] is False
+    assert "admitted controllers" in section["scope"]
+    assert result["read_authorization"]["protected_reads_enabled"] is False
+    assert result["capabilities"]["identity_binding"] is False
+
+
+@pytest.mark.parametrize("value", [True, "true", 1, None])
+def test_read_only_rejects_enabled_or_non_boolean_local_conversation(value):
+    with pytest.raises(ValueError):
+        build_status(local_conversation=value)
+
+
+def test_default_local_conversation_is_disabled():
+    section = build_status()["local_conversation"]
+    assert section["configured"] is False
+    assert section["enabled"] is False

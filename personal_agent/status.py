@@ -6,10 +6,12 @@ from . import HERMES_BASELINE, PLUGIN_ID, VERSION
 from .enforcement import build_enforcement_summary
 
 
-def build_status(*, mode: str = "read_only") -> dict[str, object]:
+def build_status(*, mode: str = "read_only", local_conversation: bool = False) -> dict[str, object]:
     """Return a fresh result without consulting credentials, files, or providers."""
     if mode not in ("read_only", "local_tasks"):
         raise ValueError("unsupported mode")
+    if type(local_conversation) is not bool or (local_conversation and mode != "local_tasks"):
+        raise ValueError("invalid local conversation configuration")
     platform_supported = os.name == "posix" and hasattr(os, "O_NOFOLLOW")
     local_tasks = mode == "local_tasks" and platform_supported
     return {
@@ -52,6 +54,18 @@ def build_status(*, mode: str = "read_only") -> dict[str, object]:
             "surface": "trusted_local_cli_only",
             "scope": "Plugin-owned tasks only; not native Kanban or a verified owner boundary.",
             "platform_gate": "POSIX private-file checks; Windows storage is not supported yet.",
+        },
+        "local_conversation": {
+            "implemented": True,
+            "configured": local_conversation,
+            "enabled": local_conversation and local_tasks,
+            "surface": "trusted_native_local_session",
+            "model_tools_enabled": False,
+            "new_remote_entry_enabled": False,
+            "scope": (
+                "Explicit commands under host session authorization; all admitted controllers "
+                "share access. LOCAL is not physical-locality or independent owner proof."
+            ),
         },
         "read_authorization": {
             "core_implemented": True,

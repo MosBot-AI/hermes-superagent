@@ -13,7 +13,7 @@ Complete a safe, reliable vertical slice first, then add connectors, entry point
 | Milestone | Deliverable | Entry criteria | Exit gate |
 |---|---|---|---|
 | M0 Design and contracts | Pinned baseline, runnable synthetic tests, minimal public API mapping, write-path coverage inventory | This design is complete | Gaps and adaptation paths are clear; no reliance on imaginary APIs; uncovered write capability sets are disabled by default |
-| M1 Reliable vertical slice | One owner, one project, one mobile text entry point, one reminder, controlled actions | E0.1–E0.5 applicable gates, E1.1–E1.5, and recovery/reconciliation foundations are complete | Restart/duplicate/denial/revocation tests pass; no enabled write path is known to bypass the action gate |
+| M1 Profile-first local MVP | Trusted single-user local gateway/profile; durable tasks, project labels and native conversation entry, without a Bot | Applicable E0.1/E0.2/E0.4/E0.5, local E2.1/E2.2 slices and E6.8; E6.9 is next | Local restart, duplicate, revision, invalid-input and host-admission tests pass; unverified scope disclosed; no remote/outbound capability enabled |
 | M2 Personal affairs | Facts/commitments, native multitasking, proactive observation, and reliable notifications; optional E9 routing shadow mode | M1; E9 shadow also requires a trusted-constraint baseline | Real-world scenarios work end to end; information correction and forgetting work; shadow mode does not change the actual model |
 | M3 Connections and voice | Minimal read/write MCP set, mobile voice messages, optional real-time voice validation and E9 bounded model routing | M2 + connector risk review; routing also requires E9.5/E9.6 gates | Confirmation of critical voice fields, identity, and costs are controlled; routing quality/privacy/budget gates pass |
 | M4 Release hardening | Recovery, backup, upgrades, rollback, security evaluations, and documentation | Core scenarios are complete | All release gates pass, with no unresolved P0 issues |
@@ -37,7 +37,7 @@ Acceptance: Every reuse point has a behavioral test or an explicit blocker; the 
 
 Current E0.4 progress: [synthetic failure contracts and a blocked-write inventory](13-enforcement-contracts.md) are implemented. This is partial evidence, not complete path coverage or permission to enable writes.
 
-E0.6 is an independent optional-client contract lane. It does not gate the channel-first M0/M1 exit; existing general E0 dependencies mean the applicable E0.1–E0.5 gates unless E0.6, E0.7 or E0.8 is explicitly named. E0.7/E1.6/E3.6 are conditional gates for an enabled Primary Bot capability; they do not silently become prerequisites for the local inbox or an unbound channel-first baseline.
+E0.6 is an independent optional-client contract lane. It does not gate the profile-first local M0/M1 exit; existing general E0 dependencies mean the applicable E0.1–E0.5 gates unless E0.6, E0.7 or E0.8 is explicitly named. E0.7/E1.6/E3.6 are conditional gates for an enabled Primary Bot capability; they do not silently become prerequisites for the local inbox or an unbound local baseline.
 
 ### E1. Establish Identity, Authorization, and Audit (P0, M1)
 
@@ -48,13 +48,13 @@ Depends on E0.2/E0.4.
 - E1.3: Operation-level checks in domain handlers and native approval adaptation; prohibit bypass through alternate paths after denial.
 - E1.4: Soft pause, hard revoke, and emergency stop; establish transactional linearization points for authorization admission and revocation, cancel effects not yet admitted, and preserve truthful status and best-effort cancellation semantics for in-flight requests already admitted/sent.
 - E1.5: Redacted audit, sensitive-data classification, and minimal credential exposure.
-- E1.6: Bind Primary Bot (M1, Backlog): depends on E0.7, E1.1–E1.5 and E2.1. Implement owner-confirmed enrollment/recovery, one active binding in its authority, revision/epoch fences, audit and roles. Binding alone enables no controlled writes.
+- E1.6: Bind Primary Bot (optional future, Backlog): depends on E0.7, E1.1–E1.5 and E2.1. Implement owner-confirmed enrollment/recovery, one active binding in its authority, revision/epoch fences, audit and roles. Binding alone enables no controlled writes.
 
 Acceptance: All write operations in release scope are covered; spoofed identities, stale approvals, payload changes after approval, and policy failures cause no unauthorized side effects. Revocation race tests cover “revocation commits first/admission commits first but nothing has been sent/the remote has accepted but local outcome is unknown/the next action after revocation.” Assert against the transactional ordering of admission and revocation; do not promise to retract already authorized remote requests. A denied intent cannot be revived; a new instruction requires a new intent and fresh authorization.
 
-Current preparatory implementation: [owner entry and read authorization](18-owner-entry-and-read-authorization.md) provides a pure internal evaluator and always-denying diagnostics. E0.7 source/IPC tests establish the missing public receiving-Bot identity. There is no production verified-context issuer, owner enrollment, live grant/policy authority or private read access. The [pending enrollment/policy core](26-pending-enrollment-policy.md) persists prospective mappings and read scopes with CAS, terminal revoke and audit, but is unwired and cannot activate them. E0.7/E1 gates remain incomplete; binding is not enabled.
+Current preparatory implementation: [owner entry and read authorization](18-owner-entry-and-read-authorization.md) provides a pure internal evaluator and always-denying diagnostics. E0.7 source/IPC tests establish the missing public receiving-Bot identity. There is no production verified-context issuer, owner enrollment, live grant/policy authority or verified remote-owner private read access. The [pending enrollment/policy core](26-pending-enrollment-policy.md) persists prospective mappings and read scopes with CAS, terminal revoke and audit, but is unwired and cannot activate them. E0.7/E1 gates remain incomplete; binding is not enabled.
 
-The [host-context experiment](23-host-command-context-experiment.md) packages a review-only prototype for E0.7. Source authenticity, current owner/policy admission and supported public IPC contracts remain separate gates. The local command-only repair has 87 guarded passing tests, but the historical nine environment-blocked tests remain unresolved; no Primary Bot or private read capability is enabled.
+The [host-context experiment](23-host-command-context-experiment.md) packages a review-only prototype for E0.7. Source authenticity, current owner/policy admission and supported public IPC contracts remain separate gates. The local command-only repair has 87 guarded passing tests, but the historical nine environment-blocked tests remain unresolved; that experiment enables no Primary Bot or verified remote-owner private reads.
 
 The [fenced read-admission core](27-fenced-read-admission.md) adds an internal default-denied coordinator and actual policy/revoke transaction guard, with synthetic authority/resource fixtures. This is partial E1.3/E1.4 preparation, not production identity, activation, task adoption or complete read audit.
 
@@ -70,11 +70,11 @@ Depends on E1.1/E1.5.
 
 Acceptance: Long-term facts have provenance or inference labels; they are not readable across profiles/group chats; retrieval tests after correction and deletion pass.
 
-Current E2.1 precursor: [the opt-in local CLI task inbox](16-local-task-inbox.md) implements plugin-owned SQLite, atomic receipts, revision checks and explicit local completion/cancellation. It is not the full domain Task/memory store, verified owner identity or native dispatch. E1 dependencies remain mandatory before exposing personal data to an agent, channel or HTTP client; neither E2.1 nor M1 is complete.
+Current E2.1 precursor: [the opt-in local CLI task inbox](16-local-task-inbox.md) implements plugin-owned SQLite, atomic receipts, revision checks and explicit local completion/cancellation. It is not the full domain Task/memory store, verified owner identity or native dispatch. Remote/Bot/HTTP exposure still requires the applicable E1 gates. E6.8 permits only explicit local commands under the trusted single-user deployment contract; it does not complete E1 or the full E2.1.
 
 The local follow-on adds [due dates and agenda](17-local-task-agenda.md), including atomic schema upgrades and legacy receipt compatibility tests. It advances a narrow local E2.1/E8.3 scope; it does not create reminders or complete E4 or the E1 gates.
 
-Current E2.2 precursor: [local task search](22-local-task-search.md) retrieves literal title/details matches only through the opt-in local CLI. It preserves the current schema and receipts; it is not agent memory, semantic retrieval or owner-authorized channel access. E1 and full E2.2 gates remain open.
+Current E2.2 precursor: [local task search](22-local-task-search.md) retrieves literal title/details matches through the opt-in local CLI, reused by the E6.8 local conversation commands. It preserves the current schema and receipts; it is not agent memory, semantic retrieval or owner-authorized channel access. E1 and full E2.2 gates remain open.
 
 A further local E2.1/E2.2 precursor adds [project groups](24-local-project-groups.md): labels, exact filtering, counts and schema-v3 compatibility. Labels are not stable domain/native project IDs or permission keys. This does not complete E2 or E3.1 and does not relax their E1 dependencies.
 
@@ -87,7 +87,7 @@ Depends on E0.3, E1.1–E1.5, and E2.1.
 - E3.3: Public lifecycle API for temporary subagents, minimal context and toolsets, and parent-task aggregation.
 - E3.4: Prioritize owner follow-ups, thread-to-task associations, context-only, and handback.
 - E3.5: Restart reconciliation, unknown outcomes, completion evidence, and cancellation states.
-- E3.6: Reconcile Primary Bot Sessions (M1 gate, M2 extensions; Backlog): depends on E1.6, E3.2/E3.5 and E4.3/E4.4. Resolve canonical roots/tips through verified adapters, correlate worker handoffs, and reconcile delivery/native receipts. No parallel transcript writer or automatic cross-host takeover.
+- E3.6: Reconcile Primary Bot Sessions (conditional Bot-bound gate, M2 extensions; Backlog): depends on E1.6, E3.2/E3.5 and E4.3/E4.4. Resolve canonical roots/tips through verified adapters, correlate worker handoffs, and reconcile delivery/native receipts. No parallel transcript writer or automatic cross-host takeover.
 
 Acceptance: Deduplicate one input into one task; do not mix context across projects; a short subtask exiting must not falsely report the whole task complete; long-running tasks remain queryable across restarts without duplicate dispatch.
 
@@ -117,9 +117,9 @@ Depends on E1/E4.3.
 
 Acceptance: False read-only claims, incorrect scope, revoked credentials, and malicious tool results cannot produce unauthorized behavior; new connectors must complete risk and recovery contracts before writes are enabled. E5.1/E5.2 remain checklists within the existing Epic, not new IDs. Contract design can proceed from E0.6/E1.2; write enablement requires E1.3/E1.4, E4.3/E4.4 and the connector’s E0.4 path coverage. Native OAuth remains the credential owner. See [14](14-client-api-contracts.md) for concrete connector inputs, outputs and receipts.
 
-### E6. Enable a Mobile Work Entry Point (P1, M1–M3)
+### E6. Enable Local and Optional Mobile Entry Points (P1, M1–M3)
 
-Depends on E1.1/E3/E4.
+E6.1–E6.7 retain their remote/mobile dependencies on E1.1/E3/E4 as applicable. E6.8/E6.9 are the separate local lane below.
 
 - E6.1: One primary mobile messaging channel, identity binding, text/attachments, and task/reminder routing.
 - E6.2: Desktop/mobile continuity and short candidate lists for disambiguation; idempotency for duplicate messages and approval buttons. For a selected Primary Bot, E6.1/E6.2 also verify receiving-transport/runtime-profile bindings and shared-domain, separate-transcript continuity; a shared profile does not merge chats or prove bot-account isolation.
@@ -128,8 +128,12 @@ Depends on E1.1/E3/E4.
 - E6.5: Build Domain API and Change Feed (M2, optional, Backlog): versioned typed REST over domain services, transactional dedup/outbox/change feed, authorized consistent snapshot and polling overview. Depends on E0.6, E1.1–E1.5, E2.1, E3.2/E3.5 and E4.2–E4.4; only individually verified adapters may be enabled.
 - E6.6: Validate Client Recovery Flows (M3, optional, Backlog): multi-device, offline, replay, expiry, ACL, isolation and cancellation scenarios. Depends on E6.5, E6.2/E6.4 and the E8.1/E8.2 harness for these paths, not all of E8/M4. Artifacts also require E0.6 file-contract evidence.
 - E6.7: Validate Native Mobile Sign-in (M3, optional, Blocked): depends on E0.6 auth findings, E1.1/E1.4/E1.5 and E6.4. The pinned native flow accepts only loopback callbacks; a supported target-phone callback and device-revocation contract must be proven before physical-device certification. Do not create a second plugin auth service.
+- E6.8: Enable Local Task Conversations (M1, In progress): depends on E0.1/E0.2, applicable E0.4/E0.5 and local E2.1/E2.2 schema-v3 TaskStore slices. Explicitly enable deterministic `/personal-tasks` add/list/search/projects/show/update/done/cancel/agenda, reusing validation, revisions and receipts; projects remain labels, not native Projects.
+- E6.9: Add Session-scoped Task Tools (M1, Backlog, next): depends on E6.8 and tested host session-scoped tool context, admission and permission boundaries. Verify source/session binding, invalid arguments, replay and unsupported paths before adding bounded model task tools; no automatic enablement or production verified-owner claims. No natural-language model task tool exists now.
 
-Acceptance: Complete “create project → reminder → inspect/cancel → approve controlled action” on the target physical phone; old devices and forwarded approvals cannot perform operations. M1 uses an existing messaging channel and does not depend on E6.5–E6.7 or a custom app. Optional browser/PWA delivery can precede native-mobile certification. New client work remains unimplemented; detailed contracts and exact blockers are in [14](14-client-api-contracts.md).
+Acceptance: Complete “create project → reminder → inspect/cancel → approve controlled action” on the target physical phone; old devices and forwarded approvals cannot perform operations. This is the optional mobile lane, not the local M1 exit; it does not depend on a custom app. Optional browser/PWA delivery can precede native-mobile certification. New client work remains unimplemented; detailed contracts and exact blockers are in [14](14-client-api-contracts.md).
+
+Local E6.8/E6.9 supports only a trusted single-user local gateway/profile deployment. Normal native CLI/TUI sessions are gateway-backed with LOCAL sources; host SessionAuthority checks owner/operator session read/control, exact registered live source and admission. All already host-authorized owner/operator controllers share local data access. A profile is a storage/configuration partition, not human identity; LOCAL does not prove physical locality. Add no listener, authentication service or remote connector; exposed, multiuser and remote-messaging deployments are unsupported. Pending enrollment and fenced read-admission cores remain unwired for a future verified remote-owner lane, not prerequisites for explicit local commands.
 
 ### E7. Preserve Voice Task Continuity (P1/P2, M2–M3)
 
@@ -180,11 +184,11 @@ Acceptance: Select only permitted candidates; do not override exact user pins; c
 
 ## 4. Sequence for the First Usable Vertical Slice
 
-E0.1–E0.5 (including applicable write-path coverage and disabling uncovered capability sets) → E1.1–E1.5 (identity, authorization, execution checks, hard revocation, audit/data classification) → E2.1 → E3.1/E3.2/E3.5 + E4.1–E4.4 (including task recovery, unknown outcomes, and delivery reconciliation) → E6.1 → corresponding crash/revoke/delivery tests in E8.1/E8.2 → M1.
+Local-first sequence: applicable E0.1/E0.2/E0.4/E0.5 → local E2.1/E2.2 TaskStore slices → E6.8 deterministic conversation commands → local persistence, admission, failure, recovery and configuration acceptance in E8.1/E8.2/E8.3/E8.5 → M1 local MVP. Then add session-scoped model task tools under E6.9; command entry is not natural-language task management until separately verified.
 
-A Bot-bound M1 additionally passes E0.7 → E1.6 → E3.6 and its applicable recovery/delivery gates. The explicit local_tasks inbox does not activate that binding. Custom-client work remains optional.
+The optional remote/mobile lane still requires E1.1–E1.5 → full E2.1 → E3.1/E3.2/E3.5 + E4.1–E4.4 → E6.1 and corresponding crash/revoke/delivery acceptance. Enabling Bot binding also requires E0.7 → E1.6 → E3.6. Custom clients retain independent optional gates; local commands activate none of these capabilities.
 
-Start E2.1 once the E1.5 data classification and audit conventions are clear. M1 cannot skip E1.4 and still claim revocation passes, nor defer recovery/reconciliation in E3.5/E4.4 and claim the reliable vertical slice is complete. Only then add broader automatic proactivity and more connectors. Identity, safety, and recovery are not “a final layer to add later.”
+Full E2.1 still requires E1.5 data classification and audit conventions. Completing the local MVP does not complete broad E1, remote revocation, dispatch or E3.5/E4.4 reconciliation; each capability must pass its own gates before enablement. Preserve existing research and blocker records rather than marking them Done by redefining the local scope.
 
 E9 is an optional enhancement; it must not turn the first version's fixed-model delegation into a system dependent on a new gateway. Its independent sequence is E9.1 → E9.2 → E9.3 shadow; E9.5/E9.6 may be validated in parallel, and E9.4 is enabled only after all gates pass. Do not launch automatic switching first and add trusted scope and cost controls later.
 

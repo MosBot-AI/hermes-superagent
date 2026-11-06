@@ -6,7 +6,7 @@ Hermes 原生 personal-agent 插件，目标是让一个主 agent 管理项目�
 
 ## 当前进度
 
-已实现的开发切片包括 **E0 原生兼容基础**和**显式启用的本地 CLI 任务收件箱**，尚不是完整 personal-agent MVP。
+当前优先交付 **profile-first 单用户本地 MVP**，不要求先绑定主 Bot。已实现 E0 基础、本地任务存储及显式启用的原生会话 `/personal-tasks` 命令，尚不是完整的自然语言个人助手。
 
 - `plugin.yaml` 与同步 `register(ctx)` 原生加载。
 - 只读 `personal_agent_status` 工具，以及 `in_process` 插件模式下的 `hermes personal-agent status` CLI。
@@ -16,11 +16,11 @@ Hermes 原生 personal-agent 插件，目标是让一个主 agent 管理项目�
 
 本插件**不会禁用或保护其他 Hermes 工具**。E0.4 全部写路径覆盖及 E1 身份/授权尚未完成，不能据此开放模型驱动或外部写操作。本地任务编辑是单独的明确本地操作员命令。当前 status 输出明确给出 `release_gate: blocked`。详见 [第一切片记录](docs/12-foundation-progress-zh.md)、[执行边界契约](docs/13-enforcement-contracts-zh.md) 和 [更新记录](CHANGELOG-zh.md)。
 
-详细的[客户端与连接器 API 契约](docs/14-client-api-contracts-zh.md) 仅为设计，本插件尚未注册 HTTP API。M1 使用已有手机消息渠道；自建原生手机 App 有独立的认证与恢复门槛。
+详细的[客户端与连接器 API 契约](docs/14-client-api-contracts-zh.md) 仅为设计，本插件尚未注册 HTTP API。M1 优先已有原生本地会话；手机渠道、自建 App 和指定主 Bot 是有独立认证/恢复门槛的后续可选路线。
 
 [本地任务收件箱指南](docs/16-local-task-inbox-zh.md) 说明启用、命令、持久化与隐私限制。[截止日期与 agenda](docs/17-local-task-agenda-zh.md) 说明日期语义和最初的 v1→v2 存储升级；它不会投递提醒。[主 Bot 绑定方案](docs/15-primary-bot-binding-zh.md) 选择已有原生 Bot/canonical chat，但绑定与 owner 认证尚未实现。
 
-[Owner 入口与读取权限基础](docs/18-owner-entry-and-read-authorization-zh.md)已实现内部纯评估器及 `/personal-access` / `hermes personal-agent access` 阻断诊断。公开 source 缺少可信接收 Bot 账号边界，生产身份签发与私人读取仍关闭；这不是已完成的 owner 授权。
+[Owner 入口与读取权限基础](docs/18-owner-entry-and-read-authorization-zh.md)已实现内部纯评估器及 `/personal-access` / `hermes personal-agent access` 阻断诊断。公开 source 缺少可信接收 Bot 账号边界，生产身份签发与该受保护读取路线仍关闭；这不是已完成的 owner 授权。另行明确启用的单用户本地命令不依赖此未来远程协议。
 
 [统一语音接口方案](docs/19-unified-voice-provider-contracts-zh.md)支持规划中的本地 ASR/TTS/VAD、用户配置的在线 API 与显式适配的实时语音前端，统一生命周期和恢复规则，但保留各后端实际能力差异。[离线语音模拟器](docs/20-voice-contract-simulator-zh.md)现可通过 `hermes personal-agent voice self-test` 验证窄范围合成契约，仅使用生成的静音，不接麦克风、语音模型、provider 或原生 turn。账户连接与真实语音仍未实现。
 
@@ -33,6 +33,9 @@ Hermes 原生 personal-agent 插件，目标是让一个主 agent 管理项目�
 [待确认身份登记与策略核心](docs/26-pending-enrollment-policy-zh.md)现可持久化拟议映射和范围，包含事务版本、终止性撤销及审计。内部 opener 默认禁用，没有注册运行入口。这些记录不认证 owner、不签发 grant，也不接管本地任务。
 
 [带栅栏的读取准入核心](docs/27-fenced-read-admission-zh.md)增加当前策略事务排序和有界不可变摘要协调。只有合成测试提供可信确认/资源；不启用生产 adapter、运行入口或任务接管。
+
+
+[原生本地任务对话](docs/28-profile-first-local-conversations-zh.md)将已有任务存储接入 Hermes 会话。在可信单用户安装中显式设置 `mode: local_tasks` 和 `local_conversation: true`，即可使用 `/personal-tasks add "准备演示" --project "个人助手"`、`list`、`projects`、`update` 和 `done`。命令依赖宿主原生会话授权；已获授权的 owner/operator 控制端共享访问，`LOCAL` 不证明物理本地性。不要在对外暴露/共享网关启用。无个人数据模型工具、模型调用或新增远程入口，项目仍是任务标签。
 
 ## 开发验证
 

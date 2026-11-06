@@ -2,15 +2,17 @@
 
 English | [简体中文](15-primary-bot-binding-zh.md)
 
-**Status: proposed design, not implemented.** The user selects an existing Hermes **Bot Mode Bot** to act as the personal super agent. This does not create another agent loop, change Hermes's global/default Bot, or grant new permissions. All binding records, service methods, roles, events and capability flags below belong to this proposed plugin design. The current CLI task inbox is a separate local feature, not proof of Bot binding or owner authentication.
+**Status: optional future design, not implemented; not a prerequisite for the profile-first local MVP.** If this capability is chosen, the user selects an existing Hermes **Bot Mode Bot** to act as the personal super agent. This does not create another agent loop, change Hermes's global/default Bot, or grant new permissions. All binding records, service methods, roles, events and capability flags below belong to this proposed plugin design. The current CLI task inbox is a separate local feature, not proof of Bot binding or owner authentication.
 
 Source baseline: Hermes `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`. Source inspection is not deployment certification. Read [03](03-native-architecture.md), [06](06-plugins-mcp-and-security.md), [11](11-worker-model-routing.md) and [14](14-client-api-contracts.md) alongside this contract.
 
-Preparatory code and contract evidence are in [18](18-owner-entry-and-read-authorization.md): the read evaluator exists, but missing public receiving-Bot identity keeps production owner contexts and private reads disabled. The binding flows below remain a design.
+Preparatory code and contract evidence are in [18](18-owner-entry-and-read-authorization.md): the read evaluator exists, but missing public receiving-Bot identity keeps production owner contexts and private reads in this remote/Bot lane disabled. The binding flows below remain a design.
+
+The current default route is E6.8/E6.9 in [08](08-roadmap-and-acceptance.md): native LOCAL sessions in a trusted single-user local gateway/profile, without Bot enrollment. A profile is not identity; LOCAL is not proof of physical locality. Host SessionAuthority owner/operator read/control, exact registered live-source and admission checks still apply, and all already host-authorized controllers share local data. Local commands do not pass the remote-owner/binding gates in this document; the unwired pending-enrollment/read-admission cores are not prerequisites for explicit local commands.
 
 ## 1. Decision and User Experience
 
-The personal main agent is the user's selected native Bot: its profile owns personal domain state, and its **canonical Bot Chat** is the preferred coordination conversation. Hermes still owns inference, sessions, compression, worker execution, cron, credentials and transport. The plugin contributes personal-domain context, tasks, policy and evidence.
+In this optional Bot-bound lane, the personal main agent is the user's selected native Bot: its profile owns personal domain state, and its **canonical Bot Chat** is the preferred coordination conversation. Hermes still owns inference, sessions, compression, worker execution, cron, credentials and transport. The plugin contributes personal-domain context, tasks, policy and evidence.
 
 The intended setup is: select an existing Bot and its machine, review the exact target and data scope, confirm the binding, then see **Primary Bot: <display label> · <verified connection/profile>** with a separate capability/health indicator. Binding an existing Bot preserves its model, SOUL, memory provider, credentials, ordinary conversations and routines. No automatic copying, destructive reset, model change, or retitling of another conversation occurs.
 
@@ -234,12 +236,12 @@ Older hosts may lack route descriptors, canonical fields or normalized provenanc
 | ID | Status and dependencies | Deliverable |
 |---|---|---|
 | E0.7 Verify Primary Bot Contracts | M0; Backlog; E0.1/E0.2, using E0.4 findings | Profile/route/registry/lineage/provenance/receipt probes; supported adapter map and explicit gaps; optional HTTP also needs E0.6 |
-| E1.6 Bind Primary Bot | M1; Backlog; E0.7, E1.1–E1.5, E2.1 | Owner-confirmed enrollment and recovery, unique active binding, revision/epoch fence, audit and role policy; no unconditional write enablement |
+| E1.6 Bind Primary Bot | Optional future; Backlog; E0.7, E1.1–E1.5, E2.1 | Owner-confirmed enrollment and recovery, unique active binding, revision/epoch fence, audit and role policy; no unconditional write enablement |
 | E3.6 Reconcile Primary Bot Sessions | M1 gate for enabled Bot-bound paths, extended in M2; Backlog; E1.6, E3.2/E3.5, E4.3/E4.4 | Canonical resolution, worker handoff correlation, delivery/recovery and native receipt reconciliation |
 
 Extend E6.1/E6.2 with the selected Bot's verified channel bindings and separate-transcript continuity. Extend E8.2/E8.3 with this failure matrix and reviewed migration/restore; E8.5 documents selection, pause, recovery and limitations. These are additions to the plan, not remote Project item creation or Done status.
 
-E0.7/E1.6/E3.6 are release gates **when Primary Bot capability is enabled**. They do not retroactively block the explicitly local, no-dispatch task inbox. A Bot-bound M1 must pass them for its enabled paths; custom HTTP/PWA/native-phone E0.6/E6.5–E6.7 remain separate optional lanes. Start with one existing Bot, one authoritative profile and one verified owner; defer automatic multi-host migration and broad multi-Bot orchestration.
+E0.7/E1.6/E3.6 are release gates **when Primary Bot capability is enabled**. They do not block the profile-first local MVP or its explicit, no-dispatch task commands. A Bot-bound M1 must pass them for its enabled paths; custom HTTP/PWA/native-phone E0.6/E6.5–E6.7 remain separate optional lanes. Start with one existing Bot, one authoritative profile and one verified owner; defer automatic multi-host migration and broad multi-Bot orchestration.
 
 ## 12. Pinned Evidence
 

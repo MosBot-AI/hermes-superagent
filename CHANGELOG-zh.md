@@ -8,6 +8,9 @@
 
 ### 新增
 
+- 新增显式启用的 `/personal-tasks`，在宿主授权的原生 LOCAL 会话中录入、检索、查看项目组/agenda、编辑和完成任务，沿用持久回执与 revision。不新增任务模型工具、远程入口或模型调用。
+- 按用户同意调整为 profile-first 单用户本地 M1 路线；主 Bot 和可信远程 owner 登记成为有条件的后续路线。新增双语启用/信任边界指南及真实原生进程内命令准入契约。
+
 - E0 原生插件基础：只读 readiness 工具及 `in_process` 模式 CLI。
 - 严格只读配置与参数校验，不提供个人数据写入或外部动作工具。
 - 固定 Hermes 兼容基线，真实 discovery/dispatch/reload/unload/Doctor 契约、合成单元测试及离线测试保护。

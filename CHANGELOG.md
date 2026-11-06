@@ -8,6 +8,9 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Added opt-in `/personal-tasks` commands in host-authorized native LOCAL conversations: capture, search, project groups, agenda, edits and completion using existing durable receipts/revisions. No task model tool, new remote entry or model call.
+- Adopted the user-approved profile-first single-user local M1 route; Primary Bot and verified remote-owner enrollment become conditional future lanes. Added bilingual setup/trust-boundary guide and actual native in-process command-admission contracts.
+
 - E0 native plugin foundation with a read-only readiness tool and an `in_process` CLI.
 - Strict read-only configuration and argument validation. No personal-data or external-action tools.
 - Pinned Hermes compatibility metadata, real discovery/dispatch/reload/unload/Doctor contracts, synthetic unit tests, and offline test guards.

@@ -26,7 +26,11 @@ External services or isolated execution environments
 
 The main agent is the Hermes session itself, not another “persona” running inside the plugin. The plugin does not duplicate a separate agent loop either. Auxiliary LLM calls should prefer the official `ctx.llm` and its credential/budget rules; verify specific capabilities through E0 contract tests first.
 
-The selected main identity is an existing native **Bot Mode Bot**: bind its verified profile and canonical Bot Chat, while Hermes retains runtime ownership. This is a proposed capability, not an implemented setting. Profile-scoped plugin loading does not by itself distinguish the main conversation from ordinary sessions or workers. [15](15-primary-bot-binding.md) defines owner-confirmed enrollment, cross-connection identity, session roles, recovery and migration limits without changing Hermes's default Bot.
+The default route is a **profile-first, trusted single-user local MVP**: the main agent remains a native Hermes session, with no Bot selection or binding required. A profile partitions configuration/storage; it is not a human identity. Normal native CLI/TUI sessions are gateway-backed and use a LOCAL source. Host SessionAuthority enforces owner/operator session read/control, exact registered live source and admission; all already host-authorized owner/operator controllers share local data access. LOCAL does not prove physical locality, so only a trusted single-user local gateway/profile deployment is supported, not exposed, multiuser or remote-messaging deployments.
+
+The opt-in `/personal-tasks` feature currently being implemented is a deterministic command entry point reusing schema-v3 TaskStore for add/list/search/projects/show/update/done/cancel/agenda; projects are labels only. It adds no listener, authentication service, remote connector, native Project or model task tool. Pending enrollment and read-admission cores remain unwired for a future verified remote-owner lane and do not block these explicit local commands.
+
+Binding an existing native **Bot Mode Bot** to its verified profile and canonical Bot Chat is an optional future capability, not an implemented setting or local MVP prerequisite. Profile-scoped plugin loading does not prove owner identity or distinguish primary, ordinary and worker sessions. [15](15-primary-bot-binding.md) preserves owner-confirmed enrollment, cross-connection identity, session roles, recovery and migration gates without changing Hermes's default Bot.
 
 ## 2. Existing Capabilities and Added Value
 
@@ -93,6 +97,6 @@ Begin with a configurable context-budget cap and tune it through tests on actual
 
 ## 7. Deployment and Upgrades
 
-The minimum personal deployment is one continuously online Hermes host, one owner profile, a plugin data directory, and one primary mobile channel. Run untrusted code in a restricted environment supported by Hermes, and separately verify filesystem/network/credential isolation; process isolation alone is not a sandbox.
+The minimum local MVP deployment is a trusted single-user Hermes host, one profile and a plugin data directory, using native gateway-backed CLI/TUI. It requires neither continuous uptime, a mobile channel nor Bot enrollment. Future reminders and remote entry points require their own availability and identity gates. Run untrusted code in a restricted environment supported by Hermes, and separately verify filesystem/network/credential isolation; process isolation alone is not a sandbox.
 
 The version lock records the Hermes SHA, plugin version, schema version, enabled connectors, and test results. Before upgrading, back up the plugin database and configuration, run contract and recovery tests, then enable the upgrade on a limited basis. Do not automatically upgrade to an unverified `main` and claim compatibility. Rolling back code is not the same as rolling back data; migrations must state their reversibility and recovery plan.

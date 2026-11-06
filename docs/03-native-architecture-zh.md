@@ -26,7 +26,11 @@ Hermes 原生工具 / MCP / 官方平台适配器 / 受限 workers
 
 主 agent 是 Hermes session 本身，不是插件里嵌套运行的另一个“人格”。插件内也不复制独立 agent loop。辅助 LLM 调用优先使用官方 `ctx.llm` 和其凭据/预算规则；具体能力先通过 E0 契约测试。
 
-选定的主身份是已有原生 **Bot Mode Bot**：绑定经过验证的 profile 与 canonical Bot Chat，运行时仍由 Hermes 拥有。这是拟议能力，不是已经实现的设置。按 profile 加载插件，本身并不能区分主对话、普通会话和 worker。[15](15-primary-bot-binding-zh.md) 定义 owner 确认的初始化、跨连接身份、会话角色、恢复和迁移限制，不修改 Hermes 默认 Bot。
+默认路线是 **profile-first、可信单用户本地 MVP**，主 agent 仍为原生 Hermes 会话，不必选择或绑定 Bot。Profile 是配置/存储分区，不是人的身份。原生 CLI/TUI 的普通会话由 gateway 支持，使用 LOCAL source。宿主 SessionAuthority 检查 owner/operator 会话读取与控制、精确已注册活动 source 及准入；所有已获宿主授权的 owner/operator 控制者共享本地数据访问。LOCAL 不证明物理本地性，因此仅支持可信单用户本地 gateway/profile 部署，不支持暴露式、多用户或远程消息部署。
+
+当前正在实现的 opt-in `/personal-tasks` 是确定性命令入口，复用 schema-v3 TaskStore，支持 add/list/search/projects/show/update/done/cancel/agenda；项目只有标签。它不增加监听器、认证服务、远程连接器、原生 Project 或模型任务工具。待登记与读取准入核心尚未接入，保留给未来已验证远程 owner 路线，不阻塞这些显式本地命令。
+
+绑定现有原生 **Bot Mode Bot** 的已验证 profile 与 canonical Bot Chat 是可选后续能力，不是已实现设置或本地 MVP 前置条件。按 profile 加载插件不能证明 owner 身份或区分主对话、普通会话和 worker。[15](15-primary-bot-binding-zh.md) 保留 owner 确认的初始化、跨连接身份、会话角色、恢复和迁移门禁，不修改 Hermes 默认 Bot。
 
 ## 2. 已有能力与新增价值
 
@@ -93,6 +97,6 @@ tests/                         # 单元、契约、恢复、安全、渠道测�
 
 ## 7. 部署与升级
 
-个人版最小部署是一台持续在线的 Hermes host、一个 owner profile、插件数据目录和一个主要手机渠道。执行不可信代码时使用 Hermes 支持的受限环境并单独验证 filesystem/network/credential 隔离；进程隔离本身不等于沙箱。
+本地 MVP 的最小部署是一台可信单用户 Hermes host、一个 profile 及插件数据目录，使用原生 gateway 支持的 CLI/TUI，不要求持续在线、手机渠道或 Bot 登记。未来提醒与远程入口另需可用性与身份门禁。执行不可信代码时使用 Hermes 支持的受限环境，并单独验证 filesystem/network/credential 隔离；进程隔离本身不等于沙箱。
 
 版本锁记录 Hermes SHA、插件版本、schema version、启用连接器及测试结果。升级先备份插件数据库与配置，跑契约和恢复测试，再小范围启用。禁止自动升级到未经验证的 `main` 后宣称兼容。回滚代码不等于回滚数据；migration 必须声明可逆性和恢复方案。

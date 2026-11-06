@@ -2,15 +2,17 @@
 
 [English](15-primary-bot-binding.md) | 简体中文
 
-**状态：拟议设计，尚未实现。** 用户选择一个现有的 Hermes **Bot Mode Bot** 作为个人 super agent。这不会创建另一套 agent loop、改变 Hermes 的全局/默认 Bot，也不会授予新权限。下文所有绑定记录、服务方法、角色、事件和能力标志均属于这套拟议插件设计。当前 CLI 任务收件箱是一项独立的本地功能，不能证明 Bot 绑定或 owner 身份认证已经实现。
+**状态：可选后续设计，尚未实现，不是 profile-first 本地 MVP 的前置条件。** 若选择此能力，用户选择一个现有的 Hermes **Bot Mode Bot** 作为个人 super agent。这不会创建另一套 agent loop、改变 Hermes 的全局/默认 Bot，也不会授予新权限。下文所有绑定记录、服务方法、角色、事件和能力标志均属于这套拟议插件设计。当前 CLI 任务收件箱是一项独立的本地功能，不能证明 Bot 绑定或 owner 身份认证已经实现。
 
 源码基线：Hermes `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`。检查源码不等于部署认证。请结合 [03](03-native-architecture-zh.md)、[06](06-plugins-mcp-and-security-zh.md)、[11](11-worker-model-routing-zh.md) 和 [14](14-client-api-contracts-zh.md) 阅读本合同。
 
-准备性代码与契约证据见[文档 18](18-owner-entry-and-read-authorization-zh.md)：只读评估器已实现，但公开接收 Bot 身份缺失，生产 owner context 和私人读取仍关闭。以下绑定流程仍为设计。
+准备性代码与契约证据见[文档 18](18-owner-entry-and-read-authorization-zh.md)：只读评估器已实现，但公开接收 Bot 身份缺失，该远程/Bot 路线的生产 owner context 和私人读取仍关闭。以下绑定流程仍为设计。
+
+当前默认路线见 [08](08-roadmap-and-acceptance-zh.md) 的 E6.8/E6.9：可信单用户本地 gateway/profile 中的原生 LOCAL 会话，无需 Bot 登记。Profile 不是身份；LOCAL 不是物理本地性证明。宿主 SessionAuthority 的 owner/operator 读取、控制、精确已注册活动 source 及准入检查仍适用，所有已获宿主授权的控制者共享本地数据。本文的远程 owner/绑定门禁不因本地命令而视为通过；未接入的待登记/读取准入核心也不是显式本地命令的前置条件。
 
 ## 1. 决策与用户体验
 
-个人主 agent 是用户选择的原生 Bot：其 profile 持有个人领域状态，其**规范 Bot Chat（canonical Bot Chat）**是首选的协调会话。Hermes 仍负责推理、会话、压缩、worker 执行、cron、凭据和传输。插件提供个人领域上下文、任务、策略和证据。
+在这条可选 Bot 绑定路线中，个人主 agent 是用户选择的原生 Bot：其 profile 持有个人领域状态，其**规范 Bot Chat（canonical Bot Chat）**是首选的协调会话。Hermes 仍负责推理、会话、压缩、worker 执行、cron、凭据和传输。插件提供个人领域上下文、任务、策略和证据。
 
 预期设置流程为：选择现有 Bot 及其所在机器，审阅确切目标和数据范围，确认绑定，然后显示 **主 Bot：<显示标签> · <已验证的连接/profile>**，并单独显示能力/健康状态。绑定现有 Bot 会保留它的模型、SOUL、记忆 provider、凭据、普通会话和例行任务。不会自动复制、执行破坏性重置、更换模型或重命名其他会话。
 
@@ -234,12 +236,12 @@ Payload 携带 ID、修订号、epoch 和原因码，不包含会话记录、non
 | ID | 状态与依赖 | 交付物 |
 |---|---|---|
 | E0.7 Verify Primary Bot Contracts | M0；Backlog；E0.1/E0.2，使用 E0.4 发现 | Profile/路由/注册表/谱系/来源/回执探针；受支持的适配器映射和明确缺口；可选 HTTP 还需要 E0.6 |
-| E1.6 Bind Primary Bot | M1；Backlog；E0.7、E1.1–E1.5、E2.1 | Owner 确认的登记与恢复、唯一 active 绑定、修订号/epoch 栅栏、审计和角色策略；不无条件启用写入 |
+| E1.6 Bind Primary Bot | 可选后续；Backlog；E0.7、E1.1–E1.5、E2.1 | Owner 确认的登记与恢复、唯一 active 绑定、修订号/epoch 栅栏、审计和角色策略；不无条件启用写入 |
 | E3.6 Reconcile Primary Bot Sessions | 启用 Bot 绑定路径时为 M1 门禁，M2 继续扩展；Backlog；E1.6、E3.2/E3.5、E4.3/E4.4 | 规范会话解析、worker handoff 关联、投递/恢复和原生回执对账 |
 
 扩展 E6.1/E6.2，加入所选 Bot 的已验证渠道绑定和分离会话记录的连续性。扩展 E8.2/E8.3，加入这份故障矩阵和经过审阅的迁移/恢复；E8.5 记录选择、暂停、恢复和限制。这些只是计划增补，不代表创建远端 Project 条目或将状态标为 Done。
 
-**启用 Primary Bot 能力时**，E0.7/E1.6/E3.6 是发布关卡。它们不会追溯性地阻塞明确限定为本地、无派发的任务收件箱。绑定 Bot 的 M1 必须让其启用路径通过这些关卡；自定义 HTTP/PWA/原生手机端的 E0.6/E6.5–E6.7 仍是独立的可选路线。从一个现有 Bot、一份权威 profile 和一个已验证 owner 开始；自动多宿主迁移和广泛的多 Bot 编排延后处理。
+**启用 Primary Bot 能力时**，E0.7/E1.6/E3.6 是发布关卡。它们不阻塞 profile-first 本地 MVP 或其明确限定为本地、无派发的任务命令。绑定 Bot 的 M1 必须让其启用路径通过这些关卡；自定义 HTTP/PWA/原生手机端的 E0.6/E6.5–E6.7 仍是独立的可选路线。从一个现有 Bot、一份权威 profile 和一个已验证 owner 开始；自动多宿主迁移和广泛的多 Bot 编排延后处理。
 
 ## 12. 固定版本证据
 

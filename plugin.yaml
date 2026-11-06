@@ -12,8 +12,12 @@ config_schema:
   mode:
     type: str
     default: read_only
-    description: read_only (default) or local_tasks for explicit local CLI storage only.
+    description: read_only (default) or local_tasks for explicit local task storage; conversation entry is separately opt-in.
   planning_blueprint:
     type: bool
     default: false
     description: Opt in to a native planning check-in template; does not create a cron job.
+  local_conversation:
+    type: bool
+    default: false
+    description: Opt in to trusted single-user native LOCAL session commands; requires local_tasks mode.

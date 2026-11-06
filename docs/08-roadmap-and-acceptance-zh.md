@@ -13,7 +13,7 @@
 | Milestone | 交付结果 | 进入条件 | 退出门槛 |
 |---|---|---|---|
 | M0 设计与契约 | 固定基线、可运行的合成测试、最小公共 API 映射、写路径覆盖清单 | 本设计完成 | 缺口和适配路径清楚；没有依赖虚构 API；未覆盖写集合默认关闭 |
-| M1 可靠纵切 | 单 owner、单项目、单手机文字入口、一个提醒、受控动作 | E0.1–E0.5 适用门禁、E1.1–E1.5 及恢复/对账基础完成 | 重启/重复/拒绝/撤权测试通过；没有已知绕过 action gate 的启用写路径 |
+| M1 Profile-first 本地 MVP | 可信单用户本地 gateway/profile；持久任务、项目标签和原生对话入口，无需 Bot | 适用的 E0.1/E0.2/E0.4/E0.5、本地 E2.1/E2.2 切片、E6.8；E6.9 作为下一步 | 本地重启、重复、revision、非法输入及宿主准入测试通过；披露未验证范围；无远程/外发能力启用 |
 | M2 个人事务 | 事实/承诺、原生多任务、主动观察与可靠通知；可选 E9 路由 shadow | M1；E9 shadow 另需可信约束基线 | 真实场景闭环，资料纠错和遗忘有效；shadow 不改变实际模型 |
 | M3 连接与语音 | 最小读写 MCP 集合、手机语音消息、可选实时语音验证及 E9 有界模型路由 | M2 + connector 风险评审；路由另需 E9.5/E9.6 gate | 语音关键字段确认、身份与费用可控；路由质量/隐私/预算门槛通过 |
 | M4 发布硬化 | 恢复、备份、升级、回滚、安全评测和文档 | 核心场景完成 | 发布门禁全部满足，没有未处理 P0 |
@@ -37,7 +37,7 @@
 
 当前 E0.4 进度：[合成失败契约与阻断写清单](13-enforcement-contracts-zh.md) 已实现。这只是部分证据，不代表路径全部覆盖，也不允许启用写操作。
 
-E0.6 是独立的可选客户端契约路线，不阻塞 channel-first M0/M1 退出；除非明确列出 E0.6、E0.7 或 E0.8，现有一般 E0 依赖均指适用的 E0.1–E0.5 门禁。E0.7/E1.6/E3.6 是启用 Primary Bot 能力时的条件门槛，不会静默成为本地收件箱或未绑定 channel-first 基线的前置条件。
+E0.6 是独立的可选客户端契约路线，不阻塞 profile-first local M0/M1 退出；除非明确列出 E0.6、E0.7 或 E0.8，现有一般 E0 依赖均指适用的 E0.1–E0.5 门禁。E0.7/E1.6/E3.6 是启用 Primary Bot 能力时的条件门槛，不会静默成为本地收件箱或未绑定本地基线的前置条件。
 
 ### E1. 建立身份授权审计（P0，M1）
 
@@ -48,13 +48,13 @@ E0.6 是独立的可选客户端契约路线，不阻塞 channel-first M0/M1 退
 - E1.3：领域 handler 操作级检查与原生 approval 适配；拒绝后禁止替代路径绕行。
 - E1.4：soft pause、hard revoke、emergency stop，建立授权准入/撤权事务线性化点，取消未准入 effect，对已准入/已发出的在途请求保留真实状态和尽力取消语义。
 - E1.5：脱敏审计、敏感数据分类与最小凭据暴露。
-- E1.6：Bind Primary Bot（M1，Backlog）：依赖 E0.7、E1.1–E1.5、E2.1。实现 owner 确认的 enrollment/recovery、authority 内唯一 active binding、revision/epoch fence、审计及角色。仅绑定不会启用受控写。
+- E1.6：Bind Primary Bot（可选后续，Backlog）：依赖 E0.7、E1.1–E1.5、E2.1。实现 owner 确认的 enrollment/recovery、authority 内唯一 active binding、revision/epoch fence、审计及角色。仅绑定不会启用受控写。
 
 验收：所有发布范围内写操作均被覆盖；伪造身份、旧批准、审批后改 payload、policy 故障均无未经授权副作用。撤权 race 测试覆盖“撤权先提交/准入先提交但未发送/远端已接受而本地未知/撤权后下一动作”，依据 admission 与 revoke 的事务顺序断言，不承诺撤回已获许可的远端请求。denied intent 不可复活，新指令须新建并重新授权。
 
-当前准备性实现：[Owner 入口与只读授权基础](18-owner-entry-and-read-authorization-zh.md)提供纯内部评估器和始终拒绝访问的诊断。E0.7 原生 source/IPC 测试证实公开接收 Bot 身份缺失；不签发生产 verified context，不提供 owner 登记、实际 grant/policy authority 或私人读取。E0.7/E1 门禁尚未完成，不据此启用绑定。
+当前准备性实现：[Owner 入口与只读授权基础](18-owner-entry-and-read-authorization-zh.md)提供纯内部评估器和始终拒绝访问的诊断。E0.7 原生 source/IPC 测试证实公开接收 Bot 身份缺失；不签发生产 verified context，不提供 owner 登记、实际 grant/policy authority 或已验证远程 owner 的私人读取。E0.7/E1 门禁尚未完成，不据此启用绑定。
 
-[host 上下文实验](23-host-command-context-experiment-zh.md)为 E0.7 打包仅供审阅的原型。来源真实性、当前 owner/策略准入及受支持的公共 IPC 契约仍是独立门禁。本地仅命令调用修复通过 87 项受守卫测试，但历史九项环境受限测试仍未解决；不启用主 Bot 或私人读取。
+[host 上下文实验](23-host-command-context-experiment-zh.md)为 E0.7 打包仅供审阅的原型。来源真实性、当前 owner/策略准入及受支持的公共 IPC 契约仍是独立门禁。本地仅命令调用修复通过 87 项受守卫测试，但历史九项环境受限测试仍未解决；该实验不启用主 Bot 或已验证远程 owner 的私人读取。
 
 [待确认身份登记/策略核心](26-pending-enrollment-policy-zh.md)已提供拟议映射及读取范围的 CAS、终止性撤销和事务审计持久化，但未接运行入口、不能激活，不构成实际 grant/policy authority 或 owner 认证。
 
@@ -72,11 +72,11 @@ E0.6 是独立的可选客户端契约路线，不阻塞 channel-first M0/M1 退
 
 验收：长期事实都有 provenance 或 inference 标记；跨 profile/群聊不可读；纠错与删除后的检索测试通过。
 
-当前 E2.1 前置切片：[显式本地 CLI 任务收件箱](16-local-task-inbox-zh.md) 已实现插件自有 SQLite、原子 receipt、revision 校验及明确本地完成/取消。它不是完整领域 Task/记忆存储、已验证 owner 身份或原生派发。向 agent、渠道或 HTTP 开放个人数据前，E1 依赖仍是必需条件；E2.1 和 M1 均未完成。
+当前 E2.1 前置切片：[显式本地 CLI 任务收件箱](16-local-task-inbox-zh.md) 已实现插件自有 SQLite、原子 receipt、revision 校验及明确本地完成/取消。它不是完整领域 Task/记忆存储、已验证 owner 身份或原生派发。向远程/Bot/HTTP 开放个人数据仍须满足适用的 E1 门禁。E6.8 仅在可信单用户部署契约内允许显式本地命令，不代表 E1 或完整 E2.1 完成。
 
 后续本地扩展已实现[截止日期与 agenda](17-local-task-agenda-zh.md)，包含原子 schema 升级及旧 receipt 兼容测试。它推进 E2.1/E8.3 的狭窄本地范围，不创建提醒，也不完成 E4 或 E1 门禁。
 
-当前 E2.2 先导切片：[本地任务检索](22-local-task-search-zh.md)仅通过显式启用的本地 CLI 查询标题/详情字面匹配，保留当前 schema 与回执；它不是 Agent 记忆、语义检索或 owner 授权的渠道访问。E1 和完整 E2.2 门槛仍未满足。
+当前 E2.2 先导切片：[本地任务检索](22-local-task-search-zh.md)通过显式启用的本地 CLI 查询，并由 E6.8 本地对话命令复用，支持标题/详情字面匹配，保留当前 schema 与回执；它不是 Agent 记忆、语义检索或 owner 授权的渠道访问。E1 和完整 E2.2 门槛仍未满足。
 
 另一个本地 E2.1/E2.2 先导增加[项目分组](24-local-project-groups-zh.md)：标签、精确筛选、计数及 schema-v3 兼容性。标签不是稳定的领域/原生项目 ID 或权限键。这不代表 E2 或 E3.1 完成，也不放宽其 E1 依赖。
 
@@ -89,7 +89,7 @@ E0.6 是独立的可选客户端契约路线，不阻塞 channel-first M0/M1 退
 - E3.3：临时子 agent 的公共 lifecycle API，最小上下文和工具集，父任务汇总。
 - E3.4：owner follow-up 优先，线程到任务关联、context-only 和 handback。
 - E3.5：重启对账、未知结果、完成证据与取消状态。
-- E3.6：Reconcile Primary Bot Sessions（M1 门槛，M2 扩展；Backlog）：依赖 E1.6、E3.2/E3.5、E4.3/E4.4。通过已验证 adapter 解析 canonical root/tip，关联 worker handoff，完成交付与 native receipt 对账。不并行写同一 transcript，不自动跨宿主接管。
+- E3.6：Reconcile Primary Bot Sessions（Bot 绑定条件门槛，M2 扩展；Backlog）：依赖 E1.6、E3.2/E3.5、E4.3/E4.4。通过已验证 adapter 解析 canonical root/tip，关联 worker handoff，完成交付与 native receipt 对账。不并行写同一 transcript，不自动跨宿主接管。
 
 验收：一条输入去重为一个任务；多个项目不串上下文；短子任务退出不虚报整个任务完成；长期任务跨重启可查且不会重复派工。
 
@@ -119,9 +119,9 @@ E0.6 是独立的可选客户端契约路线，不阻塞 channel-first M0/M1 退
 
 验收：伪 read-only、错误 scope、凭据撤销、恶意 tool result 不能产生越权；新连接器必须完成风险与恢复契约后才启用写操作。E5.1/E5.2 保持为现有 Epic 内的 checklist，不新建编号。契约设计可从 E0.6/E1.2 开始；启用写操作还须 E1.3/E1.4、E4.3/E4.4 及该连接器的 E0.4 路径覆盖。凭据仍由原生 OAuth 管理。具体连接器输入、输出与 receipt 见 [14](14-client-api-contracts-zh.md)。
 
-### E6. 打通手机工作入口（P1，M1–M3）
+### E6. 打通本地与可选手机工作入口（P1，M1–M3）
 
-依赖 E1.1/E3/E4。
+E6.1–E6.7 保留适用的 E1.1/E3/E4 远程/手机依赖。E6.8/E6.9 是下述独立本地路线。
 
 - E6.1：一个主手机消息渠道，身份绑定、文字/附件、任务与提醒路由。
 - E6.2：跨桌面/手机接续和短候选消歧，重复消息与审批按钮幂等。 选择 Primary Bot 时，E6.1/E6.2 还须核验接收 transport/runtime-profile binding，以及共享领域、分离 transcript 的连续性；共享 profile 不合并聊天，也不证明 bot 账号隔离。
@@ -130,8 +130,12 @@ E0.6 是独立的可选客户端契约路线，不阻塞 channel-first M0/M1 退
 - E6.5：Build Domain API and Change Feed（M2，可选，Backlog）：基于领域服务的版本化类型 REST、事务化去重/outbox/change feed、授权一致快照及轮询概览。依赖 E0.6、E1.1–E1.5、E2.1、E3.2/E3.5、E4.2–E4.4；仅启用逐项验证的 adapter。
 - E6.6：Validate Client Recovery Flows（M3，可选，Backlog）：多设备、离线、重放、过期、ACL、隔离及取消场景。依赖 E6.5、E6.2/E6.4 与这些路径所需的 E8.1/E8.2 harness，不等待全部 E8/M4。附件还需 E0.6 文件契约证据。
 - E6.7：Validate Native Mobile Sign-in（M3，可选，Blocked）：依赖 E0.6 认证发现、E1.1/E1.4/E1.5 和 E6.4。固定版本的原生流程仅接受 loopback callback，须先证实目标手机支持的 callback 及设备撤权契约，再做真机认证。不得另造插件认证服务。
+- E6.8：Enable Local Task Conversations（M1，In progress）：依赖 E0.1/E0.2、适用的 E0.4/E0.5、本地 E2.1/E2.2 schema-v3 TaskStore 切片。显式启用确定性 `/personal-tasks` add/list/search/projects/show/update/done/cancel/agenda，复用校验、revision 和回执；项目仅为标签，不是原生 Project。
+- E6.9：Add Session-scoped Task Tools（M1，Backlog，下一步）：依赖 E6.8 及经测试的宿主 session-scoped 工具上下文、准入与权限边界。添加有界模型任务工具前，验证来源/会话绑定、非法参数、重放及不支持路径；不自动开启，不宣称生产 owner 身份已验证。当前尚无自然语言模型任务工具。
 
-验收：目标真实手机上完成“创建项目 → 提醒 → 查看/取消 → 批准受控动作”；旧设备与转发批准不能操作。M1 使用已有消息渠道，不依赖 E6.5–E6.7 或自建 App。可选浏览器/PWA 交付可先于原生手机认证。新增客户端工作仍未实现，详细契约与精确阻断见 [14](14-client-api-contracts-zh.md)。
+验收：目标真实手机上完成“创建项目 → 提醒 → 查看/取消 → 批准受控动作”；旧设备与转发批准不能操作。这是可选手机路线，不是本地 M1 退出门槛，也不依赖自建 App。可选浏览器/PWA 交付可先于原生手机认证。新增客户端工作仍未实现，详细契约与精确阻断见 [14](14-client-api-contracts-zh.md)。
+
+本地 E6.8/E6.9 仅支持可信单用户本地 gateway/profile 部署。原生 CLI/TUI 的普通会话由 gateway 支持并使用 LOCAL source；宿主 SessionAuthority 检查 owner/operator 会话读取、控制、精确已注册活动 source 与准入。所有已获宿主授权的 owner/operator 控制者共享本地数据访问。Profile 是存储/配置分区，不是人的身份；LOCAL 不证明物理本地性。不新增监听器、认证服务或远程连接器；不支持暴露式、多用户或远程消息部署。待登记和 fenced read-admission 核心仍未接入，保留给未来已验证远程 owner 路线，不是显式本地命令的前置条件。
 
 ### E7. 保持语音任务连续性（P1/P2，M2–M3）
 
@@ -182,11 +186,11 @@ E0.6 是独立的可选客户端契约路线，不阻塞 channel-first M0/M1 退
 
 ## 4. 首次可用纵切顺序
 
-E0.1–E0.5（含适用写路径覆盖与关闭未覆盖集合）→ E1.1–E1.5（身份、授权、执行检查、硬撤权、审计/数据分类）→ E2.1 → E3.1/E3.2/E3.5 + E4.1–E4.4（含任务恢复、结果未知与交付对账）→ E6.1 → E8.1/E8.2 对应的 crash/revoke/delivery 测试 → M1。
+本地优先路线：适用 E0.1/E0.2/E0.4/E0.5 → 本地 E2.1/E2.2 TaskStore 切片 → E6.8 确定性对话命令 → E8.1/E8.2/E8.3/E8.5 的本地持久化、准入、失败、恢复与配置验收 → M1 本地 MVP。随后通过 E6.9 增加 session-scoped 模型任务工具；在单独验证前不能把命令入口称为自然语言任务管理。
 
-Bot-bound M1 还须通过 E0.7 → E1.6 → E3.6 及适用的恢复/交付门槛。显式 local_tasks 收件箱不会启用该绑定；自建客户端仍为可选路线。
+可选远程/手机路线仍须 E1.1–E1.5 → 完整 E2.1 → E3.1/E3.2/E3.5 + E4.1–E4.4 → E6.1 及相应 crash/revoke/delivery 验收。启用 Bot 绑定还须 E0.7 → E1.6 → E3.6。自建客户端保持独立可选门禁；本地命令不激活上述能力。
 
-E2.1 在 E1.5 的数据分类与审计约定明确后进入。M1 不能跳过 E1.4 再宣称 revoke 通过，也不能把 E3.5/E4.4 的恢复对账留到后面却宣称可靠纵切完成。随后才做更广泛自动主动性和更多 connectors。身份、安全、恢复不是“最后补一层”。
+完整 E2.1 的数据分类与审计约定仍需 E1.5。不得把本地 MVP 完成视为广泛 E1、远程撤权、派发或 E3.5/E4.4 对账已完成；这些能力启用前必须通过各自门禁。保留既有研究与阻断记录，不通过重定义本地范围把它们标为 Done。
 
 E9 是可选增强，不把第一版固定模型委派变成依赖新网关的系统。其独立顺序为 E9.1 → E9.2 → E9.3 shadow；E9.5/E9.6 可并行验证，全部 gate 通过后才启用 E9.4，不能先上线自动切换再补可信 scope 和费用控制。
 

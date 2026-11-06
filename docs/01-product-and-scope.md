@@ -8,6 +8,8 @@ Users do not want to maintain a fleet of agents. They want an assistant that und
 
 The core loop is: **receive the request → clarify the goal and boundaries → persist the work → gather evidence → execute authorized actions → record actual results → deliver → follow up when necessary**. Answering once and losing subsequent commitments does not meet the personal-agent goal.
 
+The approved first step is a **profile-first, trusted single-user local MVP**, without Bot binding. A profile is a storage/configuration partition, not a human identity. Start with durable tasks and project labels in native Hermes local conversations; remote authorization, cross-device continuity and a selected Primary Bot remain optional future capabilities. The scenarios and objects below describe the longer-term target, not implemented features.
+
 ## 2. Core User Scenarios
 
 | Scenario | Example input | Expected behavior | Completion evidence |
@@ -41,13 +43,13 @@ The main agent retains control of priorities and user communication. Workers rec
 
 ## 5. End-to-End Flows Required in the First Version
 
-1. One verified mobile messaging entry point and a Hermes desktop/CLI entry point.
-2. Searchable, editable, traceable projects, commitments, and preferences for the same user.
-3. One one-time reminder and one conditional monitor that recover across gateway restarts and do not “come back to life” after being stopped.
-4. One read-only MCP scenario and one write scenario requiring approval, without switching tools to bypass a denial.
-5. A main agent that can start restricted workers, read actual results, and merge them into task state.
-6. User-visible distinctions between “working,” “waiting for my confirmation,” “waiting externally,” “failed,” and “completed.”
-7. Mobile voice messages entering the same conversation, without recognition errors triggering high-risk actions.
+1. Explicitly enable native LOCAL conversation commands `/personal-tasks` in a trusted single-user local gateway/profile deployment, reusing schema-v3 TaskStore.
+2. Support add/list/search/projects/show/update/done/cancel/agenda; projects are labels only, with no native Project entities or dispatch yet.
+3. Validate input, revisions and atomic receipts, and verify persistence across restarts and failure paths; agenda is not a reminder.
+4. Rely on host SessionAuthority checks for owner/operator session read/control, exact registered live source and admission. All already host-authorized owner/operator controllers share local data access; a LOCAL label does not prove physical locality.
+5. Add no listener, authentication service or remote connector; exposed, multiuser and remote-messaging deployments are unsupported. Pending enrollment and read-admission cores remain for a future verified remote-owner lane, not prerequisites for these explicit local commands.
+6. Add validated session-scoped model task tools next under E6.9; no natural-language model task tool exists now, and none is automatically enabled.
+7. Add mobile, Bot binding, reminders/monitoring, MCP writes, workers and voice in stages after their own gates pass; they do not block the local MVP.
 
 ## 6. Non-Goals
 
