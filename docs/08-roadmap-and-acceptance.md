@@ -30,6 +30,8 @@ Complete a safe, reliable vertical slice first, then add connectors, entry point
 
 Acceptance: Every reuse point has a behavioral test or an explicit blocker; the initial `requires_hermes` range comes from tests, not arbitrary version numbers. Produce a per-tool, per-path enforcement inventory. A capability set must not be enabled while it has unknown or bypassable write paths; prompt constraints cannot substitute for enforcement.
 
+Current E0.4 progress: [synthetic failure contracts and a blocked-write inventory](13-enforcement-contracts.md) are implemented. This is partial evidence, not complete path coverage or permission to enable writes.
+
 ### E1. Establish Identity, Authorization, and Audit (P0, M1)
 
 Depends on E0.2/E0.4.

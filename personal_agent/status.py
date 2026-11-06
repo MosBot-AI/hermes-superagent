@@ -1,6 +1,7 @@
 """Bounded, non-personal diagnostics. This is not an authorization service."""
 
 from . import HERMES_BASELINE, PLUGIN_ID, VERSION
+from .enforcement import build_enforcement_summary
 
 
 def build_status() -> dict[str, object]:
@@ -33,4 +34,5 @@ def build_status() -> dict[str, object]:
             "reason": "Identity, authorization and write-path coverage are not implemented.",
             "scope": "This plugin does not disable or secure other Hermes tools.",
         },
+        "write_path_inventory": build_enforcement_summary(),
     }

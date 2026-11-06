@@ -12,8 +12,9 @@ The first development slice is the **E0 native plugin foundation**, not a usable
 - A read-only `personal_agent_status` tool and, in `in_process` plugin mode, the `hermes personal-agent status` CLI.
 - Strict rejection of any mode other than `read_only`. No personal-data writes, external delivery, scheduling, or model routing are registered.
 - Offline unit tests and real discovery, registry dispatch, configuration, and unload contracts against a pinned Hermes commit.
+- Follow-on E0.4 failure-boundary contracts and a read-only inventory of ten blocked write paths. `hermes personal-agent coverage` shows the evidence; it does not authorize or disable host tools.
 
-This plugin **does not disable or secure other Hermes tools**. E0.4 write-path coverage and E1 identity/authorization are incomplete, so this foundation must not be used to enable controlled write operations. Its status explicitly reports `release_gate: blocked`. See the [first-slice implementation record](docs/12-foundation-progress.md) and [changelog](CHANGELOG.md).
+This plugin **does not disable or secure other Hermes tools**. E0.4 write-path coverage and E1 identity/authorization are incomplete, so this foundation must not be used to enable controlled write operations. Its status explicitly reports `release_gate: blocked`. See the [first-slice implementation record](docs/12-foundation-progress.md), [enforcement contracts](docs/13-enforcement-contracts.md), and [changelog](CHANGELOG.md).
 
 ## Development checks
 

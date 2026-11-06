@@ -14,6 +14,8 @@ This file distinguishes design work, development changes, and released capabilit
 - Reproducible check script and SHA-pinned GitHub Actions workflow.
 - macOS and Windows system-file ignore rules, preserving existing Python rules, with Git behavior tests.
 - Separate English originals and `-zh` Chinese README, changelog, and all design documents with language links.
+- E0.4 synthetic failure-boundary contracts covering policy callbacks, dispatcher/middleware failures, direct registry dispatch, and managed/safe worker configuration.
+- A read-only blocked-write inventory and `personal-agent coverage` CLI; no write authorization or host-wide enforcement is added.
 
 ### Boundaries
 

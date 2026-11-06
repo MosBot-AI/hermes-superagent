@@ -1,0 +1,9 @@
+manifest_version: 2
+name: enforcement-probe
+version: "0.0.0"
+description: Offline contract fixture with in-memory effects only
+kind: standalone
+provides_tools:
+  - enforcement_probe
+provides_hooks:
+  - pre_tool_call

@@ -14,6 +14,8 @@
 - 可复现检查脚本和 SHA 固定的 GitHub Actions 工作流。
 - 保留现有 Python 忽略规则，新增 macOS、Windows 系统文件规则及 Git 行为测试。
 - README、更新记录和全部设计文档采用英文原名、中文 `-zh` 的分文件版本，并提供语言互链。
+- E0.4 合成失败边界契约，覆盖 policy callbacks、dispatcher/middleware 失败、直接 registry dispatch 及 managed/safe worker 配置。
+- 只读阻断写路径清单与 `personal-agent coverage` CLI；没有新增写授权或全宿主执行保护。
 
 ### 边界
 

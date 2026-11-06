@@ -22,7 +22,8 @@
 10. [接口与端到端契约](10-interface-contracts-zh.md)：拟议事件、工具、适配器和关键纵向流程。
 11. [Worker 模型路由插件](11-worker-model-routing-zh.md)：按任务需求选择已许可 provider/model/effort，先 shadow 再启用。
 12. [第一开发切片](12-foundation-progress-zh.md)：原生只读插件、实际合同测试与剩余门槛。
-13. [架构决策记录](adr/README-zh.md)：为什么选择这些约束。
+13. [执行边界契约与写路径清单](13-enforcement-contracts-zh.md)：实测失败边界与仍被阻断的写路径。
+14. [架构决策记录](adr/README-zh.md)：为什么选择这些约束。
 
 ## 三类陈述必须分开
 

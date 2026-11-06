@@ -104,7 +104,7 @@ def main() -> int:
                 [
                     "bash",
                     str(checkout / "scripts/run_tests.sh"),
-                    str(ROOT / "tests/contracts/test_native_plugin.py"),
+                    str(ROOT / "tests/contracts"),
                     "--file-retries",
                     "0",
                     "-q",
