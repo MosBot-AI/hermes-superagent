@@ -66,6 +66,12 @@
 
 [Web Dashboard](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/website/docs/user-guide/features/web-dashboard.md)有 chat、sessions、cron、MCP、profiles、认证和远端连接。不得因存在 REST API 就假定它可公开无认证使用；新 UI 优先走官方扩展和认证体系。
 
+## H14. Worker provider/model/effort 路由
+
+[DelegationProvider ABC](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/agent/delegation_provider.py)与[官方插件说明](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/website/docs/developer-guide/delegation-provider-plugin.md)提供 route_task 原生 seam，核心保留生命周期。[delegate_tool_routes.py](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/tools/delegate_tool_routes.py)显示 payload 只有 goal/context/index 与声明参数，未包含完整可信 RouteContext；非 profile route 可继承 fallback，profile route 忽略其他路由参数，managed worker 的 frozen config 限制跨 profile。
+
+[reasoning_effort.py](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/agent/reasoning_effort.py)给出内部梯级、provider/model 的映射和厂商特例；unknown 支持集合不构成服务端能力证明。[child timeout](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/tools/delegate_tool_config.py#L192-L201)为 inactivity，不是总 deadline。公共 lifecycle 和 /review 等路径不自动使用 delegation.backend。详细设计、固定 Switchyard/LiteLLM/vLLM 来源与未实测边界见 [11](11-worker-model-routing.md)。
+
 ## 待验证清单
 
 1. 精确支持的 release 与插件 install/validate/config schema 行为。
@@ -74,5 +80,6 @@
 4. 目标手机渠道 approval、附件、时区、送达和 identity 的行为。
 5. 常驻服务、备份/restore、停止/重启、取消和权限撤销的真实集成测试。
 6. 语音设备/网络/provider 兼容和费用计量。
+7. E9 路由可信上下文、预算原子准入、完整请求路径、effort wire 审计、schema/backend 切换及所有 fallback 隐私/费用约束。
 
 本次只做文档静态校验；没有把上述待验证事项标为通过。DSH 的固定证据和新闻阅读限制见 [02](02-dsh-research-and-decisions.md)。

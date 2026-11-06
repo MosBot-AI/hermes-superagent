@@ -33,6 +33,7 @@ Hermes 原生工具 / MCP / 官方平台适配器 / 受限 workers
 | 项目 | Projects/workspace、Kanban board | 非代码项目、承诺与资料的领域补充 | 直接改宿主数据库 schema |
 | 长任务 | Kanban dispatcher、goal contract | 任务映射、结果验收、跨任务汇总 | 自建 worker supervisor |
 | 短并行 | `ctx.subagent_lifecycle` 或原生 delegation | 最小上下文与权限裁剪 | 声称句柄可跨重启恢复 |
+| Worker 模型选择 | `DelegationProvider.route_task` 与宿主 provider/effort 编码 | 可选原生路由插件、能力清单、shadow/预算/审计 | 第二个 agent 主脑或必需网关；假设所有 worker 路径已覆盖 |
 | 调度 | cron、session heartbeat | 用户意图、预算、停止与外发策略 | 平行 cron daemon |
 | 记忆 | MEMORY/USER、session search、单个外部 provider | 结构化事实、来源、纠错、按权限检索 | 默认同时激活多个 memory provider |
 | 连接 | MCP、OAuth、插件 catalog | connector 风险清单与最小工具集 | 第三套 OAuth/token store |
@@ -76,6 +77,7 @@ tests/                         # 单元、契约、恢复、安全、渠道测�
 - `pre_tool_call` 在本次固定源码中对 callback 异常/超时/still-running **fail-closed**。`tool_request` 和 `tool_execution` middleware 失败可继续下游，不能拿它们做唯一权限边界。
 - hook 回调不执行外发副作用；有副作用的领域 handler 自身再次检查权限、版本、幂等和审批。
 - `ctx.subagent_lifecycle` 仅在活动父 turn 中可用；进程退出后 `reconnect` 不会恢复执行。长期工作使用 Kanban。
+- worker 路由插件优先通过 `delegate_task` backend 接入，主 agent 模型不变。公共 lifecycle、Kanban 初始 worker、cron 和辅助调用不自动经过该 backend；当前 route_task 没有完整可信 RouteContext 或原子预算准入。所需最小通用扩展、effort 映射与启用门槛见 [11](11-worker-model-routing.md)。
 - 原生 `desktop_project` 当前是 GUI 工具集，不能假设手机 session 默认可见。跨入口项目操作需要 E0 验证可用适配路径。
 - 不直接导入 `hermes_cli.projects_db` / `kanban_db` 修改数据，不直接写 `jobs.json` / SessionDB。缺公共写入入口时，先验证官方命令/dispatch 支持；确实缺 seam 时提出最小通用上游扩展。
 

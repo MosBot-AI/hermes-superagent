@@ -12,8 +12,8 @@
 |---|---|---|---|
 | M0 设计与契约 | 固定基线、可运行的合成测试、最小公共 API 映射、写路径覆盖清单 | 本设计完成 | 缺口和适配路径清楚；没有依赖虚构 API；未覆盖写集合默认关闭 |
 | M1 可靠纵切 | 单 owner、单项目、单手机文字入口、一个提醒、受控动作 | E0、E1.1–E1.5 及恢复/对账基础完成 | 重启/重复/拒绝/撤权测试通过；没有已知绕过 action gate 的启用写路径 |
-| M2 个人事务 | 事实/承诺、原生多任务、主动观察与可靠通知 | M1 | 真实场景闭环，资料纠错和遗忘有效 |
-| M3 连接与语音 | 最小读写 MCP 集合、手机语音消息、可选实时语音验证 | M2 + connector 风险评审 | 语音关键字段确认、身份与费用可控 |
+| M2 个人事务 | 事实/承诺、原生多任务、主动观察与可靠通知；可选 E9 路由 shadow | M1；E9 shadow 另需可信约束基线 | 真实场景闭环，资料纠错和遗忘有效；shadow 不改变实际模型 |
+| M3 连接与语音 | 最小读写 MCP 集合、手机语音消息、可选实时语音验证及 E9 有界模型路由 | M2 + connector 风险评审；路由另需 E9.5/E9.6 gate | 语音关键字段确认、身份与费用可控；路由质量/隐私/预算门槛通过 |
 | M4 发布硬化 | 恢复、备份、升级、回滚、安全评测和文档 | 核心场景完成 | 发布门禁全部满足，没有未处理 P0 |
 
 ## 3. Epics 与工作包
@@ -122,17 +122,34 @@
 
 验收：以同一发布 SHA 运行全套 gate；披露跳过/失败项，不把静态检查当运行验证。
 
+### E9. 设计并验证 Worker 路由插件（P1，M0–M3）
+
+详细设计：[Worker 模型与思考强度路由插件](11-worker-model-routing.md)。复用 Hermes delegation backend，按任务在用户配置且允许的 provider/model/effort 集合中选择，不改变主 agent 模型，不强制部署网关。以下都是待实施工作包，当前为 Backlog。
+
+| ID | 英文工作包标题 | 主里程碑 | 交付与依赖 |
+|---|---|---|---|
+| E9.1 | Verify Hermes Routing Contracts | M0 | 依赖 E0；插件注册/route_task/schema pin、模型能力清单、未覆盖路径与兼容测试 |
+| E9.2 | Define Trusted Route Context and Constraints | M1 | 依赖 E9.1、E1.1/E1.2/E1.4/E1.5 的身份/grant/撤权/数据 scope 契约，以及 E3.2 的 task/attempt 标识契约；不等待整个 E3 |
+| E9.3 | Build Shadow Routing and Audit | M2 | 依赖 E9.1/E9.2；不改变实际 route 的建议选择、脱敏审计与基线评测 |
+| E9.4 | Enable Bounded Worker Routing | M3 | 依赖 E9.3、E9.5/E9.6 的启用 gate；有限任务、尝试/截止时间/费用上限、可控回退 |
+| E9.5 | Validate Effort and Fallback Policies | M2 | 依赖 E9.1/E9.2；provider wire 映射、未知能力拒绝、fallback 隐私/权限、取消和不重复副作用；M3 重测 |
+| E9.6 | Integrate Budget Admission and Release Gates | M3 | 依赖 E9.2、E1.3/E1.4 的准入/撤权、E3.2/E3.5 的 attempt/对账契约、E8.1 审计计量与 E8.2 故障 fixture；完成预算与路由发布 gate，不等待整个 E8/M4 |
+
+验收：只选已许可候选；精确用户 pin 不被覆盖；classifier/reviewer/fallback 同样受隐私与预算约束；requested 与有效 wire effort 可区分，未知明确标注。缺可信上下文/预算 enforcement 时保持 shadow 或拒绝相应自动路由。Shadow 结果不能冒充新模型实际成功率，启用须独立回放/任务验证证据。安全与费用限制未通过不能以“成本优化”理由发布。
+
 ## 4. 首次可用纵切顺序
 
 E0（含写路径覆盖与关闭未覆盖集合）→ E1.1–E1.5（身份、授权、执行检查、硬撤权、审计/数据分类）→ E2.1 → E3.1/E3.2/E3.5 + E4.1–E4.4（含任务恢复、结果未知与交付对账）→ E6.1 → E8.1/E8.2 对应的 crash/revoke/delivery 测试 → M1。
 
 E2.1 在 E1.5 的数据分类与审计约定明确后进入。M1 不能跳过 E1.4 再宣称 revoke 通过，也不能把 E3.5/E4.4 的恢复对账留到后面却宣称可靠纵切完成。随后才做更广泛自动主动性和更多 connectors。身份、安全、恢复不是“最后补一层”。
 
+E9 是可选增强，不把第一版固定模型委派变成依赖新网关的系统。其独立顺序为 E9.1 → E9.2 → E9.3 shadow；E9.5/E9.6 可并行验证，全部 gate 通过后才启用 E9.4，不能先上线自动切换再补可信 scope 和费用控制。
+
 ## 5. GitHub Projects 配置建议
 
 - 主 Project：Hermes Personal Agent，描述目标、设计基线和未实现状态。
 - Status：Backlog、Ready、In Progress、Blocked、In Review、Done。Blocked 必须有原因与下一步，不把等待确认写成 In Progress。
-- 字段：Epic（E0–E8）、Milestone（M0–M4）、Priority（P0/P1/P2）、Area、Risk、Effort、Dependencies、Acceptance evidence。
+- 字段：Epic（E0–E9）、Milestone（M0–M4）、Priority（P0/P1/P2）、Area、Risk、Effort、Dependencies、Acceptance evidence。E9 的 Epic/工作包标题采用英文，docs 正文继续中文。
 - Views：Roadmap（Milestone）、Execution（Status board）、Security/Blockers、Mobile/Voice、Ready next。
 - 先建 epics 和能独立验收的工作包，不用数百条碎任务淹没计划。
 - Issue 模板包含 outcome、scope/non-goals、依赖、设计链接、验收、测试/安全、完成证据。父 epic 只有所有必要工作包及验收完成才关闭。

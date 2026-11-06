@@ -65,3 +65,13 @@
 **原因**：单机锁和 SQLite 不等于分布式一致性；文章里的未来架构不能直接当 MVP 已实现。
 
 **代价**：单 host 故障时暂不可用，需要清楚服务健康、备份和恢复目标。见 [08](../08-roadmap-and-acceptance.md)。
+
+## ADR-009：Worker 模型路由以原生插件交付，先 shadow
+
+**选择**：复用 DelegationProvider.route_task，在用户配置且允许的 provider/model/effort 中选择；主 agent 保持原模型与职责。先本地 shadow，可信上下文、隐私、预算、effort/fallback 与质量 gate 通过后有界启用。
+
+安装/启用插件不自动改 backend；owner 明确选择后默认 shadow，且必须有已获准静态基线。没有基线先配置，不能从父 route 猜一个；真实自动选择另行明确开启。
+
+**原因**：任务级模型分流无需新建 API 网关或第二主脑。当前接口不足以承载完整可信 RouteContext 和预算原子准入，必须明确最小通用宿主扩展，而非把模型参数当授权。Switchyard/LiteLLM/vLLM SR 是可选参考，不是强制 runtime 依赖。
+
+**代价**：需要固定 provider 能力、记录 requested/effective effort、计入 classifier/reviewer/retry 总成本，并覆盖原生 backend 未接管的路径。未知能力或硬限制无法证明时保持 shadow/拒绝对应自动选择。用户 pin、数据接收范围和费用上限优先于自动优化。见 [11](../11-worker-model-routing.md)。

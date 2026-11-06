@@ -18,7 +18,8 @@
 8. [路线图与验收](08-roadmap-and-acceptance.md)：按依赖排序的 epics、任务和可测试验收。
 9. [上游证据与核验边界](09-upstream-evidence.md)：固定源码版本、链接和需要再验证的契约。
 10. [接口与端到端契约](10-interface-contracts.md)：拟议事件、工具、适配器和关键纵向流程。
-11. [架构决策记录](adr/README.md)：为什么选择这些约束。
+11. [Worker 模型路由插件](11-worker-model-routing.md)：按任务需求选择已许可 provider/model/effort，先 shadow 再启用。
+12. [架构决策记录](adr/README.md)：为什么选择这些约束。
 
 ## 三类陈述必须分开
 
@@ -41,3 +42,5 @@
 ## 当前交付范围
 
 本次提交只建设方案文档与项目规划。没有部署、没有安装插件、没有接入真实个人数据，也没有宣称权限、提醒或手机语音已经可用。GitHub Projects 是研发计划；Hermes 原生 Projects/Kanban 是未来产品运行时的工作对象，二者不能混淆。
+
+新增 E9 为原生 worker 模型路由插件设计：用户已审阅并选择插件方向，仍未实现。主 agent 保持原有职责；完整约束、宿主能力缺口、开源参考和验收见 [11](11-worker-model-routing.md)。
