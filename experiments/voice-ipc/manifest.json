@@ -1,0 +1,174 @@
+{
+  "scope": "Local-only typed native speech IPC prototype, not a shipped or activated Personal Agent capability",
+  "branch": "prototype/typed-voice-streams",
+  "commit": "40889c64e1e2fbf194ec7ece73a63e7d84c52420",
+  "tree": "50d5814a0dfe1eb47d6521d4ed61b2788d072225",
+  "base": "90d6b98fd86d20981ee06ddd5b7d93e4320f26a4",
+  "deployed": false,
+  "main_untouched": true,
+  "changed_files": 7,
+  "selected_suite": {
+    "files": 13,
+    "passed": 120,
+    "failed": 0,
+    "skipped_modules": 1,
+    "skip_reason": "tests/tools/test_tts_streaming.py requires missing numpy",
+    "retries": 0,
+    "test_files": [
+      "tests/hermes_cli/test_plugin_host_voice_streams.py",
+      "tests/hermes_cli/test_plugin_host_voice_consumers.py",
+      "tests/hermes_cli/test_plugin_host.py",
+      "tests/hermes_cli/test_plugin_host_return_types.py",
+      "tests/hermes_cli/test_plugin_host_wire_errors.py",
+      "tests/hermes_cli/test_plugins_tts_registration.py",
+      "tests/hermes_cli/test_plugins_transcription_registration.py",
+      "tests/tools/test_tts_streaming.py",
+      "tests/tools/test_transcription_plugin_dispatch.py",
+      "tests/tools/test_tts_plugin_dispatch.py",
+      "tests/tools/test_tts_provider_authority.py",
+      "tests/agent/test_tts_registry.py",
+      "tests/agent/test_transcription_registry.py"
+    ],
+    "historical": true
+  },
+  "final_focused_suite": {
+    "files": 2,
+    "passed": 17,
+    "failed": 0,
+    "retries": 0,
+    "historical": true
+  },
+  "static_checks": {
+    "passed": 14,
+    "failed": 0,
+    "health_exceptions": [
+      {
+        "rule": "BLE001",
+        "boundary": "_RemoteVoice.close",
+        "reason": "Best-effort cleanup must preserve original failure and queue bounded retry without logging provider data"
+      },
+      {
+        "rule": "BLE001",
+        "boundary": "HostedTranscriptionSession.finalize",
+        "reason": "Native ABC requires failure envelope rather than raising arbitrary provider or transport exceptions"
+      }
+    ],
+    "historical": true
+  },
+  "historical_exploratory_test": {
+    "existing_STT_tests_passed": 2,
+    "used_loopback_WebSocket_fixture": true,
+    "excluded_from_final_selected_runner": true
+  },
+  "restricted_identity_socket_tests_retried": false,
+  "real_provider_or_device_tested": false,
+  "keys_used": false,
+  "clean_upstream_apply_check": true,
+  "patch_sha256": "3e49d2993c9d1eadc7cf3c65e3f0ba0e63a750040f2ef757db7dd4a93330d2df",
+  "environment": {
+    "python": "3.14.9",
+    "installed_package_count": 88,
+    "installed_packages_sha256": "a9cea936af33b50b9aa91e899a31d1a2c7692c779af621d62ec041a03fe5e643",
+    "hermes_uv_lock_sha256": "5057a8a3cbc6d2b1f2059d66e27ffa43f447021f89779599dca416056574c064",
+    "environment_origin": "Existing caller-supplied contract venv, prepared previously using pinned Hermes pm.build_env",
+    "lock_environment_equivalence_attested": false
+  },
+  "limits": [
+    "Only local upstream prototype; no adoption or production enablement",
+    "Native ASR feeder queue remains unbounded",
+    "Logical close does not stop blocking compute or confirm cleanup finished",
+    "GC release depends on subsequent host call",
+    "Per-profile host not malicious-plugin/same-UID security sandbox",
+    "No owner identity, Primary Bot binding, permissions or private data enabled"
+  ],
+  "schema_version": 1,
+  "status": "reviewable experiment; not installed, applied, shipped, or enabled by this project",
+  "patch_file": "typed-voice-stream-prototype.patch",
+  "patch_files": [
+    "hermes_cli/plugin_host.py",
+    "hermes_cli/plugin_host_child.py",
+    "hermes_cli/plugin_host_voice.py",
+    "tests/hermes_cli/test_plugin_host_voice_consumers.py",
+    "tests/hermes_cli/test_plugin_host_voice_streams.py",
+    "tools/transcription_streaming.py",
+    "tools/tts_streaming.py"
+  ],
+  "artifact_files": [
+    "LICENSE.hermes-agent",
+    "README.md",
+    "README-zh.md",
+    "manifest.json",
+    "run_tests.py",
+    "typed-voice-stream-prototype.patch"
+  ],
+  "runner": "run_tests.py invokes canonical bash scripts/run_tests.sh with explicit pre-provisioned HERMES_PYTHON, temporary HOME/runtime path, and fail-closed provisioning guard; portable 12-file selection excludes both legacy streaming listener modules",
+  "submitted_upstream": false,
+  "installed_or_runtime_integrated": false,
+  "artifact_distribution": "Packaged for review in the Personal Agent development branch; local prototype commit is provenance, not a published commit link",
+  "prototype_git_remotes": [],
+  "portable_test_files": [
+    "tests/hermes_cli/test_plugin_host_voice_streams.py",
+    "tests/hermes_cli/test_plugin_host_voice_consumers.py",
+    "tests/hermes_cli/test_plugin_host.py",
+    "tests/hermes_cli/test_plugin_host_return_types.py",
+    "tests/hermes_cli/test_plugin_host_wire_errors.py",
+    "tests/hermes_cli/test_plugins_tts_registration.py",
+    "tests/hermes_cli/test_plugins_transcription_registration.py",
+    "tests/tools/test_transcription_plugin_dispatch.py",
+    "tests/tools/test_tts_plugin_dispatch.py",
+    "tests/tools/test_tts_provider_authority.py",
+    "tests/agent/test_tts_registry.py",
+    "tests/agent/test_transcription_registry.py"
+  ],
+  "numpy_tts_follow_up": {
+    "verified_at_utc": "2026-11-06T14:46:28.230819+00:00",
+    "checkout_commit": "40889c64e1e2fbf194ec7ece73a63e7d84c52420",
+    "install_method": "Hermes pm.build_env --group dev --group test --extra audio-io; fresh isolated output from unchanged uv.lock",
+    "numpy_version": "2.5.4",
+    "numpy_source": {
+      "registry": "https://pypi.org/simple"
+    },
+    "numpy_linux_cp314_wheel": {
+      "url": "https://files.pythonhosted.org/packages/16/d5/928078d2b28f26829b138b4a6c3980045022fb409f570657a224ae60ef4e/numpy-2.5.4-cp314-cp314-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+      "hash": "sha256:d549420b8858885cea8838a727842249218b9c1da24dd517e25c9c7a948310a3",
+      "size": 16721710,
+      "upload-time": "2026-10-10T20:03:49.489Z"
+    },
+    "package_changes": {
+      "added": {
+        "numpy": "2.5.4",
+        "sounddevice": "0.5.6"
+      },
+      "changed": {},
+      "removed": []
+    },
+    "original_environment_package_fingerprint_unchanged": true,
+    "before_packages_sha256": "a9cea936af33b50b9aa91e899a31d1a2c7692c779af621d62ec041a03fe5e643",
+    "new_packages_sha256": "e32e08249c2439104b218474f19d3bcba02b336b3dafc2cdf03e27c36ee5fd80",
+    "original_after_packages_sha256": "a9cea936af33b50b9aa91e899a31d1a2c7692c779af621d62ec041a03fe5e643",
+    "original_package_count": 88,
+    "new_package_count": 90,
+    "pyproject_sha256": "b1531ab4807bc64441a3fe3f56d6c166dcf0074e3510e061a1377c4d05d3ca24",
+    "uv_lock_sha256": "5057a8a3cbc6d2b1f2059d66e27ffa43f447021f89779599dca416056574c064",
+    "pyproject_unchanged": true,
+    "uv_lock_unchanged": true,
+    "test_results": {
+      "files": 1,
+      "passed": 44,
+      "failed": 0,
+      "skipped": 0,
+      "duration_seconds": 6.9,
+      "exit_code": 0
+    },
+    "limits": [
+      "Only the previously skipped TTS module was rerun; not the entire selected 13-file suite or full upstream suite.",
+      "Providers, sounddevice playback and sync synthesis are mocked; no live audio or external provider validation.",
+      "The module loopback WebSocket tests passed in this run; this is not a claim that unrelated denied socket operations are permitted.",
+      "The nine previously restricted identity socket tests were not attempted or retried.",
+      "No source or production dependency changes; original PM test environment retained."
+    ],
+    "python": "3.14.9",
+    "command": "HERMES_PYTHON=\"$PREPARED_PYTHON\" bash scripts/run_tests.sh tests/tools/test_tts_streaming.py --file-retries 0 -q --tb=short -x",
+    "scope": "Separately authorized one-file supplement; not part of the portable no-listener lane and not a rerun of the full selected suite"
+  }
+}

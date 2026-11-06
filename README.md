@@ -10,7 +10,7 @@ Implemented development slices include the **E0 native foundation** and an **opt
 
 - Native loading through `plugin.yaml` and synchronous `register(ctx)`.
 - A read-only `personal_agent_status` tool and, in `in_process` plugin mode, the `hermes personal-agent status` CLI.
-- Default `read_only` mode opens no task storage. Explicit `local_tasks` enables a profile-local CLI inbox: capture, list/show, update, complete and cancel, plus explicit due dates and agenda with durable replay receipts and revision checks. No personal-data model tool, external delivery, scheduling or model routing is registered.
+- Default `read_only` mode opens no task storage. Explicit `local_tasks` enables a profile-local CLI inbox: capture, search, list/show, update, complete and cancel, plus explicit due dates and agenda with durable replay receipts and revision checks. No personal-data model tool, external delivery, scheduling or model routing is registered.
 - Offline unit tests and real discovery, registry dispatch, configuration, and unload contracts against a pinned Hermes commit.
 - Follow-on E0.4 failure-boundary contracts and a read-only inventory of ten blocked write paths. `hermes personal-agent coverage` shows the evidence; it does not authorize or disable host tools.
 
@@ -23,6 +23,8 @@ The [local task inbox guide](docs/16-local-task-inbox.md) documents opt-in, comm
 The [owner-entry/read-authorization foundation](docs/18-owner-entry-and-read-authorization.md) adds a pure internal evaluator and `/personal-access` / `hermes personal-agent access` denial diagnostics. Public source context lacks verified receiving-Bot/account provenance, so production identity issuance and private reads remain disabled; this is not completed owner authorization.
 
 The [unified voice design](docs/19-unified-voice-provider-contracts.md) covers local ASR/TTS/VAD, user-configured online APIs and explicitly adapted realtime frontends under shared lifecycle/recovery contracts, preserving real backend differences. The [offline voice simulator](docs/20-voice-contract-simulator.md) now exercises a narrow synthetic contract through `hermes personal-agent voice self-test`. It uses generated silence only, with no microphone, speech model, provider call or native turn. Account connections and live voice remain unimplemented.
+
+The [local search guide](docs/22-local-task-search.md) adds literal title/details retrieval with bounded pages. A separate [native voice IPC experiment](docs/21-native-voice-ipc-experiment.md) includes a reviewable host patch and verification record; it is not applied or integrated by this plugin.
 
 ## Development checks
 
@@ -69,4 +71,4 @@ To try the local inbox, explicitly change only this plugin’s mode to `local_ta
 
 ## License
 
-[MIT](LICENSE). Upstream test sources are not bundled with this plugin. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for attribution and licensing.
+[MIT](LICENSE). The review-only voice experiment includes a limited upstream-derived patch and its license; the Hermes host itself is not vendored or modified by plugin installation. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for attribution and licensing.

@@ -100,6 +100,7 @@ def validate_request(operation: str, payload: dict) -> dict:
         "cancel": ({"task_id", "expected_revision", "request_id", "note"}, set()),
         "get": ({"task_id"}, set()),
         "list": (set(), {"state", "limit", "after"}),
+        "search": ({"query"}, {"state", "limit", "after"}),
         "agenda": ({"on"}, {"limit", "after"}),
     }
     if not isinstance(operation, str) or operation not in fields or not isinstance(payload, dict):
@@ -114,6 +115,7 @@ def validate_request(operation: str, payload: dict) -> dict:
         raise TaskError("invalid_request")
     for key, maximum, needed, multiline in (
         ("title", 240, True, False),
+        ("query", 240, True, False),
         ("details", 5000, False, True),
         ("note", 2000, True, True),
     ):
@@ -133,11 +135,16 @@ def validate_request(operation: str, payload: dict) -> dict:
         value = result["expected_revision"]
         if type(value) is not int or not 1 <= value < 2**63 - 1:
             raise TaskError("invalid_request")
-    if operation in ("list", "agenda"):
+    if operation in ("list", "search", "agenda"):
         result = {"limit": 20, "after": None, **result}
-        if operation == "list":
+        if operation in ("list", "search"):
             result.setdefault("state", "captured")
-        if operation == "list" and result["state"] not in ("captured", "done", "cancelled", "all"):
+        if operation in ("list", "search") and result["state"] not in (
+            "captured",
+            "done",
+            "cancelled",
+            "all",
+        ):
             raise TaskError("invalid_request")
         if type(result["limit"]) is not int or not 1 <= result["limit"] <= 100:
             raise TaskError("invalid_request")
@@ -228,6 +235,10 @@ class TaskStore:
 
     def _list(self, request: dict) -> dict:
         clauses, arguments = [], []
+        if "query" in request:
+            # Literal, case-sensitive matching; bind text without normalization.
+            clauses.append("(instr(title, ?) > 0 OR instr(details, ?) > 0)")
+            arguments.extend((request["query"], request["query"]))
         if request["state"] != "all":
             clauses.append("state = ?")
             arguments.append(request["state"])
@@ -285,7 +296,7 @@ class TaskStore:
         try:
             if self._connection.in_transaction:
                 raise TaskError("connection_in_transaction")
-            if operation in ("get", "list", "agenda"):
+            if operation in ("get", "list", "search", "agenda"):
                 if operation == "get":
                     data = self._get(request["task_id"])
                 elif operation == "agenda":

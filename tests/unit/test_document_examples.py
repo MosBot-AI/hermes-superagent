@@ -23,3 +23,21 @@ def test_unterminated_json_example_is_an_error():
         0,
         ["unterminated JSON example at line 1"],
     )
+
+
+@pytest.mark.parametrize("relative", ["experiments/review/README.md", "THIRD_PARTY_NOTICES.md"])
+def test_bilingual_checker_covers_review_artifacts_and_notices(
+    tmp_path, monkeypatch, capsys, relative
+):
+    import json
+
+    from scripts import check_docs
+
+    path = tmp_path / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("# English document\n", encoding="utf-8")
+    monkeypatch.setattr(check_docs, "ROOT", tmp_path)
+    assert check_docs.main() == 1
+    report = json.loads(capsys.readouterr().out)
+    assert report["files"] == 1
+    assert report["errors"] == [f"{relative}: Chinese counterpart missing"]

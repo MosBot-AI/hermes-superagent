@@ -30,7 +30,9 @@
 18. [Owner 入口与只读授权基础](18-owner-entry-and-read-authorization-zh.md)：内部评估器、原生身份缺口与不读取个人数据的诊断。
 19. [统一语音会话与提供方契约](19-unified-voice-provider-contracts-zh.md)：本地/在线语音的可替换接口、能力、打断/恢复及安全门禁设计。
 20. [离线语音契约模拟器](20-voice-contract-simulator-zh.md)：合成音频帧、队列与恢复自检，以及核实的原生 provider 局限。
-21. [架构决策记录](adr/README-zh.md)：为什么选择这些约束。
+21. [原生语音 IPC 实验](21-native-voice-ipc-experiment-zh.md)：可审阅宿主补丁、真实消费路径证据及尚未集成的发布限制。
+22. [本地任务检索](22-local-task-search-zh.md)：标题/详情字面匹配、有界分页及不变的本地门禁。
+23. [架构决策记录](adr/README-zh.md)：为什么选择这些约束。
 
 ## 三类陈述必须分开
 

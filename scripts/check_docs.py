@@ -93,8 +93,9 @@ def check_pair(path: Path, content: str) -> list[str]:
 
 
 def main() -> int:
-    files = sorted(ROOT.glob("docs/**/*.md"))
-    files += sorted(ROOT.glob("README*.md")) + sorted(ROOT.glob("CHANGELOG*.md"))
+    files = sorted(ROOT.glob("docs/**/*.md")) + sorted(ROOT.glob("experiments/**/*.md"))
+    for pattern in ("README*.md", "CHANGELOG*.md", "THIRD_PARTY_NOTICES*.md"):
+        files += sorted(ROOT.glob(pattern))
     errors = []
     checked = 0
     pairs = 0

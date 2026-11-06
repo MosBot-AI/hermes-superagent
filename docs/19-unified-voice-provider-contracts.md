@@ -6,6 +6,8 @@ English | [简体中文](19-unified-voice-provider-contracts-zh.md)
 
 This scope is an in-app live voice conversation and voice messages, not a PSTN dialer or permission to call third parties. Hermes remains the personal agent and tool authority. The voice layer does not replace the main Bot, native session runtime, authorization, worker routing or credential system. Read [07](07-mobile-and-voice.md), [14](14-client-api-contracts.md), [15](15-primary-bot-binding.md) and [18](18-owner-entry-and-read-authorization.md) for those boundaries.
 
+A separate [review-only host patch](21-native-voice-ipc-experiment.md) demonstrates typed streaming across the existing pipe in a disposable prototype. It is not integrated or activated by this plugin; official-pin findings below remain unchanged.
+
 ## 1. Decision: One Contract, Explicit Capabilities
 
 Unify **session lifecycle, audio metadata, events, cancellation, recovery, authorization and metering**, not vendors' wire protocols or quality claims. Three adapter families share the contract:

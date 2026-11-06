@@ -29,6 +29,13 @@ def setup_tasks_cli(parent: argparse._SubParsersAction) -> None:
     )
     listing.add_argument("--limit", type=int, default=20)
     listing.add_argument("--after", default=None)
+    search = commands.add_parser("search", help="Search literal task text, newest first")
+    search.add_argument("--query", required=True)
+    search.add_argument(
+        "--state", choices=("captured", "done", "cancelled", "all"), default="captured"
+    )
+    search.add_argument("--limit", type=int, default=20)
+    search.add_argument("--after", default=None)
     agenda = commands.add_parser(
         "agenda", help="List active tasks due on or before an explicit date"
     )
@@ -62,6 +69,7 @@ def command_request(args: argparse.Namespace) -> tuple[str, dict]:
         "capture": ("title", "details", "request_id", "due_date"),
         "get": ("task_id",),
         "list": ("state", "limit", "after"),
+        "search": ("query", "state", "limit", "after"),
         "agenda": ("on", "limit", "after"),
         "update": ("task_id", "expected_revision", "request_id", "title", "details", "due_date"),
         "complete": ("task_id", "expected_revision", "request_id", "note"),

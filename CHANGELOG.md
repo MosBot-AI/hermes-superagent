@@ -36,6 +36,9 @@ This file distinguishes design work, development changes, and released capabilit
 - Offline `voice self-test` CLI, strict synthetic PCM capability/frame validation, bounded queues, duplicate/gap handling, generation/epoch fencing and interruption/recovery/close checks. No speech recognition, synthesis, capture, playback or native turn is performed.
 - Native ASR/TTS discovery and pipe-host contracts with synthetic unavailable providers; file operations work across the tested host boundary, but streaming-session/generator return values are not usable there. No provider is registered by the production plugin.
 
+- Review-only native voice IPC patch, provenance, separate guarded reproduction and bilingual limitations. Not applied, installed or integrated into the plugin; the official compatibility pin is unchanged.
+- Local literal title/details search with state filtering and bounded creation-order pagination, preserving existing task schema, receipts and local-operator gates. No semantic retrieval or private channel access is enabled.
+
 ### Boundaries
 
 - E0.3, full E0.4 coverage, E0.6, identity/authorization, full domain storage, reminders, connectors, mobile, voice, and E9 model routing remain unimplemented.

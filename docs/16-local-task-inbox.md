@@ -8,6 +8,8 @@ The tested Hermes baseline remains `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`, P
 
 Date-only deadlines and agenda are now available as a compatible extension; see [17](17-local-task-agenda.md) for commands, migration and legacy receipt semantics.
 
+Literal title/details search is available through the same local gate; see [22](22-local-task-search.md) for matching and pagination semantics.
+
 ## 1. Scope and Trust Boundary
 
 - Default `mode: read_only` still refuses task commands before opening plugin storage. Status and coverage do not open task storage in either mode.

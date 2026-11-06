@@ -8,6 +8,8 @@
 
 仅含日期的截止日期与 agenda 已作为兼容扩展提供；命令、迁移及旧 receipt 语义见[文档 17](17-local-task-agenda-zh.md)。
 
+标题/详情字面检索通过相同本地门禁提供；匹配与分页语义见 [22](22-local-task-search-zh.md)。
+
 ## 1. 范围与信任边界
 
 - 默认 `mode: read_only` 仍在打开插件存储之前拒绝任务命令。两种模式下 status 和 coverage 都不打开任务存储。

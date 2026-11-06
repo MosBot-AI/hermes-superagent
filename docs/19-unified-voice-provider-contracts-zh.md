@@ -6,6 +6,8 @@
 
 本范围包括应用内实时语音对话和语音消息，不包括 PSTN 拨号器，也不代表获准呼叫第三方。Hermes 仍是个人 agent 和工具权限的权威。语音层不替代主 Bot、原生会话运行时、授权、worker 路由或凭据系统。这些边界见[文档 07](07-mobile-and-voice-zh.md)、[文档 14](14-client-api-contracts-zh.md)、[文档 15](15-primary-bot-binding-zh.md)与[文档 18](18-owner-entry-and-read-authorization-zh.md)。
 
+独立的[仅供审阅宿主补丁](21-native-voice-ipc-experiment-zh.md)在一次性原型中验证了现有管道上的有类型流传输。插件未集成或启用它，下述正式固定版本的发现保持不变。
+
 ## 1. 决策：统一契约，明确能力
 
 统一的是**会话生命周期、音频元数据、事件、取消、恢复、授权与用量计量**，不是各厂商的线上协议或质量宣称。三个 adapter 家族共享此契约：

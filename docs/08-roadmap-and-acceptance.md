@@ -70,6 +70,8 @@ Current E2.1 precursor: [the opt-in local CLI task inbox](16-local-task-inbox.md
 
 The local follow-on adds [due dates and agenda](17-local-task-agenda.md), including atomic schema upgrades and legacy receipt compatibility tests. It advances a narrow local E2.1/E8.3 scope; it does not create reminders or complete E4 or the E1 gates.
 
+Current E2.2 precursor: [local task search](22-local-task-search.md) retrieves literal title/details matches only through the opt-in local CLI. It preserves the current schema and receipts; it is not agent memory, semantic retrieval or owner-authorized channel access. E1 and full E2.2 gates remain open.
+
 ### E3. Connect Native Projects and Tasks (P0/P1, M1–M2)
 
 Depends on E0.3, E1.1–E1.5, and E2.1.
@@ -136,6 +138,8 @@ Production modes depend on applicable native/client identity contracts, E1.3 and
 [19](19-unified-voice-provider-contracts.md) unifies E7.1–E7.4 configuration/safety semantics while retaining separate voice-message MVP and realtime-duplex gates. The [offline simulator](20-voice-contract-simulator.md) implements a narrow synthetic precursor and public ASR/TTS contract probes. E0.8/E7.5 remain incomplete; production interfaces, online transmission and Primary Bot authority are not enabled.
 
 Acceptance: Misrecognition does not cause high-impact outbound actions; the same task can switch between text and voice; network loss or stopping voice does not falsely report cancellation of an external action. Real-time voice is a separate gate and does not block a completed voice-message MVP.
+
+The [native voice IPC experiment](21-native-voice-ipc-experiment.md) preserves a separately tested host adaptation as a review artifact. It is not installed by this project, does not change the official pin and does not complete E0.8/E7.5 or enable E7.6/E7.7.
 
 ### E8. Complete Operations, Evaluation, and Release (P0/P1, Across M0–M4)
 

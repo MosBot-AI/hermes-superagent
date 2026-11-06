@@ -1,0 +1,1220 @@
+diff --git a/hermes_cli/plugin_host.py b/hermes_cli/plugin_host.py
+index b179d3f9..18612c82 100644
+--- a/hermes_cli/plugin_host.py
++++ b/hermes_cli/plugin_host.py
+@@ -89,6 +89,9 @@ class PluginHost:
+         # (object ids restart at 1, so a stale id would silently land on a different object).
+         self._generation = 0
+         self._releases: list = []
++        self._voice_releases: list = []
++        self._voice_tokens: set = set()
++        self._voice_release_lock = threading.Lock()
+         self.info: dict[str, Any] = {}
+ 
+     # -- lifecycle ----------------------------------------------------------------------------------
+@@ -146,12 +149,17 @@ class PluginHost:
+                                     bufsize=0)
+             threading.Thread(target=_pump_stderr, args=(proc, self._home.name), daemon=True,
+                              name=f"plugin-host-{proc.pid}-stderr").start()
+-            self._generation += 1
++            generation = self._generation + 1
+             channel = Channel(proc.stdout, proc.stdin, self._handle,  # type: ignore[arg-type]
+                               name=f"plugin-host[{proc.pid}]",
+-                              on_close=functools.partial(self._on_channel_close, self._generation),
+-                              context_for_origin=self._context_for_origin).start()
+-            self._proc, self._channel = proc, channel
++                              on_close=functools.partial(self._on_channel_close, generation),
++                              context_for_origin=self._context_for_origin)
++            with self._voice_release_lock:
++                self._generation = generation
++                self._voice_releases = []
++                self._voice_tokens.clear()
++                self._proc, self._channel = proc, channel
++            channel.start()
+             self._releases = []
+         try:
+             self.info = channel.call("hello", {}, timeout=_START_TIMEOUT_SECS)
+@@ -345,12 +353,25 @@ class PluginHost:
+     def _call(self, method: str, params: dict[str, Any], *, generation: Optional[int] = None,
+               timeout: Optional[float] = None, returns: Any = None) -> Any:
+         """``returns`` is the type a core ABC declares for the result; the reply is rebuilt as it."""
+-        channel = self._channel
+         try:
+-            if channel is None:
+-                raise PluginHostUnavailable("not started")
+-            if generation is not None and generation != self._generation:
+-                raise PluginHostUnavailable("this object belonged to a plugin host process that has exited")
++            with self._voice_release_lock:
++                channel, call_generation = self._channel, self._generation
++                if channel is None:
++                    raise PluginHostUnavailable("not started")
++                if generation is not None and generation != call_generation:
++                    raise PluginHostUnavailable("this object belonged to a plugin host process that has exited")
++                released_voice, self._voice_releases = self._voice_releases, []
++            handles = [release for voice_generation, release in released_voice
++                       if voice_generation == call_generation]
++            if handles:
++                try:
++                    channel.call("voice_release", {"handles": handles}, timeout=2.0)
++                    for voice_generation, release in released_voice:
++                        self._forget_voice_token(voice_generation, release["token"])
++                except Exception:
++                    for voice_generation, release in released_voice:
++                        self._queue_voice_release(voice_generation, release)
++                    logger.warning("Plugin voice cleanup acknowledgement unavailable", exc_info=True)
+             if self._releases:
+                 released, self._releases = self._releases, []
+                 channel.call("release", {"refs": released})
+@@ -359,6 +380,36 @@ class PluginHost:
+         except PluginHostUnavailable as exc:
+             raise PluginHostUnavailable(self._exit_reason()) from exc
+ 
++    def _reserve_voice_token(self, generation: int, token: str) -> None:
++        from hermes_cli.plugin_host_voice import MAX_SESSIONS
++        with self._voice_release_lock:
++            flush = len(self._voice_tokens) >= MAX_SESSIONS and bool(self._voice_releases)
++        if flush:
++            self._call("voice_release", {"handles": []}, generation=generation, timeout=2.0)
++        with self._voice_release_lock:
++            if generation != self._generation:
++                raise PluginHostUnavailable("voice host generation has exited")
++            if len(self._voice_tokens) >= MAX_SESSIONS:
++                raise ValueError("voice handle capacity exceeded; close existing sessions")
++            self._voice_tokens.add(token)
++
++    def _forget_voice_token(self, generation: int, token: str) -> None:
++        with self._voice_release_lock:
++            if generation == self._generation:
++                self._voice_tokens.discard(token)
++
++    def _queue_voice_release(self, generation: int, release: dict) -> None:
++        with self._voice_release_lock:
++            channel = self._channel
++            if generation != self._generation:
++                return
++            if channel is None or channel.closed_reason is not None:
++                self._voice_tokens.discard(release["token"])
++                return
++            item = (generation, release)
++            if item not in self._voice_releases:
++                self._voice_releases.append(item)
++
+     def _release(self, generation: int, ref: int) -> None:
+         """Finalizer of an object proxy (any thread, GC time): queue only; sent with the next call."""
+         if generation == self._generation:
+@@ -502,7 +553,7 @@ class PluginHost:
+         live = set(ref.get("live") or ())
+         namespace: dict[str, Any] = {}
+         for name, meta in (ref.get("methods") or {}).items():
+-            namespace[name] = _method_proxy(host, slot, name, meta, declared_return(base, name))
++            namespace[name] = _method_proxy(host, slot, name, meta, declared_return(base, name), base)
+ 
+         def __getattribute__(self_: Any, name: str) -> Any:
+             if name in live:
+@@ -577,8 +628,8 @@ def _holds_live_handle(value: Any) -> bool:
+ 
+ def is_hosted_object(obj: Any) -> bool:
+     """``obj`` is a proxy for a plugin object whose code runs in the plugin host (``plugins.isolation:
+-    host``): its methods run there and anything they return that is not plain data arrives as an
+-    :class:`Opaque` placeholder."""
++    host``): its methods run there. Declared providers and typed voice streams use dedicated
++    proxies; other non-data results arrive as :class:`Opaque` placeholders."""
+     return "__hermes_plugin_host_ref__" in vars(type(obj))
+ 
+ 
+@@ -598,12 +649,22 @@ def _run_on_gateway_loop(coro: Any) -> Any:
+ 
+ 
+ def _method_proxy(host: PluginHost, slot: _ObjectSlot, name: str, meta: dict[str, Any],
+-                  returns: Any) -> Callable[..., Any]:
++                  returns: Any, base: type) -> Callable[..., Any]:
++    from hermes_cli.plugin_host_voice import open_voice, voice_kind
++    kind = voice_kind(base, name)
++
++    def invoke(owner, args, kwargs):
++        if kind is not None:
++            result = open_voice(host, slot, name, args, kwargs, kind)
++            result.owner = owner
++            return result
++        return host.obj_invoke(slot, name, args, kwargs, returns)
++
+     async def async_method(self_: Any, *args: Any, **kwargs: Any) -> Any:
+-        return await asyncio.to_thread(host.obj_invoke, slot, name, args, kwargs, returns)
++        return await asyncio.to_thread(invoke, self_, args, kwargs)
+ 
+     def sync_method(self_: Any, *args: Any, **kwargs: Any) -> Any:
+-        return host.obj_invoke(slot, name, args, kwargs, returns)
++        return invoke(self_, args, kwargs)
+ 
+     method: Any = async_method if meta.get("async") else sync_method
+     method.__name__ = method.__qualname__ = name
+diff --git a/hermes_cli/plugin_host_child.py b/hermes_cli/plugin_host_child.py
+index ffc903e0..3b5d78d5 100644
+--- a/hermes_cli/plugin_host_child.py
++++ b/hermes_cli/plugin_host_child.py
+@@ -129,6 +129,8 @@ class HostRuntime:
+     """Reference tables, the asyncio loop for async plugin code, and the request handler."""
+ 
+     def __init__(self, reader, writer):
++        from hermes_cli.plugin_host_voice import VoiceSessions
++        self.voice = VoiceSessions(self)
+         self.refs: dict[int, Any] = {}
+         self.owners: dict[int, str] = {}
+         self._ids = itertools.count(1)
+@@ -217,6 +219,10 @@ class HostRuntime:
+ 
+     # -- incoming ---------------------------------------------------------------------------------
+     def handle(self, method: str, params: dict[str, Any], _origin: Optional[int]) -> Any:
++        voice_handler = {"voice_open": self.voice.open, "voice_op": self.voice.operation,
++                         "voice_close": self.voice.close, "voice_release": self.voice.release}.get(method)
++        if voice_handler is not None:
++            return voice_handler(params)
+         handler = _HANDLERS.get(method)
+         if handler is None:
+             raise ValueError(f"unknown plugin host request {method!r}")
+@@ -369,10 +375,13 @@ class HostRuntime:
+ 
+     def op_release(self, params: dict[str, Any]) -> None:
+         """Drop objects whose Hermes-side proxies were garbage-collected."""
++        for ref in params.get("refs") or ():
++            self.voice.close_owner(owner=int(ref))
+         with self._lock:
+             for ref in params.get("refs") or ():
+                 self.refs.pop(int(ref), None)
+                 self.owners.pop(int(ref), None)
++        self.voice.reap_owners()
+ 
+     def op_config_schema(self, params: dict[str, Any]) -> Any:
+         """A memory provider's ``config_schema.py`` ``CONFIG_SCHEMA`` (user code: it runs here)."""
+@@ -392,6 +401,7 @@ class HostRuntime:
+         setattr(obj, name, decode(params.get("value"), None))
+ 
+     def op_unload(self, params: dict[str, Any]) -> dict[str, Any]:
++        self.voice.close_owner(plugin=str(params["plugin_key"]))
+         plugin_key = str(params["plugin_key"])
+         errors = []
+         for callback in reversed(self.unload_callbacks.pop(plugin_key, [])):
+@@ -403,6 +413,7 @@ class HostRuntime:
+             for ref in [r for r, owner in self.owners.items() if owner == plugin_key]:
+                 self.refs.pop(ref, None)
+                 self.owners.pop(ref, None)
++        self.voice.reap_owners()
+         module_name = self.modules.pop(plugin_key, "")
+         if module_name:
+             for name in [m for m in sys.modules if m == module_name or m.startswith(module_name + ".")]:
+@@ -410,6 +421,7 @@ class HostRuntime:
+         return {"errors": errors}
+ 
+     def op_shutdown(self, _params: dict[str, Any]) -> None:
++        self.voice.close_owner()
+         for plugin_key in list(self.unload_callbacks):
+             self.op_unload({"plugin_key": plugin_key})
+         self.stopped.set()
+diff --git a/hermes_cli/plugin_host_voice.py b/hermes_cli/plugin_host_voice.py
+new file mode 100644
+index 00000000..9e96ebac
+--- /dev/null
++++ b/hermes_cli/plugin_host_voice.py
+@@ -0,0 +1,314 @@
++"""Typed, bounded voice sessions over the existing per-profile plugin-host pipe.
++
++Closing fences replies immediately. It cannot interrupt Python/provider compute; busy
++entries retain their capacity reservation until that compute returns and cleanup runs.
++"""
++from __future__ import annotations
++
++import logging
++import contextvars
++import threading
++import time
++import uuid
++import weakref
++from collections.abc import Iterator
++
++from agent.transcription_provider import TranscriptionProvider, TranscriptionStreamSession
++from agent.tts_provider import TTSProvider
++from hermes_cli.plugin_host_wire import decode, encode
++
++MAX_SESSIONS = 32
++MAX_CHUNK = 1024 * 1024
++MAX_AUDIO = 32 * 1024 * 1024
++MAX_TEXT = 64 * 1024
++CALL_TIMEOUT = 120.0
++CLOSE_TIMEOUT = 2.0
++logger = logging.getLogger("hermes_cli.plugins")
++
++
++def voice_kind(base, method):
++    if issubclass(base, TranscriptionProvider) and method == "open_stream_session":
++        return "asr"
++    if issubclass(base, TTSProvider) and method == "stream":
++        return "tts"
++    return None
++
++
++def bounded_text(value):
++    if not isinstance(value, str) or len(value.encode("utf-8")) > MAX_TEXT:
++        raise ValueError("voice text must be a string of at most 64 KiB")
++    return value
++
++
++def validate_input(args, kwargs):
++    # Voice open has text/options only, never arbitrary live handles or unbounded trees.
++    import json
++    data = json.dumps([args, kwargs], ensure_ascii=False)
++    if len(data.encode("utf-8")) > MAX_TEXT:
++        raise ValueError("voice open arguments exceed 64 KiB")
++
++
++class _Entry:
++    def __init__(self, owner, plugin, kind):
++        self.owner, self.plugin, self.kind = owner, plugin, kind
++        self.value = None
++        self.busy = True
++        self.closed = False
++        self.total = 0
++
++
++class VoiceSessions:
++    """Child-owned sessions; only the two declared provider entry points can create one."""
++    def __init__(self, runtime):
++        self.runtime = runtime
++        self.entries = {}
++        self.retired_owners = set()
++        self.lock = threading.Lock()
++
++    def open(self, params):
++        owner, token = int(params["ref"]), str(params["token"])
++        obj = self.runtime.refs.get(owner)
++        method = str(params["method"])
++        kind = voice_kind(type(obj), method)
++        if kind is None:
++            raise TypeError("not a voice provider entry point")
++        args, kwargs = self.runtime._decode_args(params)
++        validate_input(args, kwargs)
++        with self.lock:
++            if owner in self.retired_owners or self.runtime.refs.get(owner) is not obj:
++                raise RuntimeError("voice provider has been released")
++            if time.monotonic() >= params["deadline"]:
++                raise TimeoutError("voice opening deadline expired")
++            if token in self.entries or len(self.entries) >= MAX_SESSIONS:
++                raise ValueError("voice session capacity exceeded or duplicate token")
++            entry = _Entry(owner, self.runtime.owners.get(owner), kind)
++            self.entries[token] = entry
++        try:
++            value = self.runtime._run(getattr(obj, method)(*args, **kwargs))
++            entry.value = value
++            valid = isinstance(value, TranscriptionStreamSession) if kind == "asr" else isinstance(value, Iterator)
++            if not valid:
++                raise TypeError("voice provider returned an invalid session type")
++            with self.lock:
++                if entry.closed or self.runtime.refs.get(owner) is not obj:
++                    raise RuntimeError("voice session closed while opening")
++            return {"kind": kind, "token": token}
++        except BaseException:
++            entry.closed = True
++            raise
++        finally:
++            self._finish(token, entry)
++
++    def _finish(self, token, entry):
++        with self.lock:
++            entry.busy = False
++            cleanup = entry.closed
++            if cleanup:
++                # Cleanup may block too; keep its slot, but never hold the pipe caller.
++                entry.busy = True
++        if cleanup:
++            threading.Thread(target=contextvars.copy_context().run,
++                             args=(self._cleanup, token, entry), daemon=True,
++                             name="plugin-voice-cleanup").start()
++
++    def _cleanup(self, token, entry):
++        try:
++            close = getattr(entry.value, "close", None)
++            if callable(close):
++                close()
++        except Exception:
++            logger.warning("Voice session cleanup failed", exc_info=True)
++        finally:
++            with self.lock:
++                self.entries.pop(token, None)
++
++    def close(self, params):
++        token = str(params["token"])
++        with self.lock:
++            entry = self.entries.get(token)
++            if entry is None:
++                return
++            if entry.owner != int(params["ref"]):
++                raise PermissionError("voice session owner mismatch")
++            entry.closed = True
++            idle = not entry.busy
++            if idle:
++                entry.busy = True
++        if idle:
++            self._finish(token, entry)
++
++    def release(self, params):
++        for handle in params["handles"]:
++            self.close(handle)
++
++    def close_owner(self, owner=None, plugin=None):
++        with self.lock:
++            with self.runtime._lock:
++                refs = [ref for ref, key in self.runtime.owners.items()
++                        if (owner is None or ref == owner) and (plugin is None or key == plugin)]
++            self.retired_owners.update(refs)
++            idle = []
++            for token, entry in self.entries.items():
++                if (owner is None or owner == entry.owner) and (plugin is None or plugin == entry.plugin):
++                    entry.closed = True
++                    if not entry.busy:
++                        entry.busy = True
++                        idle.append((token, entry))
++        for token, entry in idle:
++            self._finish(token, entry)
++
++    def reap_owners(self):
++        with self.lock:
++            with self.runtime._lock:
++                self.retired_owners.intersection_update(self.runtime.refs)
++
++    def operation(self, params):
++        token, action = str(params["token"]), str(params["action"])
++        with self.lock:
++            entry = self.entries.get(token)
++            if entry is None or entry.closed:
++                raise RuntimeError("voice session is closed")
++            if entry.owner != int(params["ref"]) or self.runtime.owners.get(entry.owner) != entry.plugin:
++                raise PermissionError("voice session owner mismatch")
++            if entry.busy:
++                raise RuntimeError("voice session operation already in flight")
++            entry.busy = True
++        try:
++            result, terminal = self._operate(entry, action, params)
++            with self.lock:
++                if entry.closed:
++                    raise RuntimeError("voice session closed during operation")
++                entry.closed = terminal
++            return encode(result)
++        except BaseException:
++            entry.closed = True
++            raise
++        finally:
++            self._finish(token, entry)
++
++    def _operate(self, entry, action, params):
++        if entry.kind == "tts" and action == "next":
++            try:
++                chunk = next(entry.value)
++            except StopIteration:
++                return {"end": True}, True
++            self._audio(entry, chunk)
++            return {"chunk": chunk}, False
++        if entry.kind == "asr" and action == "push":
++            chunk = decode(params.get("chunk"))
++            self._audio(entry, chunk)
++            entry.value.push_audio(chunk)
++            return None, False
++        if entry.kind == "asr" and action == "partial":
++            return bounded_text(entry.value.partial_transcript()), False
++        if entry.kind == "asr" and action == "finalize":
++            result = entry.value.finalize()
++            if not isinstance(result, dict) or type(result.get("success")) is not bool:
++                raise TypeError("invalid transcription envelope")
++            output = {"success": result["success"], "transcript": bounded_text(result.get("transcript")),
++                      "provider": bounded_text(result.get("provider"))}
++            if not output["success"]:
++                output["error"] = bounded_text(result.get("error"))
++            return output, True
++        raise ValueError("invalid typed voice operation")
++
++    @staticmethod
++    def _audio(entry, chunk):
++        if not isinstance(chunk, bytes) or len(chunk) > MAX_CHUNK:
++            raise ValueError("voice chunk must be bytes of at most 1 MiB")
++        entry.total += len(chunk)
++        if entry.total > MAX_AUDIO:
++            raise ValueError("voice session audio exceeds 32 MiB")
++
++
++def _abandon(host, generation, ref, token):
++    # GC must never block on IPC. The next host call flushes the release queue.
++    host._queue_voice_release(generation, {"ref": ref, "token": token})
++
++
++class _RemoteVoice:
++    def __init__(self, host, ref, generation, token):
++        self.host, self.ref, self.generation, self.token = host, ref, generation, token
++        self.closed = threading.Event()
++        self.lock = threading.Lock()
++        self.finalizer = weakref.finalize(self, _abandon, host, generation, ref, token)
++
++    def _call(self, action, **extra):
++        if self.closed.is_set():
++            raise RuntimeError("voice session is closed")
++        if not self.lock.acquire(blocking=False):
++            raise RuntimeError("voice session operation already in flight")
++        try:
++            result = self.host._call("voice_op", {"ref": self.ref, "token": self.token,
++                "action": action, **extra}, generation=self.generation, timeout=CALL_TIMEOUT)
++            if self.closed.is_set():
++                raise RuntimeError("voice session closed during operation")
++            return result
++        except BaseException:
++            self.close()
++            raise
++        finally:
++            self.lock.release()
++
++    def close(self):
++        if self.closed.is_set():
++            return
++        self.closed.set()
++        self.finalizer.detach()
++        try:
++            self.host._call("voice_close", {"ref": self.ref, "token": self.token},
++                            generation=self.generation, timeout=CLOSE_TIMEOUT)
++            self.host._forget_voice_token(self.generation, self.token)
++        except Exception:  # health: allow BLE001 -- cleanup must not mask an in-flight failure; retain the handle for bounded retry without logging provider data
++            _abandon(self.host, self.generation, self.ref, self.token)
++
++    cancel = close
++
++
++class HostedTranscriptionSession(_RemoteVoice, TranscriptionStreamSession):
++    def push_audio(self, chunk):
++        if not isinstance(chunk, bytes) or len(chunk) > MAX_CHUNK:
++            self.close()
++            raise ValueError("voice chunk must be bytes of at most 1 MiB")
++        self._call("push", chunk=encode(chunk))
++
++    def partial_transcript(self):
++        return self._call("partial")
++
++    def finalize(self):
++        try:
++            return self._call("finalize")
++        except Exception as exc:  # health: allow BLE001 -- TranscriptionStreamSession.finalize must return a failure envelope for arbitrary provider/transport errors, not raise
++            return {"success": False, "transcript": "", "provider": "plugin-host", "error": str(exc)}
++        finally:
++            self.close()
++
++
++class HostedTTSIterator(_RemoteVoice, Iterator):
++    def __next__(self):
++        if self.closed.is_set():
++            raise StopIteration
++        result = self._call("next")
++        if result.get("end"):
++            self.close()
++            raise StopIteration
++        return result["chunk"]
++
++
++def open_voice(host, slot, method, args, kwargs, kind):
++    validate_input(args, kwargs)
++    ref, generation = slot.live()
++    token = uuid.uuid4().hex
++    host._reserve_voice_token(generation, token)
++    cls = HostedTranscriptionSession if kind == "asr" else HostedTTSIterator
++    proxy = cls(host, ref, generation, token)
++    try:
++        result = host._call("voice_open", {"ref": ref, "token": token, "method": method,
++            "args": encode(list(args)), "kwargs": encode(kwargs), "deadline": time.monotonic() + CALL_TIMEOUT},
++            generation=generation, timeout=CALL_TIMEOUT)
++        if result != {"kind": kind, "token": token}:
++            raise TypeError("invalid typed voice open response")
++        return proxy
++    except BaseException:
++        proxy.close()
++        raise
+diff --git a/tests/hermes_cli/test_plugin_host_voice_consumers.py b/tests/hermes_cli/test_plugin_host_voice_consumers.py
+new file mode 100644
+index 00000000..50e5180c
+--- /dev/null
++++ b/tests/hermes_cli/test_plugin_host_voice_consumers.py
+@@ -0,0 +1,352 @@
++"""Native voice consumers over host pipes with deterministic, non-speech PCM fixtures.
++
++These tests prove dispatch, profile scope, streaming and cleanup, not speech quality.
++No microphone, speaker, credentials, model download, gateway or socket listener is used.
++"""
++
++from contextlib import contextmanager
++import json
++import os
++from pathlib import Path
++import threading
++
++import pytest
++
++from hermes_constants import reset_hermes_home_override, set_hermes_home_override
++
++PLUGIN_ID = "native-voice-fixture"
++NAME = "synthetic-native-voice"
++PCM = b"\x00\x00\x01\x00"
++
++PLUGIN = r'''
++import json
++import os
++import threading
++import time
++from pathlib import Path
++from agent.transcription_provider import TranscriptionProvider, TranscriptionStreamSession
++from agent.tts_provider import TTSProvider
++
++HOME = Path(__file__).parent.parent.parent
++LABEL = HOME.name
++LOG = HOME / "voice-events.jsonl"
++
++def record(event, **values):
++    with LOG.open("a", encoding="utf-8") as out:
++        out.write(json.dumps(dict(event=event, pid=os.getpid(), profile=LABEL, **values)) + "\n")
++
++class Utterance(TranscriptionStreamSession):
++    def __init__(self, language, prompt):
++        self.audio = bytearray()
++        self.prompt = prompt
++        record("asr-open", language=language, prompt=prompt)
++    def push_audio(self, chunk):
++        if self.prompt == "blocked-push":
++            record("asr-blocked")
++            deadline = time.monotonic() + 10
++            while not (HOME / "release-push").exists():
++                if time.monotonic() > deadline:
++                    raise TimeoutError("test did not release blocked provider")
++                threading.Event().wait(0.01)
++        if self.prompt == "fail-push":
++            raise ValueError("synthetic push failure")
++        self.audio.extend(chunk)
++        record("asr-push", pcm=chunk.hex())
++    def partial_transcript(self):
++        return LABEL + " partial" if self.audio else ""
++    def finalize(self):
++        record("asr-final", pcm=self.audio.hex())
++        return dict(success=True, transcript=LABEL + " final", provider="synthetic-native-voice",
++                    pcm=self.audio.hex(), pid=os.getpid(), profile=LABEL)
++    def close(self):
++        record("asr-close")
++    def cancel(self):
++        self.close()
++
++class ASR(TranscriptionProvider):
++    name = "synthetic-native-voice"
++    streaming_capable = True
++    def is_available(self):
++        return True
++    def transcribe(self, file_path, **extra):
++        raise AssertionError("file fallback must not run")
++    def open_stream_session(self, *, language=None, prompt=None):
++        return Utterance(language, prompt)
++
++class Speech(TTSProvider):
++    name = "synthetic-native-voice"
++    streams_pcm = True
++    stream_sample_rate = 16000
++    def is_available(self):
++        return True
++    def synthesize(self, text, output_path, **extra):
++        raise AssertionError("file fallback must not run")
++    def stream(self, text, *, voice=None, model=None, format="opus", **extra):
++        record("tts-open", text=text, voice=voice, model=model, format=format, speed=extra.get("speed"))
++        try:
++            yield b"\x00\x00"
++            if text == "fail":
++                raise ValueError("synthetic stream failure")
++            yield b"\x01\x00"
++        finally:
++            record("tts-close")
++
++def register(ctx):
++    ctx.register_transcription_provider(ASR())
++    ctx.register_tts_provider(Speech())
++'''
++
++
++@contextmanager
++def profile_scope(home):
++    token = set_hermes_home_override(home)
++    try:
++        yield
++    finally:
++        reset_hermes_home_override(token)
++
++
++@pytest.fixture
++def voice_profiles(tmp_path, monkeypatch):
++    from hermes_cli import plugins
++
++    bundled = tmp_path / "empty-bundled"
++    bundled.mkdir()
++    monkeypatch.setenv("HERMES_BUNDLED_PLUGINS", str(bundled))
++    monkeypatch.setenv("HERMES_ENABLE_PROJECT_PLUGINS", "0")
++    monkeypatch.setenv("HOME", str(tmp_path / "os-home"))
++    monkeypatch.setattr(Path, "home", lambda: tmp_path / "os-home")
++    monkeypatch.setattr(plugins, "_plugin_manager", None)
++    monkeypatch.setattr(plugins, "_plugin_managers_by_home", {})
++    managers = []
++    originals = {}
++
++    def create(label, *, installed=True):
++        home = tmp_path / label
++        home.mkdir()
++        config = {
++            "plugins": {"enabled": [PLUGIN_ID] if installed else [], "isolation": "host"},
++            "stt": {"provider": NAME, "streaming": True, "language": "en", "prompt": label},
++            "tts": {"provider": NAME, "voice": label + "-voice", "model": "synthetic-only",
++                    "speed": 1.25, "streaming": {"provider": NAME}},
++        }
++        path = home / "config.yaml"
++        path.write_text(json.dumps(config), encoding="utf-8")
++        originals[path] = path.read_bytes()
++        if installed:
++            plugin = home / "plugins" / PLUGIN_ID
++            plugin.mkdir(parents=True)
++            (plugin / "plugin.yaml").write_text(json.dumps({"name": PLUGIN_ID, "version": "0.0.0"}))
++            (plugin / "__init__.py").write_text(PLUGIN, encoding="utf-8")
++        with profile_scope(home):
++            manager = plugins.get_plugin_manager()
++            manager.discover_and_load()
++            if installed:
++                loaded = manager._plugins[PLUGIN_ID]
++                assert loaded.enabled and loaded.error is None, loaded.error
++        managers.append(manager)
++        return home
++
++    try:
++        yield create
++    finally:
++        for manager in managers:
++            manager.unload()
++            manager._plugin_host().shutdown()
++        for path, original in originals.items():
++            assert path.read_bytes() == original
++
++
++def events(home):
++    path = home / "voice-events.jsonl"
++    return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
++
++
++def test_native_consumers_stream_configured_voice_in_child(voice_profiles):
++    from tools.transcription_streaming import open_streaming_session, streaming_available
++    from tools.tts_streaming import resolve_streaming_provider
++    from tools.tts_tool import _load_tts_config
++
++    home = voice_profiles("alpha")
++    partial_ready = threading.Event()
++    partials = []
++
++    def on_partial(text):
++        partials.append(text)
++        partial_ready.set()
++
++    with profile_scope(home):
++        assert streaming_available()
++        session = open_streaming_session(on_partial=on_partial)
++        assert session is not None
++        try:
++            session.push_audio(PCM)
++            assert partial_ready.wait(5), "native caller did not receive a live partial"
++            result = session.finalize(timeout=5)
++            assert result["success"] and result["transcript"] == "alpha final"
++            assert result["provider"] == NAME
++            assert partials == ["alpha partial"]
++        finally:
++            session.cancel()
++        streamer = resolve_streaming_provider(_load_tts_config())
++        assert streamer is not None and streamer.sample_rate == 16000
++        assert list(streamer.stream("synthetic sentence")) == [PCM[:2], PCM[2:]]
++    log = events(home)
++    child_pids = {item["pid"] for item in log}
++    assert len(child_pids) == 1 and os.getpid() not in child_pids
++    assert next(item for item in log if item["event"] == "asr-final")["pcm"] == PCM.hex()
++    opened = next(item for item in log if item["event"] == "tts-open")
++    assert {key: opened[key] for key in ("voice", "model", "format", "speed")} == {
++        "voice": "alpha-voice", "model": "synthetic-only", "format": "pcm", "speed": 1.25}
++    assert next(item for item in log if item["event"] == "asr-open")["language"] == "en"
++    assert sum(item["event"] == "tts-close" for item in log) == 1
++
++
++def test_native_resolution_is_profile_scoped_and_unknown_does_not_stream(voice_profiles):
++    from tools.transcription_streaming import open_streaming_session, streaming_available
++    from tools.tts_streaming import resolve_streaming_provider
++    from tools.tts_tool import _load_tts_config
++
++    alpha = voice_profiles("alpha")
++    beta = voice_profiles("beta")
++    empty = voice_profiles("empty", installed=False)
++    pids = {}
++    for home in (alpha, beta, alpha):
++        with profile_scope(home):
++            session = open_streaming_session()
++            assert session is not None
++            session.push_audio(PCM)
++            result = session.finalize(timeout=5)
++            assert result["success"] and result["transcript"] == home.name + " final"
++            pids[home.name] = events(home)[-1]["pid"]
++            streamer = resolve_streaming_provider(_load_tts_config())
++            assert streamer is not None
++            assert b"".join(streamer.stream("scope probe")) == PCM
++    assert pids["alpha"] != pids["beta"]
++    assert os.getpid() not in pids.values()
++    with profile_scope(empty):
++        assert not streaming_available()
++        assert open_streaming_session() is None
++        assert resolve_streaming_provider(_load_tts_config()) is None
++    with profile_scope(alpha):
++        assert open_streaming_session(stt_config={"provider": "missing-voice", "streaming": True}) is None
++        assert resolve_streaming_provider({"provider": "missing-voice"}) is None
++        assert resolve_streaming_provider({"provider": NAME, "streaming": {"provider": "missing-voice"}}) is None
++    # None invites the caller's native file fallback; this test never invokes that fallback.
++    for home in (alpha, beta):
++        assert all(item["profile"] == home.name for item in events(home))
++
++
++@pytest.mark.parametrize("early_stop", [False, True])
++def test_native_tts_error_or_early_stop_closes_child_stream(voice_profiles, early_stop):
++    from tools.tts_streaming import resolve_streaming_provider
++    from tools.tts_tool import _load_tts_config
++
++    home = voice_profiles("alpha")
++    with profile_scope(home):
++        streamer = resolve_streaming_provider(_load_tts_config())
++        assert streamer is not None
++        stream = streamer.stream("synthetic" if early_stop else "fail")
++        assert next(stream) == PCM[:2]
++        if early_stop:
++            stream.close()
++        else:
++            with pytest.raises(ValueError, match="synthetic stream failure"):
++                next(stream)
++    assert sum(item["event"] == "tts-close" for item in events(home)) == 1
++
++
++def test_native_asr_cancel_closes_child_session(voice_profiles):
++    from tools.transcription_streaming import open_streaming_session
++
++    home = voice_profiles("alpha")
++    ready = threading.Event()
++    with profile_scope(home):
++        session = open_streaming_session(on_partial=lambda text: ready.set())
++        assert session is not None
++        session.push_audio(PCM)
++        assert ready.wait(5)
++        session.cancel()
++        session._worker.join(timeout=5)
++        assert not session._worker.is_alive()
++        assert session.finalize(timeout=5)["success"] is False
++    assert sum(item["event"] == "asr-close" for item in events(home)) == 1
++
++
++def test_native_tts_byte_cap_closes_child_stream(voice_profiles, monkeypatch):
++    from tools import tts_streaming
++    from tools.tts_tool import _load_tts_config
++
++    home = voice_profiles("alpha")
++    monkeypatch.setattr(tts_streaming, "_STREAM_SENTENCE_BYTE_CAP", 2)
++    with profile_scope(home):
++        streamer = tts_streaming.resolve_streaming_provider(_load_tts_config())
++        assert streamer is not None
++        assert list(streamer.stream("cap probe")) == [PCM[:2]]
++    assert sum(item["event"] == "tts-close" for item in events(home)) == 1
++
++
++def test_native_asr_failure_keeps_error_envelope_and_closes_child(voice_profiles):
++    from tools.transcription_streaming import open_streaming_session
++
++    home = voice_profiles("alpha")
++    with profile_scope(home):
++        session = open_streaming_session(stt_config={
++            "provider": NAME, "streaming": True, "prompt": "fail-push"})
++        assert session is not None
++        session.push_audio(PCM)
++        result = session.finalize(timeout=5)
++        assert result["success"] is False and result["provider"] == NAME
++        assert "synthetic push failure" in result["error"]
++    assert sum(item["event"] == "asr-close" for item in events(home)) == 1
++
++
++def test_native_asr_cancel_fences_blocked_push_and_late_partial(voice_profiles):
++    from tests.waiting import wait_until
++    from tools.transcription_streaming import open_streaming_session
++
++    home = voice_profiles("alpha")
++    partials = []
++    with profile_scope(home):
++        session = open_streaming_session(on_partial=partials.append, stt_config={
++            "provider": NAME, "streaming": True, "prompt": "blocked-push"})
++        assert session is not None
++        try:
++            session.push_audio(PCM)
++            assert wait_until(lambda: any(item["event"] == "asr-blocked" for item in events(home)), timeout=5)
++            session.cancel()
++            assert session.finalize(timeout=5)["success"] is False
++            # Cancellation releases/fences the bridge lease; only this fixture can unblock compute.
++            (home / "release-push").touch()
++            session._worker.join(timeout=5)
++            assert not session._worker.is_alive()
++            assert partials == []
++        finally:
++            (home / "release-push").touch()
++            session.cancel()
++            session._worker.join(timeout=5)
++    assert sum(item["event"] == "asr-close" for item in events(home)) == 1
++
++
++def test_native_cleanup_accepts_legacy_in_process_session_without_close():
++    from agent.transcription_provider import TranscriptionStreamSession
++    from tools.transcription_streaming import _PluginSession
++    from tools.tts_streaming import _capped
++
++    class LegacySession(TranscriptionStreamSession):
++        def __init__(self):
++            self.audio = bytearray()
++
++        def push_audio(self, chunk):
++            self.audio.extend(chunk)
++
++        def finalize(self):
++            return {"success": True, "transcript": "legacy", "provider": NAME}
++
++    inner = LegacySession()
++    session = _PluginSession(NAME, inner, None).start()
++    session.push_audio(PCM)
++    assert session.finalize(timeout=5) == {"success": True, "transcript": "legacy", "provider": NAME}
++    assert bytes(inner.audio) == PCM
++    session.cancel()
++    assert list(_capped(iter([PCM]), "legacy iterator")) == [PCM]
+diff --git a/tests/hermes_cli/test_plugin_host_voice_streams.py b/tests/hermes_cli/test_plugin_host_voice_streams.py
+new file mode 100644
+index 00000000..a81d941a
+--- /dev/null
++++ b/tests/hermes_cli/test_plugin_host_voice_streams.py
+@@ -0,0 +1,237 @@
++"""Typed voice handles use real host pipes, with bounded and terminal semantics."""
++import pytest
++from concurrent.futures import ThreadPoolExecutor
++from tests.waiting import wait_until
++
++from tests.hermes_cli.test_plugin_host import _home_with_plugins
++from hermes_cli.plugins import PluginManager
++from hermes_cli.plugin_host_wire import Opaque
++from agent.transcription_provider import TranscriptionStreamSession
++
++PLUGIN = '''
++from agent.transcription_provider import TranscriptionProvider, TranscriptionStreamSession
++from agent.tts_provider import TTSProvider
++import threading
++_OPEN_GATE = threading.Event()
++_OPEN_STARTED = threading.Event()
++_CLOSE_GATE = threading.Event()
++_CLOSE_STARTED = threading.Event()
++_CLOSED = 0
++class Session(TranscriptionStreamSession):
++    def __init__(self, block_close=False): self.audio, self.block_close = b"", block_close
++    def close(self):
++        global _CLOSED
++        if self.block_close:
++            _CLOSE_STARTED.set()
++            if not _CLOSE_GATE.wait(20): raise TimeoutError("close test gate expired")
++        _CLOSED += 1
++    def push_audio(self, chunk): self.audio += chunk
++    def partial_transcript(self): return str(len(self.audio))
++    def finalize(self): return {"success": True, "transcript": self.audio.decode(), "provider": "voiceprobe"}
++class ASR(TranscriptionProvider):
++    name = "voiceprobe"
++    streaming_capable = True
++    def transcribe(self, file_path, **kwargs): return {"success": True, "transcript": file_path, "provider": self.name}
++    def open_stream_session(self, **kwargs):
++        if kwargs.get("prompt") == "bad": return object()
++        if kwargs.get("prompt") == "block":
++            _OPEN_STARTED.set()
++            if not _OPEN_GATE.wait(20): raise TimeoutError("open test gate expired")
++        return Session(kwargs.get("prompt") == "cleanup")
++    def unrelated(self): return Session()
++    def unrelated_iterator(self): return iter([b"not a voice result"])
++class TTS(TTSProvider):
++    name = "voiceprobe"
++    def __init__(self):
++        self._gate = threading.Event()
++        self._started = threading.Event()
++        self._closed = 0
++        self._pulls = 0
++    def counts(self): return {"started": self._started.is_set(), "closed": self._closed, "pulls": self._pulls}
++    def unblock(self): self._gate.set()
++    def lifecycle(self): return {"open_started": _OPEN_STARTED.is_set(), "close_started": _CLOSE_STARTED.is_set(), "closed": _CLOSED}
++    def unblock_open(self): _OPEN_GATE.set()
++    def unblock_close(self): _CLOSE_GATE.set()
++    def synthesize(self, text, output_path, **kwargs): return output_path
++    def stream(self, text, **kwargs):
++        try:
++            self._pulls += 1
++            if text == "block":
++                self._started.set()
++                if not self._gate.wait(20): raise TimeoutError("test gate expired")
++            yield text.encode()
++            self._pulls += 1
++            if text == "error": raise ValueError("synthetic failure")
++            if text == "bad": yield "not bytes"
++            yield b"!"
++        finally:
++            self._closed += 1
++def register(ctx):
++    ctx.register_transcription_provider(ASR())
++    ctx.register_tts_provider(TTS())
++'''
++
++@pytest.fixture
++def providers(tmp_path, monkeypatch):
++    from agent import transcription_registry, tts_registry
++    _home_with_plugins(tmp_path, monkeypatch, {"voiceprobe": PLUGIN})
++    manager = PluginManager()
++    manager.discover_and_load()
++    assert manager._plugins["voiceprobe"].error is None
++    yield manager, transcription_registry.get_provider("voiceprobe"), tts_registry.get_provider("voiceprobe")
++    manager.unload()
++    manager._plugin_host().shutdown()
++
++
++def test_native_typed_roundtrip_and_terminal_state(providers):
++    _, asr, tts = providers
++    session = asr.open_stream_session()
++    assert isinstance(session, TranscriptionStreamSession)
++    session.push_audio(b"hello")
++    assert session.partial_transcript() == "5"
++    assert session.finalize() == {"success": True, "transcript": "hello", "provider": "voiceprobe"}
++    assert session.finalize()["success"] is False
++    with pytest.raises(RuntimeError): session.push_audio(b"x")
++    chunks = tts.stream("hello")
++    assert iter(chunks) is chunks
++    assert next(chunks) == b"hello"
++    assert next(chunks) == b"!"
++    with pytest.raises(StopIteration): next(chunks)
++    with pytest.raises(StopIteration): next(chunks)
++    assert isinstance(asr.unrelated(), Opaque)
++    assert isinstance(asr.unrelated_iterator(), Opaque)
++    assert asr.transcribe("file.wav")["transcript"] == "file.wav"
++    assert tts.synthesize("hello", "out.wav") == "out.wav"
++
++
++def test_bounds_ownership_errors_and_unload(providers):
++    manager, asr, tts = providers
++    from hermes_cli.plugin_host_voice import MAX_CHUNK, MAX_SESSIONS, MAX_TEXT
++    s = asr.open_stream_session()
++    with pytest.raises(ValueError): s.push_audio(b"a" * (MAX_CHUNK + 1))
++    assert s.finalize()["success"] is False
++    with pytest.raises(ValueError): tts.stream("x" * (MAX_TEXT + 1))
++    for text in ("bad", "error"):
++        chunks = tts.stream(text)
++        assert next(chunks) == text.encode()
++        with pytest.raises(ValueError): next(chunks)
++        with pytest.raises(StopIteration): next(chunks)
++    sessions = [asr.open_stream_session() for _ in range(MAX_SESSIONS)]
++    with pytest.raises(ValueError): asr.open_stream_session()
++    live = sessions.pop()
++    with pytest.raises(PermissionError):
++        live.host._call("voice_op", {"token": live.token, "ref": live.ref + 999, "action": "partial"})
++    assert live.partial_transcript() == "0"
++    for session in sessions: session.close()
++    manager.unload()
++    assert live.finalize()["success"] is False
++
++
++def test_laziness_abandonment_source_type_gates_and_generation(providers):
++    import gc
++    manager, asr, tts = providers
++    before = tts.counts()
++    chunks = tts.stream("lazy")
++    assert tts.counts() == before
++    assert next(chunks) == b"lazy"
++    assert tts.counts()["pulls"] == before["pulls"] + 1
++    del chunks
++    gc.collect()
++    assert wait_until(lambda: tts.counts()["closed"] == before["closed"] + 1, timeout=5)
++    with pytest.raises(TypeError): asr.open_stream_session(prompt="bad")
++    s = asr.open_stream_session()
++    with pytest.raises(TypeError):
++        s.host._call("voice_open", {"ref": s.ref, "method": "unrelated", "token": "wrong-source"})
++    stale = asr.open_stream_session()
++    generation = s.host._generation
++    s.host.shutdown()
++    assert s.finalize()["success"] is False
++    assert s.host._generation == generation
++    s.host.ensure_started()
++    assert s.host._generation > generation
++    from hermes_cli.plugin_host_wire import PluginHostUnavailable
++    with pytest.raises(PluginHostUnavailable): stale.partial_transcript()
++    manager.unload()
++    manager.discover_and_load()
++    from agent import tts_registry
++    assert list(tts_registry.get_provider("voiceprobe").stream("fresh")) == [b"fresh", b"!"]
++
++
++@pytest.mark.parametrize("termination", ["close", "timeout"])
++def test_busy_close_fences_late_output_and_retains_capacity(providers, monkeypatch, termination):
++    from hermes_cli import plugin_host_voice as voice
++    _, asr, tts = providers
++    chunks = tts.stream("block")
++    sessions = [asr.open_stream_session() for _ in range(voice.MAX_SESSIONS - 1)]
++    if termination == "timeout": monkeypatch.setattr(voice, "CALL_TIMEOUT", 2.0)
++    with ThreadPoolExecutor(max_workers=1) as pool:
++        pending = pool.submit(next, chunks)
++        assert wait_until(lambda: tts.counts()["started"], timeout=5)
++        if termination == "close":
++            chunks.close()
++        else:
++            with pytest.raises(TimeoutError): pending.result(timeout=5)
++        # Closed logical handles still occupy a slot while provider compute runs.
++        with pytest.raises(ValueError): asr.open_stream_session()
++        tts.unblock()
++        if termination == "close":
++            with pytest.raises(RuntimeError): pending.result(timeout=5)
++        assert wait_until(lambda: tts.counts()["closed"] == 1, timeout=5)
++    with pytest.raises(StopIteration): next(chunks)
++    replacement = asr.open_stream_session()
++    replacement.close()
++    for session in sessions: session.close()
++
++
++def test_open_timeout_retains_slot_until_late_session_cleanup(providers, monkeypatch):
++    from hermes_cli import plugin_host_voice as voice
++    _, asr, tts = providers
++    monkeypatch.setattr(voice, "CALL_TIMEOUT", 2.0)
++    sessions = [asr.open_stream_session() for _ in range(voice.MAX_SESSIONS - 1)]
++    with ThreadPoolExecutor(max_workers=1) as pool:
++        pending = pool.submit(asr.open_stream_session, prompt="block")
++        assert wait_until(lambda: tts.lifecycle()["open_started"], timeout=5)
++        with pytest.raises(TimeoutError): pending.result(timeout=5)
++        with pytest.raises(ValueError): asr.open_stream_session()
++        tts.unblock_open()
++        assert wait_until(lambda: tts.lifecycle()["closed"] == 1, timeout=5)
++    fresh = asr.open_stream_session()
++    fresh.close()
++    for session in sessions: session.close()
++
++
++def test_blocked_cleanup_holds_slot_but_not_other_pipe_calls(providers):
++    from hermes_cli import plugin_host_voice as voice
++    _, asr, tts = providers
++    session = asr.open_stream_session(prompt="cleanup")
++    others = [asr.open_stream_session() for _ in range(voice.MAX_SESSIONS - 1)]
++    session.close()
++    assert wait_until(lambda: tts.lifecycle()["close_started"], timeout=5)
++    assert tts.synthesize("normal", "out.wav") == "out.wav"
++    with pytest.raises(ValueError): asr.open_stream_session()
++    tts.unblock_close()
++    assert wait_until(lambda: tts.lifecycle()["closed"] == 1, timeout=5)
++    fresh = asr.open_stream_session()
++    fresh.close()
++    for other in others: other.close()
++
++
++def test_gc_release_retry_preserves_pending_cleanup(providers, monkeypatch):
++    import gc
++    _, _, tts = providers
++    chunks = tts.stream("release")
++    assert next(chunks) == b"release"
++    host = chunks.host
++    channel = host._channel
++    original = channel.call
++    fail = [True]
++    def call(method, params, **kwargs):
++        if method == "voice_release" and fail[0]:
++            fail[0] = False
++            raise TimeoutError("synthetic missing close acknowledgement")
++        return original(method, params, **kwargs)
++    monkeypatch.setattr(channel, "call", call)
++    del chunks
++    gc.collect()
++    assert tts.counts()["closed"] == 0
++    assert wait_until(lambda: tts.counts()["closed"] == 1, timeout=5)
+diff --git a/tools/transcription_streaming.py b/tools/transcription_streaming.py
+index e29e9c56..78784c71 100644
+--- a/tools/transcription_streaming.py
++++ b/tools/transcription_streaming.py
+@@ -432,17 +432,41 @@ class _PluginSession(StreamingSession):
+     def __init__(self, provider_name: str, inner: Any, on_partial: Optional[PartialCallback]) -> None:
+         super().__init__(on_partial)
+         self.provider, self._inner = provider_name, inner
++        self._close_lock = threading.Lock()
++        self._inner_closed = False
++
++    def _close_inner(self) -> None:
++        with self._close_lock:
++            if self._inner_closed:
++                return
++            self._inner_closed = True
++        # Closing a hosted lease fences late results, but cannot interrupt provider computation.
++        close = getattr(self._inner, "close", None)
++        if callable(close):
++            try:
++                close()
++            except Exception:
++                logger.debug("Plugin STT session cleanup failed", exc_info=True)
++
++    def cancel(self) -> None:
++        super().cancel()
++        self._close_inner()
+ 
+     def _session(self) -> dict[str, Any]:
+-        while True:
+-            chunk = self._take_audio(block=True, timeout=0.25)
+-            if self._cancelled.is_set():
+-                return self._error("cancelled")
+-            if chunk is None:
+-                return dict(self._inner.finalize())
+-            if chunk:
+-                self._inner.push_audio(chunk)
+-            self._set_partial(str(self._inner.partial_transcript() or ""))
++        try:
++            while True:
++                chunk = self._take_audio(block=True, timeout=0.25)
++                if self._cancelled.is_set():
++                    return self._error("cancelled")
++                if chunk is None:
++                    return dict(self._inner.finalize())
++                if chunk:
++                    self._inner.push_audio(chunk)
++                partial = str(self._inner.partial_transcript() or "")
++                if not self._cancelled.is_set():
++                    self._set_partial(partial)
++        finally:
++            self._close_inner()
+ 
+ 
+ # ── resolution ──
+diff --git a/tools/tts_streaming.py b/tools/tts_streaming.py
+index af9ccf7b..01b3058f 100644
+--- a/tools/tts_streaming.py
++++ b/tools/tts_streaming.py
+@@ -218,12 +218,21 @@ def resolve_streaming_provider(
+ def _capped(chunks: Iterator[bytes], label: str) -> Iterator[bytes]:
+     """Pass chunks through, aborting past the per-sentence byte cap (runaway/hostile upstream)."""
+     total = 0
+-    for chunk in chunks:
+-        total += len(chunk)
+-        if total > _STREAM_SENTENCE_BYTE_CAP:
+-            logger.warning("%s exceeded %d bytes for one sentence; truncating", label, _STREAM_SENTENCE_BYTE_CAP)
+-            return
+-        yield chunk
++    try:
++        for chunk in chunks:
++            total += len(chunk)
++            if total > _STREAM_SENTENCE_BYTE_CAP:
++                logger.warning("%s exceeded %d bytes for one sentence; truncating", label, _STREAM_SENTENCE_BYTE_CAP)
++                return
++            yield chunk
++    finally:
++        # Closing a consumer (or hitting the cap) must release a hosted iterator immediately.
++        close = getattr(chunks, "close", None)
++        if callable(close):
++            try:
++                close()
++            except Exception:
++                logger.debug("%s cleanup failed", label, exc_info=True)
+ 
+ 
+ @register("elevenlabs")

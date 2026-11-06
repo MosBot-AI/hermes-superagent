@@ -2,6 +2,8 @@
 
 [English](20-voice-contract-simulator.md) | 简体中文
 
+独立的[仅供审阅宿主补丁](21-native-voice-ipc-experiment-zh.md)在一次性原型中验证了现有管道上的有类型流传输。插件未集成或启用它，下述正式固定版本的发现保持不变。
+
 ## 1. 已实现范围
 
 这是 E0.8/E7.5 的离线开发先导切片，不是可用的语音或通话。它实现严格的合成媒体配置、帧格式、有界队列和生命周期检查。[生产语音方案](19-unified-voice-provider-contracts-zh.md)仍需要可信身份、授权、预算、真实 provider adapter 与设备验证。

@@ -2,6 +2,8 @@
 
 English | [简体中文](20-voice-contract-simulator-zh.md)
 
+A separate [review-only host patch](21-native-voice-ipc-experiment.md) demonstrates typed streaming across the existing pipe in a disposable prototype. It is not integrated or activated by this plugin; official-pin findings below remain unchanged.
+
 ## 1. Implemented Scope
 
 This is an offline development precursor for E0.8/E7.5, not working speech or calls. It implements strict synthetic media configuration, framing, bounded queues and lifecycle checks. The [production voice design](19-unified-voice-provider-contracts.md) still requires trusted identity, authorization, budgets, real provider adapters and device validation.
