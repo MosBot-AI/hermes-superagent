@@ -17,9 +17,13 @@ This file distinguishes design work, development changes, and released capabilit
 - E0.4 synthetic failure-boundary contracts covering policy callbacks, dispatcher/middleware failures, direct registry dispatch, and managed/safe worker configuration.
 - A read-only blocked-write inventory and `personal-agent coverage` CLI; no write authorization or host-wide enforcement is added.
 
+- Detailed bilingual client/connector API design: plugin HTTP namespace, host authentication seams, canonical session transport, durable changes, approval/idempotency/recovery semantics, and explicit native-mobile blockers. No HTTP endpoints are implemented.
+- E0.6 and E6.5–E6.7 work packages, with E5.1/E5.2 connector contract details.
+- JSON-example syntax validation with regression tests; this does not validate API schemas or runtime behavior.
+
 ### Boundaries
 
-- E0.3/E0.4, identity/authorization, domain storage, reminders, connectors, mobile, voice, and E9 model routing remain unimplemented.
+- E0.3, full E0.4 coverage, E0.6, identity/authorization, domain storage, reminders, connectors, mobile, voice, and E9 model routing remain unimplemented.
 - The plugin does not secure other Hermes tools. The status reports a blocked release gate.
 - Full install transactions and isolated-host execution have not been validated. The host-isolated CLI is unsupported by the pinned host.
 

@@ -23,7 +23,8 @@
 11. [Worker 模型路由插件](11-worker-model-routing-zh.md)：按任务需求选择已许可 provider/model/effort，先 shadow 再启用。
 12. [第一开发切片](12-foundation-progress-zh.md)：原生只读插件、实际合同测试与剩余门槛。
 13. [执行边界契约与写路径清单](13-enforcement-contracts-zh.md)：实测失败边界与仍被阻断的写路径。
-14. [架构决策记录](adr/README-zh.md)：为什么选择这些约束。
+14. [客户端、授权与连接器 API 契约](14-client-api-contracts-zh.md)：拟议 HTTP 路由、canonical 会话传输、恢复和明确的原生手机阻断。
+15. [架构决策记录](adr/README-zh.md)：为什么选择这些约束。
 
 ## 三类陈述必须分开
 

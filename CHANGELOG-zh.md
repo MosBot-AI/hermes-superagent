@@ -17,9 +17,13 @@
 - E0.4 合成失败边界契约，覆盖 policy callbacks、dispatcher/middleware 失败、直接 registry dispatch 及 managed/safe worker 配置。
 - 只读阻断写路径清单与 `personal-agent coverage` CLI；没有新增写授权或全宿主执行保护。
 
+- 详细双语客户端/连接器 API 设计：插件 HTTP 命名空间、宿主认证适配缺口、canonical 会话传输、持久变更流、审批/幂等/恢复语义及原生手机认证阻断。尚未实现 HTTP 端点。
+- E0.6 与 E6.5–E6.7 工作包，以及 E5.1/E5.2 连接器契约细节。
+- JSON 示例语法验证及回归测试；不代表 API schema 或运行时行为已验证。
+
 ### 边界
 
-- E0.3/E0.4、身份授权、领域存储、提醒、连接器、手机、语音及 E9 模型路由尚未实现。
+- E0.3、完整 E0.4 覆盖、E0.6、身份授权、领域存储、提醒、连接器、手机、语音及 E9 模型路由尚未实现。
 - 本插件不保护其他 Hermes 工具；状态输出明确保留发布阻断门槛。
 - 没有验证完整安装事务或隔离 host 执行；固定宿主不支持 host-isolated CLI。
 

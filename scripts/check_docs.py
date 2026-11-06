@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check bilingual structure and local links, not semantic translation accuracy."""
+"""Check links, bilingual structure and JSON syntax, not semantic or API validity."""
 
 import json
 import re
@@ -37,6 +37,38 @@ def external_urls(content: str) -> Counter[str]:
     return Counter(url for url in LINKS.findall(content) if urlsplit(url).scheme)
 
 
+def check_json_examples(content: str) -> tuple[int, list[str]]:
+    """Validate fenced JSON examples without claiming schema conformance."""
+    errors = []
+    count = 0
+    opening = 0
+    language = None
+    lines: list[str] = []
+
+    def reject_constant(value: str) -> None:
+        raise ValueError(f"Non-JSON constant: {value}")
+
+    for number, line in enumerate(content.splitlines(), 1):
+        fence = line.strip()
+        if language is None and fence.startswith("```"):
+            language = fence[3:].strip()
+            opening = number
+            lines = []
+        elif language is not None and fence == "```":
+            if language == "json":
+                count += 1
+                try:
+                    json.loads("\n".join(lines), parse_constant=reject_constant)
+                except ValueError as error:
+                    errors.append(f"invalid JSON example at line {opening}: {error}")
+            language = None
+        elif language is not None:
+            lines.append(line)
+    if language == "json":
+        errors.append(f"unterminated JSON example at line {opening}")
+    return count, errors
+
+
 def check_pair(path: Path, content: str) -> list[str]:
     translated = path.with_name(path.stem + "-zh.md")
     if not translated.exists():
@@ -66,8 +98,12 @@ def main() -> int:
     errors = []
     checked = 0
     pairs = 0
+    json_examples = 0
     for path in files:
         content = path.read_text(encoding="utf-8")
+        count, example_errors = check_json_examples(content)
+        json_examples += count
+        errors.extend(f"{path.relative_to(ROOT)}: {error}" for error in example_errors)
         for raw in LINKS.findall(content):
             url = urlsplit(raw.strip("<>"))
             if url.scheme or raw.startswith("//"):
@@ -88,7 +124,13 @@ def main() -> int:
         errors.extend(f"{path.relative_to(ROOT)}: {error}" for error in check_pair(path, content))
     print(
         json.dumps(
-            {"files": len(files), "pairs": pairs, "local_links_checked": checked, "errors": errors},
+            {
+                "files": len(files),
+                "pairs": pairs,
+                "local_links_checked": checked,
+                "json_examples_checked": json_examples,
+                "errors": errors,
+            },
             indent=2,
         )
     )

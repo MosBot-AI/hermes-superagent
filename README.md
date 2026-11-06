@@ -16,6 +16,8 @@ The first development slice is the **E0 native plugin foundation**, not a usable
 
 This plugin **does not disable or secure other Hermes tools**. E0.4 write-path coverage and E1 identity/authorization are incomplete, so this foundation must not be used to enable controlled write operations. Its status explicitly reports `release_gate: blocked`. See the [first-slice implementation record](docs/12-foundation-progress.md), [enforcement contracts](docs/13-enforcement-contracts.md), and [changelog](CHANGELOG.md).
 
+The detailed [client and connector API contracts](docs/14-client-api-contracts.md) are design work only. No HTTP API is registered by this plugin yet. M1 uses an existing mobile messaging channel; a custom native phone app has separate authentication and recovery gates.
+
 ## Development checks
 
 `compatibility.json` records the Hermes baseline commit. The current runtime target is Python 3.14. A single tested SHA does not justify a broad `requires_hermes` version range.
@@ -36,7 +38,7 @@ cd ../hermes-superagent
 
 Environment preparation downloads dependencies from official sources. Tests use synthetic inputs, temporary homes, and a Python socket connection guard; they do not access real personal accounts. The checker verifies the upstream HEAD and clean tracked sources, records Python and lock/package fingerprints, and invokes the official Hermes `scripts/run_tests.sh`. Missing checkouts or dependencies fail rather than silently skipping compatibility checks. The recorded package inventory is evidence of the interpreter used, not proof that an arbitrary supplied environment exactly matches the lock.
 
-`python scripts/check.py` alone runs repository unit tests, Ruff, ty, and bilingual document structure/link checks, and explicitly reports Hermes compatibility **NOT RUN**. Test-tool versions come from the pinned Hermes dev group, not plugin runtime dependencies.
+`python scripts/check.py` alone runs repository unit tests, Ruff, ty, and bilingual document structure/link and JSON-example syntax checks, and explicitly reports Hermes compatibility **NOT RUN**. Test-tool versions come from the pinned Hermes dev group, not plugin runtime dependencies.
 
 ## Try it in an isolated Hermes profile
 

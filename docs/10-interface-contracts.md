@@ -4,6 +4,8 @@ English | [简体中文](10-interface-contracts-zh.md)
 
 Everything on this page is a **proposed contract** for this project, not a claim that Hermes already provides APIs with these names. Exact naming will be frozen after E0. Domain services should be decoupled from UI/models; entry through an agent tool, a mobile button, or background scheduling must use the same state and permission checks.
 
+For concrete client HTTP routes, host authentication, canonical session transport, durable change feeds, and connector schemas, see [14](14-client-api-contracts.md). That design is also unimplemented; this page defines the common domain layer.
+
 ## 1. EventEnvelope
 
 ```json
@@ -33,7 +35,7 @@ Deduplication is based on source_instance_id + event_id. For sources that suppor
 
 ## 2. Minimal Domain Tool Surface
 
-Do not expose all database CRUD to the model. Initial tools can be grouped into the following small sets, with the exposed set dynamically reduced for each task:
+Do not expose all database CRUD to the model. Initial tools can be grouped into the following small sets, with a minimal allowed set selected at supported session/worker creation boundaries or an explicitly supported next-turn rebuild. The pinned host freezes tool and prompt surfaces for a session/worker to preserve cache behavior; do not assume arbitrary mid-turn tool-schema mutation. Current policy must still be checked before every controlled action:
 
 | Proposed tool | Key inputs | Output/side effects |
 |---|---|---|

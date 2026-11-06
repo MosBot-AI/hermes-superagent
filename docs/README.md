@@ -23,7 +23,8 @@ Extend Hermes into a long-lived personal agent for one user: one main agent unde
 11. [Worker model routing plugin](11-worker-model-routing.md): select authorized provider/model/effort routes, starting in shadow mode.
 12. [First development slice](12-foundation-progress.md): the native read-only plugin, real contract tests, and remaining gates.
 13. [Enforcement contracts and write-path inventory](13-enforcement-contracts.md): observed failure boundaries and still-blocked write paths.
-14. [Architecture decision records](adr/README.md): reasons for the constraints.
+14. [Client, authorization, and connector API contracts](14-client-api-contracts.md): proposed HTTP routes, canonical session transport, recovery, and explicit native-mobile blockers.
+15. [Architecture decision records](adr/README.md): reasons for the constraints.
 
 ## Keep three kinds of statements separate
 

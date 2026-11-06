@@ -13,7 +13,7 @@
 | Milestone | 交付结果 | 进入条件 | 退出门槛 |
 |---|---|---|---|
 | M0 设计与契约 | 固定基线、可运行的合成测试、最小公共 API 映射、写路径覆盖清单 | 本设计完成 | 缺口和适配路径清楚；没有依赖虚构 API；未覆盖写集合默认关闭 |
-| M1 可靠纵切 | 单 owner、单项目、单手机文字入口、一个提醒、受控动作 | E0、E1.1–E1.5 及恢复/对账基础完成 | 重启/重复/拒绝/撤权测试通过；没有已知绕过 action gate 的启用写路径 |
+| M1 可靠纵切 | 单 owner、单项目、单手机文字入口、一个提醒、受控动作 | E0.1–E0.5 适用门禁、E1.1–E1.5 及恢复/对账基础完成 | 重启/重复/拒绝/撤权测试通过；没有已知绕过 action gate 的启用写路径 |
 | M2 个人事务 | 事实/承诺、原生多任务、主动观察与可靠通知；可选 E9 路由 shadow | M1；E9 shadow 另需可信约束基线 | 真实场景闭环，资料纠错和遗忘有效；shadow 不改变实际模型 |
 | M3 连接与语音 | 最小读写 MCP 集合、手机语音消息、可选实时语音验证及 E9 有界模型路由 | M2 + connector 风险评审；路由另需 E9.5/E9.6 gate | 语音关键字段确认、身份与费用可控；路由质量/隐私/预算门槛通过 |
 | M4 发布硬化 | 恢复、备份、升级、回滚、安全评测和文档 | 核心场景完成 | 发布门禁全部满足，没有未处理 P0 |
@@ -27,10 +27,13 @@
 - E0.3：验证 Project/Kanban/cron 创建、查询、取消与 receipt 的公共操作路径；缺口记录为 upstream seam，不直接写宿主 DB。
 - E0.4：测试 pre_tool_call callback 与 dispatcher 异常、middleware fallback；覆盖原生工具、裸 MCP、shell/browser、execute_code/RPC、批量调用和 worker，未受 action gate 保护的写集合默认关闭或只读降级。专项验证 troubleshooting safe mode 跳过 hooks 时只读降级，以及普通 managed worker 的 frozen config 不影响读取当前持久 policy revision。
 - E0.5：建立离线合成 source/connector fixtures，测试不依赖真实个人账号。
+- E0.6：在固定宿主上核验客户端传输契约：dashboard API 注册、可信 principal/profile 透传、canonical session RPC、认证/隔离/文件边界及明确不支持模式。依赖 E0.1/E0.2 并采用 E0.4 发现，不代表完整写路径覆盖已完成。见 [14](14-client-api-contracts-zh.md)。
 
 验收：每个复用点有一个行为测试或明确 blocker；首次 `requires_hermes` 范围来自测试，不用随意版本号。输出逐工具/逐路径 enforcement 清单；有未知或可绕过的写路径时不得启用该集合，不能用 prompt 约束替代。
 
 当前 E0.4 进度：[合成失败契约与阻断写清单](13-enforcement-contracts-zh.md) 已实现。这只是部分证据，不代表路径全部覆盖，也不允许启用写操作。
+
+E0.6 是独立的可选客户端契约路线，不阻塞 channel-first M0/M1 退出；除非明确列出 E0.6，现有一般 E0 依赖均指适用的 E0.1–E0.5 门禁。
 
 ### E1. 建立身份授权审计（P0，M1）
 
@@ -84,13 +87,13 @@
 
 依赖 E1/E4.3。
 
-- E5.1：connector capability registry：账号、读写工具、数据类、成本、幂等与健康。
-- E5.2：一个只读连接器和一个受控写连接器纵切，服务端语义验证。
+- E5.1：Connector capability registry：账号、读写操作、版本化输入/输出 schema、数据类别、成本、真实幂等保留期、receipt 级别、对账/取消能力及认证健康。
+- E5.2：一个只读 connector 与一个受控写 connector 纵切，包含类型化 prepare/execute/reconcile/cancel 契约、服务端语义校验、逐 effect 准入、稳定 effect key 及部分成功/未知结果测试。若准备阶段有远端副作用，它本身也是受控操作。
 - E5.3：最小工具集、MCP trust/filters/OAuth、断连/撤销处理。
 - E5.4：插件来源、固定版本、依赖更新、扩权 consent 与供应链清单。
 - E5.5：持久预算和 connector receipt，不以原生会话估算代替账单。
 
-验收：伪 read-only、错误 scope、凭据撤销、恶意 tool result 不能产生越权；新连接器必须完成风险与恢复契约后才启用写操作。
+验收：伪 read-only、错误 scope、凭据撤销、恶意 tool result 不能产生越权；新连接器必须完成风险与恢复契约后才启用写操作。E5.1/E5.2 保持为现有 Epic 内的 checklist，不新建编号。契约设计可从 E0.6/E1.2 开始；启用写操作还须 E1.3/E1.4、E4.3/E4.4 及该连接器的 E0.4 路径覆盖。凭据仍由原生 OAuth 管理。具体连接器输入、输出与 receipt 见 [14](14-client-api-contracts-zh.md)。
 
 ### E6. 打通手机工作入口（P1，M1–M3）
 
@@ -100,8 +103,11 @@
 - E6.2：跨桌面/手机接续和短候选消歧，重复消息与审批按钮幂等。
 - E6.3：personal overview，优先复用原生 dashboard/plugin UI；验证移动布局。
 - E6.4：TLS/auth/session 撤销、附件访问、小屏和弱网测试。
+- E6.5：Build Domain API and Change Feed（M2，可选，Backlog）：基于领域服务的版本化类型 REST、事务化去重/outbox/change feed、授权一致快照及轮询概览。依赖 E0.6、E1.1–E1.5、E2.1、E3.2/E3.5、E4.2–E4.4；仅启用逐项验证的 adapter。
+- E6.6：Validate Client Recovery Flows（M3，可选，Backlog）：多设备、离线、重放、过期、ACL、隔离及取消场景。依赖 E6.5、E6.2/E6.4 与这些路径所需的 E8.1/E8.2 harness，不等待全部 E8/M4。附件还需 E0.6 文件契约证据。
+- E6.7：Validate Native Mobile Sign-in（M3，可选，Blocked）：依赖 E0.6 认证发现、E1.1/E1.4/E1.5 和 E6.4。固定版本的原生流程仅接受 loopback callback，须先证实目标手机支持的 callback 及设备撤权契约，再做真机认证。不得另造插件认证服务。
 
-验收：目标真实手机上完成“创建项目 → 提醒 → 查看/取消 → 批准受控动作”；旧设备与转发批准不能操作。
+验收：目标真实手机上完成“创建项目 → 提醒 → 查看/取消 → 批准受控动作”；旧设备与转发批准不能操作。M1 使用已有消息渠道，不依赖 E6.5–E6.7 或自建 App。可选浏览器/PWA 交付可先于原生手机认证。新增客户端工作仍未实现，详细契约与精确阻断见 [14](14-client-api-contracts-zh.md)。
 
 ### E7. 保持语音任务连续性（P1/P2，M3）
 
@@ -143,7 +149,7 @@
 
 ## 4. 首次可用纵切顺序
 
-E0（含写路径覆盖与关闭未覆盖集合）→ E1.1–E1.5（身份、授权、执行检查、硬撤权、审计/数据分类）→ E2.1 → E3.1/E3.2/E3.5 + E4.1–E4.4（含任务恢复、结果未知与交付对账）→ E6.1 → E8.1/E8.2 对应的 crash/revoke/delivery 测试 → M1。
+E0.1–E0.5（含适用写路径覆盖与关闭未覆盖集合）→ E1.1–E1.5（身份、授权、执行检查、硬撤权、审计/数据分类）→ E2.1 → E3.1/E3.2/E3.5 + E4.1–E4.4（含任务恢复、结果未知与交付对账）→ E6.1 → E8.1/E8.2 对应的 crash/revoke/delivery 测试 → M1。
 
 E2.1 在 E1.5 的数据分类与审计约定明确后进入。M1 不能跳过 E1.4 再宣称 revoke 通过，也不能把 E3.5/E4.4 的恢复对账留到后面却宣称可靠纵切完成。随后才做更广泛自动主动性和更多 connectors。身份、安全、恢复不是“最后补一层”。
 

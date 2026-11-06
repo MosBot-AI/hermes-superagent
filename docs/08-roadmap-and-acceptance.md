@@ -13,7 +13,7 @@ Complete a safe, reliable vertical slice first, then add connectors, entry point
 | Milestone | Deliverable | Entry criteria | Exit gate |
 |---|---|---|---|
 | M0 Design and contracts | Pinned baseline, runnable synthetic tests, minimal public API mapping, write-path coverage inventory | This design is complete | Gaps and adaptation paths are clear; no reliance on imaginary APIs; uncovered write capability sets are disabled by default |
-| M1 Reliable vertical slice | One owner, one project, one mobile text entry point, one reminder, controlled actions | E0, E1.1–E1.5, and recovery/reconciliation foundations are complete | Restart/duplicate/denial/revocation tests pass; no enabled write path is known to bypass the action gate |
+| M1 Reliable vertical slice | One owner, one project, one mobile text entry point, one reminder, controlled actions | E0.1–E0.5 applicable gates, E1.1–E1.5, and recovery/reconciliation foundations are complete | Restart/duplicate/denial/revocation tests pass; no enabled write path is known to bypass the action gate |
 | M2 Personal affairs | Facts/commitments, native multitasking, proactive observation, and reliable notifications; optional E9 routing shadow mode | M1; E9 shadow also requires a trusted-constraint baseline | Real-world scenarios work end to end; information correction and forgetting work; shadow mode does not change the actual model |
 | M3 Connections and voice | Minimal read/write MCP set, mobile voice messages, optional real-time voice validation and E9 bounded model routing | M2 + connector risk review; routing also requires E9.5/E9.6 gates | Confirmation of critical voice fields, identity, and costs are controlled; routing quality/privacy/budget gates pass |
 | M4 Release hardening | Recovery, backup, upgrades, rollback, security evaluations, and documentation | Core scenarios are complete | All release gates pass, with no unresolved P0 issues |
@@ -27,10 +27,13 @@ Complete a safe, reliable vertical slice first, then add connectors, entry point
 - E0.3: Verify public operations for Project/Kanban/cron creation, querying, cancellation, and receipts; record gaps as upstream seams rather than writing directly to the host DB.
 - E0.4: Test pre_tool_call callback and dispatcher exceptions and middleware fallback; cover native tools, raw MCP, shell/browser, execute_code/RPC, batch calls, and workers. Disable write capability sets not protected by the action gate by default, or degrade them to read-only. Specifically verify read-only degradation when troubleshooting safe mode skips hooks, and that ordinary managed workers' frozen config does not prevent reading the current persistent policy revision.
 - E0.5: Build offline synthetic source/connector fixtures so tests do not depend on real personal accounts.
+- E0.6: Verify client transport contracts at the pinned host: dashboard API registration, trusted principal/profile propagation, canonical session RPCs, auth/isolation/file boundaries, and explicit unsupported modes. Depends on E0.1/E0.2 and uses E0.4 findings; this is not a claim that full write coverage is complete. See [14](14-client-api-contracts.md).
 
 Acceptance: Every reuse point has a behavioral test or an explicit blocker; the initial `requires_hermes` range comes from tests, not arbitrary version numbers. Produce a per-tool, per-path enforcement inventory. A capability set must not be enabled while it has unknown or bypassable write paths; prompt constraints cannot substitute for enforcement.
 
 Current E0.4 progress: [synthetic failure contracts and a blocked-write inventory](13-enforcement-contracts.md) are implemented. This is partial evidence, not complete path coverage or permission to enable writes.
+
+E0.6 is an independent optional-client contract lane. It does not gate the channel-first M0/M1 exit; existing general E0 dependencies mean the applicable E0.1–E0.5 gates unless E0.6 is explicitly named.
 
 ### E1. Establish Identity, Authorization, and Audit (P0, M1)
 
@@ -84,13 +87,13 @@ Acceptance: Duplicate triggers, process interruption, send timeouts, restarts, a
 
 Depends on E1/E4.3.
 
-- E5.1: Connector capability registry: accounts, read/write tools, data classes, costs, idempotency, and health.
-- E5.2: One read-only connector and one controlled-write connector vertical slice, with server-side semantic validation.
+- E5.1: Connector capability registry: accounts, read/write operations, versioned input/output schemas, data classes, costs, actual idempotency retention, receipt levels, reconciliation/cancellation capabilities, and auth health.
+- E5.2: One read-only connector and one controlled-write connector vertical slice, with typed prepare/execute/reconcile/cancel contracts, server-side semantic validation, per-effect admission, stable effect keys, and partial/unknown-outcome tests. Preparation with a remote side effect is itself a controlled operation.
 - E5.3: Minimal toolsets, MCP trust/filters/OAuth, and disconnection/revocation handling.
 - E5.4: Plugin sources, pinned versions, dependency updates, consent for expanded access, and a supply-chain inventory.
 - E5.5: Persistent budgets and connector receipts; do not substitute native session estimates for billing records.
 
-Acceptance: False read-only claims, incorrect scope, revoked credentials, and malicious tool results cannot produce unauthorized behavior; new connectors must complete risk and recovery contracts before writes are enabled.
+Acceptance: False read-only claims, incorrect scope, revoked credentials, and malicious tool results cannot produce unauthorized behavior; new connectors must complete risk and recovery contracts before writes are enabled. E5.1/E5.2 remain checklists within the existing Epic, not new IDs. Contract design can proceed from E0.6/E1.2; write enablement requires E1.3/E1.4, E4.3/E4.4 and the connector’s E0.4 path coverage. Native OAuth remains the credential owner. See [14](14-client-api-contracts.md) for concrete connector inputs, outputs and receipts.
 
 ### E6. Enable a Mobile Work Entry Point (P1, M1–M3)
 
@@ -100,8 +103,11 @@ Depends on E1.1/E3/E4.
 - E6.2: Desktop/mobile continuity and short candidate lists for disambiguation; idempotency for duplicate messages and approval buttons.
 - E6.3: Personal overview, preferably reusing native dashboard/plugin UI; validate mobile layout.
 - E6.4: TLS/auth/session revocation, attachment access, small-screen, and poor-network tests.
+- E6.5: Build Domain API and Change Feed (M2, optional, Backlog): versioned typed REST over domain services, transactional dedup/outbox/change feed, authorized consistent snapshot and polling overview. Depends on E0.6, E1.1–E1.5, E2.1, E3.2/E3.5 and E4.2–E4.4; only individually verified adapters may be enabled.
+- E6.6: Validate Client Recovery Flows (M3, optional, Backlog): multi-device, offline, replay, expiry, ACL, isolation and cancellation scenarios. Depends on E6.5, E6.2/E6.4 and the E8.1/E8.2 harness for these paths, not all of E8/M4. Artifacts also require E0.6 file-contract evidence.
+- E6.7: Validate Native Mobile Sign-in (M3, optional, Blocked): depends on E0.6 auth findings, E1.1/E1.4/E1.5 and E6.4. The pinned native flow accepts only loopback callbacks; a supported target-phone callback and device-revocation contract must be proven before physical-device certification. Do not create a second plugin auth service.
 
-Acceptance: Complete “create project → reminder → inspect/cancel → approve controlled action” on the target physical phone; old devices and forwarded approvals cannot perform operations.
+Acceptance: Complete “create project → reminder → inspect/cancel → approve controlled action” on the target physical phone; old devices and forwarded approvals cannot perform operations. M1 uses an existing messaging channel and does not depend on E6.5–E6.7 or a custom app. Optional browser/PWA delivery can precede native-mobile certification. New client work remains unimplemented; detailed contracts and exact blockers are in [14](14-client-api-contracts.md).
 
 ### E7. Preserve Voice Task Continuity (P1/P2, M3)
 
@@ -143,7 +149,7 @@ Acceptance: Select only permitted candidates; do not override exact user pins; c
 
 ## 4. Sequence for the First Usable Vertical Slice
 
-E0 (including write-path coverage and disabling uncovered capability sets) → E1.1–E1.5 (identity, authorization, execution checks, hard revocation, audit/data classification) → E2.1 → E3.1/E3.2/E3.5 + E4.1–E4.4 (including task recovery, unknown outcomes, and delivery reconciliation) → E6.1 → corresponding crash/revoke/delivery tests in E8.1/E8.2 → M1.
+E0.1–E0.5 (including applicable write-path coverage and disabling uncovered capability sets) → E1.1–E1.5 (identity, authorization, execution checks, hard revocation, audit/data classification) → E2.1 → E3.1/E3.2/E3.5 + E4.1–E4.4 (including task recovery, unknown outcomes, and delivery reconciliation) → E6.1 → corresponding crash/revoke/delivery tests in E8.1/E8.2 → M1.
 
 Start E2.1 once the E1.5 data classification and audit conventions are clear. M1 cannot skip E1.4 and still claim revocation passes, nor defer recovery/reconciliation in E3.5/E4.4 and claim the reliable vertical slice is complete. Only then add broader automatic proactivity and more connectors. Identity, safety, and recovery are not “a final layer to add later.”
 
