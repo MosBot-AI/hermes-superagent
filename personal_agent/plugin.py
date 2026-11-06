@@ -59,6 +59,7 @@ def _status_result(
     *,
     local_conversation: bool = False,
     local_model_tools: bool = False,
+    local_memory: bool = False,
 ) -> str:
     if not isinstance(args, dict) or args:
         return json.dumps(
@@ -70,7 +71,10 @@ def _status_result(
         )
     return json.dumps(
         build_status(
-            mode=mode, local_conversation=local_conversation, local_model_tools=local_model_tools
+            mode=mode,
+            local_conversation=local_conversation,
+            local_model_tools=local_model_tools,
+            local_memory=local_memory,
         ),
         ensure_ascii=False,
         sort_keys=True,
@@ -114,6 +118,11 @@ def register(ctx: PluginContext) -> None:
         raise ValueError("local_model_tools must be a boolean")
     if model_tools_enabled and not conversation_enabled:
         raise ValueError("local_model_tools requires local_conversation and local_tasks")
+    memory_enabled = ctx.get_config("local_memory", False)
+    if type(memory_enabled) is not bool:
+        raise ValueError("local_memory must be a boolean")
+    if memory_enabled and not conversation_enabled:
+        raise ValueError("local_memory requires local_conversation and local_tasks")
     bound_home = current_profile_home()
 
     def registered_status(args: dict[str, object], **_context: object) -> str:
@@ -137,11 +146,15 @@ def register(ctx: PluginContext) -> None:
                 local_model_tools and not local_conversation
             ):
                 raise ValueError("invalid local model tools configuration")
+            local_memory = ctx.get_config("local_memory", False)
+            if type(local_memory) is not bool or (local_memory and not local_conversation):
+                raise ValueError("invalid local memory configuration")
             return _status_result(
                 args,
                 mode,
                 local_conversation=local_conversation,
                 local_model_tools=local_model_tools,
+                local_memory=local_memory,
             )
         except Exception:
             return json.dumps({"status": "blocked", "error": {"code": "invalid_configuration"}})
@@ -227,6 +240,18 @@ def register(ctx: PluginContext) -> None:
                 "Manage tasks/project groups in an explicitly trusted single-user local session."
             ),
             args_hint="<command> [arguments]",
+        )
+
+    if memory_enabled:
+        from .conversation_memory import LocalMemoryCommands
+
+        memory = LocalMemoryCommands(bound_home=bound_home, read_config=ctx.get_config)
+        ctx.on_unload(memory.close)
+        ctx.register_command(
+            "personal-memory",
+            handler=memory.command,
+            description="Explicitly save, inspect, correct or forget local operator records.",
+            args_hint="remember | list | search | show | correct | forget | export | help",
         )
 
     if model_tools_enabled:

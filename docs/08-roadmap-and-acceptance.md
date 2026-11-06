@@ -69,12 +69,12 @@ Dependencies follow the trust mode. Explicit trusted-profile local memory reuses
 - E2.3: Correction, expiration, forgetting, export, and backup/restore tombstones. Preserve deletion precedence over re-extraction and require projection/index/provider purge receipts, retention-safe event payloads and restore suppression.
 - E2.4: Person/project disambiguation and task-source associations; do not treat third-party reports as owner instructions. Distinguish semantic/episodic/procedural/task references, temporal conflicts and Chinese names/aliases; similarity is not identity proof.
 - E2.5: Evaluate optional memory provider adaptation; remain compatible with the user's existing single provider rather than forcing replacement. Evaluate replaceable project MemoryBackend adapters and the optional native MemoryProvider bridge separately; users may supply a conforming adapter, with explicit selection/migration.
-- E2.6: Define Pluggable Memory Contracts (M1, Backlog): depends on E0.9, local E1.5 audit/data-classification/secret-reference contracts and applicable local E2.1/E2.2 contracts. Define the versioned service/backend SDK, records/events/receipts, deletion semantics and conformance fixtures.
-- E2.7: Build Local Memory Backend (M2, Backlog): depends on E2.6, local E2.1/E2.2 and applicable E8.1/E8.2 harness. Implement canonical SQLite records/events/FTS, generated Markdown, bounded retrieval, correction/forgetting and explicit local commands.
+- E2.6: Define Pluggable Memory Contracts (M1, In Progress; narrow local precursor): depends on E0.9, local E1.5 audit/data-classification/secret-reference contracts and applicable local E2.1/E2.2 contracts. Define the versioned service/backend SDK, records/events/receipts, deletion semantics and conformance fixtures.
+- E2.7: Build Local Memory Backend (M2, In Progress; explicit-record precursor): depends on E2.6, local E2.1/E2.2 and applicable E8.1/E8.2 harness. Implement canonical SQLite records/events/FTS, generated Markdown, bounded retrieval, correction/forgetting and explicit local commands.
 - E2.8: Integrate Native Memory Lifecycle (M2, Backlog): depends on E0.9/E2.6/E2.7 and applicable E6.8/E6.9 entry contracts. Add the optional single-slot bridge, consented source-bound candidates/recall and durable lifecycle/checkpoint handling with budgets. The bridge is not required for explicit local memory tools.
 - E2.9: Validate Memory Migration and Recall (M3, Backlog): depends on E2.7/E2.8 and E8.1/E8.2/E8.3 harness. Validate adapter conformance, fenced export/cutover/restore/delete races and Chinese/long-horizon recall.
 
-These five new memory packages, including E0.9, are planned and remain Backlog. [30](30-pluggable-memory-contracts.md) is the complete design, not an implementation report. Existing E2.1–E2.5 retain their checklist IDs and local-task evidence; no duplicate work packages are created.
+E0.9/E2.8/E2.9 remain Backlog. E2.6/E2.7 are In Progress only for the narrow explicit-record precursor below. [30](30-pluggable-memory-contracts.md) is the complete design, not an implementation report. Existing E2.1–E2.5 retain their checklist IDs and local-task evidence; no duplicate work packages are created.
 
 Acceptance: Long-term facts have provenance or inference labels; they are not readable across profiles/group chats; retrieval tests after correction and deletion pass.
 
@@ -85,6 +85,8 @@ The local follow-on adds [due dates and agenda](17-local-task-agenda.md), includ
 Current E2.2 precursor: [local task search](22-local-task-search.md) retrieves literal title/details matches through the opt-in local CLI, reused by the E6.8 local conversation commands. It preserves the current schema and receipts; it is not agent memory, semantic retrieval or owner-authorized channel access. E1 and full E2.2 gates remain open.
 
 A further local E2.1/E2.2 precursor adds [project groups](24-local-project-groups.md): labels, exact filtering, counts and schema-v3 compatibility. Labels are not stable domain/native project IDs or permission keys. This does not complete E2 or E3.1 and does not relax their E1 dependencies.
+
+Current local memory precursor: [31](31-explicit-local-memory.md) implements opt-in native operator commands and a bounded SQLite backend behind an internal interface. It reuses the verified E6.8 command entry and local storage contracts, without enabling the provider modes still gated by E0.9. No automatic retrieval/ingestion, complete SDK, FTS/Markdown projections, consistent migration or native bridge is implemented; existing task model tools do not gain memory access. This starts but does not complete E2.6/E2.7 or the full memory gates.
 
 ### E3. Connect Native Projects and Tasks (P0/P1, M1–M2)
 

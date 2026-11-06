@@ -56,6 +56,29 @@ def test_status_returns_new_nested_values():
     assert build_status()["capabilities"]["external_delivery"] is False
 
 
+def test_local_memory_status_is_explicit_without_provider_or_model_claims():
+    default = build_status()
+    assert not default["local_memory"]["enabled"]
+    result = build_status(mode="local_tasks", local_conversation=True, local_memory=True)
+    assert result["local_memory"]["configured"] is True
+    for capability in (
+        "automatic_recall",
+        "automatic_extraction",
+        "native_provider_bridge",
+        "third_party_adapter_loading",
+        "markdown_projections",
+    ):
+        assert result["local_memory"][capability] is False
+    assert result["safety"]["agent_personal_data_reads_enabled"] is False
+    assert result["safety"]["plugin_write_tools_registered"] is False
+
+
+@pytest.mark.parametrize("value", [True, 1, "true", None, {}])
+def test_local_memory_status_rejects_invalid_or_missing_prerequisites(value):
+    with pytest.raises(ValueError):
+        build_status(local_memory=value)
+
+
 def test_opt_in_status_never_claims_agent_access_or_external_authority():
     result = build_status(mode="local_tasks")
     assert result["mode"] == "local_tasks"

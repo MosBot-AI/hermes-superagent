@@ -71,12 +71,12 @@ E0.6 是独立的可选客户端契约路线，不阻塞 profile-first local M0/
 - E2.3：更正、过期、遗忘、导出与备份恢复 tombstone。 删除优先于重新提取；要求投影/索引/provider purge receipt、符合保留规则的事件载荷及恢复抑制。
 - E2.4：人物/项目消歧与任务来源关联，不把第三方转述当 owner 指令。 区分 semantic/episodic/procedural/task 引用、时间冲突及中文姓名/别名；相似度不证明身份。
 - E2.5：可选 memory provider 适配评估；兼容用户现有单 provider，不强制替换。 分别评估可替换项目 MemoryBackend 适配器与可选原生 MemoryProvider 桥接；用户可提供合规适配器，并显式选择/迁移。
-- E2.6：Define Pluggable Memory Contracts（M1，Backlog）：依赖 E0.9、E1.5 本地审计/数据分类/secret 引用合同及适用本地 E2.1/E2.2 合同。定义版本化 service/backend SDK、record/event/receipt、删除语义与符合性 fixture。
-- E2.7：Build Local Memory Backend（M2，Backlog）：依赖 E2.6、本地 E2.1/E2.2 及适用 E8.1/E8.2 harness。实现权威 SQLite record/event/FTS、生成 Markdown、有界检索、纠错/遗忘与显式本地命令。
+- E2.6：Define Pluggable Memory Contracts（M1，In Progress；狭窄本地先导）：依赖 E0.9、E1.5 本地审计/数据分类/secret 引用合同及适用本地 E2.1/E2.2 合同。定义版本化 service/backend SDK、record/event/receipt、删除语义与符合性 fixture。
+- E2.7：Build Local Memory Backend（M2，In Progress；显式记录先导）：依赖 E2.6、本地 E2.1/E2.2 及适用 E8.1/E8.2 harness。实现权威 SQLite record/event/FTS、生成 Markdown、有界检索、纠错/遗忘与显式本地命令。
 - E2.8：Integrate Native Memory Lifecycle（M2，Backlog）：依赖 E0.9/E2.6/E2.7 及适用 E6.8/E6.9 入口合同。增加可选单槽桥接、经同意的来源绑定候选/召回，以及带预算的持久生命周期/checkpoint 处理。显式本地记忆工具不要求启用桥接。
 - E2.9：Validate Memory Migration and Recall（M3，Backlog）：依赖 E2.7/E2.8 及 E8.1/E8.2/E8.3 harness。验证适配器符合性、带栅栏的导出/切换/恢复/删除竞态及中文/长期召回。
 
-包括 E0.9 在内的五个新记忆工作包均为规划，保持 Backlog。[30](30-pluggable-memory-contracts-zh.md) 是完整方案，不是实现报告。现有 E2.1–E2.5 保留其清单 ID 和本地任务证据，不重复创建工作包。
+E0.9/E2.8/E2.9 保持 Backlog。E2.6/E2.7 仅因下述狭窄显式记录先导切片设为 In Progress。[30](30-pluggable-memory-contracts-zh.md) 是完整方案，不是实现报告。现有 E2.1–E2.5 保留其清单 ID 和本地任务证据，不重复创建工作包。
 
 验收：长期事实都有 provenance 或 inference 标记；跨 profile/群聊不可读；纠错与删除后的检索测试通过。
 
@@ -87,6 +87,8 @@ E0.6 是独立的可选客户端契约路线，不阻塞 profile-first local M0/
 当前 E2.2 先导切片：[本地任务检索](22-local-task-search-zh.md)通过显式启用的本地 CLI 查询，并由 E6.8 本地对话命令复用，支持标题/详情字面匹配，保留当前 schema 与回执；它不是 Agent 记忆、语义检索或 owner 授权的渠道访问。E1 和完整 E2.2 门槛仍未满足。
 
 另一个本地 E2.1/E2.2 先导增加[项目分组](24-local-project-groups-zh.md)：标签、精确筛选、计数及 schema-v3 兼容性。标签不是稳定的领域/原生项目 ID 或权限键。这不代表 E2 或 E3.1 完成，也不放宽其 E1 依赖。
+
+当前本地记忆先导：[31](31-explicit-local-memory-zh.md)实现显式开启的原生操作员命令，以及内部接口后的有界 SQLite 后端。它复用已验证的 E6.8 命令入口与本地存储契约，不启用仍受 E0.9 门禁约束的 provider 模式。自动检索/摄取、完整 SDK、FTS/Markdown 投影、一致迁移和原生桥接均未实现；现有任务模型工具不获得记忆访问权。这只是开始 E2.6/E2.7，不代表它们或完整记忆门禁完成。
 
 ### E3. 接通原生项目任务（P0/P1，M1–M2）
 

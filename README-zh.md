@@ -42,6 +42,8 @@ Hermes 原生 personal-agent 插件，目标是让一个主 agent 管理项目�
 
 [可插拔记忆方案](docs/30-pluggable-memory-contracts-zh.md)定义可替换的项目后端与用户自写适配器 SDK，默认采用 SQLite 记录/事件/FTS 加 Markdown 投影，并可选桥接实际 Hermes MemoryProvider。获准替换前保留现有原生 provider。当前任务工具**尚未实现**记忆摄取、生命周期集成、检索与迁移。
 
+首个[显式本地记忆切片](docs/31-explicit-local-memory-zh.md)现支持在已有可信原生会话中使用 `/personal-memory remember`、`search`、`show`、`correct`、`forget` 和有界 `export`，需另行显式设置 `local_memory: true`。它通过小型内部后端接口使用独立 SQLite 存储，保留原生 provider，不自动召回/提取。命令/结果可能进入正常宿主历史；遗忘不会擦除该历史或备份。
+
 ## 开发验证
 
 基线为 `compatibility.json` 内的 Hermes commit；当前实际运行目标是 Python 3.14。没有根据单一 SHA 宣称宽泛的 `requires_hermes` 版本范围。

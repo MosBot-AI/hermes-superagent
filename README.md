@@ -42,6 +42,8 @@ The [fenced read-admission core](docs/27-fenced-read-admission.md) adds current-
 
 The [pluggable memory design](docs/30-pluggable-memory-contracts.md) specifies a replaceable project backend and user-written adapter SDK, default SQLite records/events/FTS with Markdown projections, and an optional real Hermes MemoryProvider bridge. Existing native providers remain selected until an approved replacement. Memory ingestion, lifecycle integration, retrieval and migration are **planned, not implemented** by the current task tools.
 
+The first [explicit local memory slice](docs/31-explicit-local-memory.md) now supports `/personal-memory remember`, `search`, `show`, `correct`, `forget` and bounded `export` in an existing trusted native session after separate `local_memory: true` opt-in. It uses a dedicated SQLite store behind a small internal backend interface, preserves native providers, and performs no automatic recall/extraction. Commands/results may enter normal host history; forgetting does not erase that history or backups.
+
 ## Development checks
 
 `compatibility.json` records the Hermes baseline commit. The current runtime target is Python 3.14. A single tested SHA does not justify a broad `requires_hermes` version range.

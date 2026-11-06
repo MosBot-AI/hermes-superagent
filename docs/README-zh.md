@@ -42,7 +42,8 @@
 28. [Profile 优先的本地任务对话](28-profile-first-local-conversations-zh.md)：显式启用原生会话命令、任务/项目标签闭环和可信单用户部署边界。
 29. [会话范围任务工具](29-session-scoped-task-tools-zh.md)：明确激活的原生进程内模型任务访问、隐私/撤销边界及待完成真实模型验收。
 30. [可插拔记忆契约](30-pluggable-memory-contracts-zh.md)：拟议的可替换后端/SDK、SQLite 权威与 Markdown 投影、可选原生桥接、有界召回、删除与迁移。
-31. [架构决策记录](adr/README-zh.md)：为什么选择这些约束。
+31. [显式本地记忆](31-explicit-local-memory-zh.md)：用户控制的原生记住/搜索/更正/遗忘命令、有界记录与部分适配器边界；无自动召回或 provider 替换。
+32. [架构决策记录](adr/README-zh.md)：为什么选择这些约束。
 
 ## 三类陈述必须分开
 

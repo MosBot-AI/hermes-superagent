@@ -27,3 +27,7 @@ config_schema:
     type: bool
     default: false
     description: Allow native in-process task tools after explicit session activation; requires local_conversation.
+  local_memory:
+    type: bool
+    default: false
+    description: Opt in to explicit native LOCAL memory commands; requires local_conversation, preserves native providers and performs no automatic recall or extraction.
