@@ -1,0 +1,75 @@
+{
+  "scope": "local-only observation prototype; not deployed or externally published",
+  "base_commit": "90d6b98fd86d20981ee06ddd5b7d93e4320f26a4",
+  "prototype_commit": "adfb1feb207943d2bb539555adcbb667bcb571ab",
+  "prototype_tree": "2eed0582216b9bdec676ac9787f8a7cb724dbe54",
+  "prototype_branch": "prototype/verified-command-context",
+  "patch_sha256": "ab47d5f7c25c4cbc007332cb05e4f5dbf146ba701ef90cd77e09df10a5af1f20",
+  "patch_apply_check_on_clean_base": "passed; no files modified",
+  "python": "3.14.9",
+  "uv_lock_sha256": "5057a8a3cbc6d2b1f2059d66e27ffa43f447021f89779599dca416056574c064",
+  "installed_package_count": 88,
+  "installed_packages_sha256": "7993c25b433be4f0c8fabdd484f49a447ea08b10592195bbdda391eb52190d7d",
+  "environment_origin": "Existing caller-supplied PM test environment; observed fingerprint, not attestation of exact lock equivalence",
+  "test_results": {
+    "new_contract_tests_passed": 70,
+    "selected_total_passed": 146,
+    "selected_total_failed_at_environment_setup": 9,
+    "static_checks_passed": 14,
+    "retries": "one permitted socket test rerun, still EPERM; no further attempts",
+    "remote_ci": "not run for local prototype"
+  },
+  "blocked_files": [
+    "tests/gateway/test_cli_plugin_command_in_gateway.py",
+    "tests/gateway/test_cli_plugin_command_own_socket.py",
+    "tests/gateway/test_plugin_command_choice.py"
+  ],
+  "blocker": "Temporary gateway control socket bind returns EPERM / Operation not permitted; these 9 tests did not reach acceptance assertions.",
+  "clean_upstream": {
+    "commit": "90d6b98fd86d20981ee06ddd5b7d93e4320f26a4",
+    "tracked_status": ""
+  },
+  "project": {
+    "branch": "feat/e0-native-plugin-foundation",
+    "commit": "e02a8ecd978f00a6fe5f12a7b670de806f5d6aaa",
+    "status": ""
+  },
+  "files": [
+    {
+      "path": "gateway/command_context.py",
+      "sha256": "e7fca2f5aac6f51888a5d49f7d52d7de479395cca8be25a90747c691d9c955c6"
+    },
+    {
+      "path": "gateway/run_inbound_hooks.py",
+      "sha256": "9304abe5d73ff39873093fe6ad530407bde5f46bedbfe70cdc52ccd9a7d877c5"
+    },
+    {
+      "path": "hermes_cli/plugin_command_context_bridge.py",
+      "sha256": "20310a51f014aff15c6e6a70338a7482e2279912fea747d4578886a92c3af2cb"
+    },
+    {
+      "path": "hermes_cli/plugin_host.py",
+      "sha256": "8413e95ca060a4a5d09bd46928d51b0d2fdfb30d1a20ae8385607d96a5ece48b"
+    },
+    {
+      "path": "hermes_cli/plugin_host_child.py",
+      "sha256": "c81dafeac1b2520b411b77331acbe77d747efe54b46c8d3f147907a784f6c909"
+    },
+    {
+      "path": "plugins/platforms/telegram/adapter.py",
+      "sha256": "8806c55de3edc51b4d1f93c07ac7028669d03a1d8294e3e7dac08d6a9f17a990"
+    },
+    {
+      "path": "plugins/platforms/telegram/telegram_command_context.py",
+      "sha256": "22e53e972faef5f64e0f03ed14849244011b4c3875815da25fba1988f2720287"
+    },
+    {
+      "path": "tests/gateway/test_command_provenance.py",
+      "sha256": "cea17397e7f118dc9b50fd87bfa41848dbbaf1ba8282ca0a7bb3018357762f38"
+    },
+    {
+      "path": "tests/hermes_cli/test_command_provenance_host.py",
+      "sha256": "fd4ab4e18bd4e7a8586939f7aae02db48ed7f9d8eed55869292087bd19f330d8"
+    }
+  ]
+}

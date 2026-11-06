@@ -54,6 +54,8 @@ Acceptance: All write operations in release scope are covered; spoofed identitie
 
 Current preparatory implementation: [owner entry and read authorization](18-owner-entry-and-read-authorization.md) provides a pure internal evaluator and always-denying diagnostics. E0.7 source/IPC tests establish the missing public receiving-Bot identity. There is no production verified-context issuer, owner enrollment, grant/policy persistence or private read access. E0.7/E1 gates remain incomplete; binding is not enabled.
 
+The [host-context experiment](23-host-command-context-experiment.md) packages a review-only prototype for E0.7. Source authenticity, current owner/policy admission and supported public IPC contracts remain separate gates. The historical nine environment-blocked tests are not counted as passing; no Primary Bot or private read capability is enabled.
+
 ### E2. Establish the Personal Domain and Memory (P0/P1, M1–M2)
 
 Depends on E1.1/E1.5.
@@ -71,6 +73,8 @@ Current E2.1 precursor: [the opt-in local CLI task inbox](16-local-task-inbox.md
 The local follow-on adds [due dates and agenda](17-local-task-agenda.md), including atomic schema upgrades and legacy receipt compatibility tests. It advances a narrow local E2.1/E8.3 scope; it does not create reminders or complete E4 or the E1 gates.
 
 Current E2.2 precursor: [local task search](22-local-task-search.md) retrieves literal title/details matches only through the opt-in local CLI. It preserves the current schema and receipts; it is not agent memory, semantic retrieval or owner-authorized channel access. E1 and full E2.2 gates remain open.
+
+A further local E2.1/E2.2 precursor adds [project groups](24-local-project-groups.md): labels, exact filtering, counts and schema-v3 compatibility. Labels are not stable domain/native project IDs or permission keys. This does not complete E2 or E3.1 and does not relax their E1 dependencies.
 
 ### E3. Connect Native Projects and Tasks (P0/P1, M1–M2)
 

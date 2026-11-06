@@ -6,6 +6,8 @@ English | [简体中文](18-owner-entry-and-read-authorization-zh.md)
 
 The baseline is Hermes `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`. No API Key is needed to test this slice. Missing trustworthy host contracts cannot be repaired by supplying a model credential.
 
+A separate [review-only host-context experiment](23-host-command-context-experiment.md) records a prototype transport-observation seam and unresolved integration gates. It is not applied to the compatibility checkout or installed with this plugin, and does not change the denied production behavior described here.
+
 ## 1. Why Channel Identity Is Not Yet Enough
 
 The documented slash-command callback supplies `source`, `platform`, `session_id` and `session_key`. `source` is adapter-derived and has stable user/chat IDs; the host documentation explicitly says it is transport identity, not an authorization grant [I1]. This is a better candidate input than a name or command body, but it does not provide every required boundary.

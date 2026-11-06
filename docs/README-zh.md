@@ -32,7 +32,9 @@
 20. [离线语音契约模拟器](20-voice-contract-simulator-zh.md)：合成音频帧、队列与恢复自检，以及核实的原生 provider 局限。
 21. [原生语音 IPC 实验](21-native-voice-ipc-experiment-zh.md)：可审阅宿主补丁、真实消费路径证据及尚未集成的发布限制。
 22. [本地任务检索](22-local-task-search-zh.md)：标题/详情字面匹配、有界分页及不变的本地门禁。
-23. [架构决策记录](adr/README-zh.md)：为什么选择这些约束。
+23. [host 命令上下文实验](23-host-command-context-experiment-zh.md)：仅供审阅的身份观察补丁与明确集成门禁。
+24. [本地项目分组](24-local-project-groups-zh.md)：任务标签、精确筛选、进度计数及 schema-v3 迁移。
+25. [架构决策记录](adr/README-zh.md)：为什么选择这些约束。
 
 ## 三类陈述必须分开
 

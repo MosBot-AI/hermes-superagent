@@ -21,6 +21,7 @@ def setup_tasks_cli(parent: argparse._SubParsersAction) -> None:
     capture.add_argument("--details", default="")
     capture.add_argument("--request-id", required=True)
     capture.add_argument("--due-date", default=argparse.SUPPRESS, help="Explicit YYYY-MM-DD date")
+    capture.add_argument("--project", default=argparse.SUPPRESS)
     show = commands.add_parser("show", help="Read one local task")
     show.add_argument("task_id")
     listing = commands.add_parser("list", help="Read a bounded local task page, newest first")
@@ -42,6 +43,13 @@ def setup_tasks_cli(parent: argparse._SubParsersAction) -> None:
     agenda.add_argument("--on", required=True, help="Explicit YYYY-MM-DD date; no clock inference")
     agenda.add_argument("--limit", type=int, default=20)
     agenda.add_argument("--after", default=None)
+    for reader in (listing, search, agenda):
+        filters = reader.add_mutually_exclusive_group()
+        filters.add_argument("--project", default=argparse.SUPPRESS, help="Exact project label")
+        filters.add_argument("--unassigned", action="store_true", default=argparse.SUPPRESS)
+    projects = commands.add_parser("projects", help="Count current local task project labels")
+    projects.add_argument("--limit", type=int, default=20)
+    projects.add_argument("--after", default=None, help="Exclusive binary-order project label")
     for name in ("update", "complete", "cancel"):
         command = commands.add_parser(name, help=f"{name.capitalize()} a local task explicitly")
         command.add_argument("task_id")
@@ -50,6 +58,15 @@ def setup_tasks_cli(parent: argparse._SubParsersAction) -> None:
         if name == "update":
             command.add_argument("--title", default=argparse.SUPPRESS)
             command.add_argument("--details", default=argparse.SUPPRESS)
+            labels = command.add_mutually_exclusive_group()
+            labels.add_argument("--project", default=argparse.SUPPRESS)
+            labels.add_argument(
+                "--clear-project",
+                dest="project",
+                action="store_const",
+                const=None,
+                default=argparse.SUPPRESS,
+            )
             dates = command.add_mutually_exclusive_group()
             dates.add_argument("--due-date", default=argparse.SUPPRESS)
             dates.add_argument(
@@ -66,12 +83,21 @@ def setup_tasks_cli(parent: argparse._SubParsersAction) -> None:
 def command_request(args: argparse.Namespace) -> tuple[str, dict]:
     operation = "get" if args.task_operation == "show" else args.task_operation
     fields = {
-        "capture": ("title", "details", "request_id", "due_date"),
+        "capture": ("title", "details", "request_id", "due_date", "project"),
         "get": ("task_id",),
-        "list": ("state", "limit", "after"),
-        "search": ("query", "state", "limit", "after"),
-        "agenda": ("on", "limit", "after"),
-        "update": ("task_id", "expected_revision", "request_id", "title", "details", "due_date"),
+        "projects": ("limit", "after"),
+        "list": ("state", "limit", "after", "project", "unassigned"),
+        "search": ("query", "state", "limit", "after", "project", "unassigned"),
+        "agenda": ("on", "limit", "after", "project", "unassigned"),
+        "update": (
+            "task_id",
+            "expected_revision",
+            "request_id",
+            "title",
+            "details",
+            "due_date",
+            "project",
+        ),
         "complete": ("task_id", "expected_revision", "request_id", "note"),
         "cancel": ("task_id", "expected_revision", "request_id", "note"),
     }

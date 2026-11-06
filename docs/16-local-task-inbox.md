@@ -10,6 +10,8 @@ Date-only deadlines and agenda are now available as a compatible extension; see 
 
 Literal title/details search is available through the same local gate; see [22](22-local-task-search.md) for matching and pagination semantics.
 
+[Local project groups](24-local-project-groups.md) add labels, filters and progress counts. Current task views include nullable `project`; current schema is v3, with old receipts preserved unchanged.
+
 ## 1. Scope and Trust Boundary
 
 - Default `mode: read_only` still refuses task commands before opening plugin storage. Status and coverage do not open task storage in either mode.

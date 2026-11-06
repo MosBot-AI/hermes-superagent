@@ -12,6 +12,8 @@
 
 [语音 IPC 实验](experiments/voice-ipc/README-zh.md)包含仅供审阅的补丁，含部分上游衍生代码/上下文及新增原型代码。原始 Hermes MIT 声明完整保留于 [LICENSE.hermes-agent](experiments/voice-ipc/LICENSE.hermes-agent)。插件不会安装、导入或应用该补丁，补丁也未提交上游，正式兼容性固定版本不变。
 
+[命令上下文实验](experiments/command-context/README-zh.md)同样包含仅供审阅的上游衍生补丁，原始 MIT 声明位于 [LICENSE.hermes-agent](experiments/command-context/LICENSE.hermes-agent)。它不会安装或应用，不授予 owner 权限，也未提交上游。
+
 开发及 CI 环境解析固定 Hermes `uv.lock`，包含其 `dev` 和 `test` 分组。相关依赖保留各自许可，不打包进插件。工作流使用 SHA 固定的官方 `actions/checkout` 和 `actions/setup-python`。
 
 DSH Superagent、Switchyard、LiteLLM 和 vLLM Semantic Router 是 `docs/` 中的研究参考。本基础切片不包含或执行它们的实现代码。

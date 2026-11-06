@@ -39,6 +39,9 @@ This file distinguishes design work, development changes, and released capabilit
 - Review-only native voice IPC patch, provenance, separate guarded reproduction and bilingual limitations. Not applied, installed or integrated into the plugin; the official compatibility pin is unchanged.
 - Local literal title/details search with state filtering and bounded creation-order pagination, preserving existing task schema, receipts and local-operator gates. No semantic retrieval or private channel access is enabled.
 
+- Local project labels, exact project/unassigned filters and bounded per-project progress counts; atomic schema-v3 upgrades retain historical mutation digests and receipt bytes. No native project mapping or authorization scope is added.
+- Review-only host command-context patch, license, provenance and bilingual integration gates. Historical 146 passing tests and 9 environment-blocked tests are recorded separately; the patch is not installed, integrated or an owner-authorization issuer.
+
 ### Boundaries
 
 - E0.3, full E0.4 coverage, E0.6, identity/authorization, full domain storage, reminders, connectors, mobile, voice, and E9 model routing remain unimplemented.

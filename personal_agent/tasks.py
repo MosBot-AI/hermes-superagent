@@ -10,7 +10,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 _APPLICATION_ID = 0x5041544B
-_SCHEMA_VERSION = 2
+_SCHEMA_VERSION = 3
 _COLUMNS = (
     "id",
     "title",
@@ -23,6 +23,7 @@ _COLUMNS = (
     "resolution_note",
     "source",
     "due_date",
+    "project",
 )
 _SCHEMA_V1 = {
     "tasks": """CREATE TABLE tasks (
@@ -41,7 +42,8 @@ _SCHEMA_V1 = {
 }
 
 # Match SQLite ADD COLUMN serialization so fresh and migrated stores validate identically.
-_SCHEMA = {**_SCHEMA_V1, "tasks": _SCHEMA_V1["tasks"][:-1] + ", due_date TEXT)"}
+_SCHEMA_V2 = {**_SCHEMA_V1, "tasks": _SCHEMA_V1["tasks"][:-1] + ", due_date TEXT)"}
+_SCHEMA = {**_SCHEMA_V2, "tasks": _SCHEMA_V2["tasks"][:-1] + ", project TEXT)"}
 
 
 class TaskError(Exception):
@@ -64,6 +66,21 @@ def _text(value: Any, maximum: int, *, required: bool, multiline: bool) -> str:
         if unicodedata.category(char) in {"Cc", "Cf", "Cs", "Zl", "Zp"}:
             raise TaskError("invalid_request")
     return value
+
+
+def _project(value: Any) -> str:
+    value = _text(value, 80, required=True, multiline=False)
+    if value != value.strip():
+        raise TaskError("invalid_request")
+    return value
+
+
+def _project_filter(request: dict, clauses: list, arguments: list) -> None:
+    if "project" in request:
+        clauses.append("project = ? COLLATE BINARY")
+        arguments.append(request["project"])
+    elif request.get("unassigned"):
+        clauses.append("project IS NULL")
 
 
 def _task_id(value: Any) -> str:
@@ -91,17 +108,18 @@ def _date(value: Any) -> str:
 def validate_request(operation: str, payload: dict) -> dict:
     """Validate without touching storage; return an independent normalized mapping."""
     fields = {
-        "capture": ({"title", "request_id"}, {"details", "due_date"}),
+        "capture": ({"title", "request_id"}, {"details", "due_date", "project"}),
         "update": (
             {"task_id", "expected_revision", "request_id"},
-            {"title", "details", "due_date"},
+            {"title", "details", "due_date", "project"},
         ),
         "complete": ({"task_id", "expected_revision", "request_id", "note"}, set()),
         "cancel": ({"task_id", "expected_revision", "request_id", "note"}, set()),
         "get": ({"task_id"}, set()),
-        "list": (set(), {"state", "limit", "after"}),
-        "search": ({"query"}, {"state", "limit", "after"}),
-        "agenda": ({"on"}, {"limit", "after"}),
+        "list": (set(), {"state", "limit", "after", "project", "unassigned"}),
+        "search": ({"query"}, {"state", "limit", "after", "project", "unassigned"}),
+        "agenda": ({"on"}, {"limit", "after", "project", "unassigned"}),
+        "projects": (set(), {"limit", "after"}),
     }
     if not isinstance(operation, str) or operation not in fields or not isinstance(payload, dict):
         raise TaskError("invalid_request")
@@ -111,7 +129,7 @@ def validate_request(operation: str, payload: dict) -> dict:
     result = dict(payload)
     if operation == "capture":
         result.setdefault("details", "")
-    if operation == "update" and not ({"title", "details", "due_date"} & result.keys()):
+    if operation == "update" and not ({"title", "details", "due_date", "project"} & result.keys()):
         raise TaskError("invalid_request")
     for key, maximum, needed, multiline in (
         ("title", 240, True, False),
@@ -121,6 +139,12 @@ def validate_request(operation: str, payload: dict) -> dict:
     ):
         if key in result:
             result[key] = _text(result[key], maximum, required=needed, multiline=multiline)
+    if "project" in result:
+        if not (operation in ("capture", "update") and result["project"] is None):
+            result["project"] = _project(result["project"])
+    if "unassigned" in result:
+        if type(result["unassigned"]) is not bool or "project" in result:
+            raise TaskError("invalid_request")
     if "due_date" in result and not (operation == "update" and result["due_date"] is None):
         result["due_date"] = _date(result["due_date"])
     if "on" in result:
@@ -135,7 +159,7 @@ def validate_request(operation: str, payload: dict) -> dict:
         value = result["expected_revision"]
         if type(value) is not int or not 1 <= value < 2**63 - 1:
             raise TaskError("invalid_request")
-    if operation in ("list", "search", "agenda"):
+    if operation in ("list", "search", "agenda", "projects"):
         result = {"limit": 20, "after": None, **result}
         if operation in ("list", "search"):
             result.setdefault("state", "captured")
@@ -149,7 +173,9 @@ def validate_request(operation: str, payload: dict) -> dict:
         if type(result["limit"]) is not int or not 1 <= result["limit"] <= 100:
             raise TaskError("invalid_request")
         if result["after"] is not None:
-            result["after"] = _task_id(result["after"])
+            result["after"] = (
+                _project(result["after"]) if operation == "projects" else _task_id(result["after"])
+            )
     return result
 
 
@@ -183,7 +209,7 @@ class TaskStore:
             pass
 
     def initialize(self) -> None:
-        """Create v2, atomically migrate exact owned v1, or verify the v2 schema."""
+        """Create v3, atomically migrate exact owned v1/v2, or verify v3."""
         self._initialized = False
         began = False
         try:
@@ -202,10 +228,13 @@ class TaskStore:
                 conn.execute(f"PRAGMA user_version = {_SCHEMA_VERSION}")
             elif app_id != _APPLICATION_ID:
                 raise TaskError("foreign_database")
-            elif version == 1:
-                if dict(rows) != _SCHEMA_V1 or len(rows) != len(_SCHEMA_V1):
+            elif version in (1, 2):
+                legacy = _SCHEMA_V1 if version == 1 else _SCHEMA_V2
+                if dict(rows) != legacy or len(rows) != len(legacy):
                     raise TaskError("unsupported_schema")
-                conn.execute("ALTER TABLE tasks ADD COLUMN due_date TEXT")
+                if version == 1:
+                    conn.execute("ALTER TABLE tasks ADD COLUMN due_date TEXT")
+                conn.execute("ALTER TABLE tasks ADD COLUMN project TEXT")
                 conn.execute(f"PRAGMA user_version = {_SCHEMA_VERSION}")
             elif version != _SCHEMA_VERSION:
                 raise TaskError("unsupported_schema")
@@ -235,6 +264,7 @@ class TaskStore:
 
     def _list(self, request: dict) -> dict:
         clauses, arguments = [], []
+        _project_filter(request, clauses, arguments)
         if "query" in request:
             # Literal, case-sensitive matching; bind text without normalization.
             clauses.append("(instr(title, ?) > 0 OR instr(details, ?) > 0)")
@@ -264,6 +294,7 @@ class TaskStore:
         """Read live keyset pages; edits between pages may change membership."""
         clauses = ["state = 'captured'", "due_date IS NOT NULL", "due_date <= ?"]
         arguments = [request["on"]]
+        _project_filter(request, clauses, arguments)
         if request["after"] is not None:
             row = self._connection.execute(
                 "SELECT due_date, sequence FROM tasks WHERE id = ?", (request["after"],)
@@ -287,6 +318,36 @@ class TaskStore:
             "has_more": more,
         }
 
+    def _projects(self, request: dict) -> dict:
+        """Live label buckets, binary keyset order; no persistent project entities."""
+        counts = "sum(state = 'captured'), sum(state = 'done'), sum(state = 'cancelled'), count(*)"
+        where = "project IS NOT NULL"
+        arguments = []
+        if request["after"] is not None:
+            where += " AND project COLLATE BINARY > ?"
+            arguments.append(request["after"])
+        arguments.append(request["limit"] + 1)
+        rows = self._connection.execute(
+            f"SELECT project, {counts} FROM tasks WHERE {where}"
+            " GROUP BY project COLLATE BINARY ORDER BY project COLLATE BINARY ASC LIMIT ?",
+            arguments,
+        ).fetchall()
+        keys = ("captured", "done", "cancelled", "total")
+        items = [
+            {"project": row[0], **dict(zip(keys, row[1:], strict=True))}
+            for row in rows[: request["limit"]]
+        ]
+        unassigned = self._connection.execute(
+            f"SELECT {counts} FROM tasks WHERE project IS NULL"
+        ).fetchone()
+        more = len(rows) > request["limit"]
+        return {
+            "items": items,
+            "unassigned_counts": dict(zip(keys, (value or 0 for value in unassigned), strict=True)),
+            "next_cursor": items[-1]["project"] if more else None,
+            "has_more": more,
+        }
+
     def run(self, operation: str, payload: dict) -> dict:
         """Execute a validated operation with atomic mutations and durable replay receipts."""
         request = validate_request(operation, payload)
@@ -296,9 +357,16 @@ class TaskStore:
         try:
             if self._connection.in_transaction:
                 raise TaskError("connection_in_transaction")
-            if operation in ("get", "list", "search", "agenda"):
+            if operation in ("get", "list", "search", "agenda", "projects"):
                 if operation == "get":
                     data = self._get(request["task_id"])
+                elif operation == "projects":
+                    # Both aggregate queries share one read snapshot. A deferred
+                    # transaction avoids acquiring an unnecessary write lock.
+                    self._connection.execute("BEGIN")
+                    began = True
+                    data = self._projects(request)
+                    self._connection.execute("COMMIT")
                 elif operation == "agenda":
                     data = self._agenda(request)
                 else:
@@ -332,8 +400,8 @@ class TaskStore:
                 task_id = str(uuid4())
                 self._connection.execute(
                     "INSERT INTO tasks (id,title,details,state,revision,"
-                    "created_at,updated_at,source,due_date)"
-                    " VALUES (?,?,?,'captured',1,?,?,'local_cli',?)",
+                    "created_at,updated_at,source,due_date,project)"
+                    " VALUES (?,?,?,'captured',1,?,?,'local_cli',?,?)",
                     (
                         task_id,
                         request["title"],
@@ -341,6 +409,7 @@ class TaskStore:
                         now,
                         now,
                         request.get("due_date"),
+                        request.get("project"),
                     ),
                 )
             else:
@@ -352,12 +421,14 @@ class TaskStore:
                     raise TaskError("terminal_state")
                 state = {"complete": "done", "cancel": "cancelled"}.get(operation, "captured")
                 cursor = self._connection.execute(
-                    "UPDATE tasks SET title=?, details=?, due_date=?, state=?, revision=revision+1,"
+                    "UPDATE tasks SET title=?, details=?, due_date=?, project=?, state=?,"
+                    " revision=revision+1,"
                     " updated_at=?, resolved_at=?, resolution_note=? WHERE id=? AND revision=?",
                     (
                         request.get("title", task["title"]),
                         request.get("details", task["details"]),
                         request.get("due_date", task["due_date"]),
+                        request.get("project", task["project"]),
                         state,
                         now,
                         now if state != "captured" else None,

@@ -6,6 +6,8 @@ English | [简体中文](17-local-task-agenda-zh.md)
 
 This advances the E2.1 local-store precursor and its E8.3 schema-compatibility tests. It does not complete E1, E2, E4 or M1. Hermes remains pinned to `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`; no new host API or provider credential is needed.
 
+**Current-schema note:** Section 4 records the original v1→v2 date extension. The current plugin creates schema v3 or upgrades exact v1/v2 stores to v3 for [project groups](24-local-project-groups.md); its additional nullable `project` column does not change date semantics or old receipts.
+
 ## 1. Dates Mean Calendar Dates
 
 `due_date` is an optional Gregorian date in exact `YYYY-MM-DD` format. It is not a timestamp or reminder occurrence. A task due on 2028-02-29 has no inferred hour, offset, timezone or delivery deadline. Dates must exist in the calendar; leap days are validated. Whitespace, alternate formats, natural language, timestamps and invalid types are refused before opening task storage.

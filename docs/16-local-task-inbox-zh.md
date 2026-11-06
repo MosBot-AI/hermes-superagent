@@ -10,6 +10,8 @@
 
 标题/详情字面检索通过相同本地门禁提供；匹配与分页语义见 [22](22-local-task-search-zh.md)。
 
+[本地项目分组](24-local-project-groups-zh.md)增加标签、筛选和进度计数。当前任务视图包含可空 `project`，当前 schema 为 v3，旧回执保持原样。
+
 ## 1. 范围与信任边界
 
 - 默认 `mode: read_only` 仍在打开插件存储之前拒绝任务命令。两种模式下 status 和 coverage 都不打开任务存储。

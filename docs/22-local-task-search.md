@@ -2,6 +2,8 @@
 
 English | [简体中文](22-local-task-search-zh.md)
 
+[Project grouping](24-local-project-groups.md) now adds optional exact project/unassigned filters. The current store is schema v3; the search behavior below remains unchanged, and historical receipts are not rewritten.
+
 ## 1. Implemented Scope
 
 A trusted local operator can search the existing opt-in task inbox by literal text in its title or details. This is a narrow local retrieval precursor to E2.2, not agent memory, semantic retrieval, owner authentication or the full personal-agent MVP. The [inbox](16-local-task-inbox.md) and [agenda](17-local-task-agenda.md) boundaries continue to apply.

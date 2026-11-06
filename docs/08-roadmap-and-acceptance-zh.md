@@ -54,6 +54,8 @@ E0.6 是独立的可选客户端契约路线，不阻塞 channel-first M0/M1 退
 
 当前准备性实现：[Owner 入口与只读授权基础](18-owner-entry-and-read-authorization-zh.md)提供纯内部评估器和始终拒绝访问的诊断。E0.7 原生 source/IPC 测试证实公开接收 Bot 身份缺失；不签发生产 verified context，不提供 owner 登记、grant/policy 持久化或私人读取。E0.7/E1 门禁尚未完成，不据此启用绑定。
 
+[host 上下文实验](23-host-command-context-experiment-zh.md)为 E0.7 打包仅供审阅的原型。来源真实性、当前 owner/策略准入及受支持的公共 IPC 契约仍是独立门禁。历史九项环境受限测试不计为通过，也不启用主 Bot 或私人读取。
+
 ### E2. 建立个人领域与记忆（P0/P1，M1–M2）
 
 依赖 E1.1/E1.5。
@@ -71,6 +73,8 @@ E0.6 是独立的可选客户端契约路线，不阻塞 channel-first M0/M1 退
 后续本地扩展已实现[截止日期与 agenda](17-local-task-agenda-zh.md)，包含原子 schema 升级及旧 receipt 兼容测试。它推进 E2.1/E8.3 的狭窄本地范围，不创建提醒，也不完成 E4 或 E1 门禁。
 
 当前 E2.2 先导切片：[本地任务检索](22-local-task-search-zh.md)仅通过显式启用的本地 CLI 查询标题/详情字面匹配，保留当前 schema 与回执；它不是 Agent 记忆、语义检索或 owner 授权的渠道访问。E1 和完整 E2.2 门槛仍未满足。
+
+另一个本地 E2.1/E2.2 先导增加[项目分组](24-local-project-groups-zh.md)：标签、精确筛选、计数及 schema-v3 兼容性。标签不是稳定的领域/原生项目 ID 或权限键。这不代表 E2 或 E3.1 完成，也不放宽其 E1 依赖。
 
 ### E3. 接通原生项目任务（P0/P1，M1–M2）
 

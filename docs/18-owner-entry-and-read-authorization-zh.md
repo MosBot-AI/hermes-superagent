@@ -6,6 +6,8 @@
 
 基线为 Hermes `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`。测试本切片不需要 API Key；补充模型凭据也不能解决宿主可信契约缺失。
 
+另有[仅供审阅的 host 上下文实验](23-host-command-context-experiment-zh.md)，记录原型传输观察接口与尚未解决的集成门禁。它未应用到兼容性副本，也不会随插件安装，不改变本文所述生产路径拒绝行为。
+
 ## 1. 为什么渠道身份仍然不够
 
 官方 slash-command 回调提供 `source`、`platform`、`session_id` 与 `session_key`。`source` 来自 adapter，包含稳定 user/chat ID；宿主文档明确说明它是 transport identity，不是授权 grant [I1]。它比名字或命令正文更适合作为候选输入，但仍不具备全部必要边界。

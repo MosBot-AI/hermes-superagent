@@ -32,7 +32,9 @@ Extend Hermes into a long-lived personal agent for one user: one main agent unde
 20. [Offline voice contract simulator](20-voice-contract-simulator.md): synthetic frame/queue/recovery self-test and verified native provider limitations.
 21. [Native voice IPC experiment](21-native-voice-ipc-experiment.md): reviewable host patch, actual consumer evidence and unintegrated release limits.
 22. [Local task search](22-local-task-search.md): literal title/details matching, bounded pages and unchanged local-only gates.
-23. [Architecture decision records](adr/README.md): reasons for the constraints.
+23. [Host command-context experiment](23-host-command-context-experiment.md): review-only identity-observation patch and explicit integration gates.
+24. [Local project groups](24-local-project-groups.md): task labels, exact filters, progress counts and schema-v3 migration.
+25. [Architecture decision records](adr/README.md): reasons for the constraints.
 
 ## Keep three kinds of statements separate
 

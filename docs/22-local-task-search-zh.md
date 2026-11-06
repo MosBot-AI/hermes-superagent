@@ -2,6 +2,8 @@
 
 [English](22-local-task-search.md) | 简体中文
 
+[项目分组](24-local-project-groups-zh.md)现增加可选的精确项目/未分组筛选。当前存储为 schema v3；下述检索行为不变，历史回执不会重写。
+
 ## 1. 已实现范围
 
 可信本地操作人可以按标题或详情中的字面文本搜索现有显式启用的任务收件箱。这是 E2.2 的有限本地检索先导切片，不是 Agent 记忆、语义检索、owner 认证或完整 personal-agent MVP。[收件箱](16-local-task-inbox-zh.md)和[日程](17-local-task-agenda-zh.md)的边界继续适用。

@@ -12,6 +12,8 @@ Compatibility tests exercise **NousResearch/hermes-agent**, commit `90d6b98fd86d
 
 The [voice IPC experiment](experiments/voice-ipc/README.md) contains a review-only patch with selected upstream-derived code/context and new prototype code. The original Hermes MIT notice is preserved verbatim in [LICENSE.hermes-agent](experiments/voice-ipc/LICENSE.hermes-agent). The patch is not installed, imported or applied by this plugin, and has not been submitted upstream. It does not change the official compatibility pin.
 
+The [command-context experiment](experiments/command-context/README.md) likewise includes a review-only upstream-derived patch, with the original MIT notice in [LICENSE.hermes-agent](experiments/command-context/LICENSE.hermes-agent). It is not installed or applied, grants no owner authority and has not been submitted upstream.
+
 Development and CI environments resolve the pinned Hermes `uv.lock`, including its `dev` and `test` groups. Those dependencies retain their own licenses and are not bundled into the plugin. The workflow uses SHA-pinned official `actions/checkout` and `actions/setup-python`.
 
 DSH Superagent, Switchyard, LiteLLM and vLLM Semantic Router are research references in `docs/`. Their implementation code is not included or executed by this foundation slice.

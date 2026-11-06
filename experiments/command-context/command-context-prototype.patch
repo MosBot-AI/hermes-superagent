@@ -1,0 +1,1049 @@
+diff --git a/gateway/command_context.py b/gateway/command_context.py
+new file mode 100644
+index 00000000..eb64829a
+--- /dev/null
++++ b/gateway/command_context.py
+@@ -0,0 +1,103 @@
++"""One-call native command observations. These are NOT owner permissions.
++
++Only a certified ingress registers an event here. Records/JSON and restored session
++sources cannot register receipts. In-process plugins share the host's trust boundary;
++this module is not a Python sandbox. The isolated plugin bridge spends a host-held
++receipt, never a deserialized claim or an ambient RPC origin.
++"""
++from __future__ import annotations
++
++from contextlib import contextmanager
++from copy import deepcopy
++import secrets
++import threading
++import time
++import weakref
++import sqlite3
++
++_RECEIPTS = {}
++_CONTEXTS = weakref.WeakKeyDictionary()
++_LOCK = threading.RLock()
++_INGRESS_TTL = 30.0
++_HOST_INSTANCE_ID = secrets.token_hex(16)
++
++
++class CommandContext:
++    """Opaque, one-consumption observation handle; retaining it grants nothing."""
++
++    def __repr__(self):
++        return "<CommandContext: one-call native observation>"
++
++    def consume(self):
++        with _LOCK:
++            state = _CONTEXTS.pop(self, None)
++            if state is None:
++                return None
++            snapshot, current = state
++            return deepcopy(snapshot) if _current(current) else None
++
++
++def _register_ingress(event, snapshot, current):
++    """Host adapter seam, deliberately absent from plugin RPC and wire codecs."""
++    key = id(event)
++    with _LOCK:
++        _RECEIPTS[key] = (
++            weakref.ref(event, lambda ref: _discard_event(key, ref)),
++            deepcopy(snapshot), current, time.monotonic() + _INGRESS_TTL,
++        )
++
++
++def discard_ingress(event):
++    """Retire an event whose native dispatch failed or was cancelled."""
++    with _LOCK:
++        receipt = _RECEIPTS.get(id(event))
++        if receipt is not None and receipt[0]() is event:
++            _RECEIPTS.pop(id(event), None)
++
++
++def _discard_event(key, ref):
++    with _LOCK:
++        prior = _RECEIPTS.get(key)
++        if prior is not None and prior[0] is ref:
++            _RECEIPTS.pop(key, None)
++
++
++@contextmanager
++def command_scope(event, source, session_key, session_id):
++    """Spend original ingress once, and retire the observation after this dispatch."""
++    context = None
++    with _LOCK:
++        receipt = _RECEIPTS.pop(id(event), None)
++        if receipt is not None:
++            ref, snapshot, current, deadline = receipt
++            if (ref() is event and event.source is source and time.monotonic() < deadline
++                    and isinstance(session_key, str) and bool(session_key)
++                    and isinstance(session_id, str) and bool(session_id)
++                    and snapshot.get("session_key") == session_key
++                    and snapshot.get("session_id") == session_id and _current(current)):
++                context = CommandContext()
++                snapshot.update(schema_version=1, invocation_id=secrets.token_hex(16),
++                                host_instance_id=_HOST_INSTANCE_ID,
++                                session_key=session_key, session_id=session_id,
++                                scope="one-command-observation")
++                _CONTEXTS[context] = (snapshot, current)
++    try:
++        yield context
++    finally:
++        if context is not None:
++            with _LOCK:
++                _CONTEXTS.pop(context, None)
++
++
++def _is_live_context(value):
++    with _LOCK:
++        return type(value) is CommandContext and value in _CONTEXTS
++
++
++def _current(check):
++    try:
++        return check() is True
++    except (AttributeError, TypeError, ValueError, RuntimeError, OSError, sqlite3.Error):
++        # Lost or unavailable state means no observation. Never catch cancellation,
++        # and never log identity-bearing exception messages from an adapter/store.
++        return False
+diff --git a/gateway/run_inbound_hooks.py b/gateway/run_inbound_hooks.py
+index c403aae6..2887b0bf 100644
+--- a/gateway/run_inbound_hooks.py
++++ b/gateway/run_inbound_hooks.py
+@@ -285,6 +285,7 @@ class GatewayInboundHooksMixin:
+         from hermes_cli.plugin_command_dispatch import invoke_plugin_command
+         from gateway.plugin_messages import bind_live_source
+         from gateway.plugin_command_choice import chat_choices
++        from gateway.command_context import command_scope
+         call = functools.partial(
+             invoke_plugin_command, plugin_handler, user_args, source=source,
+             session_id=_plugin_context.session_id or "", session_key=_plugin_context.session_key or "",
+@@ -292,7 +293,10 @@ class GatewayInboundHooksMixin:
+         # ctx.post_message from the handler reaches this chat even before its session is stored;
+         # ctx.ask_choice asks it with the clarify prompt.
+         with (self._session_env_scope(_plugin_context), bind_live_source(source),
+-              chat_choices(self, source, self._session_key_for_source(source))):
++              chat_choices(self, source, self._session_key_for_source(source)),
++              command_scope(event, source, _plugin_context.session_key or "",
++                            _plugin_context.session_id or "") as command_context):
++            call.keywords["command_context"] = command_context
+             if inspect.iscoroutinefunction(plugin_handler):
+                 result = await call()
+             else:
+diff --git a/hermes_cli/plugin_command_context_bridge.py b/hermes_cli/plugin_command_context_bridge.py
+new file mode 100644
+index 00000000..58b99407
+--- /dev/null
++++ b/hermes_cli/plugin_command_context_bridge.py
+@@ -0,0 +1,70 @@
++"""Dedicated one-call observation bridge; ordinary Record decoding grants nothing.
++
++Tickets are random, host-owned and expire when invoke returns, fails or times out.
++The channel is a per-profile cooperative plugin boundary, NOT per-plugin isolation.
++No reverse RPC uses these observations as authorization for host actions.
++"""
++from contextlib import contextmanager
++import secrets
++import threading
++
++from gateway.command_context import _is_live_context
++
++_LOCK = threading.RLock()
++
++
++@contextmanager
++def export_context(host, value, generation):
++    descriptor = None
++    ticket = None
++    if _is_live_context(value) and generation == host._generation:
++        ticket = secrets.token_hex(32)
++        with _LOCK:
++            if not hasattr(host, "_command_context_tickets"):
++                host._command_context_tickets = {}
++            host._command_context_tickets[ticket] = (generation, value)
++        descriptor = {"schema_version": 1, "ticket": ticket}
++    try:
++        yield descriptor
++    finally:
++        if ticket is not None:
++            with _LOCK:
++                host._command_context_tickets.pop(ticket, None)
++
++
++def consume_context(host, params):
++    if set(params) != {"schema_version", "ticket"} or type(params["schema_version"]) is not int or params["schema_version"] != 1:
++        return None
++    ticket = params["ticket"]
++    if not isinstance(ticket, str):
++        return None
++    with _LOCK:
++        state = getattr(host, "_command_context_tickets", {}).pop(ticket, None)
++        if state is None or state[0] != host._generation:
++            return None
++        return state[1].consume()
++
++
++class RemoteCommandContext:
++    """Constructed only by the incoming invoke seam, never by decode/restore."""
++
++    def __init__(self, channel, descriptor):
++        self._channel = channel
++        self._descriptor = descriptor
++
++    def __repr__(self):
++        return "<RemoteCommandContext: one-call native observation>"
++
++    def consume(self):
++        descriptor, self._descriptor = self._descriptor, None
++        if descriptor is None:
++            return None
++        return self._channel.call("command_context_consume", descriptor)
++
++
++def import_context(channel, descriptor):
++    if (not isinstance(descriptor, dict) or set(descriptor) != {"schema_version", "ticket"}
++            or type(descriptor["schema_version"]) is not int or descriptor["schema_version"] != 1
++            or not isinstance(descriptor["ticket"], str) or len(descriptor["ticket"]) != 64):
++        return None
++    return RemoteCommandContext(channel, descriptor)
+diff --git a/hermes_cli/plugin_host.py b/hermes_cli/plugin_host.py
+index b179d3f9..2198cbf3 100644
+--- a/hermes_cli/plugin_host.py
++++ b/hermes_cli/plugin_host.py
+@@ -365,8 +365,18 @@ class PluginHost:
+             self._releases.append(ref)
+ 
+     def invoke(self, ref: int, args: tuple, kwargs: dict, *, generation: Optional[int] = None) -> Any:
+-        return self._call("invoke", {"ref": ref, "args": encode(list(args)), "kwargs": encode(kwargs)},
+-                          generation=generation)
++        from hermes_cli.plugin_command_context_bridge import export_context
++        kwargs = dict(kwargs)
++        has_context = "command_context" in kwargs
++        context = kwargs.pop("command_context", None)
++        with export_context(self, context, generation) as descriptor:
++            payload = {"ref": ref, "args": encode(list(args)), "kwargs": encode(kwargs)}
++            if descriptor is not None:
++                payload["command_context"] = descriptor
++            elif has_context:
++                kwargs["command_context"] = None
++                payload["kwargs"] = encode(kwargs)
++            return self._call("invoke", payload, generation=generation)
+ 
+     def obj_invoke(self, slot: _ObjectSlot, method: str, args: tuple, kwargs: dict, returns: Any = None) -> Any:
+         ref, generation = slot.live()
+@@ -391,6 +401,9 @@ class PluginHost:
+         return (caller or self._base_context).copy()
+ 
+     def _handle(self, method: str, params: dict[str, Any], _origin: Optional[int]) -> Any:
++        if method == "command_context_consume":
++            from hermes_cli.plugin_command_context_bridge import consume_context
++            return consume_context(self, params)
+         if method == "ctx":
+             return self._serve_ctx(params)
+         if method == "facade":
+diff --git a/hermes_cli/plugin_host_child.py b/hermes_cli/plugin_host_child.py
+index ffc903e0..57fef4d1 100644
+--- a/hermes_cli/plugin_host_child.py
++++ b/hermes_cli/plugin_host_child.py
+@@ -342,6 +342,10 @@ class HostRuntime:
+         if fn is None:
+             raise LookupError(f"plugin host callable {ref} was released")
+         args, kwargs = self._decode_args(params)
++        # Context claims in generic kwargs are untrusted, including Record-shaped claims.
++        if "command_context" in kwargs or "command_context" in params:
++            from hermes_cli.plugin_command_context_bridge import import_context
++            kwargs["command_context"] = import_context(self.channel, params.get("command_context"))
+         return self._encode_result(self.owners.get(ref, ""), self._run(fn(*args, **kwargs)))
+ 
+     def op_obj_invoke(self, params: dict[str, Any]) -> Any:
+diff --git a/plugins/platforms/telegram/adapter.py b/plugins/platforms/telegram/adapter.py
+index 94e19720..a5283454 100644
+--- a/plugins/platforms/telegram/adapter.py
++++ b/plugins/platforms/telegram/adapter.py
+@@ -734,11 +734,13 @@ class TelegramAdapter(TelegramHeldInboundMixin, TelegramTopicRoutingMixin, BaseP
+         return bool(getattr(self, "_send_path_degraded", False))
+ 
+     def _mark_connected(self) -> None:
++        self._command_ingress_generation = getattr(self, "_command_ingress_generation", 0) + 1
+         self._drop_delayed_deliveries = False
+         super()._mark_connected()
+         self._schedule_held_inbound_redispatch()  # PTB will not redeliver these events
+ 
+     def _mark_disconnected(self) -> None:
++        self._command_ingress_generation = getattr(self, "_command_ingress_generation", 0) + 1
+         self._drop_delayed_deliveries = True
+         super()._mark_disconnected()
+ 
+@@ -6519,6 +6521,8 @@ class TelegramAdapter(TelegramHeldInboundMixin, TelegramTopicRoutingMixin, BaseP
+         if not self._is_user_authorized_from_message(msg):
+             self._log_blocked_user(msg)
+             return
++        from .telegram_command_context import capture_native_command, register_native_command
++        captured = capture_native_command(self, update, msg)
+         await self._ensure_forum_commands(msg)
+         event = await self._build_triggered_event(msg, update, MessageType.COMMAND)
+         # A >4096-char command paste arrives as a near-limit COMMAND chunk plus TEXT continuations; dispatching
+@@ -6526,7 +6530,13 @@ class TelegramAdapter(TelegramHeldInboundMixin, TelegramTopicRoutingMixin, BaseP
+         if len(event.text or "") >= self._SPLIT_THRESHOLD:
+             self._enqueue_text_event(event)
+             return
+-        await self.handle_message(event)
++        register_native_command(self, event, update, captured)
++        try:
++            await self.handle_message(event)
++        except BaseException:
++            from gateway.command_context import discard_ingress
++            discard_ingress(event)
++            raise
+ 
+     async def _handle_location_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+         """Handle incoming location/venue pin messages."""
+diff --git a/plugins/platforms/telegram/telegram_command_context.py b/plugins/platforms/telegram/telegram_command_context.py
+new file mode 100644
+index 00000000..7b9b4317
+--- /dev/null
++++ b/plugins/platforms/telegram/telegram_command_context.py
+@@ -0,0 +1,164 @@
++"""Certified Telegram immediate, human DM command ingress only.
++
++PTB's authenticated polling/application dispatch is the trust boundary. This is not
++an authentication service for callers constructing Update objects in this process.
++Unsupported inputs and transformed/batched events receive no observation handle.
++"""
++from copy import deepcopy
++from functools import wraps
++import logging
++import weakref
++import sqlite3
++from urllib.parse import urlsplit
++
++from gateway.command_context import _register_ingress
++from gateway.session_identity import identity_of
++
++
++logger = logging.getLogger(__name__)
++
++
++def _optional_observation(function):
++    @wraps(function)
++    def guarded(*args, **kwargs):
++        try:
++            return function(*args, **kwargs)
++        except (AttributeError, TypeError, ValueError, RuntimeError, OSError, sqlite3.Error):
++            # Optional evidence must not break ordinary commands, nor log SDK objects,
++            # URLs (which contain tokens), account IDs, or exception payloads.
++            logger.debug("Native command observation unavailable")
++            return None
++    return guarded
++
++
++def _native_fields(message):
++    user = getattr(message, "from_user", None)
++    chat = getattr(message, "chat", None)
++    return (
++        getattr(user, "id", None), getattr(user, "is_bot", None),
++        getattr(chat, "id", None), getattr(chat, "type", None),
++        getattr(message, "message_id", None), getattr(message, "text", None),
++        getattr(message, "message_thread_id", None),
++        bool(getattr(message, "forward_origin", None)),
++        bool(getattr(message, "forward_date", None)),
++        bool(getattr(message, "sender_chat", None)),
++        bool(getattr(message, "via_bot", None)),
++        bool(getattr(message, "edit_date", None)),
++    )
++
++
++def _connection(adapter):
++    bot = getattr(adapter, "_bot", None)
++    return (id(bot), getattr(bot, "id", None), getattr(adapter, "_command_ingress_generation", None))
++
++
++def _official_endpoint(adapter):
++    url = getattr(getattr(adapter, "_bot", None), "base_url", "")
++    if not isinstance(url, str):
++        return False
++    parsed = urlsplit(url)
++    return (parsed.scheme == "https" and parsed.netloc == "api.telegram.org"
++            and parsed.path.startswith("/bot") and not parsed.query and not parsed.fragment)
++
++
++@_optional_observation
++def capture_native_command(adapter, update, message):
++    """Capture before any await; receiver comes from the connected SDK bot, not input."""
++    if (not _official_endpoint(adapter) or adapter.config.extra.get("base_url") or adapter.config.extra.get("base_file_url")
++            or getattr(message, "edit_date", None) is not None
++            or getattr(update, "edited_message", None) is not None):
++        return None
++    fields = _native_fields(message)
++    connection = _connection(adapter)
++    if (getattr(update, "message", None) is not message or fields[3] != "private"
++            or type(fields[0]) is not int or fields[1] is not False
++            or fields[0] <= 0 or fields[0] != fields[2] or any(fields[7:])
++            or type(fields[4]) is not int or fields[4] <= 0
++            or type(getattr(update, "update_id", None)) is not int
++            or fields[6] is not None or type(connection[1]) is not int
++            or connection[2] is None or getattr(adapter, "_running", False) is not True):
++        return None
++    return fields, connection, getattr(update, "update_id", None)
++
++
++@_optional_observation
++def register_native_command(adapter, event, update, captured):
++    """Tie the original event to current routing and connection, without wire flags."""
++    if captured is None:
++        return
++    fields, connection, update_id = captured
++    message = event.raw_message
++    if _native_fields(message) != fields or _connection(adapter) != connection:
++        return
++    # The canonical routing seam is the only authority for runtime/transport profile.
++    adapter._canonicalize(event.source)
++    identity = identity_of(event.source)
++    runner = getattr(adapter, "gateway_runner", None)
++    if identity is None or identity.adapter() is not adapter or runner is None:
++        return
++    ownership = runner._owning_profile(adapter, event.source.platform)
++    if not ownership[0]:
++        return
++    routes = deepcopy(runner.config.profile_routes)
++    homes = deepcopy(getattr(runner.config, "_runtime_profile_homes", None))
++    primary = getattr(runner, "_primary_profile_name", None)
++    profile = event.source.profile
++    multiplexed = runner.config.multiplex_profiles
++    source = event.source
++    source_fields = (source.platform, source.user_id, source.chat_id, source.chat_type, source.thread_id)
++    if (source.platform.value != "telegram" or source.user_id != str(fields[0])
++            or source.chat_id != str(fields[2]) or source.chat_type != "dm"
++            or event.text != fields[5] or not event.allow_gateway_control or event.internal):
++        return
++    session_key = runner._session_key_for_source(source)
++    store = getattr(runner, "session_store", None)
++    if store is None:
++        return
++    entry = store.lookup_by_session_key(session_key)
++    if entry is None or not entry.session_id or entry.suspended or entry.expiry_finalized:
++        return
++    session_id = entry.session_id
++    event_ref, adapter_ref = weakref.ref(event), weakref.ref(adapter)
++    text, message_id, message_type = event.text, event.message_id, event.message_type
++
++    def current():
++        live, receiver = event_ref(), adapter_ref()
++        if live is None or receiver is None:
++            return False
++        src = live.source
++        return (
++            receiver._running is True and _connection(receiver) == connection
++            and not receiver._should_drop_delayed_delivery()
++            and live.raw_message is message and _native_fields(message) == fields
++            and live.text == text and live.message_id == message_id and live.message_type == message_type
++            and live.platform_update_id == update_id
++            and live.allow_gateway_control is True and not live.internal
++            and src is source and identity_of(src) is identity
++            and identity.adapter() is receiver
++            and (src.platform, src.user_id, src.chat_id, src.chat_type, src.thread_id) == source_fields
++            and not src.is_bot and not src.delivered_via_upstream_relay
++            and not src.profile_route_rejected
++            and src.profile == profile
++            and runner.config.multiplex_profiles == multiplexed
++            and runner.config.profile_routes == routes
++            and getattr(runner.config, "_runtime_profile_homes", None) == homes
++            and getattr(runner, "_primary_profile_name", None) == primary
++            and runner._owning_profile(receiver, src.platform) == ownership
++            and runner.session_store is store
++            and store.lookup_by_session_key(session_key) is entry
++            and entry.session_id == session_id and not entry.suspended and not entry.expiry_finalized
++            and _official_endpoint(receiver)
++            and not receiver.config.extra.get("base_url")
++            and not receiver.config.extra.get("base_file_url")
++            and runner._intake_adapter_for(src) is receiver
++            and runner._session_key_for_source(src) == session_key
++        )
++
++    snapshot = dict(platform="telegram", issuer="telegram", actor_kind="human",
++                    provenance="native-direct-dm", actor_id=str(fields[0]), chat_id=str(fields[2]),
++                    receiver_id=str(connection[1]), transport_profile=identity.transport_profile,
++                    runtime_profile=identity.runtime_profile, message_id=str(fields[4]),
++                    event_id=str(update_id), connection_generation=connection[2],
++                    session_key=session_key, session_id=session_id)
++    if current():
++        _register_ingress(event, snapshot, current)
+diff --git a/tests/gateway/test_command_provenance.py b/tests/gateway/test_command_provenance.py
+new file mode 100644
+index 00000000..fbca7bd5
+--- /dev/null
++++ b/tests/gateway/test_command_provenance.py
+@@ -0,0 +1,250 @@
++"""Native Telegram command producer to one-call consumer contract, without network."""
++from datetime import UTC, datetime
++from types import SimpleNamespace
++from unittest.mock import AsyncMock
++import weakref
++
++import pytest
++
++from gateway.command_context import command_scope, CommandContext
++from gateway.config import Platform, PlatformConfig, GatewayConfig
++from gateway.platforms.event import MessageEvent, MessageType
++from gateway.session import SessionSource, SessionStore, build_session_key
++from gateway.session_identity import RoutingIdentity
++from hermes_cli.plugin_command_dispatch import invoke_plugin_command
++from plugins.platforms.telegram.adapter import TelegramAdapter
++
++
++def setup_ingress(tmp_path, receiver=900):
++    adapter = object.__new__(TelegramAdapter)
++    adapter.platform = Platform.TELEGRAM
++    adapter.config = PlatformConfig(enabled=True, extra={})
++    adapter._bot = SimpleNamespace(id=receiver, base_url="https://api.telegram.org/botfixture")
++    adapter._command_ingress_generation = 1
++    adapter._running = True
++    adapter._drop_delayed_deliveries = False
++    runner = SimpleNamespace(config=SimpleNamespace(profile_routes=[], multiplex_profiles=False))
++    runner._intake_adapter_for = lambda source: adapter
++    runner._session_key_for_source = build_session_key
++    runner._owning_profile = lambda adapter, platform: (True, None)
++    adapter.gateway_runner = runner
++    adapter._should_process_message = lambda *args, **kwargs: True
++    adapter._is_user_authorized_from_message = lambda message: True
++    adapter._ensure_forum_commands = AsyncMock()
++    adapter._canonicalize = lambda source: setattr(source, "_identity", RoutingIdentity(
++        "default", "default", tmp_path, tmp_path, False, weakref.ref(adapter)))
++    message = SimpleNamespace(
++        text="/probe", from_user=SimpleNamespace(id=42, is_bot=False),
++        chat=SimpleNamespace(id=42, type="private"), message_id=7,
++        message_thread_id=None, edit_date=None)
++    update = SimpleNamespace(message=message, update_id=11, edited_message=None)
++    source = SessionSource(Platform.TELEGRAM, "42", user_id="42")
++    runner.session_store = SessionStore(tmp_path / str(receiver) / "sessions", GatewayConfig())
++    entry = runner.session_store.get_or_create_session(source)
++    event = MessageEvent(text="/probe", message_type=MessageType.COMMAND, source=source,
++                         raw_message=message, message_id="7", platform_update_id=11)
++    event._test_session_id = entry.session_id
++    adapter._build_triggered_event = AsyncMock(return_value=event)
++    adapter._effective_update_message = lambda update: update.message
++    adapter.handle_message = AsyncMock()
++    return adapter, event, update
++
++
++async def receive(tmp_path, receiver=900):
++    adapter, event, update = setup_ingress(tmp_path, receiver)
++    await adapter._handle_command(update, None)
++    adapter.handle_message.assert_awaited_once_with(event)
++    return adapter, event, update
++
++
++@pytest.mark.asyncio
++async def test_two_receiving_bots_and_one_consumption(tmp_path):
++    observations = []
++    for bot_id in (900, 901):
++        _adapter, event, _ = await receive(tmp_path, bot_id)
++        with command_scope(event, event.source, build_session_key(event.source), event._test_session_id) as context:
++            assert context is not None
++            observations.append(invoke_plugin_command(lambda args, *, command_context: command_context.consume(),
++                                                       "", command_context=context))
++            assert context.consume() is None
++        with command_scope(event, event.source, build_session_key(event.source), event._test_session_id) as context:
++            assert context is None
++    assert observations[0]["actor_id"] == observations[1]["actor_id"] == "42"
++    assert [o["receiver_id"] for o in observations] == ["900", "901"]
++    assert "owner" not in observations[0]
++
++
++@pytest.mark.asyncio
++@pytest.mark.parametrize("mutation", ["text", "actor", "internal", "disabled", "generation", "account", "route", "profile", "disconnect", "forward", "replacement", "session", "suspended", "owner", "store"])
++async def test_mutation_revokes_original_receipt(tmp_path, mutation):
++    adapter, event, update = await receive(tmp_path)
++    entry = adapter.gateway_runner.session_store.lookup_by_session_key(build_session_key(event.source))
++    mutations = {
++        "text": lambda: setattr(event, "text", event.text + " forged"),
++        "actor": lambda: setattr(event.source, "user_id", "99"),
++        "internal": lambda: setattr(event, "internal", True),
++        "disabled": lambda: setattr(event, "allow_gateway_control", False),
++        "generation": lambda: setattr(adapter, "_command_ingress_generation", 2),
++        "account": lambda: setattr(adapter._bot, "id", 901),
++        "route": lambda: adapter.gateway_runner.config.profile_routes.append("changed"),
++        "profile": lambda: setattr(event.source, "profile", "other"),
++        "disconnect": lambda: setattr(adapter, "_running", False),
++        "forward": lambda: setattr(update.message, "forward_origin", object()),
++        "session": lambda: setattr(entry, "session_id", "session-b"),
++        "suspended": lambda: setattr(entry, "suspended", True),
++        "owner": lambda: setattr(adapter.gateway_runner, "_owning_profile", lambda *args: (True, "other")),
++        "replacement": lambda: setattr(adapter.gateway_runner, "_intake_adapter_for", lambda source: object()),
++        "store": lambda: setattr(adapter.gateway_runner, "session_store", object()),
++    }
++    mutations[mutation]()
++    with command_scope(event, event.source, build_session_key(event.source), event._test_session_id) as context:
++        assert context is None
++
++
++@pytest.mark.asyncio
++@pytest.mark.parametrize("kind", ["bot", "group", "forward", "sender_chat", "via_bot", "edited", "endpoint", "batch", "async_reconnect"])
++async def test_unsupported_native_paths_deny(tmp_path, kind):
++    adapter, event, update = setup_ingress(tmp_path)
++    async def reconnect(message):
++        adapter._command_ingress_generation += 1
++
++    def batch():
++        event.text = "x" * adapter._SPLIT_THRESHOLD
++        adapter._enqueue_text_event = lambda event: None
++
++    mutations = {
++        "bot": lambda: setattr(update.message.from_user, "is_bot", True),
++        "group": lambda: setattr(update.message.chat, "type", "group"),
++        "forward": lambda: setattr(update.message, "forward_origin", object()),
++        "sender_chat": lambda: setattr(update.message, "sender_chat", object()),
++        "via_bot": lambda: setattr(update.message, "via_bot", object()),
++        "edited": lambda: setattr(update.message, "edit_date", datetime.now(UTC)),
++        "endpoint": lambda: adapter.config.extra.update(base_url="https://example.invalid/bot"),
++        "batch": batch,
++        "async_reconnect": lambda: setattr(adapter, "_ensure_forum_commands", reconnect),
++    }
++    mutations[kind]()
++    await adapter._handle_command(update, None)
++    with command_scope(event, event.source, build_session_key(event.source), event._test_session_id) as context:
++        assert context is None
++
++
++@pytest.mark.asyncio
++async def test_scope_exit_and_in_scope_liveness(tmp_path):
++    adapter, event, _ = await receive(tmp_path)
++    with command_scope(event, event.source, build_session_key(event.source), event._test_session_id) as context:
++        retained = context
++    assert retained.consume() is None
++    adapter, event, _ = await receive(tmp_path)
++    with command_scope(event, event.source, build_session_key(event.source), event._test_session_id) as context:
++        adapter._running = False
++        assert context.consume() is None
++    assert CommandContext().consume() is None
++
++
++@pytest.mark.asyncio
++async def test_copy_serialization_and_legacy_signature(tmp_path):
++    import copy
++    from hermes_cli.plugin_host_wire import decode, encode
++    _adapter, event, _ = await receive(tmp_path)
++    copied = copy.copy(event)
++    with command_scope(copied, copied.source, build_session_key(event.source), event._test_session_id) as context:
++        assert context is None
++    with command_scope(event, event.source, build_session_key(event.source), event._test_session_id) as context:
++        assert invoke_plugin_command(lambda args: args, "legacy", command_context=context) == "legacy"
++        restored = decode(encode(context))
++        assert not isinstance(restored, CommandContext)
++        assert "42" not in repr(context)
++        assert context.consume()["receiver_id"] == "900"
++
++
++@pytest.mark.asyncio
++async def test_real_gateway_handler_and_native_session(tmp_path):
++    from contextlib import nullcontext
++    import asyncio
++    from gateway.run_inbound_hooks import GatewayInboundHooksMixin
++    from gateway.session import AsyncSessionStore
++
++    adapter, event, update = setup_ingress(tmp_path)
++    runner = adapter.gateway_runner
++    runner.config = GatewayConfig()
++    runner.async_session_store = AsyncSessionStore(runner.session_store)
++    runner._session_env_scope = lambda context: nullcontext()
++    runner._run_in_executor_with_context = asyncio.to_thread
++    observations = []
++
++    def handler(args, *, command_context):
++        observations.append(command_context.consume() if command_context else None)
++        return "observed"
++
++    async def dispatch(event):
++        return await GatewayInboundHooksMixin._hm_run_plugin_handler(
++            runner, handler, event, event.source)
++
++    adapter.handle_message = dispatch
++    await adapter._handle_command(update, None)
++    assert observations[0]["session_id"] == event._test_session_id
++    assert observations[0]["receiver_id"] == "900"
++    # Re-dispatch of the identical SDK event is not fresh native ingress.
++    await dispatch(event)
++    assert observations[1] is None
++
++
++@pytest.mark.asyncio
++async def test_missing_or_mismatched_native_session_denies(tmp_path):
++    adapter, event, _ = await receive(tmp_path)
++    with command_scope(event, event.source, build_session_key(event.source), "other-session") as context:
++        assert context is None
++    adapter, event, update = setup_ingress(tmp_path)
++    adapter.gateway_runner.session_store.lookup_by_session_key = lambda key: None
++    await adapter._handle_command(update, None)
++    with command_scope(event, event.source, build_session_key(event.source), event._test_session_id) as context:
++        assert context is None
++
++
++@pytest.mark.asyncio
++@pytest.mark.parametrize("cancelled", [False, True])
++async def test_failed_native_delivery_retires_receipt(tmp_path, cancelled):
++    import asyncio
++    adapter, event, update = setup_ingress(tmp_path)
++    failure = asyncio.CancelledError if cancelled else RuntimeError
++    adapter.handle_message = AsyncMock(side_effect=failure)
++    with pytest.raises(failure):
++        await adapter._handle_command(update, None)
++    with command_scope(event, event.source, build_session_key(event.source), event._test_session_id) as context:
++        assert context is None
++
++
++@pytest.mark.asyncio
++@pytest.mark.parametrize("fault", ["endpoint", "store", "sdk"])
++async def test_optional_observation_failure_preserves_ordinary_command(tmp_path, fault):
++    adapter, event, update = setup_ingress(tmp_path)
++
++    def broken_lookup(key):
++        raise RuntimeError("identity-bearing error must not be logged")
++
++    class BrokenSDK:
++        @property
++        def base_url(self):
++            raise RuntimeError("SDK not initialized")
++
++    faults = {
++        "endpoint": lambda: setattr(adapter._bot, "base_url", "https://[invalid"),
++        "store": lambda: setattr(adapter.gateway_runner.session_store, "lookup_by_session_key", broken_lookup),
++        "sdk": lambda: setattr(adapter, "_bot", BrokenSDK()),
++    }
++    faults[fault]()
++    await adapter._handle_command(update, None)
++    adapter.handle_message.assert_awaited_once_with(event)
++    with command_scope(event, event.source, build_session_key(event.source), event._test_session_id) as context:
++        assert context is None
++
++
++@pytest.mark.asyncio
++async def test_liveness_lookup_failure_is_unavailable(tmp_path):
++    adapter, event, _ = await receive(tmp_path)
++    with command_scope(event, event.source, build_session_key(event.source), event._test_session_id) as context:
++        def unavailable(key):
++            raise RuntimeError("store unavailable")
++        adapter.gateway_runner.session_store.lookup_by_session_key = unavailable
++        assert context.consume() is None
+diff --git a/tests/hermes_cli/test_command_provenance_host.py b/tests/hermes_cli/test_command_provenance_host.py
+new file mode 100644
+index 00000000..37597c90
+--- /dev/null
++++ b/tests/hermes_cli/test_command_provenance_host.py
+@@ -0,0 +1,316 @@
++"""Local prototype: native command observations across a real plugin-host process.
++
++No live credentials, network ingress or domain authorization are involved. The
++hosted process is not an isolation boundary between mutually hostile plugins.
++"""
++
++import json
++import os
++import asyncio
++from contextlib import contextmanager, nullcontext
++
++import pytest
++
++from hermes_cli.plugin_command_dispatch import invoke_plugin_command
++from hermes_cli.plugins import PluginManager
++from tests.hermes_cli.test_plugin_host import _home_with_plugins
++
++
++_PROBE = '''
++import json
++import os
++
++saved = None
++
++def register(ctx):
++    def probe(raw_args, *, command_context=None):
++        global saved
++        if raw_args == "origin-claim":
++            from hermes_cli.plugin_host_wire import serving_request
++            origin = serving_request()
++            value = ctx._runtime.channel.call("command_context_consume", {
++                "schema_version": 1, "ticket": "c" * 64})
++            legitimate = command_context.consume() if command_context is not None else None
++            return json.dumps({"pid": os.getpid(), "origin_active": isinstance(origin, int),
++                               "value": value, "legitimate": legitimate})
++        if raw_args.startswith("reverse:"):
++            value = ctx._runtime.channel.call("command_context_consume", json.loads(raw_args[8:]))
++            return json.dumps({"pid": os.getpid(), "value": value})
++        if raw_args in {"save", "raise"}:
++            saved = command_context
++            if raw_args == "raise":
++                raise RuntimeError("synthetic handler failure")
++            return json.dumps({"pid": os.getpid(), "present": command_context is not None})
++        if raw_args == "reuse":
++            value = saved.consume() if saved is not None else None
++            return json.dumps({"pid": os.getpid(), "value": value})
++        first = command_context.consume() if command_context is not None else None
++        second = command_context.consume() if command_context is not None else None
++        return json.dumps({"pid": os.getpid(), "value": first, "second": second,
++                           "representation": repr(command_context)})
++    ctx.register_command("context-probe", probe)
++    ctx.register_command("context-legacy", lambda raw_args: "legacy:" + raw_args)
++    def required(raw_args, *, command_context):
++        return "missing" if command_context is None else "present"
++    ctx.register_command("context-required", required)
++'''
++
++
++@pytest.fixture(params=["in_process", "host"])
++def command_plugin(tmp_path, monkeypatch, request):
++    _home_with_plugins(tmp_path, monkeypatch, {"context-probe": _PROBE}, isolation=request.param)
++    manager = PluginManager()
++    manager.discover_and_load()
++    try:
++        assert manager._plugins["context-probe"].error is None
++        yield manager, request.param
++    finally:
++        manager.unload()
++        host = getattr(manager, "_plugin_host_instance", None)
++        if host is not None:
++            host.shutdown()
++
++
++def _invoke(manager, raw_args="", **context):
++    handler = manager._plugin_commands["context-probe"]["handler"]
++    return json.loads(invoke_plugin_command(handler, raw_args, **context))
++
++
++@pytest.fixture
++def hosted_plugin(tmp_path, monkeypatch):
++    _home_with_plugins(tmp_path, monkeypatch, {"context-probe": _PROBE}, isolation="host")
++    manager = PluginManager()
++    manager.discover_and_load()
++    try:
++        assert manager._plugins["context-probe"].error is None
++        yield manager
++    finally:
++        manager.unload()
++        manager._plugin_host().shutdown()
++
++
++def test_missing_context_keeps_private_observation_unavailable(command_plugin):
++    manager, mode = command_plugin
++    result = _invoke(manager, "")
++    assert result["value"] is None
++    assert result["second"] is None
++    assert (result["pid"] != os.getpid()) is (mode == "host")
++
++
++def test_legacy_signature_remains_compatible(command_plugin):
++    manager, _ = command_plugin
++    handler = manager._plugin_commands["context-legacy"]["handler"]
++    assert invoke_plugin_command(handler, "unchanged", command_context=None) == "legacy:unchanged"
++
++
++def test_required_keyword_receives_explicit_unavailable_context(command_plugin):
++    manager, _ = command_plugin
++    handler = manager._plugin_commands["context-required"]["handler"]
++    assert invoke_plugin_command(handler, "", command_context=None) == "missing"
++
++
++@contextmanager
++def _synthetic_ingress(receiver_id="900001", current=lambda: True):
++    """Host-only registry fixture. Native Telegram issuance is tested separately."""
++    from gateway.command_context import _register_ingress, command_scope
++    from gateway.config import Platform
++    from gateway.platforms.event import MessageEvent
++    from gateway.session import SessionSource
++
++    source = SessionSource(platform=Platform.TELEGRAM, chat_id="123456", user_id="123456")
++    event = MessageEvent(text="/context-probe", source=source)
++    snapshot = dict(platform="telegram", issuer="telegram", actor_kind="human",
++                    provenance="native-direct-dm", actor_id="123456", chat_id="123456",
++                    receiver_id=receiver_id, transport_profile="private", runtime_profile="work",
++                    message_id="100", event_id="1000", connection_generation=1,
++                    session_key="agent:work:telegram:dm:123456", session_id="session-1")
++    _register_ingress(event, snapshot, current)
++    with command_scope(event, source, "agent:work:telegram:dm:123456", "session-1") as context:
++        yield context
++
++
++def test_observation_crosses_callback_once_and_repr_is_redacted(command_plugin):
++    manager, _ = command_plugin
++    with _synthetic_ingress() as context:
++        result = _invoke(manager, command_context=context)
++        assert result["value"]["receiver_id"] == "900001"
++        assert result["value"]["actor_id"] == "123456"
++        assert result["value"]["session_id"] == "session-1"
++        assert result["value"]["scope"] == "one-command-observation"
++        assert result["second"] is None
++        assert "900001" not in result["representation"]
++        assert "123456" not in result["representation"]
++        assert _invoke(manager, command_context=context)["value"] is None
++
++
++def test_same_actor_and_runtime_on_two_bots_preserve_receiver_distinction(command_plugin):
++    manager, _ = command_plugin
++    observations = []
++    for bot_id in ("900001", "900002"):
++        with _synthetic_ingress(bot_id) as context:
++            observations.append(_invoke(manager, command_context=context)["value"])
++    assert observations[0]["actor_id"] == observations[1]["actor_id"]
++    assert observations[0]["runtime_profile"] == observations[1]["runtime_profile"]
++    assert observations[0]["receiver_id"] != observations[1]["receiver_id"]
++    # An explicitly configured receiver comparison, not an owner-authorization decision.
++    assert [o["receiver_id"] == "900001" for o in observations] == [True, False]
++
++
++@pytest.mark.parametrize("mode", ["save", "raise"])
++def test_retained_callback_handle_expires_after_success_or_failure(command_plugin, mode):
++    manager, _ = command_plugin
++    with _synthetic_ingress() as context:
++        if mode == "raise":
++            with pytest.raises(RuntimeError, match="synthetic handler failure"):
++                _invoke(manager, mode, command_context=context)
++        else:
++            assert _invoke(manager, mode, command_context=context)["present"] is True
++    assert _invoke(manager, "reuse")["value"] is None
++
++
++def test_current_ingress_fence_is_checked_at_consumption(command_plugin):
++    manager, _ = command_plugin
++    live = [True]
++    with _synthetic_ingress(current=lambda: live[0]) as context:
++        live[0] = False
++        assert _invoke(manager, command_context=context)["value"] is None
++
++
++def test_hosted_retained_handle_expires_when_callback_returns_even_in_outer_scope(hosted_plugin):
++    with _synthetic_ingress() as context:
++        assert _invoke(hosted_plugin, "save", command_context=context)["present"] is True
++        assert _invoke(hosted_plugin, "reuse")["value"] is None
++
++
++def test_fabricated_dataclass_record_and_json_never_mint_hosted_context(hosted_plugin):
++    from gateway.command_context import CommandContext
++    from hermes_cli.plugin_host_wire import Record, decode, encode
++
++    claims = {"schema_version": 1, "receiver_id": "900001", "verified": True,
++              "ticket": "a" * 64}
++    for candidate in (claims, Record(claims), CommandContext(), decode(encode(CommandContext()))):
++        assert _invoke(hosted_plugin, command_context=candidate)["value"] is None
++
++
++@pytest.mark.parametrize("descriptor", [
++    None, {}, {"schema_version": 1},
++    {"schema_version": True, "ticket": "a" * 64},
++    {"schema_version": 0, "ticket": "a" * 64},
++    {"schema_version": 2, "ticket": "a" * 64},
++    {"schema_version": 1, "ticket": "short"},
++    {"schema_version": 1, "ticket": "a" * 64},
++    {"schema_version": 1, "ticket": "a" * 64, "owner": True},
++])
++def test_old_partial_or_unissued_dedicated_wire_descriptor_is_unavailable(hosted_plugin, descriptor):
++    from hermes_cli.plugin_host_wire import encode
++
++    handler = hosted_plugin._plugin_commands["context-probe"]["handler"]
++    host = hosted_plugin._plugin_host()
++    result = host._call("invoke", {
++        "ref": handler.__hermes_plugin_host_ref__, "args": [""],
++        "kwargs": encode({"command_context": {"verified": True}}),
++        "command_context": descriptor,
++    })
++    assert json.loads(result)["value"] is None
++
++
++@pytest.mark.parametrize("claim", [
++    {"schema_version": 1, "ticket": "b" * 64},
++    {"schema_version": 1, "ticket": "b" * 64, "origin": 1},
++    {"schema_version": 1, "ticket": "b" * 64, "plugin": "context-probe"},
++])
++def test_reverse_rpc_correlation_or_plugin_name_does_not_mint_ticket(hosted_plugin, claim):
++    result = _invoke(hosted_plugin, "reverse:" + json.dumps(claim))
++    assert result["pid"] != os.getpid()
++    assert result["value"] is None
++
++
++def test_active_real_reverse_rpc_origin_does_not_replace_a_valid_ticket(hosted_plugin):
++    with _synthetic_ingress() as context:
++        result = _invoke(hosted_plugin, "origin-claim", command_context=context)
++    assert result["origin_active"] is True
++    assert result["value"] is None
++    assert result["legitimate"]["receiver_id"] == "900001"
++
++
++def test_host_generation_change_fences_an_exported_ticket(hosted_plugin):
++    from hermes_cli.plugin_command_context_bridge import export_context
++
++    host = hosted_plugin._plugin_host()
++    generation = host._generation
++    with _synthetic_ingress() as context:
++        with export_context(host, context, generation) as descriptor:
++            host._generation += 1
++            try:
++                # The descriptor is valid, but belongs to the preceding host incarnation.
++                assert host._handle("command_context_consume", descriptor, 1) is None
++            finally:
++                host._generation = generation
++
++
++@pytest.mark.asyncio
++async def test_native_producer_gateway_and_real_host_callback_chain(command_plugin, tmp_path):
++    from gateway.config import GatewayConfig
++    from gateway.run_inbound_hooks import GatewayInboundHooksMixin
++    from gateway.session import AsyncSessionStore
++    from tests.gateway.test_command_provenance import setup_ingress
++
++    manager, mode = command_plugin
++    adapter, event, update = setup_ingress(tmp_path / "native-ingress")
++    runner = adapter.gateway_runner
++    runner.config = GatewayConfig()
++    runner.async_session_store = AsyncSessionStore(runner.session_store)
++    runner._session_env_scope = lambda context: nullcontext()
++    runner._run_in_executor_with_context = asyncio.to_thread
++    handler = manager._plugin_commands["context-probe"]["handler"]
++    results = []
++
++    async def dispatch(event):
++        result = await GatewayInboundHooksMixin._hm_run_plugin_handler(
++            runner, handler, event, event.source)
++        results.append(json.loads(result))
++
++    adapter.handle_message = dispatch
++    await adapter._handle_command(update, None)
++    assert results[0]["value"]["receiver_id"] == "900"
++    assert results[0]["value"]["session_id"] == event._test_session_id
++    assert (results[0]["pid"] != os.getpid()) is (mode == "host")
++    await dispatch(event)
++    assert results[1]["value"] is None
++
++
++@pytest.mark.asyncio
++async def test_gateway_cancellation_revokes_retained_handle(tmp_path):
++    from gateway.config import GatewayConfig
++    from gateway.run_inbound_hooks import GatewayInboundHooksMixin
++    from gateway.session import AsyncSessionStore
++    from tests.gateway.test_command_provenance import setup_ingress
++
++    adapter, _event, update = setup_ingress(tmp_path)
++    runner = adapter.gateway_runner
++    runner.config = GatewayConfig()
++    runner.async_session_store = AsyncSessionStore(runner.session_store)
++    runner._session_env_scope = lambda context: nullcontext()
++    retained, entered, wait_forever = [], asyncio.Event(), asyncio.Event()
++
++    async def handler(raw_args, *, command_context):
++        retained.append(command_context)
++        entered.set()
++        await wait_forever.wait()
++
++    async def dispatch(event):
++        return await GatewayInboundHooksMixin._hm_run_plugin_handler(
++            runner, handler, event, event.source)
++
++    adapter.handle_message = dispatch
++    task = asyncio.create_task(adapter._handle_command(update, None))
++    try:
++        await asyncio.wait_for(entered.wait(), 5)
++        task.cancel()
++        with pytest.raises(asyncio.CancelledError):
++            await task
++        assert retained[0].consume() is None
++    finally:
++        if not task.done():
++            task.cancel()
++            await asyncio.gather(task, return_exceptions=True)
