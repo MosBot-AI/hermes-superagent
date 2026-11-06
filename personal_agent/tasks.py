@@ -1,0 +1,302 @@
+"""Opt-in local presentation inbox; no host, path, scheduler, or network access."""
+
+import hashlib
+import json
+import re
+import sqlite3
+import unicodedata
+from datetime import UTC, datetime
+from typing import Any
+from uuid import UUID, uuid4
+
+_APPLICATION_ID = 0x5041544B
+_SCHEMA_VERSION = 1
+_COLUMNS = (
+    "id",
+    "title",
+    "details",
+    "state",
+    "revision",
+    "created_at",
+    "updated_at",
+    "resolved_at",
+    "resolution_note",
+    "source",
+)
+_SCHEMA = {
+    "tasks": """CREATE TABLE tasks (
+        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+        id TEXT NOT NULL UNIQUE, title TEXT NOT NULL, details TEXT NOT NULL,
+        state TEXT NOT NULL CHECK(state IN ('captured','done','cancelled')),
+        revision INTEGER NOT NULL CHECK(revision >= 1),
+        created_at TEXT NOT NULL, updated_at TEXT NOT NULL, resolved_at TEXT,
+        resolution_note TEXT, source TEXT NOT NULL CHECK(source = 'local_cli'))""",
+    "receipts": """CREATE TABLE receipts (
+        request_id TEXT PRIMARY KEY NOT NULL, digest TEXT NOT NULL, receipt TEXT NOT NULL)""",
+    "events": """CREATE TABLE events (
+        task_id TEXT NOT NULL, revision INTEGER NOT NULL,
+        operation TEXT NOT NULL, timestamp TEXT NOT NULL,
+        PRIMARY KEY(task_id, revision))""",
+}
+
+
+class TaskError(Exception):
+    """A stable redacted error suitable for presentation at the CLI boundary."""
+
+    def __init__(self, code: str, retryable: bool = False):
+        self.code = code
+        self.retryable = retryable
+        super().__init__(f"Local task operation failed ({code}).")
+
+
+def _text(value: Any, maximum: int, *, required: bool, multiline: bool) -> str:
+    if not isinstance(value, str) or len(value) > maximum:
+        raise TaskError("invalid_request")
+    if required and not value.strip():
+        raise TaskError("invalid_request")
+    for char in value:
+        if multiline and char in "\n\t":
+            continue
+        if unicodedata.category(char) in {"Cc", "Cf", "Cs", "Zl", "Zp"}:
+            raise TaskError("invalid_request")
+    return value
+
+
+def _task_id(value: Any) -> str:
+    if not isinstance(value, str):
+        raise TaskError("invalid_request")
+    try:
+        parsed = UUID(value)
+    except ValueError:
+        raise TaskError("invalid_request") from None
+    if parsed.version != 4 or str(parsed) != value:
+        raise TaskError("invalid_request")
+    return value
+
+
+def validate_request(operation: str, payload: dict) -> dict:
+    """Validate without touching storage; return an independent normalized mapping."""
+    fields = {
+        "capture": ({"title", "request_id"}, {"details"}),
+        "update": ({"task_id", "expected_revision", "request_id"}, {"title", "details"}),
+        "complete": ({"task_id", "expected_revision", "request_id", "note"}, set()),
+        "cancel": ({"task_id", "expected_revision", "request_id", "note"}, set()),
+        "get": ({"task_id"}, set()),
+        "list": (set(), {"state", "limit", "after"}),
+    }
+    if not isinstance(operation, str) or operation not in fields or not isinstance(payload, dict):
+        raise TaskError("invalid_request")
+    required, optional = fields[operation]
+    if not required <= payload.keys() or payload.keys() - required - optional:
+        raise TaskError("invalid_request")
+    result = dict(payload)
+    if operation == "capture":
+        result.setdefault("details", "")
+    if operation == "update" and not ({"title", "details"} & result.keys()):
+        raise TaskError("invalid_request")
+    for key, maximum, needed, multiline in (
+        ("title", 240, True, False),
+        ("details", 5000, False, True),
+        ("note", 2000, True, True),
+    ):
+        if key in result:
+            result[key] = _text(result[key], maximum, required=needed, multiline=multiline)
+    if "task_id" in result:
+        result["task_id"] = _task_id(result["task_id"])
+    if "request_id" in result:
+        value = result["request_id"]
+        if not isinstance(value, str) or re.fullmatch(r"[A-Za-z0-9._-]{1,128}", value) is None:
+            raise TaskError("invalid_request")
+    if "expected_revision" in result:
+        value = result["expected_revision"]
+        if type(value) is not int or not 1 <= value < 2**63 - 1:
+            raise TaskError("invalid_request")
+    if operation == "list":
+        result = {"state": "captured", "limit": 20, "after": None, **result}
+        if result["state"] not in ("captured", "done", "cancelled", "all"):
+            raise TaskError("invalid_request")
+        if type(result["limit"]) is not int or not 1 <= result["limit"] <= 100:
+            raise TaskError("invalid_request")
+        if result["after"] is not None:
+            result["after"] = _task_id(result["after"])
+    return result
+
+
+def _database_error(error: sqlite3.Error) -> TaskError:
+    code = getattr(error, "sqlite_errorcode", 0) or 0
+    if code & 255 in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED):
+        return TaskError("storage_busy", retryable=True)
+    if code & 255 in (sqlite3.SQLITE_CORRUPT, sqlite3.SQLITE_NOTADB):
+        return TaskError("storage_corrupt")
+    return TaskError("storage_error")
+
+
+class TaskStore:
+    """Own transactions on a dedicated supplied connection; never open or close it."""
+
+    def __init__(self, connection: sqlite3.Connection):
+        self._connection = connection
+        self._initialized = False
+
+    def _begin(self) -> None:
+        if self._connection.in_transaction:
+            raise TaskError("connection_in_transaction")
+        self._connection.execute("BEGIN IMMEDIATE")
+
+    def _rollback(self) -> None:
+        try:
+            if self._connection.in_transaction:
+                self._connection.execute("ROLLBACK")
+        except sqlite3.Error:
+            # Preserve the redacted original failure, never raw rollback diagnostics.
+            pass
+
+    def initialize(self) -> None:
+        """Create an empty owned database or verify its exact supported schema."""
+        self._initialized = False
+        began = False
+        try:
+            self._begin()
+            began = True
+            conn = self._connection
+            app_id = conn.execute("PRAGMA application_id").fetchone()[0]
+            version = conn.execute("PRAGMA user_version").fetchone()[0]
+            rows = conn.execute(
+                "SELECT name, sql FROM sqlite_master WHERE name NOT GLOB 'sqlite_*'"
+            ).fetchall()
+            if app_id == 0 and version == 0 and not rows:
+                for statement in _SCHEMA.values():
+                    conn.execute(statement)
+                conn.execute(f"PRAGMA application_id = {_APPLICATION_ID}")
+                conn.execute(f"PRAGMA user_version = {_SCHEMA_VERSION}")
+            elif app_id != _APPLICATION_ID:
+                raise TaskError("foreign_database")
+            elif version != _SCHEMA_VERSION:
+                raise TaskError("unsupported_schema")
+            elif dict(rows) != _SCHEMA or len(rows) != len(_SCHEMA):
+                raise TaskError("unsupported_schema")
+            conn.execute("COMMIT")
+            self._initialized = True
+        except BaseException as error:
+            if began:
+                self._rollback()
+            if isinstance(error, sqlite3.Error):
+                raise _database_error(error) from None
+            raise
+
+    def _get(self, task_id: str) -> dict:
+        row = self._connection.execute(
+            f"SELECT {','.join(_COLUMNS)} FROM tasks WHERE id = ?", (task_id,)
+        ).fetchone()
+        if row is None:
+            raise TaskError("not_found")
+        return dict(zip(_COLUMNS, row, strict=True))
+
+    def _list(self, request: dict) -> dict:
+        clauses, arguments = [], []
+        if request["state"] != "all":
+            clauses.append("state = ?")
+            arguments.append(request["state"])
+        if request["after"] is not None:
+            row = self._connection.execute(
+                "SELECT sequence FROM tasks WHERE id = ?", (request["after"],)
+            ).fetchone()
+            if row is None:
+                raise TaskError("invalid_cursor")
+            clauses.append("sequence < ?")
+            arguments.append(row[0])
+        where = " WHERE " + " AND ".join(clauses) if clauses else ""
+        arguments.append(request["limit"] + 1)
+        rows = self._connection.execute(
+            f"SELECT {','.join(_COLUMNS)} FROM tasks{where} ORDER BY sequence DESC LIMIT ?",
+            arguments,
+        ).fetchall()
+        more = len(rows) > request["limit"]
+        items = [dict(zip(_COLUMNS, row, strict=True)) for row in rows[: request["limit"]]]
+        return {"items": items, "next_cursor": items[-1]["id"] if more else None, "has_more": more}
+
+    def run(self, operation: str, payload: dict) -> dict:
+        """Execute a validated operation with atomic mutations and durable replay receipts."""
+        request = validate_request(operation, payload)
+        if not self._initialized:
+            raise TaskError("not_initialized")
+        began = False
+        try:
+            if self._connection.in_transaction:
+                raise TaskError("connection_in_transaction")
+            if operation in ("get", "list"):
+                data = self._get(request["task_id"]) if operation == "get" else self._list(request)
+                return {"data": data, "replayed": False}
+            self._begin()
+            began = True
+            digest = hashlib.sha256(
+                json.dumps(
+                    [operation, {k: v for k, v in request.items() if k != "request_id"}],
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    ensure_ascii=True,
+                ).encode("ascii")
+            ).hexdigest()
+            receipt = self._connection.execute(
+                "SELECT digest, receipt FROM receipts WHERE request_id = ?",
+                (request["request_id"],),
+            ).fetchone()
+            if receipt is not None:
+                if receipt[0] != digest:
+                    raise TaskError("idempotency_conflict")
+                try:
+                    data = json.loads(receipt[1])
+                except ValueError, TypeError:
+                    raise TaskError("storage_corrupt") from None
+                self._connection.execute("COMMIT")
+                return {"data": data, "replayed": True}
+            now = datetime.now(UTC).isoformat(timespec="microseconds")
+            if operation == "capture":
+                task_id = str(uuid4())
+                self._connection.execute(
+                    "INSERT INTO tasks (id,title,details,state,revision,"
+                    "created_at,updated_at,source)"
+                    " VALUES (?,?,?,'captured',1,?,?,'local_cli')",
+                    (task_id, request["title"], request["details"], now, now),
+                )
+            else:
+                task_id = request["task_id"]
+                task = self._get(task_id)
+                if task["revision"] != request["expected_revision"]:
+                    raise TaskError("revision_conflict")
+                if task["state"] != "captured":
+                    raise TaskError("terminal_state")
+                state = {"complete": "done", "cancel": "cancelled"}.get(operation, "captured")
+                cursor = self._connection.execute(
+                    "UPDATE tasks SET title=?, details=?, state=?, revision=revision+1,"
+                    " updated_at=?, resolved_at=?, resolution_note=? WHERE id=? AND revision=?",
+                    (
+                        request.get("title", task["title"]),
+                        request.get("details", task["details"]),
+                        state,
+                        now,
+                        now if state != "captured" else None,
+                        request.get("note"),
+                        task_id,
+                        request["expected_revision"],
+                    ),
+                )
+                if cursor.rowcount != 1:
+                    raise TaskError("revision_conflict")
+            data = self._get(task_id)
+            self._connection.execute(
+                "INSERT INTO events (task_id,revision,operation,timestamp) VALUES (?,?,?,?)",
+                (task_id, data["revision"], operation, now),
+            )
+            self._connection.execute(
+                "INSERT INTO receipts (request_id,digest,receipt) VALUES (?,?,?)",
+                (request["request_id"], digest, json.dumps(data, ensure_ascii=True)),
+            )
+            self._connection.execute("COMMIT")
+            return {"data": data, "replayed": False}
+        except BaseException as error:
+            if began:
+                self._rollback()
+            if isinstance(error, sqlite3.Error):
+                raise _database_error(error) from None
+            raise

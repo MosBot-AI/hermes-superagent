@@ -4,6 +4,8 @@ English | [简体中文](14-client-api-contracts-zh.md)
 
 **Status: design only. Every new domain endpoint, DTO, capability flag, policy scope, retention value and connector interface below is proposed and unimplemented.** Existing read-only foundation code does not expose this API, implement E1 authorization, or enable controlled writes. Source inspection of Hermes is not runtime certification. The verified source baseline is `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`; see [12](12-foundation-progress.md) and [13](13-enforcement-contracts.md) for actual implementation evidence.
 
+The proposed native Primary Bot selection and binding contract is in [15](15-primary-bot-binding.md). It adds owner-only binding controls, authorized binding-summary snapshots and binding/delivery invalidations when that capability is implemented. Those service methods are not routes already registered below; any future HTTP facade must retain this document's trusted-principal, idempotency and transport gates. Native Bot selection does not require a custom phone app.
+
 This document makes [10's domain contracts](10-interface-contracts.md) concrete for optional clients. It does not replace [the authorization design](06-plugins-mcp-and-security.md), [mobile scope](07-mobile-and-voice.md), or [the roadmap](08-roadmap-and-acceptance.md).
 
 ## 1. Layers and Release Boundary

@@ -26,6 +26,8 @@ Hermes 原生工具 / MCP / 官方平台适配器 / 受限 workers
 
 主 agent 是 Hermes session 本身，不是插件里嵌套运行的另一个“人格”。插件内也不复制独立 agent loop。辅助 LLM 调用优先使用官方 `ctx.llm` 和其凭据/预算规则；具体能力先通过 E0 契约测试。
 
+选定的主身份是已有原生 **Bot Mode Bot**：绑定经过验证的 profile 与 canonical Bot Chat，运行时仍由 Hermes 拥有。这是拟议能力，不是已经实现的设置。按 profile 加载插件，本身并不能区分主对话、普通会话和 worker。[15](15-primary-bot-binding-zh.md) 定义 owner 确认的初始化、跨连接身份、会话角色、恢复和迁移限制，不修改 Hermes 默认 Bot。
+
 ## 2. 已有能力与新增价值
 
 | 层 | 复用 Hermes | 本项目新增 | 明确不做 |

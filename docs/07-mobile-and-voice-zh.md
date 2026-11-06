@@ -27,6 +27,8 @@
 
 `Owner → Verified Channel Binding → Hermes Profile → Session/Thread → Project/Task`。
 
+Owner 可指定已有原生 Bot Mode Bot 作为主要协调者；它的 canonical Bot Chat 不会自动成为手机渠道的对话。默认连续性共享有权访问的领域任务/事实，而不是 transcript 或完整 prompt。通过 `profile_routes` 选择同一 profile，不会合并 Telegram/Discord/Desktop 会话。确实需要同一对话时，必须另行验证原生 attach/handoff 路径。拟议绑定与恢复合同见 [15](15-primary-bot-binding-zh.md)。
+
 渠道切换不自动合并全量 transcript。通过显式任务引用和有界 handoff summary 接续；原会话和新会话保留自己的 route、参与者与权限。群聊中不能因为提到私人项目名就加载全部个人资料。手机里“那个任务”不明确时返回短候选，不猜测敏感目标。
 
 消息包含 `client_message_id/platform_event_id`，请求去重；通知带稳定 task/automation 引用。弱网多次点击不多建任务、不重复批准、不重复发信。审批完成后其他设备及时显示已处理，并拒绝第二次执行。

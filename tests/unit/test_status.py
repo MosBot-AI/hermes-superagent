@@ -2,6 +2,7 @@
 
 import argparse
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -53,6 +54,33 @@ def test_status_returns_new_nested_values():
     first = build_status()
     first["capabilities"]["external_delivery"] = True
     assert build_status()["capabilities"]["external_delivery"] is False
+
+
+def test_opt_in_status_never_claims_agent_access_or_external_authority():
+    result = build_status(mode="local_tasks")
+    assert result["mode"] == "local_tasks"
+    assert result["local_task_inbox"]["configured"] is True
+    assert result["safety"]["agent_personal_data_reads_enabled"] is False
+    assert result["safety"]["plugin_write_tools_registered"] is False
+    assert result["capabilities"]["identity_binding"] is False
+    assert result["safety"]["release_gate"] == "blocked"
+
+
+def test_unsupported_platform_does_not_advertise_enabled_storage(monkeypatch):
+    import personal_agent.status as module
+
+    monkeypatch.setattr(module, "os", SimpleNamespace(name="nt"))
+    result = module.build_status(mode="local_tasks")
+    assert result["local_task_inbox"]["configured"] is True
+    assert result["local_task_inbox"]["enabled"] is False
+    assert result["local_task_inbox"]["available"] is False
+    assert result["capabilities"]["personal_data_storage"] is False
+    assert result["safety"]["local_cli_writes_enabled"] is False
+
+
+def test_status_rejects_an_unknown_mode():
+    with pytest.raises(ValueError):
+        build_status(mode="live")
 
 
 def test_cli_produces_same_json(capsys):

@@ -1,7 +1,7 @@
 [project]
 name = "hermes-personal-agent"
 version = "0.1.0"
-description = "Read-only foundation for a Hermes-native personal agent plugin"
+description = "Hermes-native personal agent foundation with an opt-in local task inbox"
 requires-python = ">=3.14,<3.15"
 license = "MIT"
 dependencies = []

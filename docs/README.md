@@ -2,7 +2,7 @@
 
 English | [简体中文](README-zh.md)
 
-Status: **Design baseline, with E0 read-only plugin foundation development started; product capabilities are not yet implemented.** Verification date: 2026-11-06. Repository: `MosBot-AI/hermes-superagent`. See the [first development slice](12-foundation-progress.md) for current code and verification boundaries.
+Status: **Design baseline plus E0 contracts and an opt-in local CLI task inbox; the full personal-agent MVP is not yet implemented.** Verification date: 2026-11-06. Repository: `MosBot-AI/hermes-superagent`. See the [first development slice](12-foundation-progress.md) for current code and verification boundaries.
 
 ## Purpose
 
@@ -24,7 +24,9 @@ Extend Hermes into a long-lived personal agent for one user: one main agent unde
 12. [First development slice](12-foundation-progress.md): the native read-only plugin, real contract tests, and remaining gates.
 13. [Enforcement contracts and write-path inventory](13-enforcement-contracts.md): observed failure boundaries and still-blocked write paths.
 14. [Client, authorization, and connector API contracts](14-client-api-contracts.md): proposed HTTP routes, canonical session transport, recovery, and explicit native-mobile blockers.
-15. [Architecture decision records](adr/README.md): reasons for the constraints.
+15. [Primary Bot binding and continuity](15-primary-bot-binding.md): proposed selection of an existing native Bot, verified roles, recovery and fencing.
+16. [Opt-in local task inbox](16-local-task-inbox.md): implemented local CLI persistence, replay/revision checks and explicit limits.
+17. [Architecture decision records](adr/README.md): reasons for the constraints.
 
 ## Keep three kinds of statements separate
 
@@ -46,6 +48,6 @@ Research baselines: Hermes `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4` and DSH Su
 
 ## Current deliverables
 
-The design and project plan are established. The E0 native read-only plugin foundation is now being built and loaded in temporary test homes. There is no production deployment or connection to real personal data, and no claim that authorization, reminders, or mobile voice are usable. GitHub Projects tracks development; native Hermes Projects/Kanban will represent runtime work. They are different systems.
+The design and project plan are established. The E0 foundation and opt-in local task inbox run in temporary test homes. Local CLI persistence is implemented; broader agent/channel/HTTP personal-data access is not. There is no production deployment or connection to real personal data, and no claim that authorization, reminders, or mobile voice are usable. GitHub Projects tracks development; native Hermes Projects/Kanban will represent runtime work. They are different systems.
 
 E9 remains a design for the native worker model routing plugin. The user reviewed and selected the plugin approach, but it is not implemented. The main agent keeps its responsibilities. See [11](11-worker-model-routing.md) for constraints, host gaps, references, and acceptance criteria.

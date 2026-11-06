@@ -6,6 +6,8 @@
 
 具体客户端 HTTP 路由、宿主认证、canonical 会话传输、持久变更流及连接器 schema 见 [14](14-client-api-contracts-zh.md)。该设计同样尚未实现；本页定义共同的领域层。
 
+[15](15-primary-bot-binding-zh.md) 补充拟议 Primary Bot 绑定服务、owner 确认的控制操作、binding epoch 及服务端判定的会话角色。这些不是通用模型工具，也不是新增原生 Hermes RPC。Canonical 对话、worker 结果或 Bot 消息本身都不提供 owner 授权。
+
 ## 1. EventEnvelope
 
 ```json

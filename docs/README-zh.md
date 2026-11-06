@@ -2,7 +2,7 @@
 
 [English](README.md) | 简体中文
 
-状态：**设计基线，已开始 E0 只读插件基础开发；产品功能尚未实现**。核验日期：2026-11-06。目标仓库：`MosBot-AI/hermes-superagent`。当前代码与验证边界见 [第一开发切片](12-foundation-progress-zh.md)。
+状态：**方案基线、E0 契约及显式启用的本地 CLI 任务收件箱；完整 personal-agent MVP 尚未实现**。核验日期：2026-11-06。目标仓库：`MosBot-AI/hermes-superagent`。当前代码与验证边界见 [第一开发切片](12-foundation-progress-zh.md)。
 
 ## 一句话定位
 
@@ -24,7 +24,9 @@
 12. [第一开发切片](12-foundation-progress-zh.md)：原生只读插件、实际合同测试与剩余门槛。
 13. [执行边界契约与写路径清单](13-enforcement-contracts-zh.md)：实测失败边界与仍被阻断的写路径。
 14. [客户端、授权与连接器 API 契约](14-client-api-contracts-zh.md)：拟议 HTTP 路由、canonical 会话传输、恢复和明确的原生手机阻断。
-15. [架构决策记录](adr/README-zh.md)：为什么选择这些约束。
+15. [主 Bot 绑定与连续性](15-primary-bot-binding-zh.md)：选择既有原生 Bot、验证角色、恢复与 fencing 的拟议方案。
+16. [显式启用的本地任务收件箱](16-local-task-inbox-zh.md)：已实现的本地 CLI 持久化、重放/revision 校验及明确限制。
+17. [架构决策记录](adr/README-zh.md)：为什么选择这些约束。
 
 ## 三类陈述必须分开
 
@@ -46,6 +48,6 @@
 
 ## 当前交付范围
 
-方案文档与项目规划已建立，当前开始 E0 原生只读插件基础切片，并在临时测试 home 中验证加载。没有生产部署、没有接入真实个人数据，也没有宣称权限、提醒或手机语音已经可用。GitHub Projects 是研发计划；Hermes 原生 Projects/Kanban 是未来产品运行时的工作对象，二者不能混淆。
+方案文档与项目规划已建立，E0 基础与显式本地任务收件箱已在临时测试 home 中运行。本地 CLI 持久化已实现，更广泛的 agent/渠道/HTTP 个人数据访问尚未实现。没有生产部署、没有接入真实个人数据，也没有宣称权限、提醒或手机语音已经可用。GitHub Projects 是研发计划；Hermes 原生 Projects/Kanban 是未来产品运行时的工作对象，二者不能混淆。
 
 新增 E9 为原生 worker 模型路由插件设计：用户已审阅并选择插件方向，仍未实现。主 agent 保持原有职责；完整约束、宿主能力缺口、开源参考和验收见 [11](11-worker-model-routing-zh.md)。

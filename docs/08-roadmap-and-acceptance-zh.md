@@ -29,11 +29,13 @@
 - E0.5：建立离线合成 source/connector fixtures，测试不依赖真实个人账号。
 - E0.6：在固定宿主上核验客户端传输契约：dashboard API 注册、可信 principal/profile 透传、canonical session RPC、认证/隔离/文件边界及明确不支持模式。依赖 E0.1/E0.2 并采用 E0.4 发现，不代表完整写路径覆盖已完成。见 [14](14-client-api-contracts-zh.md)。
 
+- E0.7：Verify Primary Bot Contracts（M0，Backlog）：依赖 E0.1/E0.2，采用 E0.4 发现。核验原生 profile/route/canonical registry 与 lineage、author/worker provenance 和 receipt；HTTP 模式另需 E0.6。见 [15](15-primary-bot-binding-zh.md)。
+
 验收：每个复用点有一个行为测试或明确 blocker；首次 `requires_hermes` 范围来自测试，不用随意版本号。输出逐工具/逐路径 enforcement 清单；有未知或可绕过的写路径时不得启用该集合，不能用 prompt 约束替代。
 
 当前 E0.4 进度：[合成失败契约与阻断写清单](13-enforcement-contracts-zh.md) 已实现。这只是部分证据，不代表路径全部覆盖，也不允许启用写操作。
 
-E0.6 是独立的可选客户端契约路线，不阻塞 channel-first M0/M1 退出；除非明确列出 E0.6，现有一般 E0 依赖均指适用的 E0.1–E0.5 门禁。
+E0.6 是独立的可选客户端契约路线，不阻塞 channel-first M0/M1 退出；除非明确列出 E0.6 或 E0.7，现有一般 E0 依赖均指适用的 E0.1–E0.5 门禁。E0.7/E1.6/E3.6 是启用 Primary Bot 能力时的条件门槛，不会静默成为本地收件箱或未绑定 channel-first 基线的前置条件。
 
 ### E1. 建立身份授权审计（P0，M1）
 
@@ -44,6 +46,7 @@ E0.6 是独立的可选客户端契约路线，不阻塞 channel-first M0/M1 退
 - E1.3：领域 handler 操作级检查与原生 approval 适配；拒绝后禁止替代路径绕行。
 - E1.4：soft pause、hard revoke、emergency stop，建立授权准入/撤权事务线性化点，取消未准入 effect，对已准入/已发出的在途请求保留真实状态和尽力取消语义。
 - E1.5：脱敏审计、敏感数据分类与最小凭据暴露。
+- E1.6：Bind Primary Bot（M1，Backlog）：依赖 E0.7、E1.1–E1.5、E2.1。实现 owner 确认的 enrollment/recovery、authority 内唯一 active binding、revision/epoch fence、审计及角色。仅绑定不会启用受控写。
 
 验收：所有发布范围内写操作均被覆盖；伪造身份、旧批准、审批后改 payload、policy 故障均无未经授权副作用。撤权 race 测试覆盖“撤权先提交/准入先提交但未发送/远端已接受而本地未知/撤权后下一动作”，依据 admission 与 revoke 的事务顺序断言，不承诺撤回已获许可的远端请求。denied intent 不可复活，新指令须新建并重新授权。
 
@@ -59,6 +62,8 @@ E0.6 是独立的可选客户端契约路线，不阻塞 channel-first M0/M1 退
 
 验收：长期事实都有 provenance 或 inference 标记；跨 profile/群聊不可读；纠错与删除后的检索测试通过。
 
+当前 E2.1 前置切片：[显式本地 CLI 任务收件箱](16-local-task-inbox-zh.md) 已实现插件自有 SQLite、原子 receipt、revision 校验及明确本地完成/取消。它不是完整领域 Task/记忆存储、已验证 owner 身份或原生派发。向 agent、渠道或 HTTP 开放个人数据前，E1 依赖仍是必需条件；E2.1 和 M1 均未完成。
+
 ### E3. 接通原生项目任务（P0/P1，M1–M2）
 
 依赖 E0.3、E1.1–E1.5、E2.1。
@@ -68,6 +73,7 @@ E0.6 是独立的可选客户端契约路线，不阻塞 channel-first M0/M1 退
 - E3.3：临时子 agent 的公共 lifecycle API，最小上下文和工具集，父任务汇总。
 - E3.4：owner follow-up 优先，线程到任务关联、context-only 和 handback。
 - E3.5：重启对账、未知结果、完成证据与取消状态。
+- E3.6：Reconcile Primary Bot Sessions（M1 门槛，M2 扩展；Backlog）：依赖 E1.6、E3.2/E3.5、E4.3/E4.4。通过已验证 adapter 解析 canonical root/tip，关联 worker handoff，完成交付与 native receipt 对账。不并行写同一 transcript，不自动跨宿主接管。
 
 验收：一条输入去重为一个任务；多个项目不串上下文；短子任务退出不虚报整个任务完成；长期任务跨重启可查且不会重复派工。
 
@@ -100,7 +106,7 @@ E0.6 是独立的可选客户端契约路线，不阻塞 channel-first M0/M1 退
 依赖 E1.1/E3/E4。
 
 - E6.1：一个主手机消息渠道，身份绑定、文字/附件、任务与提醒路由。
-- E6.2：跨桌面/手机接续和短候选消歧，重复消息与审批按钮幂等。
+- E6.2：跨桌面/手机接续和短候选消歧，重复消息与审批按钮幂等。 选择 Primary Bot 时，E6.1/E6.2 还须核验接收 transport/runtime-profile binding，以及共享领域、分离 transcript 的连续性；共享 profile 不合并聊天，也不证明 bot 账号隔离。
 - E6.3：personal overview，优先复用原生 dashboard/plugin UI；验证移动布局。
 - E6.4：TLS/auth/session 撤销、附件访问、小屏和弱网测试。
 - E6.5：Build Domain API and Change Feed（M2，可选，Backlog）：基于领域服务的版本化类型 REST、事务化去重/outbox/change feed、授权一致快照及轮询概览。依赖 E0.6、E1.1–E1.5、E2.1、E3.2/E3.5、E4.2–E4.4；仅启用逐项验证的 adapter。
@@ -130,6 +136,8 @@ E0.6 是独立的可选客户端契约路线，不阻塞 channel-first M0/M1 退
 - E8.4：固定场景集、observe-mode 评估、误报和成本报告。
 - E8.5：安装、配置、停用、权限、隐私与故障排查文档。
 
+发布 Primary Bot 时，E8.2 增加身份/epoch/receipt、clone/restore 故障用例；E8.3 增加 source 先 fence 的 owner-directed 迁移；E8.5 增加选择/暂停/恢复流程。缺少外部 fence 的并发克隆 authority 仍不支持，不能标为恢复通过。
+
 验收：以同一发布 SHA 运行全套 gate；披露跳过/失败项，不把静态检查当运行验证。
 
 ### E9. 设计并验证 Worker 路由插件（P1，M0–M3）
@@ -150,6 +158,8 @@ E0.6 是独立的可选客户端契约路线，不阻塞 channel-first M0/M1 退
 ## 4. 首次可用纵切顺序
 
 E0.1–E0.5（含适用写路径覆盖与关闭未覆盖集合）→ E1.1–E1.5（身份、授权、执行检查、硬撤权、审计/数据分类）→ E2.1 → E3.1/E3.2/E3.5 + E4.1–E4.4（含任务恢复、结果未知与交付对账）→ E6.1 → E8.1/E8.2 对应的 crash/revoke/delivery 测试 → M1。
+
+Bot-bound M1 还须通过 E0.7 → E1.6 → E3.6 及适用的恢复/交付门槛。显式 local_tasks 收件箱不会启用该绑定；自建客户端仍为可选路线。
 
 E2.1 在 E1.5 的数据分类与审计约定明确后进入。M1 不能跳过 E1.4 再宣称 revoke 通过，也不能把 E3.5/E4.4 的恢复对账留到后面却宣称可靠纵切完成。随后才做更广泛自动主动性和更多 connectors。身份、安全、恢复不是“最后补一层”。
 

@@ -6,17 +6,19 @@ Hermes 原生 personal-agent 插件，目标是让一个主 agent 管理项目�
 
 ## 当前进度
 
-开发中的第一切片：**E0 原生插件兼容基础**，不是可用的 personal-agent MVP。
+已实现的开发切片包括 **E0 原生兼容基础**和**显式启用的本地 CLI 任务收件箱**，尚不是完整 personal-agent MVP。
 
 - `plugin.yaml` 与同步 `register(ctx)` 原生加载。
 - 只读 `personal_agent_status` 工具，以及 `in_process` 插件模式下的 `hermes personal-agent status` CLI。
-- 严格拒绝非 `read_only` 模式，不注册任何个人数据写入、外发、调度或模型路由能力。
+- 默认 `read_only` 不打开任务存储；显式 `local_tasks` 启用 profile 本地 CLI 收件箱，支持录入、列表/查看、编辑、完成和取消，以及持久重放 receipt 和 revision 校验。不注册个人数据模型工具、外发、调度或模型路由能力。
 - 离线单元测试，以及固定 Hermes SHA 的真实 discovery、registry dispatch、配置和卸载契约测试。
 - 后续 E0.4 失败边界契约及十条阻断写路径的只读清单。`hermes personal-agent coverage` 展示证据，不授权或关闭宿主工具。
 
-本插件**不会禁用或保护其他 Hermes 工具**。E0.4 全部写路径覆盖及 E1 身份/授权尚未完成，不能据此开放受控写操作。当前 status 输出明确给出 `release_gate: blocked`。详见 [第一切片记录](docs/12-foundation-progress-zh.md)、[执行边界契约](docs/13-enforcement-contracts-zh.md) 和 [更新记录](CHANGELOG-zh.md)。
+本插件**不会禁用或保护其他 Hermes 工具**。E0.4 全部写路径覆盖及 E1 身份/授权尚未完成，不能据此开放模型驱动或外部写操作。本地任务编辑是单独的明确本地操作员命令。当前 status 输出明确给出 `release_gate: blocked`。详见 [第一切片记录](docs/12-foundation-progress-zh.md)、[执行边界契约](docs/13-enforcement-contracts-zh.md) 和 [更新记录](CHANGELOG-zh.md)。
 
 详细的[客户端与连接器 API 契约](docs/14-client-api-contracts-zh.md) 仅为设计，本插件尚未注册 HTTP API。M1 使用已有手机消息渠道；自建原生手机 App 有独立的认证与恢复门槛。
+
+[本地任务收件箱指南](docs/16-local-task-inbox-zh.md) 说明启用、命令、持久化与隐私限制。[主 Bot 绑定方案](docs/15-primary-bot-binding-zh.md) 选择已有原生 Bot/canonical chat，但绑定与 owner 认证尚未实现。
 
 ## 开发验证
 
@@ -58,6 +60,8 @@ plugins:
 ```
 
 合并到你已有配置时保留其他条目，不要覆盖整个 `plugins`。启用不修改 `delegation.backend`、主模型、凭据、tool override 或其他权限。`personal_agent_status` 是否出现在模型工具面还取决于宿主会话的工具集选择；CLI 状态检查不需要 LLM 调用。
+
+试用收件箱时，仅将本插件 mode 显式改为 `local_tasks`，按[命令示例](docs/16-local-task-inbox-zh.md#2-启用与使用)操作。它使用 POSIX 私有文件检查，在 Linux 上测试；Windows 任务存储不支持。它不会绑定 Bot、派发原生工作，也不需要 API Key。任务文本是明文本地数据，不是秘密存储。
 
 ## License
 

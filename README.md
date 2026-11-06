@@ -6,17 +6,19 @@ A Hermes-native personal-agent plugin designed for one main agent to manage proj
 
 ## Current status
 
-The first development slice is the **E0 native plugin foundation**, not a usable personal-agent MVP.
+Implemented development slices include the **E0 native foundation** and an **opt-in local CLI task inbox**. This is not yet a complete personal-agent MVP.
 
 - Native loading through `plugin.yaml` and synchronous `register(ctx)`.
 - A read-only `personal_agent_status` tool and, in `in_process` plugin mode, the `hermes personal-agent status` CLI.
-- Strict rejection of any mode other than `read_only`. No personal-data writes, external delivery, scheduling, or model routing are registered.
+- Default `read_only` mode opens no task storage. Explicit `local_tasks` enables a profile-local CLI inbox: capture, list/show, update, complete and cancel with durable replay receipts and revision checks. No personal-data model tool, external delivery, scheduling or model routing is registered.
 - Offline unit tests and real discovery, registry dispatch, configuration, and unload contracts against a pinned Hermes commit.
 - Follow-on E0.4 failure-boundary contracts and a read-only inventory of ten blocked write paths. `hermes personal-agent coverage` shows the evidence; it does not authorize or disable host tools.
 
-This plugin **does not disable or secure other Hermes tools**. E0.4 write-path coverage and E1 identity/authorization are incomplete, so this foundation must not be used to enable controlled write operations. Its status explicitly reports `release_gate: blocked`. See the [first-slice implementation record](docs/12-foundation-progress.md), [enforcement contracts](docs/13-enforcement-contracts.md), and [changelog](CHANGELOG.md).
+This plugin **does not disable or secure other Hermes tools**. E0.4 write-path coverage and E1 identity/authorization are incomplete, so this foundation must not be used to enable agent-driven or external write operations. Local task edits are separate explicit local-operator commands. Its status explicitly reports `release_gate: blocked`. See the [first-slice implementation record](docs/12-foundation-progress.md), [enforcement contracts](docs/13-enforcement-contracts.md), and [changelog](CHANGELOG.md).
 
 The detailed [client and connector API contracts](docs/14-client-api-contracts.md) are design work only. No HTTP API is registered by this plugin yet. M1 uses an existing mobile messaging channel; a custom native phone app has separate authentication and recovery gates.
+
+The [local task inbox guide](docs/16-local-task-inbox.md) documents opt-in, commands, persistence and privacy limits. The [primary Bot binding design](docs/15-primary-bot-binding.md) selects an existing native Bot/canonical chat, but binding and owner authentication are not implemented.
 
 ## Development checks
 
@@ -58,6 +60,8 @@ plugins:
 ```
 
 Preserve existing entries when combining this with your configuration; do not replace the entire `plugins` section. Enabling the plugin does not change `delegation.backend`, the main model, credentials, tool overrides, or other permissions. Whether `personal_agent_status` appears in the model's tool surface also depends on the session's toolset selection. CLI status does not require an LLM call.
+
+To try the local inbox, explicitly change only this plugin’s mode to `local_tasks` and follow [the command examples](docs/16-local-task-inbox.md#2-enable-and-use). It uses POSIX private-file checks and is tested on Linux; Windows task storage is unsupported. It does not bind a Bot, dispatch native work or need an API Key. Task text is plaintext local data, not a secret store.
 
 ## License
 

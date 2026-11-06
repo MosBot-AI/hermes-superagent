@@ -1,7 +1,7 @@
 manifest_version: 2
 name: hermes-personal-agent
 version: "0.1.0"
-description: Read-only foundation for a Hermes-native personal agent
+description: Hermes-native foundation with an opt-in local task inbox
 author: MosBot.AI
 license: MIT
 homepage: https://github.com/MosBot-AI/hermes-superagent
@@ -12,4 +12,4 @@ config_schema:
   mode:
     type: str
     default: read_only
-    description: Only read_only is supported in the foundation release.
+    description: read_only (default) or local_tasks for explicit local CLI storage only.

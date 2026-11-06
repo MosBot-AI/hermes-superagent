@@ -2,6 +2,8 @@
 
 English | [简体中文](13-enforcement-contracts-zh.md)
 
+This page records an earlier E0 slice. See [16](16-local-task-inbox.md) for the newer opt-in local task inbox; it does not enable the native/external controlled-write paths described here.
+
 This follow-on P0 slice advances E0.4 without enabling any controlled write capability. It adds reproducible failure-boundary tests and a machine-readable release inventory. E0.4, E0/M0, and E1 authorization remain incomplete.
 
 ## 1. What the implementation does

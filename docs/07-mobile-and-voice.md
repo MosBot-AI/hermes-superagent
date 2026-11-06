@@ -27,6 +27,8 @@ Choose the primary channel based on services the user already uses and deploymen
 
 `Owner → Verified Channel Binding → Hermes Profile → Session/Thread → Project/Task`.
 
+The owner may designate an existing native Bot Mode Bot as the primary coordinator; its canonical Bot Chat is not automatically the mobile channel's conversation. Default continuity shares authorized domain tasks/facts, not transcripts or complete prompts. Selecting the same profile through `profile_routes` does not merge Telegram/Discord/Desktop sessions. Exact same-conversation attach/handoff needs a separately verified native path. The proposed binding and recovery contract is in [15](15-primary-bot-binding.md).
+
 Switching channels does not automatically merge full transcripts. Continue through explicit task references and bounded handoff summaries; original and new sessions retain their own routes, participants, and permissions. Mentioning a private project name in a group must not load all personal data. If “that task” on mobile is ambiguous, return a short candidate list rather than guessing a sensitive target.
 
 Messages include `client_message_id/platform_event_id` for request deduplication, and notifications carry stable task/automation references. Repeated taps on a weak connection must not create multiple tasks, approve repeatedly, or send duplicate messages. Once approval is processed, other devices promptly show it as handled and reject a second execution.

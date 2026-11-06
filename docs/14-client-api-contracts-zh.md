@@ -4,6 +4,8 @@
 
 **状态：仅设计。下文所有新的 domain endpoint、DTO、能力标志、策略 scope、保留期限和连接器接口均为拟议，尚未实现。** 现有只读基础代码没有暴露这套 API，没有实现 E1 授权，也没有启用受控写入。检查 Hermes 源码不等于运行时认证。已核对的源码基线为 `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`；实际实现证据见 [12](12-foundation-progress-zh.md) 和 [13](13-enforcement-contracts-zh.md)。
 
+原生 Primary Bot 选择与绑定的拟议合同见 [15](15-primary-bot-binding-zh.md)。该能力实现后，将增加仅 owner 可用的绑定控制、经过授权的绑定摘要快照及绑定/投递失效通知。这些服务方法不是下文已经注册的路由；未来 HTTP facade 仍须满足本文可信 principal、幂等与 transport 门禁。原生 Bot 选择不需要自建手机 App。
+
 本文将 [10 的领域合同](10-interface-contracts-zh.md) 具体化，供可选客户端使用；不替代[授权设计](06-plugins-mcp-and-security-zh.md)、[移动端范围](07-mobile-and-voice-zh.md)或[路线图](08-roadmap-and-acceptance-zh.md)。
 
 ## 1. 分层与发布边界

@@ -26,6 +26,8 @@ External services or isolated execution environments
 
 The main agent is the Hermes session itself, not another “persona” running inside the plugin. The plugin does not duplicate a separate agent loop either. Auxiliary LLM calls should prefer the official `ctx.llm` and its credential/budget rules; verify specific capabilities through E0 contract tests first.
 
+The selected main identity is an existing native **Bot Mode Bot**: bind its verified profile and canonical Bot Chat, while Hermes retains runtime ownership. This is a proposed capability, not an implemented setting. Profile-scoped plugin loading does not by itself distinguish the main conversation from ordinary sessions or workers. [15](15-primary-bot-binding.md) defines owner-confirmed enrollment, cross-connection identity, session roles, recovery and migration limits without changing Hermes's default Bot.
+
 ## 2. Existing Capabilities and Added Value
 
 | Layer | Reuse from Hermes | Added by this project | Explicit non-goals |

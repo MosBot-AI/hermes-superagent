@@ -2,6 +2,8 @@
 
 English | [简体中文](12-foundation-progress-zh.md)
 
+This page records an earlier E0 slice. See [16](16-local-task-inbox.md) for the newer opt-in local task inbox; it does not enable the native/external controlled-write paths described here.
+
 This page records actual implementation boundaries. It does not turn the other design documents into completed features. The slice covers initial portions of E0.1/E0.2/E0.5; the E0 epic and M0 milestone remain incomplete. It is not an M1 usable release.
 
 ## Implemented

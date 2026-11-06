@@ -129,7 +129,7 @@ def test_invalid_mode_registers_no_tools_or_commands(home, manager, mode):
     manager.discover_and_load()
     loaded = manager._plugins[PLUGIN_ID]
     assert not loaded.enabled
-    assert "supports only mode: read_only" in loaded.error
+    assert "supports only read_only or local_tasks mode" in loaded.error
     assert registry.get_entry(TOOL_NAME, scope=manager.scope_key) is None
     assert "personal-agent" not in manager._cli_commands
 

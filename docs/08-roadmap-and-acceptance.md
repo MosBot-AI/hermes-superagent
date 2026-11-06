@@ -29,11 +29,13 @@ Complete a safe, reliable vertical slice first, then add connectors, entry point
 - E0.5: Build offline synthetic source/connector fixtures so tests do not depend on real personal accounts.
 - E0.6: Verify client transport contracts at the pinned host: dashboard API registration, trusted principal/profile propagation, canonical session RPCs, auth/isolation/file boundaries, and explicit unsupported modes. Depends on E0.1/E0.2 and uses E0.4 findings; this is not a claim that full write coverage is complete. See [14](14-client-api-contracts.md).
 
+- E0.7: Verify Primary Bot Contracts (M0, Backlog): depends on E0.1/E0.2 and uses E0.4 findings. Verify native profile/route/canonical registry and lineage, author/worker provenance and receipts. HTTP modes additionally require E0.6. See [15](15-primary-bot-binding.md).
+
 Acceptance: Every reuse point has a behavioral test or an explicit blocker; the initial `requires_hermes` range comes from tests, not arbitrary version numbers. Produce a per-tool, per-path enforcement inventory. A capability set must not be enabled while it has unknown or bypassable write paths; prompt constraints cannot substitute for enforcement.
 
 Current E0.4 progress: [synthetic failure contracts and a blocked-write inventory](13-enforcement-contracts.md) are implemented. This is partial evidence, not complete path coverage or permission to enable writes.
 
-E0.6 is an independent optional-client contract lane. It does not gate the channel-first M0/M1 exit; existing general E0 dependencies mean the applicable E0.1–E0.5 gates unless E0.6 is explicitly named.
+E0.6 is an independent optional-client contract lane. It does not gate the channel-first M0/M1 exit; existing general E0 dependencies mean the applicable E0.1–E0.5 gates unless E0.6 or E0.7 is explicitly named. E0.7/E1.6/E3.6 are conditional gates for an enabled Primary Bot capability; they do not silently become prerequisites for the local inbox or an unbound channel-first baseline.
 
 ### E1. Establish Identity, Authorization, and Audit (P0, M1)
 
@@ -44,6 +46,7 @@ Depends on E0.2/E0.4.
 - E1.3: Operation-level checks in domain handlers and native approval adaptation; prohibit bypass through alternate paths after denial.
 - E1.4: Soft pause, hard revoke, and emergency stop; establish transactional linearization points for authorization admission and revocation, cancel effects not yet admitted, and preserve truthful status and best-effort cancellation semantics for in-flight requests already admitted/sent.
 - E1.5: Redacted audit, sensitive-data classification, and minimal credential exposure.
+- E1.6: Bind Primary Bot (M1, Backlog): depends on E0.7, E1.1–E1.5 and E2.1. Implement owner-confirmed enrollment/recovery, one active binding in its authority, revision/epoch fences, audit and roles. Binding alone enables no controlled writes.
 
 Acceptance: All write operations in release scope are covered; spoofed identities, stale approvals, payload changes after approval, and policy failures cause no unauthorized side effects. Revocation race tests cover “revocation commits first/admission commits first but nothing has been sent/the remote has accepted but local outcome is unknown/the next action after revocation.” Assert against the transactional ordering of admission and revocation; do not promise to retract already authorized remote requests. A denied intent cannot be revived; a new instruction requires a new intent and fresh authorization.
 
@@ -59,6 +62,8 @@ Depends on E1.1/E1.5.
 
 Acceptance: Long-term facts have provenance or inference labels; they are not readable across profiles/group chats; retrieval tests after correction and deletion pass.
 
+Current E2.1 precursor: [the opt-in local CLI task inbox](16-local-task-inbox.md) implements plugin-owned SQLite, atomic receipts, revision checks and explicit local completion/cancellation. It is not the full domain Task/memory store, verified owner identity or native dispatch. E1 dependencies remain mandatory before exposing personal data to an agent, channel or HTTP client; neither E2.1 nor M1 is complete.
+
 ### E3. Connect Native Projects and Tasks (P0/P1, M1–M2)
 
 Depends on E0.3, E1.1–E1.5, and E2.1.
@@ -68,6 +73,7 @@ Depends on E0.3, E1.1–E1.5, and E2.1.
 - E3.3: Public lifecycle API for temporary subagents, minimal context and toolsets, and parent-task aggregation.
 - E3.4: Prioritize owner follow-ups, thread-to-task associations, context-only, and handback.
 - E3.5: Restart reconciliation, unknown outcomes, completion evidence, and cancellation states.
+- E3.6: Reconcile Primary Bot Sessions (M1 gate, M2 extensions; Backlog): depends on E1.6, E3.2/E3.5 and E4.3/E4.4. Resolve canonical roots/tips through verified adapters, correlate worker handoffs, and reconcile delivery/native receipts. No parallel transcript writer or automatic cross-host takeover.
 
 Acceptance: Deduplicate one input into one task; do not mix context across projects; a short subtask exiting must not falsely report the whole task complete; long-running tasks remain queryable across restarts without duplicate dispatch.
 
@@ -100,7 +106,7 @@ Acceptance: False read-only claims, incorrect scope, revoked credentials, and ma
 Depends on E1.1/E3/E4.
 
 - E6.1: One primary mobile messaging channel, identity binding, text/attachments, and task/reminder routing.
-- E6.2: Desktop/mobile continuity and short candidate lists for disambiguation; idempotency for duplicate messages and approval buttons.
+- E6.2: Desktop/mobile continuity and short candidate lists for disambiguation; idempotency for duplicate messages and approval buttons. For a selected Primary Bot, E6.1/E6.2 also verify receiving-transport/runtime-profile bindings and shared-domain, separate-transcript continuity; a shared profile does not merge chats or prove bot-account isolation.
 - E6.3: Personal overview, preferably reusing native dashboard/plugin UI; validate mobile layout.
 - E6.4: TLS/auth/session revocation, attachment access, small-screen, and poor-network tests.
 - E6.5: Build Domain API and Change Feed (M2, optional, Backlog): versioned typed REST over domain services, transactional dedup/outbox/change feed, authorized consistent snapshot and polling overview. Depends on E0.6, E1.1–E1.5, E2.1, E3.2/E3.5 and E4.2–E4.4; only individually verified adapters may be enabled.
@@ -130,6 +136,8 @@ Dependencies are integrated as each capability arrives; cover all of them before
 - E8.4: Fixed scenario suites, observe-mode evaluation, false-positive and cost reports.
 - E8.5: Installation, configuration, deactivation, permissions, privacy, and troubleshooting documentation.
 
+For Primary Bot releases, extend E8.2 with identity/epoch/receipt and clone/restore fault cases, E8.3 with source-fenced owner-directed migration, and E8.5 with selection/pause/recovery procedures. Concurrent cloned authorities without an external fence remain unsupported, not a passing recovery scenario.
+
 Acceptance: Run the full set of gates on the same release SHA; disclose skipped/failed items and do not present static checks as runtime verification.
 
 ### E9. Design and Validate the Worker Routing Plugin (P1, M0–M3)
@@ -150,6 +158,8 @@ Acceptance: Select only permitted candidates; do not override exact user pins; c
 ## 4. Sequence for the First Usable Vertical Slice
 
 E0.1–E0.5 (including applicable write-path coverage and disabling uncovered capability sets) → E1.1–E1.5 (identity, authorization, execution checks, hard revocation, audit/data classification) → E2.1 → E3.1/E3.2/E3.5 + E4.1–E4.4 (including task recovery, unknown outcomes, and delivery reconciliation) → E6.1 → corresponding crash/revoke/delivery tests in E8.1/E8.2 → M1.
+
+A Bot-bound M1 additionally passes E0.7 → E1.6 → E3.6 and its applicable recovery/delivery gates. The explicit local_tasks inbox does not activate that binding. Custom-client work remains optional.
 
 Start E2.1 once the E1.5 data classification and audit conventions are clear. M1 cannot skip E1.4 and still claim revocation passes, nor defer recovery/reconciliation in E3.5/E4.4 and claim the reliable vertical slice is complete. Only then add broader automatic proactivity and more connectors. Identity, safety, and recovery are not “a final layer to add later.”
 

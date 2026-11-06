@@ -6,6 +6,8 @@ Everything on this page is a **proposed contract** for this project, not a claim
 
 For concrete client HTTP routes, host authentication, canonical session transport, durable change feeds, and connector schemas, see [14](14-client-api-contracts.md). That design is also unimplemented; this page defines the common domain layer.
 
+[15](15-primary-bot-binding.md) adds the proposed Primary Bot binding service, owner-confirmed control operations, binding epochs and server-derived session roles. These are not general model tools or new native Hermes RPCs. A canonical conversation, worker result or Bot message never supplies owner authority by itself.
+
 ## 1. EventEnvelope
 
 ```json
