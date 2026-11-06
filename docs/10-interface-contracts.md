@@ -8,6 +8,8 @@ For concrete client HTTP routes, host authentication, canonical session transpor
 
 [15](15-primary-bot-binding.md) adds the proposed Primary Bot binding service, owner-confirmed control operations, binding epochs and server-derived session roles. These are not general model tools or new native Hermes RPCs. A canonical conversation, worker result or Bot message never supplies owner authority by itself.
 
+[19](19-unified-voice-provider-contracts.md) defines the proposed common voice-session/component interface for local and configured online speech backends. Media frames, provider cancellation and playback recovery are separate from durable domain commands; a voice-provider tool/delegation event remains a proposal to Hermes, not a direct action executor.
+
 ## 1. EventEnvelope
 
 ```json

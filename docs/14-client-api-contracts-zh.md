@@ -2,9 +2,11 @@
 
 [English](14-client-api-contracts.md) | 简体中文
 
-**状态：仅设计。下文所有新的 domain endpoint、DTO、能力标志、策略 scope、保留期限和连接器接口均为拟议，尚未实现。** 现有只读基础代码没有暴露这套 API，没有实现 E1 授权，也没有启用受控写入。检查 Hermes 源码不等于运行时认证。已核对的源码基线为 `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`；实际实现证据见 [12](12-foundation-progress-zh.md) 和 [13](13-enforcement-contracts-zh.md)。
+**状态：仅设计。下文所有新的 domain endpoint、DTO、能力标志、策略 scope、保留期限和连接器接口均为拟议，尚未实现。** 当前实现切片没有暴露这套 API，没有证明端到端 owner 授权，也没有启用受控外部效果。[18](18-owner-entry-and-read-authorization-zh.md) 的内部读取评估器和保持阻断的访问诊断只是局部准备，不代表 E1 授权已经完成。检查 Hermes 源码不等于运行时认证。已核对的源码基线为 `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`；基础实现证据见 [12](12-foundation-progress-zh.md) 和 [13](13-enforcement-contracts-zh.md)。
 
 原生 Primary Bot 选择与绑定的拟议合同见 [15](15-primary-bot-binding-zh.md)。该能力实现后，将增加仅 owner 可用的绑定控制、经过授权的绑定摘要快照及绑定/投递失效通知。这些服务方法不是下文已经注册的路由；未来 HTTP facade 仍须满足本文可信 principal、幂等与 transport 门禁。原生 Bot 选择不需要自建手机 App。
+
+拟议[统一语音合同](19-unified-voice-provider-contracts-zh.md) 增加经能力协商的本地/在线媒体适配器与通话控制。可选 HTTP facade 可以暴露经过授权的通话摘要与控制回执，但领域变更流不承载/重放麦克风音频。串流只使用已验证的原生/provider 媒体传输；被缓冲的 hosted 插件 HTTP 不会因此变成 WebSocket/音频路由，语音配置也不能绕过可信 principal 门禁。
 
 本文将 [10 的领域合同](10-interface-contracts-zh.md) 具体化，供可选客户端使用；不替代[授权设计](06-plugins-mcp-and-security-zh.md)、[移动端范围](07-mobile-and-voice-zh.md)或[路线图](08-roadmap-and-acceptance-zh.md)。
 

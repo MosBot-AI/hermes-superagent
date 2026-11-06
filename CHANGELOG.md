@@ -31,6 +31,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 - Owner-entry diagnostics, an internal read-authorization evaluator and native context/IPC contracts; missing receiving-Bot provenance explicitly blocks private reads, with no production identity or grant issuance.
 
+- Bilingual unified voice-session/provider contracts for local/online pipelines and realtime frontends, including capability negotiation, interruption/recovery, credentials/budgets/privacy and E0.8/E7.5–E7.7 planning. Design only; no microphone, online call or voice runtime feature is enabled.
+
 ### Boundaries
 
 - E0.3, full E0.4 coverage, E0.6, identity/authorization, full domain storage, reminders, connectors, mobile, voice, and E9 model routing remain unimplemented.

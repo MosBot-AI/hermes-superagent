@@ -31,11 +31,13 @@
 
 - E0.7：Verify Primary Bot Contracts（M0，Backlog）：依赖 E0.1/E0.2，采用 E0.4 发现。核验原生 profile/route/canonical registry 与 lineage、author/worker provenance 和 receipt；HTTP 模式另需 E0.6。见 [15](15-primary-bot-binding-zh.md)。
 
+- E0.8：Verify Voice Provider Contracts（M0，Backlog）：依赖 E0.1/E0.2，适用时采用 E0.4/E0.7 身份发现。核验固定 ASR/TTS、原生音频/live 协议、凭据、取消和流式契约，列明公开 adapter seam 与不支持模式。见 [19](19-unified-voice-provider-contracts-zh.md)。
+
 验收：每个复用点有一个行为测试或明确 blocker；首次 `requires_hermes` 范围来自测试，不用随意版本号。输出逐工具/逐路径 enforcement 清单；有未知或可绕过的写路径时不得启用该集合，不能用 prompt 约束替代。
 
 当前 E0.4 进度：[合成失败契约与阻断写清单](13-enforcement-contracts-zh.md) 已实现。这只是部分证据，不代表路径全部覆盖，也不允许启用写操作。
 
-E0.6 是独立的可选客户端契约路线，不阻塞 channel-first M0/M1 退出；除非明确列出 E0.6 或 E0.7，现有一般 E0 依赖均指适用的 E0.1–E0.5 门禁。E0.7/E1.6/E3.6 是启用 Primary Bot 能力时的条件门槛，不会静默成为本地收件箱或未绑定 channel-first 基线的前置条件。
+E0.6 是独立的可选客户端契约路线，不阻塞 channel-first M0/M1 退出；除非明确列出 E0.6、E0.7 或 E0.8，现有一般 E0 依赖均指适用的 E0.1–E0.5 门禁。E0.7/E1.6/E3.6 是启用 Primary Bot 能力时的条件门槛，不会静默成为本地收件箱或未绑定 channel-first 基线的前置条件。
 
 ### E1. 建立身份授权审计（P0，M1）
 
@@ -119,14 +121,19 @@ E0.6 是独立的可选客户端契约路线，不阻塞 channel-first M0/M1 退
 
 验收：目标真实手机上完成“创建项目 → 提醒 → 查看/取消 → 批准受控动作”；旧设备与转发批准不能操作。M1 使用已有消息渠道，不依赖 E6.5–E6.7 或自建 App。可选浏览器/PWA 交付可先于原生手机认证。新增客户端工作仍未实现，详细契约与精确阻断见 [14](14-client-api-contracts-zh.md)。
 
-### E7. 保持语音任务连续性（P1/P2，M3）
+### E7. 保持语音任务连续性（P1/P2，M2–M3）
 
-依赖 E6/E1.3。
+生产模式依赖适用的原生/客户端身份契约、E1.3 及 E6.4 安全/设备测试；只有启用可选 HTTP 或原生手机客户端模式时才要求相应 E0.6/E6.5/E6.7。合成 adapter 契约与设计可先行，不把整套可选手机 API 变成所有语音工作的前置条件。
 
 - E7.1：复用 STT/TTS 完成手机语音消息，支持中文、时间/姓名纠正。
 - E7.2：语音 action intent 与可见确认，barge-in/停止播放/取消执行分离。
 - E7.3：音频隐私与保留、host relay/短时凭据、provider 费用可见。
 - E7.4：实时语音路径可行性验证，只有设备和费用达标才扩大发布。
+- E7.5：Define Unified Voice Session Contract（M2，M1 可先做设计；Backlog）：依赖 E0.8、E1.1/E1.2/E1.4/E1.5；可选 HTTP facade 另需 E0.6。定义 profile/capability、音频/control schema、lease、turn/author 归属、预算隐私与合成参考 adapter。
+- E7.6：Implement Local and Online Voice Adapters（M3，Backlog）：依赖 E7.5、E7.1–E7.3；启用动作另需 E1.3 及相关 E0.4 覆盖。实现一条本地/混合 pipeline 与一个明确选定的在线 realtime adapter，不泛化协议兼容。
+- E7.7：Validate Duplex Recovery and Voice Quality（M3，Backlog）：依赖 E7.6、E6.4、E8.1/E8.2 harness；关联任务/effect 的恢复另需 E3.5/E4.4。验证设备、延迟、准确率、barge-in、播放对账、重连、预算和隐私。
+
+[文档 19](19-unified-voice-provider-contracts-zh.md)统一 E7.1–E7.4 的配置与安全语义，同时保留语音消息 MVP 和实时双工的独立门禁。新接口与新工作包尚未实现；不因设计完工启用在线传输或主 Bot 权限。
 
 验收：误识别不造成高影响外发；同任务可在文字/语音切换；断网或停止语音不会伪报外部动作已取消。实时语音是单独 gate，不阻塞已完成的语音消息 MVP。
 

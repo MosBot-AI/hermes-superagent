@@ -22,6 +22,8 @@ Hermes 原生 personal-agent 插件，目标是让一个主 agent 管理项目�
 
 [Owner 入口与读取权限基础](docs/18-owner-entry-and-read-authorization-zh.md)已实现内部纯评估器及 `/personal-access` / `hermes personal-agent access` 阻断诊断。公开 source 缺少可信接收 Bot 账号边界，生产身份签发与私人读取仍关闭；这不是已完成的 owner 授权。
 
+[统一语音接口方案](docs/19-unified-voice-provider-contracts-zh.md)支持规划中的本地 ASR/TTS/VAD、用户配置的在线 API 与显式适配的实时语音前端，统一生命周期和恢复规则，但保留各后端实际能力差异。语音运行代码、账号连接和真实通话仍未实现。
+
 ## 开发验证
 
 基线为 `compatibility.json` 内的 Hermes commit；当前实际运行目标是 Python 3.14。没有根据单一 SHA 宣称宽泛的 `requires_hermes` 版本范围。

@@ -31,11 +31,13 @@ Complete a safe, reliable vertical slice first, then add connectors, entry point
 
 - E0.7: Verify Primary Bot Contracts (M0, Backlog): depends on E0.1/E0.2 and uses E0.4 findings. Verify native profile/route/canonical registry and lineage, author/worker provenance and receipts. HTTP modes additionally require E0.6. See [15](15-primary-bot-binding.md).
 
+- E0.8: Verify Voice Provider Contracts (M0, Backlog): depends on E0.1/E0.2, using E0.4/E0.7 identity findings where applicable. Verify pinned ASR/TTS, native audio/live protocols, credentials, cancellation/streaming contracts, public adapter seams and unsupported modes. See [19](19-unified-voice-provider-contracts.md).
+
 Acceptance: Every reuse point has a behavioral test or an explicit blocker; the initial `requires_hermes` range comes from tests, not arbitrary version numbers. Produce a per-tool, per-path enforcement inventory. A capability set must not be enabled while it has unknown or bypassable write paths; prompt constraints cannot substitute for enforcement.
 
 Current E0.4 progress: [synthetic failure contracts and a blocked-write inventory](13-enforcement-contracts.md) are implemented. This is partial evidence, not complete path coverage or permission to enable writes.
 
-E0.6 is an independent optional-client contract lane. It does not gate the channel-first M0/M1 exit; existing general E0 dependencies mean the applicable E0.1–E0.5 gates unless E0.6 or E0.7 is explicitly named. E0.7/E1.6/E3.6 are conditional gates for an enabled Primary Bot capability; they do not silently become prerequisites for the local inbox or an unbound channel-first baseline.
+E0.6 is an independent optional-client contract lane. It does not gate the channel-first M0/M1 exit; existing general E0 dependencies mean the applicable E0.1–E0.5 gates unless E0.6, E0.7 or E0.8 is explicitly named. E0.7/E1.6/E3.6 are conditional gates for an enabled Primary Bot capability; they do not silently become prerequisites for the local inbox or an unbound channel-first baseline.
 
 ### E1. Establish Identity, Authorization, and Audit (P0, M1)
 
@@ -119,14 +121,19 @@ Depends on E1.1/E3/E4.
 
 Acceptance: Complete “create project → reminder → inspect/cancel → approve controlled action” on the target physical phone; old devices and forwarded approvals cannot perform operations. M1 uses an existing messaging channel and does not depend on E6.5–E6.7 or a custom app. Optional browser/PWA delivery can precede native-mobile certification. New client work remains unimplemented; detailed contracts and exact blockers are in [14](14-client-api-contracts.md).
 
-### E7. Preserve Voice Task Continuity (P1/P2, M3)
+### E7. Preserve Voice Task Continuity (P1/P2, M2–M3)
 
-Depends on E6/E1.3.
+Production modes depend on applicable native/client identity contracts, E1.3 and E6.4 safety/device tests. E0.6/E6.5/E6.7 apply only when their optional HTTP or native-mobile modes are enabled. Synthetic adapter contracts/design can proceed first; the full optional phone API is not a prerequisite for all voice work.
 
 - E7.1: Reuse STT/TTS for mobile voice messages, supporting Chinese and time/name corrections.
 - E7.2: Voice action intents and visible confirmation; distinguish barge-in, stopping playback, and cancelling execution.
 - E7.3: Audio privacy and retention, host relay/short-lived credentials, and visible provider costs.
 - E7.4: Validate real-time voice feasibility; expand release only if device and cost criteria are met.
+- E7.5: Define Unified Voice Session Contract (M2, M1 design prework; Backlog): depends on E0.8, E1.1/E1.2/E1.4/E1.5; optional HTTP facade also needs E0.6. Define profiles/capabilities, audio/control schemas, leases, turn/author ownership, budget/privacy and synthetic reference adapters.
+- E7.6: Implement Local and Online Voice Adapters (M3, Backlog): depends on E7.5 and E7.1–E7.3; enabled actions additionally require E1.3 and relevant E0.4 coverage. Implement one local/mixed pipeline and one explicitly selected online realtime adapter without generalizing protocol compatibility.
+- E7.7: Validate Duplex Recovery and Voice Quality (M3, Backlog): depends on E7.6, E6.4 and E8.1/E8.2 harness; linked task/effect recovery also needs E3.5/E4.4. Validate devices, latency, accuracy, barge-in, playback reconciliation, reconnect, budgets and privacy.
+
+[19](19-unified-voice-provider-contracts.md) unifies E7.1–E7.4 configuration/safety semantics while retaining separate voice-message MVP and realtime-duplex gates. New interfaces/packages remain unimplemented; completing the design enables neither online transmission nor Primary Bot authority.
 
 Acceptance: Misrecognition does not cause high-impact outbound actions; the same task can switch between text and voice; network loss or stopping voice does not falsely report cancellation of an external action. Real-time voice is a separate gate and does not block a completed voice-message MVP.
 

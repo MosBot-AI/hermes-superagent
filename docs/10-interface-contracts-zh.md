@@ -8,6 +8,8 @@
 
 [15](15-primary-bot-binding-zh.md) 补充拟议 Primary Bot 绑定服务、owner 确认的控制操作、binding epoch 及服务端判定的会话角色。这些不是通用模型工具，也不是新增原生 Hermes RPC。Canonical 对话、worker 结果或 Bot 消息本身都不提供 owner 授权。
 
+[19](19-unified-voice-provider-contracts-zh.md) 定义本地与配置好的在线语音后端共用的拟议会话/组件接口。媒体帧、provider 取消和播放恢复独立于持久领域命令；语音 provider 的工具/委托事件仍是交给 Hermes 评估的提议，不是直接执行操作的入口。
+
 ## 1. EventEnvelope
 
 ```json

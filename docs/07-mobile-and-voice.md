@@ -35,15 +35,17 @@ Messages include `client_message_id/platform_event_id` for request deduplication
 
 ## 4. Voice Is an Interaction Layer, Not a Permission Shortcut
 
-The native chained path is STT → Hermes turn → TTS. The source also describes a Desktop full-duplex voice front-end that delegates tool work to Hermes. A fast-response front-end model must not have independent credentials or bypass the main agent’s action gate.
+The native chained path is STT → Hermes turn → TTS. The source also describes a Desktop full-duplex voice front-end that delegates tool work to Hermes. A fast-response front-end may use an explicitly configured speech API, but must not hold independent authority or service credentials for executing personal actions or bypass the main agent's action gate.
+
+The proposed [unified voice contract](19-unified-voice-provider-contracts.md) supports interchangeable local ASR/TTS/VAD, configured online pipeline APIs and explicitly adapted realtime speech-to-speech. A common session/audio/event interface negotiates real capabilities rather than pretending all backends have equal streaming, latency, cancellation or recovery. Voice API configuration does not change the selected primary Bot or silently select a new main/worker model.
 
 Retain provenance and transcription confidence/correction information for each voice message, but do not retain raw audio long-term by default. If critical fields such as amounts, times, recipients, names, deletions, or outbound actions are misrecognized, display or read out structured confirmation. Ordinary queries do not require mechanical repeated confirmations; high-risk actions cannot expand scope merely because the voice model heard “mm-hmm.”
 
-“Stop” during speech must at least stop playback immediately and trigger an execution cancellation request. **Stopping speech does not mean the external operation is cancelled.** The UI distinguishes cancel requested from cancelled and states truthfully when an action has already been submitted.
+An explicit “stop the current work” during speech stops playback and requests cancellation of the bound native turn. Playback-only stop, barge-in, microphone mute and end-call have distinct semantics in [19](19-unified-voice-provider-contracts.md). **Stopping speech does not mean the external operation is cancelled.** The UI distinguishes cancel requested from cancelled, reports already-submitted actions truthfully, and must not interrupt unrelated sessions.
 
 ## 5. Credentials and Audio Paths
 
-In this baseline, official Desktop remote can obtain STT/TTS settings and credentials from the gateway, depending on configuration, and call the provider directly. The webapp typically relays requests while keeping keys on the host. These do not have identical security properties. [Native voice notes](09-upstream-evidence.md#h12-voice)
+In this baseline, official Desktop remote can obtain STT/TTS settings and actual provider credentials from the gateway and call the provider directly. The native `webapp` surface forces relay; other serve/dashboard surfaces do not automatically share that restriction. GPT-Live's host-side SDP exchange is a separate key-handling path. These modes do not have identical security properties. [Native voice notes](09-upstream-evidence.md#h12-voice)
 
 This project’s mobile web defaults to host relay or provider-supported short-lived, least-privilege session credentials rather than distributing long-lived provider keys to the browser. If adopting an existing client-direct path, explicitly define device trust, in-memory lifetime, transport protection, and user choice. Microphone access, recording, background playback, and third-party audio processing must comply with applicable permission and privacy requirements.
 

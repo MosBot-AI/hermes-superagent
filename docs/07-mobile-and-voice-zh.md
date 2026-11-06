@@ -35,15 +35,17 @@ Owner 可指定已有原生 Bot Mode Bot 作为主要协调者；它的 canonica
 
 ## 4. 语音是交互层，不是权限捷径
 
-原生 chained 路径是 STT → Hermes turn → TTS；源代码也描述 Desktop full-duplex voice front-end 委托 Hermes 完成工具工作。前端快响应模型不能拥有一套独立凭据或绕过主 agent 的 action gate。
+原生 chained 路径是 STT → Hermes turn → TTS；源代码也描述 Desktop full-duplex voice front-end 委托 Hermes 完成工具工作。前端快响应模型可以使用明确配置的语音 API，但不能持有执行个人事务操作的独立权限或服务凭据，也不能绕过主 agent 的 action gate。
+
+拟议[统一语音合同](19-unified-voice-provider-contracts-zh.md) 支持可替换的本地 ASR/TTS/VAD、配置好的在线流水线 API，以及经过明确适配的实时 speech-to-speech。共同的会话/音频/事件接口协商真实能力，不把不同后端的串流、延迟、取消和恢复伪装成等价能力。配置语音 API 不会更换选定的主 Bot，也不默默选择新的主/worker 模型。
 
 每条语音保留来源和转写置信/可纠错信息，但默认不长期保存原始音频。金额、时间、收件人、姓名、删除和外发等关键字段误识别时，显示或读出结构化确认。普通查询无需机械重复确认；高风险动作不能只因语音模型听到“嗯”就自行扩大 scope。
 
-正在说话时的“停”至少立即停止播放，并触发执行取消请求；**停止朗读不等于外部操作已经取消**。UI 显示 cancel requested 与 cancelled 的差别，若动作已提交则如实说明。
+说话期间明确要求“停止当前工作”，应停止播放并请求取消已绑定的原生 turn。仅停止播放、barge-in、麦克风静音和结束通话的语义在 [19](19-unified-voice-provider-contracts-zh.md) 中分别定义。**停止朗读不等于外部操作已经取消**。UI 显示 cancel requested 与 cancelled 的差别，如实说明已提交的动作，不得打断无关会话。
 
 ## 5. 凭据与音频路径
 
-本基线官方 Desktop remote 可按配置从 gateway 取得 STT/TTS 设置和凭据，直接调用 provider；webapp 则通常 relay、密钥留在 host。两者不能混为同一安全性质。[原生语音说明](09-upstream-evidence-zh.md#h12-语音)
+本基线官方 Desktop remote 可从 gateway 取得 STT/TTS 设置和真实 provider 凭据，直接调用 provider。原生 `webapp` surface 强制 relay；其他 serve/dashboard surface 不自动具有同样限制。GPT-Live 的 host 端 SDP 交换又是独立的密钥处理路径。这些模式不能混为同一安全性质。[原生语音说明](09-upstream-evidence-zh.md#h12-语音)
 
 本项目手机 web 默认优先 host relay 或供应商支持的短时、最小权限会话凭据，不把长期 provider key 下发到浏览器。若采用现成 client-direct 路径，须明确设备信任、内存生命周期、传输保护与用户选择。麦克风、录音、后台播放和第三方音频处理都要遵守相应权限和隐私要求。
 

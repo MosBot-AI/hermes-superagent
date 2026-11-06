@@ -2,9 +2,11 @@
 
 English | [简体中文](14-client-api-contracts-zh.md)
 
-**Status: design only. Every new domain endpoint, DTO, capability flag, policy scope, retention value and connector interface below is proposed and unimplemented.** Existing read-only foundation code does not expose this API, implement E1 authorization, or enable controlled writes. Source inspection of Hermes is not runtime certification. The verified source baseline is `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`; see [12](12-foundation-progress.md) and [13](13-enforcement-contracts.md) for actual implementation evidence.
+**Status: design only. Every new domain endpoint, DTO, capability flag, policy scope, retention value and connector interface below is proposed and unimplemented.** Current implementation slices do not expose this API, prove end-to-end owner authorization, or enable controlled external effects. The internal read evaluator and blocked access diagnostic in [18](18-owner-entry-and-read-authorization.md) are partial preparation, not completed E1 authorization. Source inspection of Hermes is not runtime certification. The verified source baseline is `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`; see [12](12-foundation-progress.md) and [13](13-enforcement-contracts.md) for foundation implementation evidence.
 
 The proposed native Primary Bot selection and binding contract is in [15](15-primary-bot-binding.md). It adds owner-only binding controls, authorized binding-summary snapshots and binding/delivery invalidations when that capability is implemented. Those service methods are not routes already registered below; any future HTTP facade must retain this document's trusted-principal, idempotency and transport gates. Native Bot selection does not require a custom phone app.
+
+The proposed [unified voice contract](19-unified-voice-provider-contracts.md) adds capability-negotiated local/online media adapters and call controls. An optional HTTP facade may expose authorized call summaries and control receipts, but this domain change feed does not carry/replay microphone audio. Streaming uses only proven native/provider media transports; buffered hosted plugin HTTP does not become a WebSocket/audio route, and voice configuration cannot bypass trusted-principal gates.
 
 This document makes [10's domain contracts](10-interface-contracts.md) concrete for optional clients. It does not replace [the authorization design](06-plugins-mcp-and-security.md), [mobile scope](07-mobile-and-voice.md), or [the roadmap](08-roadmap-and-acceptance.md).
 
