@@ -86,7 +86,7 @@ Current E2.2 precursor: [local task search](22-local-task-search.md) retrieves l
 
 A further local E2.1/E2.2 precursor adds [project groups](24-local-project-groups.md): labels, exact filtering, counts and schema-v3 compatibility. Labels are not stable domain/native project IDs or permission keys. This does not complete E2 or E3.1 and does not relax their E1 dependencies.
 
-Current local memory precursor: [31](31-explicit-local-memory.md) implements opt-in native operator commands and a bounded SQLite backend behind an internal interface. It reuses the verified E6.8 command entry and local storage contracts, without enabling the provider modes still gated by E0.9. No automatic retrieval/ingestion, complete SDK, FTS/Markdown projections, consistent migration or native bridge is implemented; existing task model tools do not gain memory access. This starts but does not complete E2.6/E2.7 or the full memory gates.
+Current local memory precursor: [31](31-explicit-local-memory.md) implements opt-in native operator commands and a bounded SQLite backend behind an internal interface. It reuses the verified E6.8 command entry and local storage contracts, without enabling the provider modes still gated by E0.9. No automatic retrieval/ingestion, complete SDK, FTS/Markdown projections, consistent migration or native bridge is implemented; existing task model tools do not gain memory access. The separately enabled [memory model-tool follow-on](32-session-scoped-memory-tools.md) adds independent session activation and model-origin provenance; real-provider natural-language acceptance is still pending. These advance but do not complete E2.6/E2.7 or the full memory gates.
 
 ### E3. Connect Native Projects and Tasks (P0/P1, M1–M2)
 

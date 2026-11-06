@@ -79,6 +79,27 @@ def test_local_memory_status_rejects_invalid_or_missing_prerequisites(value):
         build_status(local_memory=value)
 
 
+def test_memory_tool_status_discloses_separate_unobserved_activation():
+    result = build_status(
+        mode="local_tasks",
+        local_conversation=True,
+        local_memory=True,
+        memory_model_tools=True,
+    )
+    assert result["safety"]["plugin_write_tools_registered"] is True
+    assert result["local_memory"]["model_tools_configured"] is True
+    assert result["local_memory"]["model_tools_require_separate_session_activation"] is True
+    assert result["local_memory"]["model_session_activation_observed"] is False
+    assert result["local_model_tools"]["configured"] is False
+    assert result["local_memory"]["native_provider_bridge"] is False
+
+
+@pytest.mark.parametrize("value", [True, 1, "true", None, {}])
+def test_memory_model_tools_status_rejects_missing_or_invalid_requirements(value):
+    with pytest.raises(ValueError):
+        build_status(mode="local_tasks", local_conversation=True, memory_model_tools=value)
+
+
 def test_opt_in_status_never_claims_agent_access_or_external_authority():
     result = build_status(mode="local_tasks")
     assert result["mode"] == "local_tasks"

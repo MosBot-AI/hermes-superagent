@@ -12,6 +12,7 @@ def build_status(
     local_conversation: bool = False,
     local_model_tools: bool = False,
     local_memory: bool = False,
+    memory_model_tools: bool = False,
 ) -> dict[str, object]:
     """Return a fresh result without consulting credentials, files, or providers."""
     if mode not in ("read_only", "local_tasks"):
@@ -22,6 +23,8 @@ def build_status(
         raise ValueError("invalid local model tools configuration")
     if type(local_memory) is not bool or (local_memory and not local_conversation):
         raise ValueError("invalid local memory configuration")
+    if type(memory_model_tools) is not bool or (memory_model_tools and not local_memory):
+        raise ValueError("invalid memory model tools configuration")
     platform_supported = os.name == "posix" and hasattr(os, "O_NOFOLLOW")
     local_tasks = mode == "local_tasks" and platform_supported
     return {
@@ -49,9 +52,10 @@ def build_status(
             "explicit_local_memory": local_memory and local_tasks,
         },
         "safety": {
-            "plugin_write_tools_registered": local_model_tools,
+            "plugin_write_tools_registered": local_model_tools or memory_model_tools,
             "local_cli_writes_enabled": local_tasks,
-            "agent_personal_data_reads_enabled": local_model_tools and local_tasks,
+            "agent_personal_data_reads_enabled": (local_model_tools or memory_model_tools)
+            and local_tasks,
             "agent_personal_data_reads_require_session_activation": True,
             "host_write_paths_enforced": False,
             "release_gate": "blocked",
@@ -114,9 +118,14 @@ def build_status(
             "native_provider_bridge": False,
             "third_party_adapter_loading": False,
             "markdown_projections": False,
+            "model_tools_configured": memory_model_tools,
+            "model_tools_require_separate_session_activation": True,
+            "model_session_activation_observed": False,
+            "model_tools_supported_runtime": "native_in_process_only",
             "scope": (
                 "Explicit operator records, not identity, permission grants or fact verification. "
-                "Current native memory providers are preserved; no model memory tool is added."
+                "Current native providers are preserved. Model memory tools need separate "
+                "configuration and per-session activation; model edits are not human proof."
             ),
         },
         "enrollment_policy": {

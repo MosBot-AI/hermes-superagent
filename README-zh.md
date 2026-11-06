@@ -44,6 +44,8 @@ Hermes 原生 personal-agent 插件，目标是让一个主 agent 管理项目�
 
 首个[显式本地记忆切片](docs/31-explicit-local-memory-zh.md)现支持在已有可信原生会话中使用 `/personal-memory remember`、`search`、`show`、`correct`、`forget` 和有界 `export`，需另行显式设置 `local_memory: true`。它通过小型内部后端接口使用独立 SQLite 存储，保留原生 provider，不自动召回/提取。命令/结果可能进入正常宿主历史；遗忘不会擦除该历史或备份。
 
+[会话范围记忆工具](docs/32-session-scoped-memory-tools-zh.md)现通过独立 `memory_model_tools: true` 选项及 `/personal-memory-tools enable-read` 或 `enable-write` 激活，增加有界模型记住/查询/更正/遗忘。任务工具激活不授予记忆权限；模型编辑标记为 `activated_session_model`，不是经验证的人工指令，原生 provider 不变。已有记忆 DB 原子升级到 schema v2；真实 provider 自然语言验收仍待完成。
+
 ## 开发验证
 
 基线为 `compatibility.json` 内的 Hermes commit；当前实际运行目标是 Python 3.14。没有根据单一 SHA 宣称宽泛的 `requires_hermes` 版本范围。

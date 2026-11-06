@@ -1,4 +1,4 @@
-"""Explicit operator records in a dedicated profile-bound SQLite store.
+"""Adapter-attributed local records in a dedicated profile-bound SQLite store.
 
 No ingestion, model, filesystem discovery, native provider replacement or network.
 Host opens/protects/closes the supplied connection. Secure delete is not physical
@@ -14,8 +14,8 @@ from uuid import uuid4
 from .memory_backend import MemoryError, _text, validate_request
 
 _APPLICATION_ID = 0x50414D45
-_SCHEMA_VERSION = 1
-_SCHEMA = {
+_SCHEMA_VERSION = 2
+_SCHEMA_V1 = {
     "namespace": "CREATE TABLE namespace (id TEXT PRIMARY KEY NOT NULL)",
     "records": """CREATE TABLE records (
         sequence INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -34,6 +34,18 @@ _SCHEMA = {
         record_id TEXT NOT NULL, revision INTEGER NOT NULL, operation TEXT NOT NULL,
         UNIQUE(record_id, revision))""",
 }
+# Source describes the latest editing route, not verified human intent, facts,
+# immutable authorship, or per-message user consent. Only trusted adapters bind it.
+_SOURCE_KINDS = ("explicit_local_operator", "activated_session_model")
+_SCHEMA = {
+    **_SCHEMA_V1,
+    "records": _SCHEMA_V1["records"].replace(
+        "source = 'explicit_local_operator'",
+        "source IN ('explicit_local_operator','activated_session_model')",
+    ),
+}
+
+
 _COLUMNS = (
     "record_id",
     "revision",
@@ -63,12 +75,13 @@ class LocalMemoryBackend:
         self._connection = None
         self._namespace = None
         self._session = None
+        self._source_kind = None
 
     def describe(self) -> dict:
         return {
             "adapter_id": "local_sqlite",
             "api_version": 1,
-            "schema_version": 1,
+            "schema_version": _SCHEMA_VERSION,
             "adapter_version": "0.1.0",
             "deployment": "trusted_profile_local",
             "capabilities": [
@@ -103,9 +116,19 @@ class LocalMemoryBackend:
             "data_recipients": [],
         }
 
-    def open(self, connection: sqlite3.Connection, *, namespace_id: str, session_ref: str) -> None:
+    def open(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        namespace_id: str,
+        session_ref: str,
+        source_kind: str = "explicit_local_operator",
+    ) -> None:
+        """Bind trusted route metadata, never supplied by a mutation payload."""
         if self._connection is not None:
             raise MemoryError("already_open")
+        if not isinstance(source_kind, str) or source_kind not in _SOURCE_KINDS:
+            raise MemoryError("invalid_request")
         namespace_id = _text(namespace_id, 256)
         session_ref = _text(session_ref, 256)
         if connection.in_transaction:
@@ -124,7 +147,7 @@ class LocalMemoryBackend:
             if not (app_id == 0 and version == 0 and not rows):
                 if app_id != _APPLICATION_ID:
                     raise MemoryError("foreign_database")
-                if version != 1 or dict(rows) != _SCHEMA or len(rows) != len(_SCHEMA):
+                if not self._valid_schema(version, rows):
                     raise MemoryError("unsupported_schema")
                 if connection.execute("SELECT id FROM namespace").fetchall() != [(namespace_id,)]:
                     raise MemoryError("namespace_mismatch")
@@ -151,10 +174,12 @@ class LocalMemoryBackend:
                 connection.execute(f"PRAGMA user_version={_SCHEMA_VERSION}")
             elif app_id != _APPLICATION_ID:
                 raise MemoryError("foreign_database")
-            elif version != 1 or dict(rows) != _SCHEMA or len(rows) != len(_SCHEMA):
+            elif not self._valid_schema(version, rows):
                 raise MemoryError("unsupported_schema")
             if connection.execute("SELECT id FROM namespace").fetchall() != [(namespace_id,)]:
                 raise MemoryError("namespace_mismatch")
+            if version == 1:
+                self._upgrade_v1(connection)
             if connection.execute("SELECT count(*) FROM records").fetchone()[0] > 1000:
                 raise MemoryError("record_limit")
             connection.execute("COMMIT")
@@ -165,6 +190,27 @@ class LocalMemoryBackend:
                 raise _storage_error(error) from None
             raise
         self._connection, self._namespace, self._session = connection, namespace_id, session_ref
+        self._source_kind = source_kind
+
+    @staticmethod
+    def _valid_schema(version, rows):
+        expected = {1: _SCHEMA_V1, 2: _SCHEMA}.get(version)
+        return expected is not None and dict(rows) == expected and len(rows) == len(expected)
+
+    @staticmethod
+    def _upgrade_v1(connection):
+        # Caller holds the writer lock and has revalidated schema and namespace.
+        # Rebuild only records; receipt text/digests and event ordering stay intact.
+        sequence = connection.execute(
+            "SELECT seq FROM sqlite_sequence WHERE name='records'"
+        ).fetchone()
+        connection.execute("ALTER TABLE records RENAME TO records_v1")
+        connection.execute(_SCHEMA["records"])
+        connection.execute("INSERT INTO records SELECT * FROM records_v1")
+        connection.execute("DROP TABLE records_v1")
+        if sequence is not None:
+            connection.execute("UPDATE sqlite_sequence SET seq=? WHERE name='records'", sequence)
+        connection.execute(f"PRAGMA user_version={_SCHEMA_VERSION}")
 
     @staticmethod
     def _rollback(connection):
@@ -176,7 +222,7 @@ class LocalMemoryBackend:
 
     def close(self) -> None:
         """Detach, without closing the host-owned connection."""
-        self._connection = self._namespace = self._session = None
+        self._connection = self._namespace = self._session = self._source_kind = None
 
     def execute(self, operation: str, payload: dict) -> dict:
         request = validate_request(operation, payload)
@@ -282,8 +328,16 @@ class LocalMemoryBackend:
             record_id, revision, status = str(uuid4()), 1, "active"
             conn.execute(
                 "INSERT INTO records(record_id,revision,status,content,topic,source,session_ref,"
-                "created_at,updated_at) VALUES (?,1,'active',?,?,'explicit_local_operator',?,?,?)",
-                (record_id, request["content"], request["topic"], self._session, now, now),
+                "created_at,updated_at) VALUES (?,1,'active',?,?,?,?,?,?)",
+                (
+                    record_id,
+                    request["content"],
+                    request["topic"],
+                    self._source_kind,
+                    self._session,
+                    now,
+                    now,
+                ),
             )
         else:
             record_id = request["record_id"]
@@ -304,7 +358,7 @@ class LocalMemoryBackend:
                     status,
                     content,
                     topic,
-                    None if operation == "forget" else "explicit_local_operator",
+                    None if operation == "forget" else self._source_kind,
                     None if operation == "forget" else self._session,
                     now,
                     record_id,

@@ -44,6 +44,8 @@ The [pluggable memory design](docs/30-pluggable-memory-contracts.md) specifies a
 
 The first [explicit local memory slice](docs/31-explicit-local-memory.md) now supports `/personal-memory remember`, `search`, `show`, `correct`, `forget` and bounded `export` in an existing trusted native session after separate `local_memory: true` opt-in. It uses a dedicated SQLite store behind a small internal backend interface, preserves native providers, and performs no automatic recall/extraction. Commands/results may enter normal host history; forgetting does not erase that history or backups.
 
+[Session-scoped memory tools](docs/32-session-scoped-memory-tools.md) now add bounded model remember/query/correct/forget through a separate `memory_model_tools: true` option and `/personal-memory-tools enable-read` or `enable-write` activation. Task-tool activation does not grant memory access. Model edits are labeled `activated_session_model`, not verified human instructions; native providers remain unchanged. Existing memory DBs upgrade atomically to schema v2. Real-provider natural-language acceptance remains pending.
+
 ## Development checks
 
 `compatibility.json` records the Hermes baseline commit. The current runtime target is Python 3.14. A single tested SHA does not justify a broad `requires_hermes` version range.

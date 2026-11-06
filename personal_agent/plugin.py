@@ -60,6 +60,7 @@ def _status_result(
     local_conversation: bool = False,
     local_model_tools: bool = False,
     local_memory: bool = False,
+    memory_model_tools: bool = False,
 ) -> str:
     if not isinstance(args, dict) or args:
         return json.dumps(
@@ -75,6 +76,7 @@ def _status_result(
             local_conversation=local_conversation,
             local_model_tools=local_model_tools,
             local_memory=local_memory,
+            memory_model_tools=memory_model_tools,
         ),
         ensure_ascii=False,
         sort_keys=True,
@@ -123,6 +125,11 @@ def register(ctx: PluginContext) -> None:
         raise ValueError("local_memory must be a boolean")
     if memory_enabled and not conversation_enabled:
         raise ValueError("local_memory requires local_conversation and local_tasks")
+    memory_models_enabled = ctx.get_config("memory_model_tools", False)
+    if type(memory_models_enabled) is not bool:
+        raise ValueError("memory_model_tools must be a boolean")
+    if memory_models_enabled and not memory_enabled:
+        raise ValueError("memory_model_tools requires local_memory and local_conversation")
     bound_home = current_profile_home()
 
     def registered_status(args: dict[str, object], **_context: object) -> str:
@@ -149,12 +156,16 @@ def register(ctx: PluginContext) -> None:
             local_memory = ctx.get_config("local_memory", False)
             if type(local_memory) is not bool or (local_memory and not local_conversation):
                 raise ValueError("invalid local memory configuration")
+            memory_model_tools = ctx.get_config("memory_model_tools", False)
+            if type(memory_model_tools) is not bool or (memory_model_tools and not local_memory):
+                raise ValueError("invalid memory model tools configuration")
             return _status_result(
                 args,
                 mode,
                 local_conversation=local_conversation,
                 local_model_tools=local_model_tools,
                 local_memory=local_memory,
+                memory_model_tools=memory_model_tools,
             )
         except Exception:
             return json.dumps({"status": "blocked", "error": {"code": "invalid_configuration"}})
@@ -253,6 +264,36 @@ def register(ctx: PluginContext) -> None:
             description="Explicitly save, inspect, correct or forget local operator records.",
             args_hint="remember | list | search | show | correct | forget | export | help",
         )
+
+    if memory_models_enabled:
+        from .memory_tool_contract import PERSONAL_MEMORY_READ_SCHEMA, PERSONAL_MEMORY_WRITE_SCHEMA
+        from .session_memory_tools import SessionMemoryTools
+
+        memory_access = SessionMemoryTools(bound_home=bound_home, read_config=ctx.get_config)
+        ctx.on_unload(memory_access.close)
+        ctx.register_command(
+            "personal-memory-tools",
+            handler=memory_access.command,
+            description="Separately activate memory model access in this trusted native session.",
+            args_hint="enable-read | enable-write | disable | status",
+        )
+
+        def bind_memory_handler(name):
+            def handler(args, *, session_id="", task_id="", **context):
+                return memory_access.run(
+                    name, args, session_id=session_id, task_id=task_id, **context
+                )
+
+            return handler
+
+        for schema in (PERSONAL_MEMORY_READ_SCHEMA, PERSONAL_MEMORY_WRITE_SCHEMA):
+            ctx.register_tool(
+                name=schema["name"],
+                toolset="personal_agent",
+                schema=schema,
+                handler=bind_memory_handler(schema["name"]),
+                description="Bounded memory access after separate native session activation.",
+            )
 
     if model_tools_enabled:
         from .session_task_tools import SessionTaskTools

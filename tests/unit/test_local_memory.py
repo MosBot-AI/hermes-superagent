@@ -279,12 +279,12 @@ def test_reopen_replay_is_session_independent_and_metadata_only(tmp_path):
 def test_exact_schema_rejects_trigger_and_future_version(opened):
     backend, conn = opened
     backend.close()
-    conn.execute("PRAGMA user_version=2")
+    conn.execute("PRAGMA user_version=3")
     assert_error(
         "unsupported_schema",
         lambda: backend.open(conn, namespace_id="profile:test", session_ref="s"),
     )
-    conn.execute("PRAGMA user_version=1")
+    conn.execute("PRAGMA user_version=2")
     conn.execute("CREATE TRIGGER surprise AFTER INSERT ON events BEGIN SELECT 1; END")
     assert_error(
         "unsupported_schema",
@@ -347,4 +347,233 @@ def test_concurrent_first_open_uses_atomic_preflight_snapshot(tmp_path):
         assert second.result(timeout=10)["items"] == []
     conn = sqlite3.connect(path)
     assert conn.execute("SELECT id FROM namespace").fetchall() == [("same",)]
+    conn.close()
+
+
+@pytest.mark.parametrize("source", [None, True, [], {}, "", "user", " activated_session_model"])
+def test_invalid_source_rejected_before_storage(source):
+    conn = sqlite3.connect(":memory:")
+    try:
+        assert_error(
+            "invalid_request",
+            lambda: create_backend().open(
+                conn, namespace_id="a", session_ref="s", source_kind=source
+            ),
+        )
+        assert conn.execute("SELECT name FROM sqlite_master").fetchall() == []
+        assert not conn.in_transaction
+    finally:
+        conn.close()
+
+
+def test_source_is_latest_editor_and_replay_does_not_rewrite(opened):
+    operator, conn = opened
+    model = create_backend()
+    model.open(
+        conn,
+        namespace_id="profile:test",
+        session_ref="model-session",
+        source_kind="activated_session_model",
+    )
+    original = remember(operator)
+    rid = original["data"]["record_id"]
+    assert remember(model) == {"data": original["data"], "replayed": True}
+    assert model.execute("get", {"record_id": rid})["source"] == "explicit_local_operator"
+    correction = {"record_id": rid, "expected_revision": 1, "topic": "edited", "request_id": "edit"}
+    model.execute("correct", correction)
+    row = operator.execute("get", {"record_id": rid})
+    assert (row["source"], row["session_ref"]) == ("activated_session_model", "model-session")
+    operator.execute("correct", correction)
+    assert operator.execute("get", {"record_id": rid}) == row
+    operator.execute("correct", {**correction, "expected_revision": 2, "request_id": "operator"})
+    assert model.execute("get", {"record_id": rid})["source"] == "explicit_local_operator"
+    created = remember(model, key="model")["data"]["record_id"]
+    assert model.execute("get", {"record_id": created})["source"] == "activated_session_model"
+    model.execute("forget", {"record_id": created, "expected_revision": 1, "request_id": "forget"})
+    assert model.execute("get", {"record_id": created})["source"] is None
+    for key in ("source", "source_kind"):
+        assert_error(
+            "invalid_request", lambda key=key: remember(model, **{key: "explicit_local_operator"})
+        )
+    model.close()
+
+
+def legacy_database(conn):
+    """Construct the exact released v1 schema with historical receipt bytes."""
+    import hashlib
+
+    from personal_agent.local_memory import _APPLICATION_ID, _SCHEMA_V1
+
+    for sql in _SCHEMA_V1.values():
+        conn.execute(sql)
+    conn.execute(f"PRAGMA application_id={_APPLICATION_ID}")
+    conn.execute("PRAGMA user_version=1")
+    conn.execute("INSERT INTO namespace VALUES ('legacy')")
+    rid, forgotten = str(uuid4()), str(uuid4())
+    conn.execute(
+        "INSERT INTO records VALUES (7,?,2,'active','legacy text','note',"
+        "'explicit_local_operator','old-session','created','updated')",
+        (rid,),
+    )
+    conn.execute(
+        "INSERT INTO records VALUES (12,?,3,'forgotten',NULL,NULL,NULL,NULL,'created','updated')",
+        (forgotten,),
+    )
+    request = validate_request("remember", {"content": "legacy text", "request_id": "old"})
+    digest = hashlib.sha256(
+        json.dumps(
+            ["remember", request], ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode()
+    ).hexdigest()
+    receipt = {
+        "record_id": rid,
+        "revision": 1,
+        "operation": "remember",
+        "status": "active",
+        "request_id": "old",
+        "event_sequence": 3,
+    }
+    conn.execute("INSERT INTO receipts VALUES ('old',?,?)", (digest, json.dumps(receipt, indent=2)))
+    conn.execute("INSERT INTO events VALUES (3,?,1,'remember')", (rid,))
+    conn.execute("UPDATE sqlite_sequence SET seq=20 WHERE name='records'")
+    conn.commit()
+    return rid, receipt
+
+
+def snapshot_legacy(conn):
+    return {
+        name: conn.execute(f"SELECT * FROM {name}").fetchall()
+        for name in ("records", "receipts", "events", "namespace", "sqlite_sequence")
+    }
+
+
+def test_legacy_upgrade_preserves_data_receipt_bytes_and_replay(tmp_path):
+    from personal_agent.local_memory import _SCHEMA
+
+    conn = sqlite3.connect(tmp_path / "legacy.db")
+    rid, receipt = legacy_database(conn)
+    before = snapshot_legacy(conn)
+    backend = create_backend()
+    backend.open(
+        conn, namespace_id="legacy", session_ref="new", source_kind="activated_session_model"
+    )
+    assert conn.execute("PRAGMA user_version").fetchone() == (2,)
+    assert (
+        dict(conn.execute("SELECT name,sql FROM sqlite_master WHERE name NOT GLOB 'sqlite_*'"))
+        == _SCHEMA
+    )
+    after = snapshot_legacy(conn)
+    for name in before:
+        assert sorted(after[name]) == sorted(before[name])
+    assert remember(backend, "legacy text", "old") == {"data": receipt, "replayed": True}
+    assert backend.execute("get", {"record_id": rid})["source"] == "explicit_local_operator"
+    backend.execute(
+        "correct", {"record_id": rid, "expected_revision": 2, "request_id": "new", "topic": "new"}
+    )
+    assert backend.execute("get", {"record_id": rid})["source"] == "activated_session_model"
+    remember(backend, key="new-record")
+    assert conn.execute("SELECT max(sequence) FROM records").fetchone() == (21,)
+    backend.close()
+    backend.open(conn, namespace_id="legacy", session_ref="reopen")
+    assert remember(backend, "legacy text", "old")["replayed"] is True
+    backend.close()
+    conn.close()
+
+
+@pytest.mark.parametrize(
+    "damage,error",
+    [
+        ("CREATE TABLE extra (x)", "unsupported_schema"),
+        ("CREATE TRIGGER extra AFTER INSERT ON records BEGIN SELECT 1; END", "unsupported_schema"),
+        ("PRAGMA application_id=123", "foreign_database"),
+        ("PRAGMA user_version=0", "unsupported_schema"),
+        ("UPDATE namespace SET id='other'", "namespace_mismatch"),
+    ],
+)
+def test_malformed_or_unowned_v1_never_migrates(damage, error):
+    conn = sqlite3.connect(":memory:")
+    legacy_database(conn)
+    conn.execute(damage)
+    conn.commit()
+    before = list(conn.iterdump())
+    assert_error(error, lambda: create_backend().open(conn, namespace_id="legacy", session_ref="s"))
+    assert list(conn.iterdump()) == before
+    assert not conn.in_transaction
+    conn.close()
+
+
+def test_migration_failure_rolls_back_schema_data_and_version():
+    conn = sqlite3.connect(":memory:")
+    legacy_database(conn)
+    before = list(conn.iterdump())
+    conn.set_authorizer(
+        lambda action, name, *_: (
+            sqlite3.SQLITE_DENY
+            if action == sqlite3.SQLITE_DROP_TABLE and name == "records_v1"
+            else sqlite3.SQLITE_OK
+        )
+    )
+    backend = create_backend()
+    assert_error(
+        "storage_error", lambda: backend.open(conn, namespace_id="legacy", session_ref="s")
+    )
+    conn.set_authorizer(None)
+    assert not conn.in_transaction
+    assert conn.execute("PRAGMA user_version").fetchone() == (1,)
+    assert list(conn.iterdump()) == before
+    backend.open(conn, namespace_id="legacy", session_ref="s")
+    assert conn.execute("PRAGMA user_version").fetchone() == (2,)
+    conn.close()
+
+
+def test_concurrent_legacy_open_serializes_upgrade(tmp_path):
+    path = tmp_path / "legacy.db"
+    conn = sqlite3.connect(path)
+    legacy_database(conn)
+    before = snapshot_legacy(conn)
+    conn.close()
+    rendezvous = Barrier(2, timeout=5)
+
+    def open_legacy():
+        conn = sqlite3.connect(path, timeout=2)
+        backend = create_backend()
+        rendezvous.wait()
+        try:
+            backend.open(conn, namespace_id="legacy", session_ref="s")
+            return snapshot_legacy(conn)
+        finally:
+            backend.close()
+            conn.close()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(lambda _: open_legacy(), range(2)))
+    for after in results:
+        for name in before:
+            assert sorted(after[name]) == sorted(before[name])
+
+
+def test_migration_rechecks_namespace_after_preflight(tmp_path):
+    path = tmp_path / "legacy.db"
+    conn = sqlite3.connect(path)
+    legacy_database(conn)
+    writer = sqlite3.connect(path)
+    changed = False
+
+    def trace(sql):
+        nonlocal changed
+        if sql == "BEGIN IMMEDIATE" and not changed:
+            changed = True
+            writer.execute("UPDATE namespace SET id='other'")
+            writer.commit()
+
+    conn.set_trace_callback(trace)
+    assert_error(
+        "namespace_mismatch",
+        lambda: create_backend().open(conn, namespace_id="legacy", session_ref="s"),
+    )
+    assert changed
+    assert conn.execute("PRAGMA user_version").fetchone() == (1,)
+    assert conn.execute("SELECT id FROM namespace").fetchall() == [("other",)]
+    assert not conn.in_transaction
+    writer.close()
     conn.close()

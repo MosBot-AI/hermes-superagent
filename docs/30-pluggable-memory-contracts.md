@@ -2,7 +2,7 @@
 
 English | [简体中文](30-pluggable-memory-contracts-zh.md)
 
-Implementation update: [31](31-explicit-local-memory.md) now provides a narrow explicit local-record precursor, with an internal backend seam and native commands. The full SDK, lifecycle, automatic retrieval/ingestion and migration contract below remain proposed; the source review and this local slice do not complete them.
+Implementation update: [31](31-explicit-local-memory.md) now provides a narrow explicit local-record precursor, with an internal backend seam and native commands; [32](32-session-scoped-memory-tools.md) adds separately activated model tools and explicit model-origin labels. The full SDK, lifecycle, automatic retrieval/ingestion and migration contract below remain proposed; the source review and this local slice do not complete them.
 
 **Status: target design with a narrow local precursor; full contract not implemented.** This document specifies replaceable personal-memory storage/retrieval, lifecycle adapters and acceptance gates. It does not install a provider, ingest conversations, enable extraction, replace a user's memory, or prove recall quality. Existing task tools and policy foundations are separate implementations, not this memory system.
 

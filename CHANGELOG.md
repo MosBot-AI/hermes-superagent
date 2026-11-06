@@ -8,6 +8,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Added separately activated native memory model tools with read/write TTL, live-turn admission and independent task permissions. Added model-origin provenance and exact-owned memory schema v1→v2 migration preserving legacy receipts; no automatic prefetch/extraction or real-provider acceptance.
+
 - Added opt-in native `/personal-memory` operator records: remember, bounded literal search/list/export, revisioned correction and terminal forgetting. Dedicated private SQLite, metadata-only replay receipts and a narrow internal backend interface; native providers unchanged, with no automatic recall/extraction or public adapter loader.
 
 - Added the bilingual pluggable-memory design, user-written adapter contract, default SQLite/Markdown authority rules, native single-provider compatibility, checkpoint/recall/deletion/migration gates, and E0.9/E2.6–E2.9 planning. Documentation only; no memory backend or ingestion is enabled.

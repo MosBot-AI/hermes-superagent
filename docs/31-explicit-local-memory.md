@@ -2,6 +2,8 @@
 
 English | [简体中文](31-explicit-local-memory-zh.md)
 
+Follow-on: [32](32-session-scoped-memory-tools.md) adds separately configured and activated model access, without changing the direct-command consent boundary below. Storage now uses schema v2 and distinguishes direct operator edits from activated model edits; source is the latest editing route. The original direct-command feature alone adds no model access.
+
 Status: an implemented, explicitly enabled local precursor of E2.6/E2.7, not completion of the [full memory design](30-pluggable-memory-contracts.md). Users can save, inspect, correct and forget short records inside an existing native Hermes session. This slice adds no memory model tool, automatic recall/extraction, native MemoryProvider bridge, package loader, Markdown projection, vector service or remote account.
 
 ## 1. Enable the Narrow Local Mode
@@ -45,7 +47,7 @@ Results use `personal.local-memory.v1` with `status`, `data`, `replayed`, `reque
 
 ## 3. Truth and Privacy Boundaries
 
-A record is an **explicit local operator edit**, not a verified external fact or proof of the human author. Its source tag is `explicit_local_operator` and its session reference records the admitted route's session. No invented owner ID, transcript quote or native message ID is attached. Notes cannot grant permissions, complete tasks or prove an external action succeeded.
+A record saved through the direct command is an **explicit local operator edit**, not a verified external fact or proof of the human author. Its source tag is `explicit_local_operator` and its session reference records the admitted route's session. No invented owner ID, transcript quote or native message ID is attached. Notes cannot grant permissions, complete tasks or prove an external action succeeded.
 
 The command's own handler makes no model request or automatic prompt injection. However, commands and results may be retained in normal host session history and later included in that session's configured model context. Saving locally is not a promise that history never reaches the user's model provider. Do not use this plaintext store for passwords, tokens or payment credentials.
 

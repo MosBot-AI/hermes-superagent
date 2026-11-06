@@ -74,6 +74,12 @@ def native_tool_turn(bound_home: Path, session_id: str, task_id: str) -> Generat
 class SessionTaskTools:
     """Process-local activation; unload closes even retained command/tool callbacks."""
 
+    reply_schema = "personal.session-task-tools.v1"
+    help_text = HELP
+    write_tool_name = "personal_tasks_write"
+    unavailable_code = "local_model_tools_unavailable"
+    disclosure = "Task results enter this session's configured model context."
+
     def __init__(self, *, bound_home: Path, read_config: Callable[[str, object], Any]):
         self.bound_home = bound_home
         self.read_config = read_config
@@ -109,11 +115,11 @@ class SessionTaskTools:
             key: value for key, value in self._activations.items() if value[1] > now
         }
 
-    @staticmethod
-    def _reply(*, data=None, error=None, request_id=None, replayed=False) -> str:
+    @classmethod
+    def _reply(cls, *, data=None, error=None, request_id=None, replayed=False) -> str:
         return json.dumps(
             {
-                "schema_version": "personal.session-task-tools.v1",
+                "schema_version": cls.reply_schema,
                 "scope": "activated_trusted_local_session",
                 "status": "error" if error else "ok",
                 "data": data,
@@ -143,7 +149,7 @@ class SessionTaskTools:
                     raise TaskError("invalid_request")
                 verb = raw_args.strip()
                 if verb in ("", "help"):
-                    return self._reply(data={"help": HELP})
+                    return self._reply(data={"help": self.help_text})
                 if verb not in ("enable-read", "enable-write", "disable", "status"):
                     raise TaskError("invalid_request")
                 self._prune()
@@ -167,9 +173,7 @@ class SessionTaskTools:
                         "expires_in_seconds": max(0, int(entry[1] - time.monotonic()))
                         if entry
                         else 0,
-                        "model_data_disclosure": (
-                            "Task results enter this session's configured model context."
-                        ),
+                        "model_data_disclosure": self.disclosure,
                         "trust_boundary": (
                             "All model activity in this activated session; not human-origin proof."
                         ),
@@ -177,10 +181,15 @@ class SessionTaskTools:
                 )
         except Exception as error:
             return self._reply(
-                error=error
-                if isinstance(error, TaskError)
-                else TaskError("local_model_tools_unavailable")
+                error=error if isinstance(error, TaskError) else TaskError(self.unavailable_code)
             )
+
+    def _normalize(self, tool_name: str, arguments: dict) -> tuple[str, dict]:
+        return normalize_task_tool_request(tool_name, arguments)
+
+    def _execute(self, operation: str, payload: dict, session_id: str) -> dict:
+        with open_task_store(self.bound_home) as store:
+            return store.run(operation, payload)
 
     def run(self, tool_name: str, arguments: dict, *, session_id="", task_id="", **_context) -> str:
         request_id = None
@@ -194,17 +203,14 @@ class SessionTaskTools:
                     entry = self._activations.get((session_id, session_key))
                     if entry is None:
                         raise TaskError("session_tools_not_activated")
-                    if tool_name == "personal_tasks_write" and entry[0] != "write":
+                    if tool_name == self.write_tool_name and entry[0] != "write":
                         raise TaskError("session_write_not_activated")
-                    operation, payload = normalize_task_tool_request(tool_name, arguments)
+                    operation, payload = self._normalize(tool_name, arguments)
                     request_id = payload.get("request_id")
-                    with open_task_store(self.bound_home) as store:
-                        result = store.run(operation, payload)
+                    result = self._execute(operation, payload, session_id)
                     return self._reply(**result, request_id=request_id)
         except Exception as error:
             return self._reply(
-                error=error
-                if isinstance(error, TaskError)
-                else TaskError("local_model_tools_unavailable"),
+                error=error if isinstance(error, TaskError) else TaskError(self.unavailable_code),
                 request_id=request_id,
             )

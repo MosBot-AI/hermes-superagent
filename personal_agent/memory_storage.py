@@ -16,7 +16,9 @@ from .tasks import TaskError
 
 
 @contextmanager
-def open_memory_backend(bound_home: Path, session_ref: str) -> Generator[MemoryBackend]:
+def open_memory_backend(
+    bound_home: Path, session_ref: str, *, source_kind: str = "explicit_local_operator"
+) -> Generator[MemoryBackend]:
     """Open only the current profile's owned store; reject unsafe existing paths."""
     if not bound_home.is_dir() or current_profile_home() != bound_home:
         raise MemoryError("profile_context_changed")
@@ -55,7 +57,12 @@ def open_memory_backend(bound_home: Path, session_ref: str) -> Generator[MemoryB
         connection.execute("PRAGMA synchronous=FULL")
         connection.execute("PRAGMA secure_delete=ON")
         namespace = "trusted-profile:" + hashlib.sha256(str(bound_home).encode()).hexdigest()
-        backend.open(connection, namespace_id=namespace, session_ref=session_ref)
+        backend.open(
+            connection,
+            namespace_id=namespace,
+            session_ref=session_ref,
+            source_kind=source_kind,
+        )
         yield backend
     finally:
         backend.close()

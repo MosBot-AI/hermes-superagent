@@ -10,6 +10,8 @@ provides_tools:
   - personal_agent_status
   - personal_tasks_read
   - personal_tasks_write
+  - personal_memory_read
+  - personal_memory_write
 config_schema:
   mode:
     type: str
@@ -31,3 +33,7 @@ config_schema:
     type: bool
     default: false
     description: Opt in to explicit native LOCAL memory commands; requires local_conversation, preserves native providers and performs no automatic recall or extraction.
+  memory_model_tools:
+    type: bool
+    default: false
+    description: Allow native in-process memory tools after separate explicit session activation; requires local_memory, preserves native providers and sends results to the configured model.
