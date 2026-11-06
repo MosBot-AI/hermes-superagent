@@ -46,7 +46,7 @@ Verification date: 2026-11-06 UTC. Pinned Hermes baseline: `90d6b98fd86d20981ee0
 
 ## H9. Cron and Heartbeat
 
-[cron/AGENTS.md](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/cron/AGENTS.md) records timezone, grace, occurrence ledger, tick lock, headless refusal, profile scope, and `skip_memory=True`, and notes that background delegation is process-local.
+[cron/AGENTS.md](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/cron/AGENTS.md) records timezone, grace, occurrence ledger, tick lock, headless refusal, profile scope and process-local background delegation. Its `skip_memory=True` description conflicts with this pin's [scheduler implementation](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/cron/scheduler.py#L2502-L2514): actual settings are `skip_memory=False` and `skip_background_review=True`. [MemoryManager](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/agent/memory_manager.py#L261-L266) uniformly suppresses relevant turn hooks only for subagents; cron writing depends on providers honoring `agent_context="cron"`, not a host-enforced read-only guarantee.
 
 [Heartbeat](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/website/docs/user-guide/features/heartbeat.md) provides idle-turn prompts for the current session, coalesces missed ticks, and prioritizes the user. It can be restored by the gateway but is cleared at boundaries such as reset/switch; a live owner process is a prerequisite for execution.
 

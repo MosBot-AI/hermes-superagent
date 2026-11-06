@@ -65,7 +65,7 @@ Trusted input or tool result
 
 Explicit user instructions may directly become confirmed preferences within their corresponding scope. One-time task choices stay with that task. Model inferences must be labeled inferred and never promoted into standing authorization. Third-party statements retain their authorship and must not be recorded as “the user said this directly.”
 
-Hermes cron sets `skip_memory=True` in this baseline. Do not assume background cron naturally triggers an external MemoryProvider’s sync/prefetch. If background organization needs to write domain data, use explicit, restricted domain tools or generate candidates for the main agent to merge. Do not bypass upstream boundaries to automatically modify core personal memory.
+The pinned [cron/scheduler.py](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/cron/scheduler.py#L2502-L2514) actually sets `skip_memory=False` and `skip_background_review=True`, while initialization passes `agent_context="cron"` to providers. Cron write restrictions are a provider contract, not a host-wide memory prohibition; this does not prove every external MemoryProvider refuses writes correctly. Background domain writes should still use explicit restricted tools or produce candidates for the main agent, rather than automatically edit core memory. Also, [system_prompt.py](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/agent/system_prompt.py#L814-L837) reloads memory from disk when rebuilding after compression; do not claim snapshots never change throughout a session.
 
 ## 6. Correction, Forgetting, and Export
 

@@ -2,7 +2,7 @@
 
 [English](README.md) | 简体中文
 
-状态：**方案基线、E0 契约及显式启用的本地 CLI 任务收件箱；完整 personal-agent MVP 尚未实现**。核验日期：2026-11-06。目标仓库：`MosBot-AI/hermes-superagent`。当前代码与验证边界见 [第一开发切片](12-foundation-progress-zh.md)。
+状态：**方案基线、E0 契约、本地任务存储及显式原生会话入口与任务模型工具；完整 personal-agent MVP 尚未实现**。核验日期：2026-11-06。目标仓库：`MosBot-AI/hermes-superagent`。当前代码与验证边界见 [第一开发切片](12-foundation-progress-zh.md)。
 
 当前用户选择 profile-first 单用户本地 MVP；先通过已有原生会话管理任务和项目标签，不以主 Bot/远程登记作为前提。Profile 仍不是身份。主 Bot、远程/多用户、手机与语音安全门禁保留为对应模式的后续要求，见 [28](28-profile-first-local-conversations-zh.md) 与[路线图](08-roadmap-and-acceptance-zh.md)。
 
@@ -40,7 +40,8 @@
 26. [待确认身份登记与策略持久化](26-pending-enrollment-policy-zh.md)：未接入口的管理元数据、CAS/撤销、私有存储与剩余 owner 准入门禁。
 27. [带栅栏的读取准入](27-fenced-read-admission-zh.md)：默认拒绝的确认/快照契约、实际策略事务排序及未实现的生产 adapter。
 28. [Profile 优先的本地任务对话](28-profile-first-local-conversations-zh.md)：显式启用原生会话命令、任务/项目标签闭环和可信单用户部署边界。
-29. [架构决策记录](adr/README-zh.md)：为什么选择这些约束。
+29. [会话范围任务工具](29-session-scoped-task-tools-zh.md)：明确激活的原生进程内模型任务访问、隐私/撤销边界及待完成真实模型验收。
+30. [架构决策记录](adr/README-zh.md)：为什么选择这些约束。
 
 ## 三类陈述必须分开
 
@@ -62,6 +63,6 @@
 
 ## 当前交付范围
 
-方案文档与项目规划已建立，E0 基础与显式本地任务收件箱已在临时测试 home 中运行。本地 CLI 持久化与显式启用的原生 LOCAL 会话命令已实现，更广泛的 agent/渠道/HTTP 个人数据访问尚未实现。没有生产部署、没有接入真实个人数据，也没有宣称权限、提醒或手机语音已经可用。GitHub Projects 是研发计划；Hermes 原生 Projects/Kanban 是未来产品运行时的工作对象，二者不能混淆。
+方案文档与项目规划已建立，E0 基础与显式本地任务收件箱已在临时测试 home 中运行。本地 CLI 持久化与显式启用的原生 LOCAL 会话命令已实现，另有明确激活的进程内模型任务工具；远程渠道/HTTP 个人数据访问尚未实现。没有生产部署、没有接入真实个人数据，也没有宣称权限、提醒或手机语音已经可用。GitHub Projects 是研发计划；Hermes 原生 Projects/Kanban 是未来产品运行时的工作对象，二者不能混淆。
 
 新增 E9 为原生 worker 模型路由插件设计：用户已审阅并选择插件方向，仍未实现。主 agent 保持原有职责；完整约束、宿主能力缺口、开源参考和验收见 [11](11-worker-model-routing-zh.md)。

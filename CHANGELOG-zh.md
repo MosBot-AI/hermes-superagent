@@ -8,6 +8,9 @@
 
 ### 新增
 
+- 新增单独启用的本地任务读/写模型工具及30分钟原生会话激活，实时 turn/route/profile/task 校验、撤销与卸载门禁；支持普通进程内模式，无真实模型验收或跨进程激活。
+- 修正固定上游 cron memory 事实：实际 `skip_memory=False`，cron 写入限制由 provider 契约承担；压缩后 memory 可从磁盘重载。
+
 - 新增显式启用的 `/personal-tasks`，在宿主授权的原生 LOCAL 会话中录入、检索、查看项目组/agenda、编辑和完成任务，沿用持久回执与 revision。不新增任务模型工具、远程入口或模型调用。
 - 按用户同意调整为 profile-first 单用户本地 M1 路线；主 Bot 和可信远程 owner 登记成为有条件的后续路线。新增双语启用/信任边界指南及真实原生进程内命令准入契约。
 

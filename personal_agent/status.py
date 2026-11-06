@@ -6,12 +6,16 @@ from . import HERMES_BASELINE, PLUGIN_ID, VERSION
 from .enforcement import build_enforcement_summary
 
 
-def build_status(*, mode: str = "read_only", local_conversation: bool = False) -> dict[str, object]:
+def build_status(
+    *, mode: str = "read_only", local_conversation: bool = False, local_model_tools: bool = False
+) -> dict[str, object]:
     """Return a fresh result without consulting credentials, files, or providers."""
     if mode not in ("read_only", "local_tasks"):
         raise ValueError("unsupported mode")
     if type(local_conversation) is not bool or (local_conversation and mode != "local_tasks"):
         raise ValueError("invalid local conversation configuration")
+    if type(local_model_tools) is not bool or (local_model_tools and not local_conversation):
+        raise ValueError("invalid local model tools configuration")
     platform_supported = os.name == "posix" and hasattr(os, "O_NOFOLLOW")
     local_tasks = mode == "local_tasks" and platform_supported
     return {
@@ -38,9 +42,10 @@ def build_status(*, mode: str = "read_only", local_conversation: bool = False) -
             "worker_model_routing": False,
         },
         "safety": {
-            "plugin_write_tools_registered": False,
+            "plugin_write_tools_registered": local_model_tools,
             "local_cli_writes_enabled": local_tasks,
-            "agent_personal_data_reads_enabled": False,
+            "agent_personal_data_reads_enabled": local_model_tools and local_tasks,
+            "agent_personal_data_reads_require_session_activation": True,
             "host_write_paths_enforced": False,
             "release_gate": "blocked",
             "reason": "Identity, authorization and write-path coverage are not implemented.",
@@ -60,11 +65,25 @@ def build_status(*, mode: str = "read_only", local_conversation: bool = False) -
             "configured": local_conversation,
             "enabled": local_conversation and local_tasks,
             "surface": "trusted_native_local_session",
-            "model_tools_enabled": False,
+            "model_tools_configured": local_model_tools,
+            "model_tools_require_session_activation": True,
             "new_remote_entry_enabled": False,
             "scope": (
                 "Explicit commands under host session authorization; all admitted controllers "
                 "share access. LOCAL is not physical-locality or independent owner proof."
+            ),
+        },
+        "local_model_tools": {
+            "implemented": True,
+            "configured": local_model_tools,
+            "schemas_registered_when_configured": True,
+            "session_activation_required": True,
+            "session_activation_observed": False,
+            "supported_runtime": "native_in_process_only",
+            "activation_lifetime_seconds": 1800,
+            "scope": (
+                "All model activity in an explicitly activated trusted local session; "
+                "not verified human-origin instructions or remote owner identity."
             ),
         },
         "read_authorization": {

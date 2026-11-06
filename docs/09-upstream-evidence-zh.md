@@ -46,7 +46,7 @@
 
 ## H9. Cron 与 heartbeat
 
-[cron/AGENTS.md](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/cron/AGENTS.md)记录 timezone、grace、occurrence ledger、tick lock、headless refusal、profile scope 和 `skip_memory=True`，并指出 background delegation process-local。
+[cron/AGENTS.md](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/cron/AGENTS.md)记录 timezone、grace、occurrence ledger、tick lock、headless refusal、profile scope 及 background delegation 的 process-local 限制。其 `skip_memory=True` 描述与本 pin 的 [scheduler 实现](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/cron/scheduler.py#L2502-L2514)不一致：实际是 `skip_memory=False`、`skip_background_review=True`。[MemoryManager](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/agent/memory_manager.py#L261-L266)仅对 subagent 统一抑制相关 turn hooks；cron 写入行为须 provider 遵守 `agent_context="cron"` 契约，不能当成宿主强制只读。
 
 [Heartbeat](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/website/docs/user-guide/features/heartbeat.md)是当前 session 的空闲轮次提示，missed ticks 合并、用户优先，gateway 可恢复，但 reset/switch 等边界清理；存活 owner process 是执行前提。
 

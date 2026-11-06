@@ -65,7 +65,7 @@
 
 明确用户指令可以直接成为相应范围内的 confirmed 偏好；一次性任务选择只保存在该任务。模型推断必须标记 inferred，不升级成长期授权。第三方的转述保留作者信息，不写成“用户亲口说过”。
 
-Hermes cron 在本基线中设置 `skip_memory=True`，不能假设后台 cron 会自然触发外部 MemoryProvider 的 sync/prefetch。后台整理如果需要写领域资料，应使用显式、受限的领域工具或生成候选待主 agent 合并。不绕过上游边界自动改个人核心记忆。
+Hermes 本基线的 [cron/scheduler.py](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/cron/scheduler.py#L2502-L2514)实际设置 `skip_memory=False`、`skip_background_review=True`，并通过初始化向 provider 传入 `agent_context="cron"`。Cron 写入限制是 provider 必须遵守的契约，不是宿主统一禁用 memory；不能据此假定任何外部 MemoryProvider 都正确拒写。后台领域写入仍应走明确受限工具或生成候选供主 agent 合并，不自动修改核心记忆。另 [system_prompt.py](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/agent/system_prompt.py#L814-L837)会在压缩后失效重建时从磁盘重新加载 memory，不能泛称快照在整个会话内永不变化。
 
 ## 6. 更正、遗忘与导出
 

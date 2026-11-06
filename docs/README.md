@@ -2,7 +2,7 @@
 
 English | [简体中文](README-zh.md)
 
-Status: **Design baseline plus E0 contracts, local task storage and opt-in native conversation commands; the full personal-agent MVP is not yet implemented.** Verification date: 2026-11-06. Repository: `MosBot-AI/hermes-superagent`. See the [first development slice](12-foundation-progress.md) for current code and verification boundaries.
+Status: **Design baseline plus E0 contracts, local task storage and opt-in native conversation commands/model tools; the full personal-agent MVP is not yet implemented.** Verification date: 2026-11-06. Repository: `MosBot-AI/hermes-superagent`. See the [first development slice](12-foundation-progress.md) for current code and verification boundaries.
 
 The user selected a profile-first single-user local MVP: manage tasks and project labels through an existing native session before optional Primary Bot/remote enrollment. Profiles remain partitions, not identities. Primary Bot, remote/multi-user, mobile and voice gates remain requirements of their respective future modes; see [28](28-profile-first-local-conversations.md) and the [roadmap](08-roadmap-and-acceptance.md).
 
@@ -40,7 +40,8 @@ Extend Hermes into a long-lived personal agent for one user: one main agent unde
 26. [Pending enrollment and policy persistence](26-pending-enrollment-policy.md): unwired administrative metadata, CAS/revocation, private storage and remaining owner-admission gates.
 27. [Fenced read admission](27-fenced-read-admission.md): default-denied confirmation/snapshot seams, actual policy transaction ordering and unimplemented production adapters.
 28. [Profile-first local task conversations](28-profile-first-local-conversations.md): opt-in native commands, task/project-label lifecycle and trusted single-user deployment boundary.
-29. [Architecture decision records](adr/README.md): reasons for the constraints.
+29. [Session-scoped task tools](29-session-scoped-task-tools.md): explicitly activated in-process model task access, privacy/revocation boundaries and pending real-model acceptance.
+30. [Architecture decision records](adr/README.md): reasons for the constraints.
 
 ## Keep three kinds of statements separate
 
@@ -62,6 +63,6 @@ Research baselines: Hermes `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4` and DSH Su
 
 ## Current deliverables
 
-The design and project plan are established. The E0 foundation and opt-in local task inbox run in temporary test homes. Local CLI persistence and opt-in native LOCAL session commands are implemented; model-tool/remote-channel/HTTP personal-data access is not. There is no production deployment or connection to real personal data, and no claim that authorization, reminders, or mobile voice are usable. GitHub Projects tracks development; native Hermes Projects/Kanban will represent runtime work. They are different systems.
+The design and project plan are established. The E0 foundation and opt-in local task inbox run in temporary test homes. Local CLI persistence and opt-in native LOCAL session commands are implemented; activated in-process model task tools are implemented, while remote-channel/HTTP personal-data access is not. There is no production deployment or connection to real personal data, and no claim that authorization, reminders, or mobile voice are usable. GitHub Projects tracks development; native Hermes Projects/Kanban will represent runtime work. They are different systems.
 
 E9 remains a design for the native worker model routing plugin. The user reviewed and selected the plugin approach, but it is not implemented. The main agent keeps its responsibilities. See [11](11-worker-model-routing.md) for constraints, host gaps, references, and acceptance criteria.

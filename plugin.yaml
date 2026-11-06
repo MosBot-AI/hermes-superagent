@@ -8,6 +8,8 @@ homepage: https://github.com/MosBot-AI/hermes-superagent
 kind: standalone
 provides_tools:
   - personal_agent_status
+  - personal_tasks_read
+  - personal_tasks_write
 config_schema:
   mode:
     type: str
@@ -21,3 +23,7 @@ config_schema:
     type: bool
     default: false
     description: Opt in to trusted single-user native LOCAL session commands; requires local_tasks mode.
+  local_model_tools:
+    type: bool
+    default: false
+    description: Allow native in-process task tools after explicit session activation; requires local_conversation.

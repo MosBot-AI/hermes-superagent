@@ -131,7 +131,7 @@ E6.1–E6.7 保留适用的 E1.1/E3/E4 远程/手机依赖。E6.8/E6.9 是下述
 - E6.6：Validate Client Recovery Flows（M3，可选，Backlog）：多设备、离线、重放、过期、ACL、隔离及取消场景。依赖 E6.5、E6.2/E6.4 与这些路径所需的 E8.1/E8.2 harness，不等待全部 E8/M4。附件还需 E0.6 文件契约证据。
 - E6.7：Validate Native Mobile Sign-in（M3，可选，Blocked）：依赖 E0.6 认证发现、E1.1/E1.4/E1.5 和 E6.4。固定版本的原生流程仅接受 loopback callback，须先证实目标手机支持的 callback 及设备撤权契约，再做真机认证。不得另造插件认证服务。
 - E6.8：Enable Local Task Conversations（M1，In progress）：依赖 E0.1/E0.2、适用的 E0.4/E0.5、本地 E2.1/E2.2 schema-v3 TaskStore 切片。显式启用确定性 `/personal-tasks` add/list/search/projects/show/update/done/cancel/agenda，复用校验、revision 和回执；项目仅为标签，不是原生 Project。
-- E6.9：Add Session-scoped Task Tools（M1，Backlog，下一步）：依赖 E6.8 及经测试的宿主 session-scoped 工具上下文、准入与权限边界。添加有界模型任务工具前，验证来源/会话绑定、非法参数、重放及不支持路径；不自动开启，不宣称生产 owner 身份已验证。当前尚无自然语言模型任务工具。
+- E6.9：Add Session-scoped Task Tools（M1，In progress）：依赖 E6.8 及经测试的宿主 session-scoped 工具上下文、准入与权限边界。添加有界模型任务工具前，验证来源/会话绑定、非法参数、重放及不支持路径；不自动开启，不宣称生产 owner 身份已验证。显式启用的原生进程内工具切片已实现；真实 provider 自然语言验收与跨进程支持仍未完成，见 [29](29-session-scoped-task-tools-zh.md)。
 
 验收：目标真实手机上完成“创建项目 → 提醒 → 查看/取消 → 批准受控动作”；旧设备与转发批准不能操作。这是可选手机路线，不是本地 M1 退出门槛，也不依赖自建 App。可选浏览器/PWA 交付可先于原生手机认证。新增客户端工作仍未实现，详细契约与精确阻断见 [14](14-client-api-contracts-zh.md)。
 

@@ -8,6 +8,9 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Added separately opted-in local task read/write model tools and 30-minute native session activation, live turn/route/profile/task checks, revocation and unload gates. Ordinary in-process mode only; no real-model acceptance or cross-process activation.
+- Corrected pinned cron memory evidence: actual `skip_memory=False`, provider-owned cron write restrictions, and memory reload after compression.
+
 - Added opt-in `/personal-tasks` commands in host-authorized native LOCAL conversations: capture, search, project groups, agenda, edits and completion using existing durable receipts/revisions. No task model tool, new remote entry or model call.
 - Adopted the user-approved profile-first single-user local M1 route; Primary Bot and verified remote-owner enrollment become conditional future lanes. Added bilingual setup/trust-boundary guide and actual native in-process command-admission contracts.
 

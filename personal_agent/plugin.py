@@ -20,6 +20,8 @@ class PluginContext(Protocol):
 
     def register_tool(self, **kwargs: Any) -> Any: ...
 
+    def on_unload(self, callback: Any) -> Any: ...
+
     def register_cli_command(self, **kwargs: Any) -> Any: ...
 
     def register_command(self, name: str, handler: Any, **kwargs: Any) -> Any: ...
@@ -51,7 +53,13 @@ def status_tool(args: dict[str, object], **_context: object) -> str:
     return _status_result(args, "read_only")
 
 
-def _status_result(args: dict[str, object], mode: str, *, local_conversation: bool = False) -> str:
+def _status_result(
+    args: dict[str, object],
+    mode: str,
+    *,
+    local_conversation: bool = False,
+    local_model_tools: bool = False,
+) -> str:
     if not isinstance(args, dict) or args:
         return json.dumps(
             {
@@ -61,7 +69,9 @@ def _status_result(args: dict[str, object], mode: str, *, local_conversation: bo
             }
         )
     return json.dumps(
-        build_status(mode=mode, local_conversation=local_conversation),
+        build_status(
+            mode=mode, local_conversation=local_conversation, local_model_tools=local_model_tools
+        ),
         ensure_ascii=False,
         sort_keys=True,
     )
@@ -88,7 +98,7 @@ def run_cli(args: argparse.Namespace) -> int | None:
 
 
 def register(ctx: PluginContext) -> None:
-    """Local storage/conversation commands are opt-in; no personal-data model tools."""
+    """Explicit local entry points; model tools additionally need session activation."""
     if ctx.get_config("mode", "read_only") not in ("read_only", "local_tasks"):
         raise ValueError("hermes-personal-agent supports only read_only or local_tasks mode")
     planning_enabled = ctx.get_config("planning_blueprint", False)
@@ -99,6 +109,11 @@ def register(ctx: PluginContext) -> None:
         raise ValueError("local_conversation must be a boolean")
     if conversation_enabled and ctx.get_config("mode", "read_only") != "local_tasks":
         raise ValueError("local_conversation requires local_tasks mode")
+    model_tools_enabled = ctx.get_config("local_model_tools", False)
+    if type(model_tools_enabled) is not bool:
+        raise ValueError("local_model_tools must be a boolean")
+    if model_tools_enabled and not conversation_enabled:
+        raise ValueError("local_model_tools requires local_conversation and local_tasks")
     bound_home = current_profile_home()
 
     def registered_status(args: dict[str, object], **_context: object) -> str:
@@ -117,7 +132,17 @@ def register(ctx: PluginContext) -> None:
                 local_conversation and mode != "local_tasks"
             ):
                 raise ValueError("invalid local conversation configuration")
-            return _status_result(args, mode, local_conversation=local_conversation)
+            local_model_tools = ctx.get_config("local_model_tools", False)
+            if type(local_model_tools) is not bool or (
+                local_model_tools and not local_conversation
+            ):
+                raise ValueError("invalid local model tools configuration")
+            return _status_result(
+                args,
+                mode,
+                local_conversation=local_conversation,
+                local_model_tools=local_model_tools,
+            )
         except Exception:
             return json.dumps({"status": "blocked", "error": {"code": "invalid_configuration"}})
 
@@ -203,3 +228,31 @@ def register(ctx: PluginContext) -> None:
             ),
             args_hint="<command> [arguments]",
         )
+
+    if model_tools_enabled:
+        from .session_task_tools import SessionTaskTools
+        from .task_tool_contract import PERSONAL_TASKS_READ_SCHEMA, PERSONAL_TASKS_WRITE_SCHEMA
+
+        access = SessionTaskTools(bound_home=bound_home, read_config=ctx.get_config)
+        ctx.on_unload(access.close)
+        ctx.register_command(
+            "personal-tools",
+            handler=access.command,
+            description="Activate local task model access for this trusted native session.",
+            args_hint="enable-read | enable-write | disable | status",
+        )
+
+        def bind_handler(name):
+            def handler(args, *, session_id="", task_id="", **context):
+                return access.run(name, args, session_id=session_id, task_id=task_id, **context)
+
+            return handler
+
+        for schema in (PERSONAL_TASKS_READ_SCHEMA, PERSONAL_TASKS_WRITE_SCHEMA):
+            ctx.register_tool(
+                name=schema["name"],
+                toolset="personal_agent",
+                schema=schema,
+                handler=bind_handler(schema["name"]),
+                description="Bounded task access after explicit native session activation.",
+            )

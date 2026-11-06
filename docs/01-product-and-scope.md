@@ -48,7 +48,7 @@ The main agent retains control of priorities and user communication. Workers rec
 3. Validate input, revisions and atomic receipts, and verify persistence across restarts and failure paths; agenda is not a reminder.
 4. Rely on host SessionAuthority checks for owner/operator session read/control, exact registered live source and admission. All already host-authorized owner/operator controllers share local data access; a LOCAL label does not prove physical locality.
 5. Add no listener, authentication service or remote connector; exposed, multiuser and remote-messaging deployments are unsupported. Pending enrollment and read-admission cores remain for a future verified remote-owner lane, not prerequisites for these explicit local commands.
-6. Add validated session-scoped model task tools next under E6.9; no natural-language model task tool exists now, and none is automatically enabled.
+6. The E6.9 in-process session-scoped model task tool slice is described in [29](29-session-scoped-task-tools.md), with real-model acceptance pending and no automatic enablement.
 7. Add mobile, Bot binding, reminders/monitoring, MCP writes, workers and voice in stages after their own gates pass; they do not block the local MVP.
 
 ## 6. Non-Goals

@@ -105,7 +105,7 @@ def test_local_conversation_status_distinguishes_host_authorized_commands_from_o
     assert section["configured"] is True
     assert section["enabled"] is result["local_task_inbox"]["enabled"]
     assert section["surface"] == "trusted_native_local_session"
-    assert section["model_tools_enabled"] is False
+    assert section["model_tools_configured"] is False
     assert section["new_remote_entry_enabled"] is False
     assert "admitted controllers" in section["scope"]
     assert result["read_authorization"]["protected_reads_enabled"] is False
@@ -122,3 +122,20 @@ def test_default_local_conversation_is_disabled():
     section = build_status()["local_conversation"]
     assert section["configured"] is False
     assert section["enabled"] is False
+
+
+def test_model_tool_status_reports_activation_and_runtime_limits():
+    result = build_status(mode="local_tasks", local_conversation=True, local_model_tools=True)
+    assert result["safety"]["plugin_write_tools_registered"] is True
+    assert result["safety"]["agent_personal_data_reads_require_session_activation"] is True
+    assert result["local_model_tools"]["configured"] is True
+    assert result["local_model_tools"]["session_activation_observed"] is False
+    assert result["local_model_tools"]["supported_runtime"] == "native_in_process_only"
+    assert result["capabilities"]["identity_binding"] is False
+    assert result["capabilities"]["external_delivery"] is False
+
+
+@pytest.mark.parametrize("value", [True, "true", 1, None])
+def test_model_tool_status_rejects_missing_conversation_or_invalid_type(value):
+    with pytest.raises(ValueError):
+        build_status(mode="local_tasks", local_model_tools=value)

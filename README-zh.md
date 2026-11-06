@@ -6,15 +6,15 @@ Hermes 原生 personal-agent 插件，目标是让一个主 agent 管理项目�
 
 ## 当前进度
 
-当前优先交付 **profile-first 单用户本地 MVP**，不要求先绑定主 Bot。已实现 E0 基础、本地任务存储及显式启用的原生会话 `/personal-tasks` 命令，尚不是完整的自然语言个人助手。
+当前优先交付 **profile-first 单用户本地 MVP**，不要求先绑定主 Bot。已实现 E0 基础、本地任务存储及显式启用的原生会话 `/personal-tasks` 命令，并已新增会话范围任务模型工具；尚未完成真实模型自然语言验收。
 
 - `plugin.yaml` 与同步 `register(ctx)` 原生加载。
 - 只读 `personal_agent_status` 工具，以及 `in_process` 插件模式下的 `hermes personal-agent status` CLI。
-- 默认 `read_only` 不打开任务存储；显式 `local_tasks` 启用 profile 本地 CLI 收件箱，支持录入、检索、项目分组、列表/查看、编辑、完成和取消，以及显式截止日期与 agenda，以及持久重放 receipt 和 revision 校验。不注册个人数据模型工具或模型路由，插件加载不创建调度或外发。
+- 默认 `read_only` 不打开任务存储；显式 `local_tasks` 启用 profile 本地 CLI 收件箱，支持录入、检索、项目分组、列表/查看、编辑、完成和取消，以及显式截止日期与 agenda，以及持久重放 receipt 和 revision 校验。默认不注册个人数据模型工具；单独启用 `local_model_tools` 才注册，并要求会话激活。未实现模型路由，插件加载不创建调度或外发。
 - 离线单元测试，以及固定 Hermes SHA 的真实 discovery、registry dispatch、配置和卸载契约测试。
 - 后续 E0.4 失败边界契约及十条阻断写路径的只读清单。`hermes personal-agent coverage` 展示证据，不授权或关闭宿主工具。
 
-本插件**不会禁用或保护其他 Hermes 工具**。E0.4 全部写路径覆盖及 E1 身份/授权尚未完成，不能据此开放模型驱动或外部写操作。本地任务编辑是单独的明确本地操作员命令。当前 status 输出明确给出 `release_gate: blocked`。详见 [第一切片记录](docs/12-foundation-progress-zh.md)、[执行边界契约](docs/13-enforcement-contracts-zh.md) 和 [更新记录](CHANGELOG-zh.md)。
+本插件**不会禁用或保护其他 Hermes 工具**。E0.4 全部写路径覆盖及 E1 身份/授权尚未完成，不能据此开放远程或外部写操作。单独启用的任务模型工具只在明确激活的可信本地会话内访问本地任务。本地任务编辑是单独的明确本地操作员命令。当前 status 输出明确给出 `release_gate: blocked`。详见 [第一切片记录](docs/12-foundation-progress-zh.md)、[执行边界契约](docs/13-enforcement-contracts-zh.md) 和 [更新记录](CHANGELOG-zh.md)。
 
 详细的[客户端与连接器 API 契约](docs/14-client-api-contracts-zh.md) 仅为设计，本插件尚未注册 HTTP API。M1 优先已有原生本地会话；手机渠道、自建 App 和指定主 Bot 是有独立认证/恢复门槛的后续可选路线。
 
@@ -35,7 +35,10 @@ Hermes 原生 personal-agent 插件，目标是让一个主 agent 管理项目�
 [带栅栏的读取准入核心](docs/27-fenced-read-admission-zh.md)增加当前策略事务排序和有界不可变摘要协调。只有合成测试提供可信确认/资源；不启用生产 adapter、运行入口或任务接管。
 
 
-[原生本地任务对话](docs/28-profile-first-local-conversations-zh.md)将已有任务存储接入 Hermes 会话。在可信单用户安装中显式设置 `mode: local_tasks` 和 `local_conversation: true`，即可使用 `/personal-tasks add "准备演示" --project "个人助手"`、`list`、`projects`、`update` 和 `done`。命令依赖宿主原生会话授权；已获授权的 owner/operator 控制端共享访问，`LOCAL` 不证明物理本地性。不要在对外暴露/共享网关启用。无个人数据模型工具、模型调用或新增远程入口，项目仍是任务标签。
+[原生本地任务对话](docs/28-profile-first-local-conversations-zh.md)将已有任务存储接入 Hermes 会话。在可信单用户安装中显式设置 `mode: local_tasks` 和 `local_conversation: true`，即可使用 `/personal-tasks add "准备演示" --project "个人助手"`、`list`、`projects`、`update` 和 `done`。命令依赖宿主原生会话授权；已获授权的 owner/operator 控制端共享访问，`LOCAL` 不证明物理本地性。不要在对外暴露/共享网关启用。确定性命令不调用模型、不新增远程入口，项目仍是任务标签。
+
+
+[会话范围任务工具](docs/29-session-scoped-task-tools-zh.md)进一步支持 `personal_tasks_read` / `personal_tasks_write`。单独启用 `local_model_tools: true` 后，在原生会话中使用 `/personal-tools enable-read` 或 `enable-write` 激活30分钟。任务结果进入已配置模型上下文；所有该会话模型活动共享访问，并非逐条用户意图验证。仅支持正常原生进程内模式，不支持 managed worker/hosted plugin，不能为此关闭隔离。真实模型验收尚未运行。
 
 ## 开发验证
 
