@@ -16,6 +16,8 @@ class PluginContext(Protocol):
 
     def get_config(self, key: str, default: Any = None) -> Any: ...
 
+    def register_automation_blueprint(self, **kwargs: Any) -> Any: ...
+
     def register_tool(self, **kwargs: Any) -> Any: ...
 
     def register_cli_command(self, **kwargs: Any) -> Any: ...
@@ -85,6 +87,9 @@ def register(ctx: PluginContext) -> None:
     """Local storage is opt-in and CLI-only; register no personal-data tools."""
     if ctx.get_config("mode", "read_only") not in ("read_only", "local_tasks"):
         raise ValueError("hermes-personal-agent supports only read_only or local_tasks mode")
+    planning_enabled = ctx.get_config("planning_blueprint", False)
+    if type(planning_enabled) is not bool:
+        raise ValueError("planning_blueprint must be a boolean")
     bound_home = current_profile_home()
 
     def registered_status(args: dict[str, object], **_context: object) -> str:
@@ -149,3 +154,8 @@ def register(ctx: PluginContext) -> None:
         description="Explain protected-access blockers without reading personal data.",
         args_hint="[status]",
     )
+
+    if planning_enabled:
+        from .blueprints import planning_check_in
+
+        ctx.register_automation_blueprint(**planning_check_in())

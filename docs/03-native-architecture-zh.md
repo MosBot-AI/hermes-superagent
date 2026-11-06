@@ -61,7 +61,7 @@ skills/                        # inbox-review、project-review、weekly-review �
 tests/                         # 单元、契约、恢复、安全、渠道测试
 ```
 
-这是目标目录建议。当前只实现薄注册层和只读状态工具，其他模块尚未创建，实际进度见 [12](12-foundation-progress-zh.md)。先用一个插件包避免无意义微服务。需要独立 memory provider 时再分离可选包，不让安装基础功能就替换用户当前 provider。
+这是建议的目标目录结构，而不是当前模块布局。现有窄范围实现包括[基础切片](12-foundation-progress-zh.md)、[本地收件箱](16-local-task-inbox-zh.md)、[内部读取评估器](18-owner-entry-and-read-authorization-zh.md)及[原生计划模板](25-native-planning-blueprint-zh.md)，尚未完成领域服务或授权门禁。先用一个插件包避免无意义微服务。需要独立 memory provider 时再分离可选包，不让安装基础功能就替换用户当前 provider。
 
 ## 4. 数据与执行的唯一权威
 

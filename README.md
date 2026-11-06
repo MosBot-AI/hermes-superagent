@@ -10,7 +10,7 @@ Implemented development slices include the **E0 native foundation** and an **opt
 
 - Native loading through `plugin.yaml` and synchronous `register(ctx)`.
 - A read-only `personal_agent_status` tool and, in `in_process` plugin mode, the `hermes personal-agent status` CLI.
-- Default `read_only` mode opens no task storage. Explicit `local_tasks` enables a profile-local CLI inbox: capture, search, project grouping, list/show, update, complete and cancel, plus explicit due dates and agenda with durable replay receipts and revision checks. No personal-data model tool, external delivery, scheduling or model routing is registered.
+- Default `read_only` mode opens no task storage. Explicit `local_tasks` enables a profile-local CLI inbox: capture, search, project grouping, list/show, update, complete and cancel, plus explicit due dates and agenda with durable replay receipts and revision checks. No personal-data model tool or model routing is registered, and plugin loading creates no schedule or external delivery.
 - Offline unit tests and real discovery, registry dispatch, configuration, and unload contracts against a pinned Hermes commit.
 - Follow-on E0.4 failure-boundary contracts and a read-only inventory of ten blocked write paths. `hermes personal-agent coverage` shows the evidence; it does not authorize or disable host tools.
 
@@ -27,6 +27,8 @@ The [unified voice design](docs/19-unified-voice-provider-contracts.md) covers l
 The [local search guide](docs/22-local-task-search.md) adds literal title/details retrieval with bounded pages. A separate [native voice IPC experiment](docs/21-native-voice-ipc-experiment.md) includes a reviewable host patch and verification record; it is not applied or integrated by this plugin.
 
 The [local project groups](docs/24-local-project-groups.md) add explicit task labels, project filters and progress counts, with a schema-v3 upgrade preserving old receipts. These are local groups, not native Projects or permission scopes. The [host command-context experiment](docs/23-host-command-context-experiment.md) packages a separate unintegrated identity-observation patch and its remaining gates; no owner authorization is enabled.
+
+The opt-in [native planning blueprint](docs/25-native-planning-blueprint.md) is available through Hermes’s existing Blueprint/Cron interfaces. Loading registers a template only, not a job. Native scheduling can incur model costs; existing jobs survive plugin removal. Default delivery is local, not a tool or privacy sandbox.
 
 ## Development checks
 

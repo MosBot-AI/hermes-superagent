@@ -101,6 +101,8 @@ Depends on E0.3, E1.1–E1.5, and E2.1.
 
 Acceptance: Duplicate triggers, process interruption, send timeouts, restarts, and cancellation do not cause blind duplicate outbound sends; no change may remain silent; accepted is not presented as delivered.
 
+Native E0.3/E4.2 precursor: [the planning blueprint](25-native-planning-blueprint.md) registers an optional template in Hermes’s existing catalog. It does not create or manage jobs, read the local inbox, or implement domain authorization/outbox/reconciliation. User-created native jobs outlive plugin removal; E4 and M1 remain incomplete.
+
 ### E5. Govern MCP and Plugins (P1, M2–M3)
 
 Depends on E1/E4.3.

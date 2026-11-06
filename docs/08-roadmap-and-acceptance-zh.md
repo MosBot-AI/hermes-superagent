@@ -101,6 +101,8 @@ E0.6 是独立的可选客户端契约路线，不阻塞 channel-first M0/M1 退
 
 验收：重复触发、进程中断、发送超时、重启与取消不会导致盲目重复外发；无变化可静默；accepted 不冒充 delivered。
 
+原生 E0.3/E4.2 先导：[计划 blueprint](25-native-planning-blueprint-zh.md)在 Hermes 现有目录中注册可选模板。它不创建或管理 job、不读取本地收件箱，也不实现领域授权/outbox/对账。用户创建的原生 job 在移除插件后仍存在；E4 与 M1 尚未完成。
+
 ### E5. 治理 MCP 与插件（P1，M2–M3）
 
 依赖 E1/E4.3。

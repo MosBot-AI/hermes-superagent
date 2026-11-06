@@ -61,7 +61,7 @@ skills/                        # inbox-review, project-review, weekly-review, et
 tests/                         # Unit, contract, recovery, security, channel tests
 ```
 
-This is a proposed target directory structure. Only the thin registration layer and read-only status tool are currently implemented; other modules have not yet been created. See [12](12-foundation-progress.md) for actual progress. Start with one plugin package to avoid unnecessary microservices. Split out an optional package only if an independent memory provider becomes necessary, so installing the basic functionality does not replace the user's current provider.
+This is a proposed target directory structure, not the current module layout. Current scoped implementations include the [foundation](12-foundation-progress.md), [local inbox](16-local-task-inbox.md), [internal read evaluator](18-owner-entry-and-read-authorization.md), and [native planning template](25-native-planning-blueprint.md). They do not complete the domain services or authorization gates. Start with one plugin package to avoid unnecessary microservices. Split out an optional package only if an independent memory provider becomes necessary, so installing the basic functionality does not replace the user's current provider.
 
 ## 4. Single Authorities for Data and Execution
 

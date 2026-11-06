@@ -70,5 +70,12 @@ def build_status(*, mode: str = "read_only") -> dict[str, object]:
             "provider_connections_enabled": False,
             "scope": "Offline synthetic contract checks only; not working speech or calls.",
         },
+        "automation_blueprints": {
+            "planning_template_implemented": True,
+            "default_enabled": False,
+            "creates_jobs_on_load": False,
+            "manages_existing_jobs": False,
+            "scope": "Opt-in native template only; actual jobs use Hermes scheduling and policies.",
+        },
         "write_path_inventory": build_enforcement_summary(),
     }

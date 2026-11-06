@@ -34,7 +34,8 @@
 22. [本地任务检索](22-local-task-search-zh.md)：标题/详情字面匹配、有界分页及不变的本地门禁。
 23. [host 命令上下文实验](23-host-command-context-experiment-zh.md)：仅供审阅的身份观察补丁与明确集成门禁。
 24. [本地项目分组](24-local-project-groups-zh.md)：任务标签、精确筛选、进度计数及 schema-v3 迁移。
-25. [架构决策记录](adr/README-zh.md)：为什么选择这些约束。
+25. [原生计划 blueprint](25-native-planning-blueprint-zh.md)：显式启用的原生计划表单集成及明确 job 生命周期/费用边界。
+26. [架构决策记录](adr/README-zh.md)：为什么选择这些约束。
 
 ## 三类陈述必须分开
 

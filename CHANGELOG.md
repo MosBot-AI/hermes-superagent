@@ -42,6 +42,8 @@ This file distinguishes design work, development changes, and released capabilit
 - Local project labels, exact project/unassigned filters and bounded per-project progress counts; atomic schema-v3 upgrades retain historical mutation digests and receipt bytes. No native project mapping or authorization scope is added.
 - Review-only host command-context patch, license, provenance and bilingual integration gates. Historical 146 passing tests and 9 environment-blocked tests are recorded separately; the patch is not installed, integrated or an owner-authorization issuer.
 
+- Opt-in native personal planning Automation Blueprint, with strict boolean configuration and native catalog/form/command integration. Registration creates no job or personal-data access; actual native scheduling has independent model/delivery costs and jobs survive plugin removal.
+
 ### Boundaries
 
 - E0.3, full E0.4 coverage, E0.6, identity/authorization, full domain storage, reminders, connectors, mobile, voice, and E9 model routing remain unimplemented.

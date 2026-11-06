@@ -13,3 +13,7 @@ config_schema:
     type: str
     default: read_only
     description: read_only (default) or local_tasks for explicit local CLI storage only.
+  planning_blueprint:
+    type: bool
+    default: false
+    description: Opt in to a native planning check-in template; does not create a cron job.

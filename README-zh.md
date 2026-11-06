@@ -10,7 +10,7 @@ Hermes 原生 personal-agent 插件，目标是让一个主 agent 管理项目�
 
 - `plugin.yaml` 与同步 `register(ctx)` 原生加载。
 - 只读 `personal_agent_status` 工具，以及 `in_process` 插件模式下的 `hermes personal-agent status` CLI。
-- 默认 `read_only` 不打开任务存储；显式 `local_tasks` 启用 profile 本地 CLI 收件箱，支持录入、检索、项目分组、列表/查看、编辑、完成和取消，以及显式截止日期与 agenda，以及持久重放 receipt 和 revision 校验。不注册个人数据模型工具、外发、调度或模型路由能力。
+- 默认 `read_only` 不打开任务存储；显式 `local_tasks` 启用 profile 本地 CLI 收件箱，支持录入、检索、项目分组、列表/查看、编辑、完成和取消，以及显式截止日期与 agenda，以及持久重放 receipt 和 revision 校验。不注册个人数据模型工具或模型路由，插件加载不创建调度或外发。
 - 离线单元测试，以及固定 Hermes SHA 的真实 discovery、registry dispatch、配置和卸载契约测试。
 - 后续 E0.4 失败边界契约及十条阻断写路径的只读清单。`hermes personal-agent coverage` 展示证据，不授权或关闭宿主工具。
 
@@ -27,6 +27,8 @@ Hermes 原生 personal-agent 插件，目标是让一个主 agent 管理项目�
 [本地检索指南](docs/22-local-task-search-zh.md)介绍标题/详情字面检索与有界分页。另有[原生语音 IPC 实验](docs/21-native-voice-ipc-experiment-zh.md)，包含可审阅的宿主补丁和验证记录；本插件不会应用或集成该补丁。
 
 [本地项目分组](docs/24-local-project-groups-zh.md)增加显式任务标签、项目筛选和进度计数，并通过 schema-v3 升级保留旧回执。这些是本地分组，不是原生 Project 或权限范围。[host 命令上下文实验](docs/23-host-command-context-experiment-zh.md)另行打包未集成的身份观察补丁及剩余门禁，不启用 owner 授权。
+
+显式启用的[原生计划 blueprint](docs/25-native-planning-blueprint-zh.md)可通过 Hermes 已有 Blueprint/Cron 界面使用。加载只注册模板，不创建 job。原生排程可能产生模型费用，已有 job 在移除插件后仍会运行。默认投递为本地，不是工具或隐私沙箱。
 
 ## 开发验证
 

@@ -34,7 +34,8 @@ Extend Hermes into a long-lived personal agent for one user: one main agent unde
 22. [Local task search](22-local-task-search.md): literal title/details matching, bounded pages and unchanged local-only gates.
 23. [Host command-context experiment](23-host-command-context-experiment.md): review-only identity-observation patch and explicit integration gates.
 24. [Local project groups](24-local-project-groups.md): task labels, exact filters, progress counts and schema-v3 migration.
-25. [Architecture decision records](adr/README.md): reasons for the constraints.
+25. [Native planning blueprint](25-native-planning-blueprint.md): opt-in integration with native planning forms and explicit job lifecycle/cost boundaries.
+26. [Architecture decision records](adr/README.md): reasons for the constraints.
 
 ## Keep three kinds of statements separate
 

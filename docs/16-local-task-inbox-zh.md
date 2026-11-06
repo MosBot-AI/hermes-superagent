@@ -112,7 +112,7 @@ Handler 注册时记录解析后的 profile，任务访问前再次检查，并�
 
 主文件以 0600 创建。已有主文件/journal/WAL/SHM 必须是当前 UID 所有、单硬链接、私有权限的普通文件。已有 profile/plugin-data/插件目录必须由当前 UID 所有，且不能允许 group/world 写入。不安全链接或权限被拒绝，不 chmod、unlink、截断或修复。这些检查防止已测试的预置文件风险，不承诺防竞态的文件系统隔离。
 
-SQLite 使用默认 rollback journal、synchronous=FULL、foreign keys，并关闭 trusted_schema。插件不绕过宿主兼容控制独立启用 WAL。事务式核验应用所有权 marker 与受支持 schema，精确 v1 存储按[文档 17](17-local-task-agenda-zh.md)升级到 v2；外来、修改、损坏或更新版本的 schema 均 fail closed，不静默替换原数据库。手动恢复前先保留原文件并调查原因。
+SQLite 使用默认 rollback journal、synchronous=FULL、foreign keys，并关闭 trusted_schema。插件不绕过宿主兼容控制独立启用 WAL。事务式核验应用所有权 marker 与受支持 schema，精确 v1/v2 存储现按[文档 24](24-local-project-groups-zh.md)升级到 v3，承接[文档 17](17-local-task-agenda-zh.md)中的原始日期扩展；外来、修改、损坏或更新版本的 schema 均 fail closed，不静默替换原数据库。手动恢复前先保留原文件并调查原因。
 
 原生存储约定下，插件数据在安装更新/卸载后仍保留 [S1]。停用或删除插件不等于删除数据，不能把 uninstall 当作遗忘。
 
