@@ -5,6 +5,7 @@ import json
 from typing import Any, Protocol
 
 from .enforcement import build_enforcement_inventory
+from .identity import build_access_diagnostic
 from .status import build_status
 from .task_cli import current_profile_home, run_tasks_cli, setup_tasks_cli
 
@@ -17,6 +18,29 @@ class PluginContext(Protocol):
     def register_tool(self, **kwargs: Any) -> Any: ...
 
     def register_cli_command(self, **kwargs: Any) -> Any: ...
+
+    def register_command(self, name: str, handler: Any, **kwargs: Any) -> Any: ...
+
+
+def access_command(
+    raw_args: str,
+    *,
+    platform: str = "",
+    source: object = None,
+    session_id: str = "",
+    session_key: str = "",
+) -> str:
+    """Public slash diagnostic only; never resolves owner, grants or task data."""
+    return json.dumps(
+        build_access_diagnostic(
+            raw_args,
+            platform=platform,
+            source=source,
+            session_id=session_id,
+            session_key=session_key,
+        ),
+        sort_keys=True,
+    )
 
 
 def status_tool(args: dict[str, object], **_context: object) -> str:
@@ -40,12 +64,15 @@ def setup_cli(parser: argparse.ArgumentParser) -> None:
     subparsers = parser.add_subparsers(dest="personal_command", required=True)
     subparsers.add_parser("status", help="Show the read-only foundation status as JSON")
     subparsers.add_parser("coverage", help="Show blocked write paths and baseline evidence as JSON")
+    subparsers.add_parser("access", help="Explain the still-blocked owner/receiving-Bot boundary")
     setup_tasks_cli(subparsers)
 
 
 def run_cli(args: argparse.Namespace) -> None:
     if args.personal_command == "coverage":
         print(json.dumps(build_enforcement_inventory(), ensure_ascii=False, sort_keys=True))
+    elif args.personal_command == "access":
+        print(access_command(""))
     else:
         print(status_tool({}))
 
@@ -111,4 +138,10 @@ def register(ctx: PluginContext) -> None:
         setup_fn=setup_cli,
         handler_fn=registered_cli,
         description="Diagnostics and opt-in local task inbox; no external actions.",
+    )
+    ctx.register_command(
+        "personal-access",
+        handler=access_command,
+        description="Explain protected-access blockers without reading personal data.",
+        args_hint="[status]",
     )

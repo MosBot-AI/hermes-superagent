@@ -27,7 +27,8 @@
 15. [主 Bot 绑定与连续性](15-primary-bot-binding-zh.md)：选择既有原生 Bot、验证角色、恢复与 fencing 的拟议方案。
 16. [显式启用的本地任务收件箱](16-local-task-inbox-zh.md)：已实现的本地 CLI 持久化、重放/revision 校验及明确限制。
 17. [本地截止日期与 agenda](17-local-task-agenda-zh.md)：日期语义、有界查询与事务式 schema 升级。
-18. [架构决策记录](adr/README-zh.md)：为什么选择这些约束。
+18. [Owner 入口与只读授权基础](18-owner-entry-and-read-authorization-zh.md)：内部评估器、原生身份缺口与不读取个人数据的诊断。
+19. [架构决策记录](adr/README-zh.md)：为什么选择这些约束。
 
 ## 三类陈述必须分开
 

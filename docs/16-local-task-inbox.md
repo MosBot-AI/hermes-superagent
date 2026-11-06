@@ -2,7 +2,7 @@
 
 English | [简体中文](16-local-task-inbox-zh.md)
 
-**Implemented development slice, not the complete personal agent.** A trusted local operator can capture, inspect, edit, complete and cancel plugin-owned tasks through the real Hermes CLI. Records survive process restarts. No model, HTTP, slash-command, Bot binding, scheduler, native Kanban or outbound-action surface is enabled by this slice.
+**Implemented development slice, not the complete personal agent.** A trusted local operator can capture, inspect, edit, complete and cancel plugin-owned tasks through the real Hermes CLI. Records survive process restarts. No model, HTTP, personal-data slash-command, Bot binding, scheduler, native Kanban or outbound-action surface is enabled by this slice.
 
 The tested Hermes baseline remains `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`, Python 3.14.9. This is a narrow local precursor to E2.1, not completion of E1, E2 or M1. The [full roadmap](08-roadmap-and-acceptance.md) and controlled-write release gate remain in force.
 
@@ -12,7 +12,7 @@ Date-only deadlines and agenda are now available as a compatible extension; see 
 
 - Default `mode: read_only` still refuses task commands before opening plugin storage. Status and coverage do not open task storage in either mode.
 - Explicit `mode: local_tasks` enables only local CLI operations on this plugin's own inbox. It does not change delegation, credentials, tool permissions or native project/task/schedule state.
-- The only registered model tool remains `personal_agent_status`. It reports capability/configuration without reading task records. There is no task-data tool, HTTP route, conversational slash command or automatic capture from messages.
+- The only registered model tool remains `personal_agent_status`. It reports capability/configuration without reading task records. There is no task-data tool, HTTP route, personal-data conversational slash command or automatic capture from messages. The separate access diagnostic does not read this inbox.
 - This trusts the local OS account and the selected Hermes profile. A CLI command is not cryptographic proof of a human owner. Profile labels, task IDs and `source: local_cli` are not authorization credentials.
 - It does not contain shell/Python tools, other plugins, other processes running as the same UID, or arbitrary filesystem replacement races. It is not a substitute for E1 identity/action authorization. Do not expose the CLI through an untrusted remote executor.
 - Personal task content is plaintext in local storage and command output. Command-line arguments may appear in shell history/process listings. Do not put credentials or secrets in task fields. Encryption, secure input UI, export/forget/backup policy and remote identity are not implemented here.

@@ -53,5 +53,15 @@ def build_status(*, mode: str = "read_only") -> dict[str, object]:
             "scope": "Plugin-owned tasks only; not native Kanban or a verified owner boundary.",
             "platform_gate": "POSIX private-file checks; Windows storage is not supported yet.",
         },
+        "read_authorization": {
+            "core_implemented": True,
+            "production_context_issuer": False,
+            "protected_reads_enabled": False,
+            "missing_contracts": [
+                "verified_receiving_transport",
+                "owner_binding",
+                "current_read_policy",
+            ],
+        },
         "write_path_inventory": build_enforcement_summary(),
     }

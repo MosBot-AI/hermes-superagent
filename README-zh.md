@@ -20,6 +20,8 @@ Hermes 原生 personal-agent 插件，目标是让一个主 agent 管理项目�
 
 [本地任务收件箱指南](docs/16-local-task-inbox-zh.md) 说明启用、命令、持久化与隐私限制。[截止日期与 agenda](docs/17-local-task-agenda-zh.md) 说明日期语义和 v1→v2 存储升级；它不会投递提醒。[主 Bot 绑定方案](docs/15-primary-bot-binding-zh.md) 选择已有原生 Bot/canonical chat，但绑定与 owner 认证尚未实现。
 
+[Owner 入口与读取权限基础](docs/18-owner-entry-and-read-authorization-zh.md)已实现内部纯评估器及 `/personal-access` / `hermes personal-agent access` 阻断诊断。公开 source 缺少可信接收 Bot 账号边界，生产身份签发与私人读取仍关闭；这不是已完成的 owner 授权。
+
 ## 开发验证
 
 基线为 `compatibility.json` 内的 Hermes commit；当前实际运行目标是 Python 3.14。没有根据单一 SHA 宣称宽泛的 `requires_hermes` 版本范围。

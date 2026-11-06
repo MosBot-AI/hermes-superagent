@@ -6,6 +6,8 @@
 
 源码基线：Hermes `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`。检查源码不等于部署认证。请结合 [03](03-native-architecture-zh.md)、[06](06-plugins-mcp-and-security-zh.md)、[11](11-worker-model-routing-zh.md) 和 [14](14-client-api-contracts-zh.md) 阅读本合同。
 
+准备性代码与契约证据见[文档 18](18-owner-entry-and-read-authorization-zh.md)：只读评估器已实现，但公开接收 Bot 身份缺失，生产 owner context 和私人读取仍关闭。以下绑定流程仍为设计。
+
 ## 1. 决策与用户体验
 
 个人主 agent 是用户选择的原生 Bot：其 profile 持有个人领域状态，其**规范 Bot Chat（canonical Bot Chat）**是首选的协调会话。Hermes 仍负责推理、会话、压缩、worker 执行、cron、凭据和传输。插件提供个人领域上下文、任务、策略和证据。

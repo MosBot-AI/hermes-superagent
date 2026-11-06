@@ -20,6 +20,8 @@ The detailed [client and connector API contracts](docs/14-client-api-contracts.m
 
 The [local task inbox guide](docs/16-local-task-inbox.md) documents opt-in, commands, persistence and privacy limits. [Due dates and agenda](docs/17-local-task-agenda.md) explain date semantics and the v1→v2 store upgrade; they do not deliver reminders. The [primary Bot binding design](docs/15-primary-bot-binding.md) selects an existing native Bot/canonical chat, but binding and owner authentication are not implemented.
 
+The [owner-entry/read-authorization foundation](docs/18-owner-entry-and-read-authorization.md) adds a pure internal evaluator and `/personal-access` / `hermes personal-agent access` denial diagnostics. Public source context lacks verified receiving-Bot/account provenance, so production identity issuance and private reads remain disabled; this is not completed owner authorization.
+
 ## Development checks
 
 `compatibility.json` records the Hermes baseline commit. The current runtime target is Python 3.14. A single tested SHA does not justify a broad `requires_hermes` version range.

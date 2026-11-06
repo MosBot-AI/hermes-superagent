@@ -73,7 +73,7 @@ def entry(manager):
     assert loaded.tools_registered == ["personal_agent_status"]
     assert not loaded.hooks_registered
     assert not loaded.middleware_registered
-    assert not manager._plugin_commands
+    assert set(manager._plugin_commands) == {"personal-access"}
     assert not manager._platform_handler_factories
     return manager._cli_commands["personal-agent"]
 

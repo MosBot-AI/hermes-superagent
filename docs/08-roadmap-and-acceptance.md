@@ -50,6 +50,8 @@ Depends on E0.2/E0.4.
 
 Acceptance: All write operations in release scope are covered; spoofed identities, stale approvals, payload changes after approval, and policy failures cause no unauthorized side effects. Revocation race tests cover “revocation commits first/admission commits first but nothing has been sent/the remote has accepted but local outcome is unknown/the next action after revocation.” Assert against the transactional ordering of admission and revocation; do not promise to retract already authorized remote requests. A denied intent cannot be revived; a new instruction requires a new intent and fresh authorization.
 
+Current preparatory implementation: [owner entry and read authorization](18-owner-entry-and-read-authorization.md) provides a pure internal evaluator and always-denying diagnostics. E0.7 source/IPC tests establish the missing public receiving-Bot identity. There is no production verified-context issuer, owner enrollment, grant/policy persistence or private read access. E0.7/E1 gates remain incomplete; binding is not enabled.
+
 ### E2. Establish the Personal Domain and Memory (P0/P1, M1–M2)
 
 Depends on E1.1/E1.5.

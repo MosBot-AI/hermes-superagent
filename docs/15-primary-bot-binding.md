@@ -6,6 +6,8 @@ English | [简体中文](15-primary-bot-binding-zh.md)
 
 Source baseline: Hermes `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`. Source inspection is not deployment certification. Read [03](03-native-architecture.md), [06](06-plugins-mcp-and-security.md), [11](11-worker-model-routing.md) and [14](14-client-api-contracts.md) alongside this contract.
 
+Preparatory code and contract evidence are in [18](18-owner-entry-and-read-authorization.md): the read evaluator exists, but missing public receiving-Bot identity keeps production owner contexts and private reads disabled. The binding flows below remain a design.
+
 ## 1. Decision and User Experience
 
 The personal main agent is the user's selected native Bot: its profile owns personal domain state, and its **canonical Bot Chat** is the preferred coordination conversation. Hermes still owns inference, sessions, compression, worker execution, cron, credentials and transport. The plugin contributes personal-domain context, tasks, policy and evidence.
