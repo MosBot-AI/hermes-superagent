@@ -22,7 +22,7 @@ The [local task inbox guide](docs/16-local-task-inbox.md) documents opt-in, comm
 
 The [owner-entry/read-authorization foundation](docs/18-owner-entry-and-read-authorization.md) adds a pure internal evaluator and `/personal-access` / `hermes personal-agent access` denial diagnostics. Public source context lacks verified receiving-Bot/account provenance, so production identity issuance and private reads remain disabled; this is not completed owner authorization.
 
-The [unified voice design](docs/19-unified-voice-provider-contracts.md) covers local ASR/TTS/VAD, user-configured online APIs and explicitly adapted realtime frontends under shared lifecycle/recovery contracts, preserving real backend differences. Voice runtime code, account connections and live calls remain unimplemented.
+The [unified voice design](docs/19-unified-voice-provider-contracts.md) covers local ASR/TTS/VAD, user-configured online APIs and explicitly adapted realtime frontends under shared lifecycle/recovery contracts, preserving real backend differences. The [offline voice simulator](docs/20-voice-contract-simulator.md) now exercises a narrow synthetic contract through `hermes personal-agent voice self-test`. It uses generated silence only, with no microphone, speech model, provider call or native turn. Account connections and live voice remain unimplemented.
 
 ## Development checks
 

@@ -63,5 +63,12 @@ def build_status(*, mode: str = "read_only") -> dict[str, object]:
                 "current_read_policy",
             ],
         },
+        "voice": {
+            "synthetic_self_test_implemented": True,
+            "live_voice_enabled": False,
+            "microphone_enabled": False,
+            "provider_connections_enabled": False,
+            "scope": "Offline synthetic contract checks only; not working speech or calls.",
+        },
         "write_path_inventory": build_enforcement_summary(),
     }

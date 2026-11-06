@@ -2,7 +2,7 @@
 
 English | [简体中文](19-unified-voice-provider-contracts-zh.md)
 
-**Status: proposed design, not implemented.** Users may select local speech processing, configured online speech APIs, or a supported realtime speech-to-speech service through one application-level interface. This document defines new plugin-owned contracts, not an existing Hermes `VoiceProvider` API. No microphone, provider account, live audio API or paid call was used to prepare this design. No real-device latency/accuracy certification is implied.
+**Status: production design, not enabled.** A narrow offline simulator and native provider contract tests are implemented in [20](20-voice-contract-simulator.md); they do not implement this production voice API. Users may select local speech processing, configured online speech APIs, or a supported realtime speech-to-speech service through one application-level interface. This document defines new plugin-owned contracts, not an existing Hermes `VoiceProvider` API. No microphone, provider account, live audio API or paid call was used to prepare this design. No real-device latency/accuracy certification is implied.
 
 This scope is an in-app live voice conversation and voice messages, not a PSTN dialer or permission to call third parties. Hermes remains the personal agent and tool authority. The voice layer does not replace the main Bot, native session runtime, authorization, worker routing or credential system. Read [07](07-mobile-and-voice.md), [14](14-client-api-contracts.md), [15](15-primary-bot-binding.md) and [18](18-owner-entry-and-read-authorization.md) for those boundaries.
 
@@ -34,6 +34,8 @@ Hermes source baseline is `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`. The follow
 | `voice.voice_chat_mode: gpt-live` [V5] | Specific client-delegation protocol: host exchanges SDP, Desktop owns WebRTC, delegation enters Hermes and commentary returns to the voice frontend; not a generic realtime API bus |
 | Native chained client-direct and relay modes [V6] | Some Desktop/serve/dashboard paths can return long-lived provider keys to trusted client memory; the `webapp` surface forces relay; these are different security properties |
 | Native interruption paths [V7] | Playback stop and agent interruption are only partly separated; one TUI path interrupts all running sessions. Existing provider ABCs do not guarantee a cancellable blocking finalize |
+
+Pinned synthetic host tests additionally show that native ASR stream-session objects and TTS generators do not become usable streaming objects across plugin-host IPC. A true streaming flag alone is insufficient. File operations are a separate passing contract; see [20](20-voice-contract-simulator.md).
 
 New `VoiceSessionAdapter`, component-VAD interface and unified controls below are **proposed internal interfaces**. Reuse the existing ASR/TTS registrars where their semantics fit. Do not shadow built-in provider names or import the internal streaming `@register` decorator as a public plugin ABI. If supporting a new realtime backend requires a generic host voice-session extension, specify and test that seam with this concrete consumer before enabling it.
 
@@ -251,14 +253,14 @@ Use fake transports/engines and synthetic audio first; record exact adapter/nati
 
 | ID | Status and narrow dependencies | Deliverable |
 |---|---|---|
-| E0.8 Verify Voice Provider Contracts | M0; Backlog; E0.1/E0.2; use E0.4/E0.7 identity findings where applicable | Pinned ASR/TTS/native audio/live-protocol matrix, credential/cancel/stream probes, public adapter seams and unsupported modes |
-| E7.5 Define Unified Voice Session Contract | M2 (M1 design prework); Backlog; E0.8, E1.1/E1.2/E1.4/E1.5; E0.6 only for optional HTTP facade | Versioned profiles/capabilities, audio/control schemas, leases, author/turn ownership, budget and privacy policy; synthetic reference adapters |
+| E0.8 Verify Voice Provider Contracts | M0; In progress (offline contracts only); E0.1/E0.2; use E0.4/E0.7 identity findings where applicable | Pinned ASR/TTS/native audio/live-protocol matrix, credential/cancel/stream probes, public adapter seams and unsupported modes |
+| E7.5 Define Unified Voice Session Contract | M2 (M1 design prework); In progress (synthetic precursor only); E0.8, E1.1/E1.2/E1.4/E1.5; E0.6 only for optional HTTP facade | Versioned profiles/capabilities, audio/control schemas, leases, author/turn ownership, budget and privacy policy; synthetic reference adapters |
 | E7.6 Implement Local and Online Voice Adapters | M3; Backlog; E7.5, E7.1/E7.2/E7.3; E1.3 and relevant E0.4 coverage for enabled actions | One local/mixed pipeline and one explicitly selected online realtime adapter, native integration and capability-specific controls; no broad provider equivalence |
 | E7.7 Validate Duplex Recovery and Voice Quality | M3; Backlog; E7.6, E6.4, E8.1/E8.2 harness; E3.5/E4.4 for linked task/effect recovery | Device/latency/accuracy, barge-in, playback repair, reconnect, budgets and privacy tests; documented per-mode release gates |
 
 Extend E7.1–E7.4 rather than replacing the working voice-message plan: unify their ASR/TTS configuration and safety semantics, keep voice-message MVP and live duplex separate, and retain optional realtime validation. E9 remains worker-model routing; voice providers do not silently select that backend. Bot-bound calls additionally need the applicable E0.7/E1.6/E3.6 gates, without making every voice message depend on optional Bot enrollment.
 
-This design does not block the local task inbox or require a custom mobile app. All new packages remain Backlog. Start with a capability-negotiated pipeline, add one verified online realtime family, then expand adapters only with protocol/privacy/cost evidence. Complete the plan and document interfaces now; do not enable microphone capture, paid sessions, new grants or runtime features merely because the design is approved.
+This design does not block the local task inbox or require a custom mobile app. E0.8/E7.5 now have a partial offline precursor; neither package nor a production mode is complete. E7.6/E7.7 remain Backlog. Start with a capability-negotiated pipeline, add one verified online realtime family, then expand adapters only with protocol/privacy/cost evidence. Complete the plan and document interfaces now; do not enable microphone capture, paid sessions, new grants or runtime features merely because the design is approved.
 
 ## 13. Evidence and Version Notes
 

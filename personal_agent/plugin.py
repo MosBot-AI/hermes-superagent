@@ -8,6 +8,7 @@ from .enforcement import build_enforcement_inventory
 from .identity import build_access_diagnostic
 from .status import build_status
 from .task_cli import current_profile_home, run_tasks_cli, setup_tasks_cli
+from .voice_cli import run_voice_cli, setup_voice_cli
 
 
 class PluginContext(Protocol):
@@ -66,9 +67,12 @@ def setup_cli(parser: argparse.ArgumentParser) -> None:
     subparsers.add_parser("coverage", help="Show blocked write paths and baseline evidence as JSON")
     subparsers.add_parser("access", help="Explain the still-blocked owner/receiving-Bot boundary")
     setup_tasks_cli(subparsers)
+    setup_voice_cli(subparsers)
 
 
-def run_cli(args: argparse.Namespace) -> None:
+def run_cli(args: argparse.Namespace) -> int | None:
+    if args.personal_command == "voice":
+        return run_voice_cli(args)
     if args.personal_command == "coverage":
         print(json.dumps(build_enforcement_inventory(), ensure_ascii=False, sort_keys=True))
     elif args.personal_command == "access":
@@ -111,7 +115,7 @@ def register(ctx: PluginContext) -> None:
             if json.loads(result).get("status") == "blocked":
                 return 1
         else:
-            run_cli(args)
+            return run_cli(args)
         return None
 
     ctx.register_tool(
@@ -134,7 +138,7 @@ def register(ctx: PluginContext) -> None:
     )
     ctx.register_cli_command(
         name="personal-agent",
-        help="Inspect the personal-agent foundation and opt-in local tasks",
+        help="Inspect the foundation, opt-in local tasks and synthetic voice checks",
         setup_fn=setup_cli,
         handler_fn=registered_cli,
         description="Diagnostics and opt-in local task inbox; no external actions.",

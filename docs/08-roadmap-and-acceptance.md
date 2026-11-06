@@ -31,7 +31,7 @@ Complete a safe, reliable vertical slice first, then add connectors, entry point
 
 - E0.7: Verify Primary Bot Contracts (M0, Backlog): depends on E0.1/E0.2 and uses E0.4 findings. Verify native profile/route/canonical registry and lineage, author/worker provenance and receipts. HTTP modes additionally require E0.6. See [15](15-primary-bot-binding.md).
 
-- E0.8: Verify Voice Provider Contracts (M0, Backlog): depends on E0.1/E0.2, using E0.4/E0.7 identity findings where applicable. Verify pinned ASR/TTS, native audio/live protocols, credentials, cancellation/streaming contracts, public adapter seams and unsupported modes. See [19](19-unified-voice-provider-contracts.md).
+- E0.8: Verify Voice Provider Contracts (M0, In progress; offline subset only): depends on E0.1/E0.2, using E0.4/E0.7 identity findings where applicable. Verify pinned ASR/TTS, native audio/live protocols, credentials, cancellation/streaming contracts, public adapter seams and unsupported modes. See [19](19-unified-voice-provider-contracts.md).
 
 Acceptance: Every reuse point has a behavioral test or an explicit blocker; the initial `requires_hermes` range comes from tests, not arbitrary version numbers. Produce a per-tool, per-path enforcement inventory. A capability set must not be enabled while it has unknown or bypassable write paths; prompt constraints cannot substitute for enforcement.
 
@@ -129,11 +129,11 @@ Production modes depend on applicable native/client identity contracts, E1.3 and
 - E7.2: Voice action intents and visible confirmation; distinguish barge-in, stopping playback, and cancelling execution.
 - E7.3: Audio privacy and retention, host relay/short-lived credentials, and visible provider costs.
 - E7.4: Validate real-time voice feasibility; expand release only if device and cost criteria are met.
-- E7.5: Define Unified Voice Session Contract (M2, M1 design prework; Backlog): depends on E0.8, E1.1/E1.2/E1.4/E1.5; optional HTTP facade also needs E0.6. Define profiles/capabilities, audio/control schemas, leases, turn/author ownership, budget/privacy and synthetic reference adapters.
+- E7.5: Define Unified Voice Session Contract (M2, M1 design prework; In progress, synthetic precursor only): depends on E0.8, E1.1/E1.2/E1.4/E1.5; optional HTTP facade also needs E0.6. Define profiles/capabilities, audio/control schemas, leases, turn/author ownership, budget/privacy and synthetic reference adapters.
 - E7.6: Implement Local and Online Voice Adapters (M3, Backlog): depends on E7.5 and E7.1–E7.3; enabled actions additionally require E1.3 and relevant E0.4 coverage. Implement one local/mixed pipeline and one explicitly selected online realtime adapter without generalizing protocol compatibility.
 - E7.7: Validate Duplex Recovery and Voice Quality (M3, Backlog): depends on E7.6, E6.4 and E8.1/E8.2 harness; linked task/effect recovery also needs E3.5/E4.4. Validate devices, latency, accuracy, barge-in, playback reconciliation, reconnect, budgets and privacy.
 
-[19](19-unified-voice-provider-contracts.md) unifies E7.1–E7.4 configuration/safety semantics while retaining separate voice-message MVP and realtime-duplex gates. New interfaces/packages remain unimplemented; completing the design enables neither online transmission nor Primary Bot authority.
+[19](19-unified-voice-provider-contracts.md) unifies E7.1–E7.4 configuration/safety semantics while retaining separate voice-message MVP and realtime-duplex gates. The [offline simulator](20-voice-contract-simulator.md) implements a narrow synthetic precursor and public ASR/TTS contract probes. E0.8/E7.5 remain incomplete; production interfaces, online transmission and Primary Bot authority are not enabled.
 
 Acceptance: Misrecognition does not cause high-impact outbound actions; the same task can switch between text and voice; network loss or stopping voice does not falsely report cancellation of an external action. Real-time voice is a separate gate and does not block a completed voice-message MVP.
 

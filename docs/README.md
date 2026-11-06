@@ -29,7 +29,8 @@ Extend Hermes into a long-lived personal agent for one user: one main agent unde
 17. [Local due dates and agenda](17-local-task-agenda.md): date semantics, bounded queries and transactional schema upgrades.
 18. [Owner entry and read authorization](18-owner-entry-and-read-authorization.md): internal evaluator, native identity gaps and non-personal diagnostics.
 19. [Unified voice session and provider contracts](19-unified-voice-provider-contracts.md): replaceable local/online speech interfaces, capabilities, interruption/recovery and safety gates.
-20. [Architecture decision records](adr/README.md): reasons for the constraints.
+20. [Offline voice contract simulator](20-voice-contract-simulator.md): synthetic frame/queue/recovery self-test and verified native provider limitations.
+21. [Architecture decision records](adr/README.md): reasons for the constraints.
 
 ## Keep three kinds of statements separate
 

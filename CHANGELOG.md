@@ -33,6 +33,9 @@ This file distinguishes design work, development changes, and released capabilit
 
 - Bilingual unified voice-session/provider contracts for local/online pipelines and realtime frontends, including capability negotiation, interruption/recovery, credentials/budgets/privacy and E0.8/E7.5–E7.7 planning. Design only; no microphone, online call or voice runtime feature is enabled.
 
+- Offline `voice self-test` CLI, strict synthetic PCM capability/frame validation, bounded queues, duplicate/gap handling, generation/epoch fencing and interruption/recovery/close checks. No speech recognition, synthesis, capture, playback or native turn is performed.
+- Native ASR/TTS discovery and pipe-host contracts with synthetic unavailable providers; file operations work across the tested host boundary, but streaming-session/generator return values are not usable there. No provider is registered by the production plugin.
+
 ### Boundaries
 
 - E0.3, full E0.4 coverage, E0.6, identity/authorization, full domain storage, reminders, connectors, mobile, voice, and E9 model routing remain unimplemented.
