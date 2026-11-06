@@ -26,6 +26,9 @@ This file distinguishes design work, development changes, and released capabilit
 - Synthetic concurrency/rollback/storage tests, real-host CLI lifecycle tests and guarded top-level CLI subprocesses.
 - Separate bilingual primary Bot binding design, including conditional E0.7/E1.6/E3.6 work packages; no binding code is enabled.
 
+- Local date-only deadlines and bounded agenda, with explicit set/clear/view dates and existing idempotency/revision gates; no clock inference or reminder delivery.
+- Atomic exact-schema v1→v2 upgrade preserving legacy digests/receipts, with rollback, concurrent-upgrade and old-request replay tests.
+
 ### Boundaries
 
 - E0.3, full E0.4 coverage, E0.6, identity/authorization, full domain storage, reminders, connectors, mobile, voice, and E9 model routing remain unimplemented.

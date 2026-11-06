@@ -64,6 +64,8 @@ E0.6 是独立的可选客户端契约路线，不阻塞 channel-first M0/M1 退
 
 当前 E2.1 前置切片：[显式本地 CLI 任务收件箱](16-local-task-inbox-zh.md) 已实现插件自有 SQLite、原子 receipt、revision 校验及明确本地完成/取消。它不是完整领域 Task/记忆存储、已验证 owner 身份或原生派发。向 agent、渠道或 HTTP 开放个人数据前，E1 依赖仍是必需条件；E2.1 和 M1 均未完成。
 
+后续本地扩展已实现[截止日期与 agenda](17-local-task-agenda-zh.md)，包含原子 schema 升级及旧 receipt 兼容测试。它推进 E2.1/E8.3 的狭窄本地范围，不创建提醒，也不完成 E4 或 E1 门禁。
+
 ### E3. 接通原生项目任务（P0/P1，M1–M2）
 
 依赖 E0.3、E1.1–E1.5、E2.1。

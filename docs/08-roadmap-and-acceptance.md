@@ -64,6 +64,8 @@ Acceptance: Long-term facts have provenance or inference labels; they are not re
 
 Current E2.1 precursor: [the opt-in local CLI task inbox](16-local-task-inbox.md) implements plugin-owned SQLite, atomic receipts, revision checks and explicit local completion/cancellation. It is not the full domain Task/memory store, verified owner identity or native dispatch. E1 dependencies remain mandatory before exposing personal data to an agent, channel or HTTP client; neither E2.1 nor M1 is complete.
 
+The local follow-on adds [due dates and agenda](17-local-task-agenda.md), including atomic schema upgrades and legacy receipt compatibility tests. It advances a narrow local E2.1/E8.3 scope; it does not create reminders or complete E4 or the E1 gates.
+
 ### E3. Connect Native Projects and Tasks (P0/P1, M1–M2)
 
 Depends on E0.3, E1.1–E1.5, and E2.1.

@@ -211,3 +211,40 @@ def test_invalid_payload_never_reaches_store(parser, monkeypatch, tmp_path, caps
     )
     assert code == 1
     assert json.loads(capsys.readouterr().out)["error"]["code"] == "invalid_request"
+
+
+def test_capture_without_due_keeps_legacy_digest_fields(parser):
+    args = parser.parse_args(["tasks", "capture", "--title", "Synthetic", "--request-id", "r1"])
+    assert task_cli.command_request(args) == (
+        "capture",
+        {"title": "Synthetic", "details": "", "request_id": "r1"},
+    )
+
+
+def test_due_date_edit_and_clear_remain_distinct(parser):
+    task_id = str(uuid4())
+    common = ["tasks", "update", task_id, "--expected-revision", "1", "--request-id", "r2"]
+    assert (
+        task_cli.command_request(parser.parse_args([*common, "--due-date", "2028-02-29"]))[1][
+            "due_date"
+        ]
+        == "2028-02-29"
+    )
+    assert (
+        task_cli.command_request(parser.parse_args([*common, "--clear-due"]))[1]["due_date"] is None
+    )
+    with pytest.raises(SystemExit) as error:
+        parser.parse_args([*common, "--due-date", "2028-02-29", "--clear-due"])
+    assert error.value.code == 2
+
+
+def test_agenda_requires_explicit_date_and_extracts_only_declared_fields(parser):
+    with pytest.raises(SystemExit) as error:
+        parser.parse_args(["tasks", "agenda"])
+    assert error.value.code == 2
+    args = parser.parse_args(["tasks", "agenda", "--on", "2028-02-29", "--limit", "3"])
+    args.owner = "not-trusted"
+    assert task_cli.command_request(args) == (
+        "agenda",
+        {"on": "2028-02-29", "limit": 3, "after": None},
+    )

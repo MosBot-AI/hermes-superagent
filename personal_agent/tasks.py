@@ -5,12 +5,12 @@ import json
 import re
 import sqlite3
 import unicodedata
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
 _APPLICATION_ID = 0x5041544B
-_SCHEMA_VERSION = 1
+_SCHEMA_VERSION = 2
 _COLUMNS = (
     "id",
     "title",
@@ -22,8 +22,9 @@ _COLUMNS = (
     "resolved_at",
     "resolution_note",
     "source",
+    "due_date",
 )
-_SCHEMA = {
+_SCHEMA_V1 = {
     "tasks": """CREATE TABLE tasks (
         sequence INTEGER PRIMARY KEY AUTOINCREMENT,
         id TEXT NOT NULL UNIQUE, title TEXT NOT NULL, details TEXT NOT NULL,
@@ -38,6 +39,9 @@ _SCHEMA = {
         operation TEXT NOT NULL, timestamp TEXT NOT NULL,
         PRIMARY KEY(task_id, revision))""",
 }
+
+# Match SQLite ADD COLUMN serialization so fresh and migrated stores validate identically.
+_SCHEMA = {**_SCHEMA_V1, "tasks": _SCHEMA_V1["tasks"][:-1] + ", due_date TEXT)"}
 
 
 class TaskError(Exception):
@@ -74,15 +78,29 @@ def _task_id(value: Any) -> str:
     return value
 
 
+def _date(value: Any) -> str:
+    if not isinstance(value, str) or re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", value) is None:
+        raise TaskError("invalid_request")
+    try:
+        date.fromisoformat(value)
+    except ValueError:
+        raise TaskError("invalid_request") from None
+    return value
+
+
 def validate_request(operation: str, payload: dict) -> dict:
     """Validate without touching storage; return an independent normalized mapping."""
     fields = {
-        "capture": ({"title", "request_id"}, {"details"}),
-        "update": ({"task_id", "expected_revision", "request_id"}, {"title", "details"}),
+        "capture": ({"title", "request_id"}, {"details", "due_date"}),
+        "update": (
+            {"task_id", "expected_revision", "request_id"},
+            {"title", "details", "due_date"},
+        ),
         "complete": ({"task_id", "expected_revision", "request_id", "note"}, set()),
         "cancel": ({"task_id", "expected_revision", "request_id", "note"}, set()),
         "get": ({"task_id"}, set()),
         "list": (set(), {"state", "limit", "after"}),
+        "agenda": ({"on"}, {"limit", "after"}),
     }
     if not isinstance(operation, str) or operation not in fields or not isinstance(payload, dict):
         raise TaskError("invalid_request")
@@ -92,7 +110,7 @@ def validate_request(operation: str, payload: dict) -> dict:
     result = dict(payload)
     if operation == "capture":
         result.setdefault("details", "")
-    if operation == "update" and not ({"title", "details"} & result.keys()):
+    if operation == "update" and not ({"title", "details", "due_date"} & result.keys()):
         raise TaskError("invalid_request")
     for key, maximum, needed, multiline in (
         ("title", 240, True, False),
@@ -101,6 +119,10 @@ def validate_request(operation: str, payload: dict) -> dict:
     ):
         if key in result:
             result[key] = _text(result[key], maximum, required=needed, multiline=multiline)
+    if "due_date" in result and not (operation == "update" and result["due_date"] is None):
+        result["due_date"] = _date(result["due_date"])
+    if "on" in result:
+        result["on"] = _date(result["on"])
     if "task_id" in result:
         result["task_id"] = _task_id(result["task_id"])
     if "request_id" in result:
@@ -111,9 +133,11 @@ def validate_request(operation: str, payload: dict) -> dict:
         value = result["expected_revision"]
         if type(value) is not int or not 1 <= value < 2**63 - 1:
             raise TaskError("invalid_request")
-    if operation == "list":
-        result = {"state": "captured", "limit": 20, "after": None, **result}
-        if result["state"] not in ("captured", "done", "cancelled", "all"):
+    if operation in ("list", "agenda"):
+        result = {"limit": 20, "after": None, **result}
+        if operation == "list":
+            result.setdefault("state", "captured")
+        if operation == "list" and result["state"] not in ("captured", "done", "cancelled", "all"):
             raise TaskError("invalid_request")
         if type(result["limit"]) is not int or not 1 <= result["limit"] <= 100:
             raise TaskError("invalid_request")
@@ -152,7 +176,7 @@ class TaskStore:
             pass
 
     def initialize(self) -> None:
-        """Create an empty owned database or verify its exact supported schema."""
+        """Create v2, atomically migrate exact owned v1, or verify the v2 schema."""
         self._initialized = False
         began = False
         try:
@@ -171,9 +195,19 @@ class TaskStore:
                 conn.execute(f"PRAGMA user_version = {_SCHEMA_VERSION}")
             elif app_id != _APPLICATION_ID:
                 raise TaskError("foreign_database")
+            elif version == 1:
+                if dict(rows) != _SCHEMA_V1 or len(rows) != len(_SCHEMA_V1):
+                    raise TaskError("unsupported_schema")
+                conn.execute("ALTER TABLE tasks ADD COLUMN due_date TEXT")
+                conn.execute(f"PRAGMA user_version = {_SCHEMA_VERSION}")
             elif version != _SCHEMA_VERSION:
                 raise TaskError("unsupported_schema")
             elif dict(rows) != _SCHEMA or len(rows) != len(_SCHEMA):
+                raise TaskError("unsupported_schema")
+            rows = conn.execute(
+                "SELECT name, sql FROM sqlite_master WHERE name NOT GLOB 'sqlite_*'"
+            ).fetchall()
+            if dict(rows) != _SCHEMA or len(rows) != len(_SCHEMA):
                 raise TaskError("unsupported_schema")
             conn.execute("COMMIT")
             self._initialized = True
@@ -215,6 +249,33 @@ class TaskStore:
         items = [dict(zip(_COLUMNS, row, strict=True)) for row in rows[: request["limit"]]]
         return {"items": items, "next_cursor": items[-1]["id"] if more else None, "has_more": more}
 
+    def _agenda(self, request: dict) -> dict:
+        """Read live keyset pages; edits between pages may change membership."""
+        clauses = ["state = 'captured'", "due_date IS NOT NULL", "due_date <= ?"]
+        arguments = [request["on"]]
+        if request["after"] is not None:
+            row = self._connection.execute(
+                "SELECT due_date, sequence FROM tasks WHERE id = ?", (request["after"],)
+            ).fetchone()
+            if row is None or row[0] is None or row[0] > request["on"]:
+                raise TaskError("invalid_cursor")
+            clauses.append("(due_date > ? OR (due_date = ? AND sequence > ?))")
+            arguments.extend((row[0], row[0], row[1]))
+        arguments.append(request["limit"] + 1)
+        rows = self._connection.execute(
+            f"SELECT {','.join(_COLUMNS)} FROM tasks WHERE {' AND '.join(clauses)}"
+            " ORDER BY due_date ASC, sequence ASC LIMIT ?",
+            arguments,
+        ).fetchall()
+        more = len(rows) > request["limit"]
+        items = [dict(zip(_COLUMNS, row, strict=True)) for row in rows[: request["limit"]]]
+        return {
+            "on": request["on"],
+            "items": items,
+            "next_cursor": items[-1]["id"] if more else None,
+            "has_more": more,
+        }
+
     def run(self, operation: str, payload: dict) -> dict:
         """Execute a validated operation with atomic mutations and durable replay receipts."""
         request = validate_request(operation, payload)
@@ -224,8 +285,13 @@ class TaskStore:
         try:
             if self._connection.in_transaction:
                 raise TaskError("connection_in_transaction")
-            if operation in ("get", "list"):
-                data = self._get(request["task_id"]) if operation == "get" else self._list(request)
+            if operation in ("get", "list", "agenda"):
+                if operation == "get":
+                    data = self._get(request["task_id"])
+                elif operation == "agenda":
+                    data = self._agenda(request)
+                else:
+                    data = self._list(request)
                 return {"data": data, "replayed": False}
             self._begin()
             began = True
@@ -255,9 +321,16 @@ class TaskStore:
                 task_id = str(uuid4())
                 self._connection.execute(
                     "INSERT INTO tasks (id,title,details,state,revision,"
-                    "created_at,updated_at,source)"
-                    " VALUES (?,?,?,'captured',1,?,?,'local_cli')",
-                    (task_id, request["title"], request["details"], now, now),
+                    "created_at,updated_at,source,due_date)"
+                    " VALUES (?,?,?,'captured',1,?,?,'local_cli',?)",
+                    (
+                        task_id,
+                        request["title"],
+                        request["details"],
+                        now,
+                        now,
+                        request.get("due_date"),
+                    ),
                 )
             else:
                 task_id = request["task_id"]
@@ -268,11 +341,12 @@ class TaskStore:
                     raise TaskError("terminal_state")
                 state = {"complete": "done", "cancel": "cancelled"}.get(operation, "captured")
                 cursor = self._connection.execute(
-                    "UPDATE tasks SET title=?, details=?, state=?, revision=revision+1,"
+                    "UPDATE tasks SET title=?, details=?, due_date=?, state=?, revision=revision+1,"
                     " updated_at=?, resolved_at=?, resolution_note=? WHERE id=? AND revision=?",
                     (
                         request.get("title", task["title"]),
                         request.get("details", task["details"]),
+                        request.get("due_date", task["due_date"]),
                         state,
                         now,
                         now if state != "captured" else None,

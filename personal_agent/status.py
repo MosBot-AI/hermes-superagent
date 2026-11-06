@@ -28,6 +28,7 @@ def build_status(*, mode: str = "read_only") -> dict[str, object]:
             "diagnostics": True,
             "personal_data_storage": local_tasks,
             "local_task_inbox_cli": local_tasks,
+            "local_task_agenda_cli": local_tasks,
             "identity_binding": False,
             "action_authorization": False,
             "reminders": False,

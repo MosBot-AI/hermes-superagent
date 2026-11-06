@@ -6,6 +6,8 @@
 
 测试基线仍为 Hermes `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`、Python 3.14.9。这是 E2.1 的有限本地前置切片，不代表 E1、E2 或 M1 完成。[完整路线](08-roadmap-and-acceptance-zh.md)与受控写发布门槛仍然有效。
 
+仅含日期的截止日期与 agenda 已作为兼容扩展提供；命令、迁移及旧 receipt 语义见[文档 17](17-local-task-agenda-zh.md)。
+
 ## 1. 范围与信任边界
 
 - 默认 `mode: read_only` 仍在打开插件存储之前拒绝任务命令。两种模式下 status 和 coverage 都不打开任务存储。
@@ -71,7 +73,7 @@ hermes personal-agent tasks list --state done
 
 List 状态支持 captured（默认）、done、cancelled、all；limit 默认 20，范围 1–100。将返回的 next_cursor UUID 传给 `--after`。这是本地 keyset 分页，不是持久变更流或跨页面一致快照。其他 profile 的任务不是本数据库中的有效 cursor。
 
-成功结果均包含 `schema_version: personal.local-tasks.v1`、`status: ok`、`scope: trusted_local_cli_only`、data、replayed 和 `error: null`。List 的 data 包含 items、next_cursor、has_more。任务包含 id、title、details、state、revision、created_at、updated_at、resolved_at、resolution_note、source。时间为 UTC；本切片不解析截止时间或时区。
+成功结果均包含 `schema_version: personal.local-tasks.v1`、`status: ok`、`scope: trusted_local_cli_only`、data、replayed 和 `error: null`。List 的 data 包含 items、next_cursor、has_more。任务包含 id、title、details、state、revision、created_at、updated_at、resolved_at、resolution_note、source，当前视图另含可为 null 的 due_date。事件时间为 UTC；due_date 是不推断时区的日历日期。历史 receipt 可能缺少 due_date，见[文档 17](17-local-task-agenda-zh.md)。
 
 ```json
 {
@@ -96,7 +98,7 @@ CLI 成功退出码为 0，已处理操作失败为 1，argparse 用法错误为
 
 变更在同一事务中比较 expected_revision，仅增加一次 revision。竞争更新返回 revision_conflict。事务失败时任务、事件和 receipt 一起回滚。CLI 响应丢失可用相同 request ID/payload 重试；换新 key 表示新操作，不是恢复方法。本切片没有远端 effect，因此不声称分布式 exactly-once。
 
-首个 schema 在本地保留 receipt，不自动过期；没有新增删除、自动清理、备份恢复迁移或遗忘命令。这是开发限制，不是完整个人数据保留策略。
+首个 schema 在本地保留 receipt，不自动过期；没有新增删除、自动清理、备份恢复或遗忘命令。Schema 升级另见[文档 17](17-local-task-agenda-zh.md)。这是开发限制，不是完整个人数据保留策略。
 
 ## 5. 存储与 Profile 安全
 
@@ -106,7 +108,7 @@ Handler 注册时记录解析后的 profile，任务访问前再次检查，并�
 
 主文件以 0600 创建。已有主文件/journal/WAL/SHM 必须是当前 UID 所有、单硬链接、私有权限的普通文件。已有 profile/plugin-data/插件目录必须由当前 UID 所有，且不能允许 group/world 写入。不安全链接或权限被拒绝，不 chmod、unlink、截断或修复。这些检查防止已测试的预置文件风险，不承诺防竞态的文件系统隔离。
 
-SQLite 使用默认 rollback journal、synchronous=FULL、foreign keys，并关闭 trusted_schema。插件不绕过宿主兼容控制独立启用 WAL。事务式核验应用所有权 marker 与 schema version 1；外来、修改、损坏或更新版本的 schema 均 fail closed，不静默替换原数据库。手动恢复前先保留原文件并调查原因。
+SQLite 使用默认 rollback journal、synchronous=FULL、foreign keys，并关闭 trusted_schema。插件不绕过宿主兼容控制独立启用 WAL。事务式核验应用所有权 marker 与受支持 schema，精确 v1 存储按[文档 17](17-local-task-agenda-zh.md)升级到 v2；外来、修改、损坏或更新版本的 schema 均 fail closed，不静默替换原数据库。手动恢复前先保留原文件并调查原因。
 
 原生存储约定下，插件数据在安装更新/卸载后仍保留 [S1]。停用或删除插件不等于删除数据，不能把 uninstall 当作遗忘。
 

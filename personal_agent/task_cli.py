@@ -20,6 +20,7 @@ def setup_tasks_cli(parent: argparse._SubParsersAction) -> None:
     capture.add_argument("--title", required=True)
     capture.add_argument("--details", default="")
     capture.add_argument("--request-id", required=True)
+    capture.add_argument("--due-date", default=argparse.SUPPRESS, help="Explicit YYYY-MM-DD date")
     show = commands.add_parser("show", help="Read one local task")
     show.add_argument("task_id")
     listing = commands.add_parser("list", help="Read a bounded local task page, newest first")
@@ -28,6 +29,12 @@ def setup_tasks_cli(parent: argparse._SubParsersAction) -> None:
     )
     listing.add_argument("--limit", type=int, default=20)
     listing.add_argument("--after", default=None)
+    agenda = commands.add_parser(
+        "agenda", help="List active tasks due on or before an explicit date"
+    )
+    agenda.add_argument("--on", required=True, help="Explicit YYYY-MM-DD date; no clock inference")
+    agenda.add_argument("--limit", type=int, default=20)
+    agenda.add_argument("--after", default=None)
     for name in ("update", "complete", "cancel"):
         command = commands.add_parser(name, help=f"{name.capitalize()} a local task explicitly")
         command.add_argument("task_id")
@@ -36,6 +43,15 @@ def setup_tasks_cli(parent: argparse._SubParsersAction) -> None:
         if name == "update":
             command.add_argument("--title", default=argparse.SUPPRESS)
             command.add_argument("--details", default=argparse.SUPPRESS)
+            dates = command.add_mutually_exclusive_group()
+            dates.add_argument("--due-date", default=argparse.SUPPRESS)
+            dates.add_argument(
+                "--clear-due",
+                dest="due_date",
+                action="store_const",
+                const=None,
+                default=argparse.SUPPRESS,
+            )
         else:
             command.add_argument("--note", required=True)
 
@@ -43,10 +59,11 @@ def setup_tasks_cli(parent: argparse._SubParsersAction) -> None:
 def command_request(args: argparse.Namespace) -> tuple[str, dict]:
     operation = "get" if args.task_operation == "show" else args.task_operation
     fields = {
-        "capture": ("title", "details", "request_id"),
+        "capture": ("title", "details", "request_id", "due_date"),
         "get": ("task_id",),
         "list": ("state", "limit", "after"),
-        "update": ("task_id", "expected_revision", "request_id", "title", "details"),
+        "agenda": ("on", "limit", "after"),
+        "update": ("task_id", "expected_revision", "request_id", "title", "details", "due_date"),
         "complete": ("task_id", "expected_revision", "request_id", "note"),
         "cancel": ("task_id", "expected_revision", "request_id", "note"),
     }

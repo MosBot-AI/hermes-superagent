@@ -26,7 +26,8 @@ Extend Hermes into a long-lived personal agent for one user: one main agent unde
 14. [Client, authorization, and connector API contracts](14-client-api-contracts.md): proposed HTTP routes, canonical session transport, recovery, and explicit native-mobile blockers.
 15. [Primary Bot binding and continuity](15-primary-bot-binding.md): proposed selection of an existing native Bot, verified roles, recovery and fencing.
 16. [Opt-in local task inbox](16-local-task-inbox.md): implemented local CLI persistence, replay/revision checks and explicit limits.
-17. [Architecture decision records](adr/README.md): reasons for the constraints.
+17. [Local due dates and agenda](17-local-task-agenda.md): date semantics, bounded queries and transactional schema upgrades.
+18. [Architecture decision records](adr/README.md): reasons for the constraints.
 
 ## Keep three kinds of statements separate
 

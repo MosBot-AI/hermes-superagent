@@ -10,7 +10,7 @@ Implemented development slices include the **E0 native foundation** and an **opt
 
 - Native loading through `plugin.yaml` and synchronous `register(ctx)`.
 - A read-only `personal_agent_status` tool and, in `in_process` plugin mode, the `hermes personal-agent status` CLI.
-- Default `read_only` mode opens no task storage. Explicit `local_tasks` enables a profile-local CLI inbox: capture, list/show, update, complete and cancel with durable replay receipts and revision checks. No personal-data model tool, external delivery, scheduling or model routing is registered.
+- Default `read_only` mode opens no task storage. Explicit `local_tasks` enables a profile-local CLI inbox: capture, list/show, update, complete and cancel, plus explicit due dates and agenda with durable replay receipts and revision checks. No personal-data model tool, external delivery, scheduling or model routing is registered.
 - Offline unit tests and real discovery, registry dispatch, configuration, and unload contracts against a pinned Hermes commit.
 - Follow-on E0.4 failure-boundary contracts and a read-only inventory of ten blocked write paths. `hermes personal-agent coverage` shows the evidence; it does not authorize or disable host tools.
 
@@ -18,7 +18,7 @@ This plugin **does not disable or secure other Hermes tools**. E0.4 write-path c
 
 The detailed [client and connector API contracts](docs/14-client-api-contracts.md) are design work only. No HTTP API is registered by this plugin yet. M1 uses an existing mobile messaging channel; a custom native phone app has separate authentication and recovery gates.
 
-The [local task inbox guide](docs/16-local-task-inbox.md) documents opt-in, commands, persistence and privacy limits. The [primary Bot binding design](docs/15-primary-bot-binding.md) selects an existing native Bot/canonical chat, but binding and owner authentication are not implemented.
+The [local task inbox guide](docs/16-local-task-inbox.md) documents opt-in, commands, persistence and privacy limits. [Due dates and agenda](docs/17-local-task-agenda.md) explain date semantics and the v1→v2 store upgrade; they do not deliver reminders. The [primary Bot binding design](docs/15-primary-bot-binding.md) selects an existing native Bot/canonical chat, but binding and owner authentication are not implemented.
 
 ## Development checks
 

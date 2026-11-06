@@ -6,6 +6,8 @@ English | [简体中文](16-local-task-inbox-zh.md)
 
 The tested Hermes baseline remains `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`, Python 3.14.9. This is a narrow local precursor to E2.1, not completion of E1, E2 or M1. The [full roadmap](08-roadmap-and-acceptance.md) and controlled-write release gate remain in force.
 
+Date-only deadlines and agenda are now available as a compatible extension; see [17](17-local-task-agenda.md) for commands, migration and legacy receipt semantics.
+
 ## 1. Scope and Trust Boundary
 
 - Default `mode: read_only` still refuses task commands before opening plugin storage. Status and coverage do not open task storage in either mode.
@@ -71,7 +73,7 @@ Validation happens before storage opens. Unknown operations/fields, invalid cano
 
 List states are `captured` (default), `done`, `cancelled` or `all`; limit defaults to 20 and must be 1–100. Pass the returned `next_cursor` UUID as `--after`. It is local keyset pagination, not a durable change feed or consistent cross-page snapshot. A task from another profile is not a valid cursor in this database.
 
-All successful command results have `schema_version: personal.local-tasks.v1`, `status: ok`, `scope: trusted_local_cli_only`, `data`, `replayed` and `error: null`. List `data` contains items, next_cursor and has_more. A task contains id, title, details, state, revision, created_at, updated_at, resolved_at, resolution_note and source. Times are UTC; this slice does not interpret due dates or timezones.
+All successful command results have `schema_version: personal.local-tasks.v1`, `status: ok`, `scope: trusted_local_cli_only`, `data`, `replayed` and `error: null`. List `data` contains items, next_cursor and has_more. A task contains id, title, details, state, revision, created_at, updated_at, resolved_at, resolution_note, source and nullable due_date in current views. Event times are UTC; due_date is a calendar date with no inferred timezone. Historical receipts can lack due_date; see [17](17-local-task-agenda.md).
 
 ```json
 {
@@ -96,7 +98,7 @@ Every mutation requires a stable request ID. The database stores a digest of the
 
 Changes compare expected_revision under the same transaction and increment it once. A competing edit returns revision_conflict. On transaction failure, task, event and receipt roll back together. A lost CLI response can be retried with the same request ID/payload; using a new key means a new requested operation and is not a recovery mechanism. There is no distributed exactly-once claim because this slice performs no remote effect.
 
-Receipts are retained locally without automatic expiration in this first schema. No delete, automatic cleanup, backup/restore migration or forgetting command is added. This is a development limitation, not a complete personal-data retention policy.
+Receipts are retained locally without automatic expiration in this first schema. No delete, automatic cleanup, backup/restore or forgetting command is added. Schema upgrades are covered separately in [17](17-local-task-agenda.md). This is a development limitation, not a complete personal-data retention policy.
 
 ## 5. Storage and Profile Safety
 
@@ -106,7 +108,7 @@ The handler captures the resolved profile at registration and checks it again be
 
 The main file is created with mode 0600. Existing main/journal/WAL/SHM files must be regular, owned by the current UID, singly linked and private. Existing profile/plugin-data/plugin directories must be current-UID directories without group/world write permissions. Unsafe links or permissions are refused without chmod, unlink, truncation or repair. These checks prevent the tested pre-existing-file hazards; they do not promise race-proof filesystem containment.
 
-SQLite uses its default rollback journal, `synchronous=FULL`, foreign keys and trusted_schema off. The plugin does not enable WAL independently of the host's compatibility controls. Application ownership marker and schema version 1 are verified transactionally. Foreign, modified, corrupt or newer schemas fail closed; the original database is not silently replaced. Keep the original files and investigate before attempting a manual recovery.
+SQLite uses its default rollback journal, `synchronous=FULL`, foreign keys and trusted_schema off. The plugin does not enable WAL independently of the host's compatibility controls. Application ownership and supported schemas are verified transactionally; exact v1 stores upgrade to v2 as documented in [17](17-local-task-agenda.md). Foreign, modified, corrupt or newer schemas fail closed; the original database is not silently replaced. Keep the original files and investigate before attempting a manual recovery.
 
 Plugin data survives install updates/removal under the native storage convention [S1]. Disabling or removing the plugin is not data deletion. Do not assume uninstall implements forgetting.
 
