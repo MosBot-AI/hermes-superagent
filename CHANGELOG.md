@@ -50,6 +50,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 - Added a default-disabled pending enrollment/policy persistence core, exact scoped CAS, terminal revocation, transactional audit and private POSIX storage checks. No activation, grant issuance, task adoption or production read entry point.
 
+- Added an unwired default-denied read coordinator and SQLite current-policy guard, exact confirmations, bounded summary projections and revoke/expiry contention tests. Trusted host/resource adapters and durable read audit remain production gates.
+
 ### Boundaries
 
 - E0.3, full E0.4 coverage, E0.6, identity/authorization, full domain storage, reminders, connectors, mobile, voice, and E9 model routing remain unimplemented.

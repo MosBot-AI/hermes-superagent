@@ -32,6 +32,8 @@ Hermes 原生 personal-agent 插件，目标是让一个主 agent 管理项目�
 
 [待确认身份登记与策略核心](docs/26-pending-enrollment-policy-zh.md)现可持久化拟议映射和范围，包含事务版本、终止性撤销及审计。内部 opener 默认禁用，没有注册运行入口。这些记录不认证 owner、不签发 grant，也不接管本地任务。
 
+[带栅栏的读取准入核心](docs/27-fenced-read-admission-zh.md)增加当前策略事务排序和有界不可变摘要协调。只有合成测试提供可信确认/资源；不启用生产 adapter、运行入口或任务接管。
+
 ## 开发验证
 
 基线为 `compatibility.json` 内的 Hermes commit；当前实际运行目标是 Python 3.14。没有根据单一 SHA 宣称宽泛的 `requires_hermes` 版本范围。

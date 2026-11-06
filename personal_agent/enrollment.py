@@ -13,6 +13,7 @@ There are no replay receipts or cached authorization responses.
 
 import json
 import sqlite3
+from collections.abc import Callable
 from typing import Any
 
 from .authorization import ReadRequest, _identifier, _scope
@@ -207,6 +208,51 @@ class EnrollmentStore:
             tuple(record[key] for key in ("owner_id", "profile_id", "enrollment_id", "epoch"))
             + (operation, record["enrollment_revision"], record["policy_revision"]),
         )
+
+    def with_current_record[T](
+        self,
+        key: dict,
+        *,
+        expected_revision: int,
+        expected_enrollment_revision: int,
+        expected_epoch: int,
+        operation: Callable[[dict], T],
+    ) -> T:
+        """Run trusted synchronous code while current policy excludes revocation.
+
+        Internal coordination primitive, NOT an authorization decision. A pending
+        record supplies proposed constraints only. The operation must hold an
+        independent trusted authority fence and a stable owned resource snapshot;
+        it must not send, prompt, perform network I/O or expose a lazy result.
+        No callback is accepted through run(), JSON or a registered entry point.
+        The detached result escapes only after commit. This does not issue a
+        reusable permit, persist read admissions or authenticate host provenance.
+        """
+        request = _request("get", key)
+        if (
+            not _revision(expected_revision)
+            or not _revision(expected_enrollment_revision)
+            or not _revision(expected_epoch, minimum=0)
+            or not callable(operation)
+        ):
+            raise EnrollmentError("invalid_request")
+        if not self._initialized:
+            raise EnrollmentError("not_initialized")
+
+        def apply() -> T:
+            self._schema()
+            record = self._get(request)
+            if (
+                record["policy_revision"] != expected_revision
+                or record["enrollment_revision"] != expected_enrollment_revision
+                or record["epoch"] != expected_epoch
+            ):
+                raise EnrollmentError("revision_conflict")
+            if record["state"] == "revoked":
+                raise EnrollmentError("revoked")
+            return operation(record)
+
+        return self._transaction(apply)
 
     def run(self, operation: str, payload: dict) -> dict:
         """Return current administrative snapshot, never a permission decision."""

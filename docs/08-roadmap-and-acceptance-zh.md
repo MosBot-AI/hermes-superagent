@@ -58,6 +58,8 @@ E0.6 是独立的可选客户端契约路线，不阻塞 channel-first M0/M1 退
 
 [待确认身份登记/策略核心](26-pending-enrollment-policy-zh.md)已提供拟议映射及读取范围的 CAS、终止性撤销和事务审计持久化，但未接运行入口、不能激活，不构成实际 grant/policy authority 或 owner 认证。
 
+[带栅栏的读取准入核心](27-fenced-read-admission-zh.md)增加内部默认拒绝协调器和实际策略/撤权事务守卫，采用合成 authority/资源 fixture。这只是 E1.3/E1.4 的部分准备，不是生产身份、激活、任务接管或完整读取审计。
+
 ### E2. 建立个人领域与记忆（P0/P1，M1–M2）
 
 依赖 E1.1/E1.5。

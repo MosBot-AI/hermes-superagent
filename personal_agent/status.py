@@ -72,6 +72,15 @@ def build_status(*, mode: str = "read_only") -> dict[str, object]:
                 "Unwired pending/revoked metadata only; profiles are not authenticated owners."
             ),
         },
+        "read_admission": {
+            "coordinator_implemented": True,
+            "production_adapters_available": False,
+            "default_enabled": False,
+            "durable_read_audit_implemented": False,
+            "scope": (
+                "Internal fenced snapshot coordination only; no live authority or task reader."
+            ),
+        },
         "voice": {
             "synthetic_self_test_implemented": True,
             "live_voice_enabled": False,

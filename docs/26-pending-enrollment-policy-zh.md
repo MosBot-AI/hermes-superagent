@@ -10,6 +10,8 @@
 
 这推进了 E1.1/E1.2/E1.4/E1.5 的持久化前置工作，不表示 E1、主 Bot 绑定或 M1 完成。见 [18](18-owner-entry-and-read-authorization-zh.md) 和剩余的[宿主准入门禁](23-host-command-context-experiment-zh.md)。
 
+后续[带栅栏协调器](27-fenced-read-admission-zh.md)现已提供内部事务/快照排序契约。其 authority/资源 adapter 在生产中仍不可用，本待确认存储仍不能激活或认证记录。
+
 ## 2. 数据与信任边界
 
 存储使用原生 profile 的 `plugin-data/hermes-personal-agent` 目录下独立的 `enrollment.sqlite3`。它不读取、接管或修改 `tasks.sqlite3`。每条记录均以完整的 `(owner_id, profile_id, enrollment_id)` 元组定位。这些字符串是**拟议的管理标签**，不是经过认证的身份。profile 目录、OS UID、数据库行、类型注解或调用者提供的布尔值均不能证明所有权。

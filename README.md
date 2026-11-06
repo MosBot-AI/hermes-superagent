@@ -32,6 +32,8 @@ The opt-in [native planning blueprint](docs/25-native-planning-blueprint.md) is 
 
 The [pending enrollment/policy core](docs/26-pending-enrollment-policy.md) now persists prospective mappings and scopes with transactional revisions, terminal revocation and audit. Its internal opener is disabled by default and has no registered runtime entry point. These records do not authenticate an owner, issue grants or adopt local tasks.
 
+The [fenced read-admission core](docs/27-fenced-read-admission.md) adds current-policy transaction ordering and bounded immutable summary coordination. Only synthetic tests supply trusted confirmations/resources; no production adapters, runtime entry point or task adoption are enabled.
+
 ## Development checks
 
 `compatibility.json` records the Hermes baseline commit. The current runtime target is Python 3.14. A single tested SHA does not justify a broad `requires_hermes` version range.

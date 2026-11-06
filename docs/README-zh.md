@@ -36,7 +36,8 @@
 24. [本地项目分组](24-local-project-groups-zh.md)：任务标签、精确筛选、进度计数及 schema-v3 迁移。
 25. [原生计划 blueprint](25-native-planning-blueprint-zh.md)：显式启用的原生计划表单集成及明确 job 生命周期/费用边界。
 26. [待确认身份登记与策略持久化](26-pending-enrollment-policy-zh.md)：未接入口的管理元数据、CAS/撤销、私有存储与剩余 owner 准入门禁。
-27. [架构决策记录](adr/README-zh.md)：为什么选择这些约束。
+27. [带栅栏的读取准入](27-fenced-read-admission-zh.md)：默认拒绝的确认/快照契约、实际策略事务排序及未实现的生产 adapter。
+28. [架构决策记录](adr/README-zh.md)：为什么选择这些约束。
 
 ## 三类陈述必须分开
 

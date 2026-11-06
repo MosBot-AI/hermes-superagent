@@ -10,6 +10,8 @@ This slice implements an **unwired administrative persistence core**, not an own
 
 This advances preparatory E1.1/E1.2/E1.4/E1.5 persistence work. It does not complete E1, Primary Bot binding or M1. See [18](18-owner-entry-and-read-authorization.md) and the remaining [host admission gates](23-host-command-context-experiment.md).
 
+The follow-on [fenced coordinator](27-fenced-read-admission.md) now provides the internal transaction/snapshot ordering seam. Its authority/resource adapters are still unavailable in production, and this pending store still cannot activate or authenticate a record.
+
 ## 2. Data and trust boundaries
 
 The store uses a separate `enrollment.sqlite3`, under the native profile's `plugin-data/hermes-personal-agent` directory. It never reads, adopts or modifies `tasks.sqlite3`. Every record is addressed by the full `(owner_id, profile_id, enrollment_id)` tuple. These strings are **prospective administrative labels**, not authenticated identity. A profile directory, OS UID, database row, type annotation or caller-provided boolean cannot prove ownership.

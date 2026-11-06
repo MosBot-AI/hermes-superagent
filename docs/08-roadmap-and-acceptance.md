@@ -56,6 +56,8 @@ Current preparatory implementation: [owner entry and read authorization](18-owne
 
 The [host-context experiment](23-host-command-context-experiment.md) packages a review-only prototype for E0.7. Source authenticity, current owner/policy admission and supported public IPC contracts remain separate gates. The local command-only repair has 87 guarded passing tests, but the historical nine environment-blocked tests remain unresolved; no Primary Bot or private read capability is enabled.
 
+The [fenced read-admission core](27-fenced-read-admission.md) adds an internal default-denied coordinator and actual policy/revoke transaction guard, with synthetic authority/resource fixtures. This is partial E1.3/E1.4 preparation, not production identity, activation, task adoption or complete read audit.
+
 ### E2. Establish the Personal Domain and Memory (P0/P1, M1–M2)
 
 Depends on E1.1/E1.5.
