@@ -1,15 +1,15 @@
 {
   "schema_version": 1,
-  "status": "review-only historical host transport observation experiment",
+  "status": "review-only revised host transport observation experiment",
   "source_repository": "https://github.com/NousResearch/hermes-agent",
   "base": "90d6b98fd86d20981ee06ddd5b7d93e4320f26a4",
-  "commit": "adfb1feb207943d2bb539555adcbb667bcb571ab",
-  "tree": "2eed0582216b9bdec676ac9787f8a7cb724dbe54",
+  "commit": "b93642ca32739d4426293603e66175a72582de98",
+  "tree": "d5c40d30e8a436448e266ce31277cf9c93dd82b4",
   "branch": "prototype/verified-command-context",
   "prototype_git_remotes": [],
   "commit_availability": "Local provenance only; not a published upstream commit",
   "patch_file": "command-context-prototype.patch",
-  "patch_sha256": "ab47d5f7c25c4cbc007332cb05e4f5dbf146ba701ef90cd77e09df10a5af1f20",
+  "patch_sha256": "fd437b865f54bf64cfb453db05b60aa8417653840ff83587a9f5cfcd3cc92ad3",
   "patch_files": [
     "gateway/command_context.py",
     "gateway/run_inbound_hooks.py",
@@ -19,9 +19,10 @@
     "plugins/platforms/telegram/adapter.py",
     "plugins/platforms/telegram/telegram_command_context.py",
     "tests/gateway/test_command_provenance.py",
+    "tests/hermes_cli/test_command_context_callable_transport.py",
     "tests/hermes_cli/test_command_provenance_host.py"
   ],
-  "changed_files": 9,
+  "changed_files": 10,
   "artifact_files": [
     "LICENSE.hermes-agent",
     "README.md",
@@ -29,7 +30,8 @@
     "manifest.json",
     "verification.json",
     "installed-packages.json",
-    "command-context-prototype.patch"
+    "command-context-prototype.patch",
+    "revision-verification.json"
   ],
   "historical_evidence": {
     "verification_file": "verification.json",
@@ -49,15 +51,17 @@
     "raw_log_omission_reason": "Raw local logs contain machine-specific paths; this bundle preserves structured historical receipts, not complete logs",
     "verification_project_field": "Historical project snapshot only, not the current branch tip",
     "remote_ci": "not run for prototype",
-    "lock_environment_equivalence_attested": false
+    "lock_environment_equivalence_attested": false,
+    "prototype_commit": "adfb1feb207943d2bb539555adcbb667bcb571ab",
+    "patch_sha256": "ab47d5f7c25c4cbc007332cb05e4f5dbf146ba701ef90cd77e09df10a5af1f20"
   },
   "packaging": {
-    "upstream_tests_run": false,
     "restricted_socket_tests_retried": false,
     "test_runner_included": false,
     "runtime_integrated": false,
     "submitted_upstream": false,
-    "deployed": false
+    "deployed": false,
+    "automatic_upstream_execution": false
   },
   "limits": [
     "Host transport observation only; not owner enrollment, owner grant, Primary Bot identity or full authorization",
@@ -65,12 +69,12 @@
     "Current-state snapshots provide no monotonic policy revision or ABA revocation fencing",
     "Consumption is not atomic permission-to-action admission; returned dictionaries are copyable non-authoritative data",
     "First native command without an existing matching live session receives no observation",
-    "Generic callable proxy command_context keyword interception can collide with custom hooks",
     "Only synthetic direct human Telegram DM ingress tested, no live Telegram account or TLS/network attestation",
-    "Nine socket tests never reached acceptance assertions; no full-green upstream result"
+    "Nine socket tests never reached acceptance assertions; no full-green upstream result",
+    "Command-only operation selection is parent-owned in this local prototype; child refs are not independently authenticated per-plugin command capabilities"
   ],
   "integration_gates": [
-    "Adopt an upstream-supported command-only context seam and prove hosted/in-process keyword compatibility",
+    "Adopt an upstream-supported command-only context seam; local callback compatibility repair is tested but not an accepted public host API",
     "Add monotonic route, connection, session, owner and policy revision fences including ABA and revoke/action races",
     "Design first-session enrollment without treating missing context or serialized data as authority",
     "Resolve canonical receiving Bot identity, bind Primary Bot and explicitly enroll owner with persisted grants",
@@ -78,5 +82,14 @@
     "Review shared-process/same-UID threat model, replay, cancellation, restart, revocation and recovery",
     "Obtain separately authorized suitable environment to resolve nine blocked socket tests; do not retry automatically",
     "Validate real ingress and privacy-safe diagnostics under authorized secure setup, then complete release review"
-  ]
+  ],
+  "revision_evidence": {
+    "verification_file": "revision-verification.json",
+    "verification_sha256": "977381a28a5a77336af6e2b7ce165e3da4d1b523bbcbc92f86e5fd7dabcde140",
+    "passed": 87,
+    "new_tests": 17,
+    "static_checks_passed": 14,
+    "full_upstream_suite_run": false,
+    "restricted_socket_tests_retried": false
+  }
 }

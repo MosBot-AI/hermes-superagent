@@ -44,6 +44,10 @@ This file distinguishes design work, development changes, and released capabilit
 
 - Opt-in native personal planning Automation Blueprint, with strict boolean configuration and native catalog/form/command integration. Registration creates no job or personal-data access; actual native scheduling has independent model/delivery costs and jobs survive plugin removal.
 
+- Revised the review-only identity prototype to confine live command observations to registered command handlers, preserving generic hook/tool keyword data. Recorded 87 guarded tests and 14 static checks separately from unresolved historical socket failures; no production identity activation.
+- Documented the minimum gated owner-summary path, including explicit local-data adoption and atomic host/policy admission.
+- Preserve unified patch context whitespace through scoped Git attributes; upstream source whitespace checks still run.
+
 ### Boundaries
 
 - E0.3, full E0.4 coverage, E0.6, identity/authorization, full domain storage, reminders, connectors, mobile, voice, and E9 model routing remain unimplemented.

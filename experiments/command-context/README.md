@@ -4,16 +4,24 @@ English | [简体中文](README-zh.md)
 
 ## Status and provenance
 
-This bundle preserves a local upstream prototype for review. It is **not installed, applied, shipped or enabled** by this project. The official compatibility pin and production plugin remain unchanged; protected reads remain disabled. There is no upstream PR, deployment or upstream publication implied by distributing this patch on the project feature branch.
+This bundle preserves a local upstream prototype for review. It is **not installed, applied, runtime-integrated or enabled** by this project. The official compatibility pin and production plugin remain unchanged; protected reads remain disabled. There is no upstream PR, deployment or upstream publication implied by distributing this patch on the project feature branch.
 
 - Official source: [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent).
 - Base: `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`.
-- Local prototype: `adfb1feb207943d2bb539555adcbb667bcb571ab`, tree `2eed0582216b9bdec676ac9787f8a7cb724dbe54`, branch `prototype/verified-command-context`.
+- Local prototype: `b93642ca32739d4426293603e66175a72582de98`, tree `d5c40d30e8a436448e266ce31277cf9c93dd82b4`, branch `prototype/verified-command-context`.
 - That local commit is provenance, not a published commit link; the prototype has no configured remotes.
-- Exact nine-file [patch](command-context-prototype.patch), SHA-256: `ab47d5f7c25c4cbc007332cb05e4f5dbf146ba701ef90cd77e09df10a5af1f20`.
+- Exact ten-file [patch](command-context-prototype.patch), SHA-256: `fd437b865f54bf64cfb453db05b60aa8417653840ff83587a9f5cfcd3cc92ad3`.
 - Upstream-derived code retains the [Hermes MIT license](LICENSE.hermes-agent).
 
 [manifest.json](manifest.json) records source, patch and evidence hashes, changed files, historical results, limitations and future integration gates. [verification.json](verification.json) and [installed-packages.json](installed-packages.json) are unchanged historical receipts. The project commit/status in the former describes the earlier verification snapshot, not this branch's current tip. Full raw logs are not included because they contain machine-specific paths; these structured receipts are not independently reproducible full logs.
+
+## Current command-only repair
+
+The earlier prototype `adfb1feb207943d2bb539555adcbb667bcb571ab` is retained in the unchanged historical receipt. This revision fixes the generic `command_context` collision: only `register_command`'s exact handler is bound to the dedicated `invoke_command` operation. Ordinary hook/tool calls preserve same-named data; generic descriptors cannot become live observations. Synchronous/asynchronous and legacy handler signatures, one-shot use, TTL, generation, callback scope and released refs retain their tested behavior.
+
+[revision-verification.json](revision-verification.json) records **87 passed, 0 failed, 0 skipped** across three audited files: 35 original producer tests, 35 original host tests and 17 new command/generic-callable regressions. These overlap the earlier 146, so do not sum the counts. Parent and child block socket bind/listen/connect; tests preserve the production launcher and add a temporary sitecustomize guard through the environment. A probe verifies the child guard and separate PID. All 14 static checks passed against the explicit official base. Tests were not independently demonstrated red on the preceding revision.
+
+The nine restricted socket cases were not run and remain unresolved. This is not a full upstream suite, live Telegram validation or production authorization. The patch has no remote upstream CI result. The child operation still uses the cooperative host's existing reference table, not a new per-plugin authentication boundary.
 
 ## What the prototype observes
 
@@ -27,13 +35,13 @@ This is **not owner enrollment, an owner grant, Primary Bot identity binding, or
 
 Historical checks reported 70 new contract tests passed (35 producer/observation and 35 callback/IPC). The expanded selection reported **146 passed and 9 failed at environment setup**. Those nine temporary gateway control socket binds returned `EPERM` / `Operation not permitted`, before acceptance assertions. One historically permitted rerun of the three affected files failed the same way. These tests were not skipped, passed or resolved.
 
-Affected files: `tests/gateway/test_cli_plugin_command_in_gateway.py` (six), `tests/gateway/test_cli_plugin_command_own_socket.py` (two), and `tests/gateway/test_plugin_command_choice.py` (one failure; its other test passed). This is not a full-green result. All 14 upstream static checks and the clean-base patch application check passed historically. Packaging does not rerun any upstream or identity/socket tests.
+Affected files: `tests/gateway/test_cli_plugin_command_in_gateway.py` (six), `tests/gateway/test_cli_plugin_command_own_socket.py` (two), and `tests/gateway/test_plugin_command_choice.py` (one failure; its other test passed). This is not a full-green result. All 14 upstream static checks and the clean-base patch application check passed historically. Those are historical results, not the current revision's complete test result.
 
 Tests used synthetic ingress fixtures, including native producer → gateway handler → real hosted child consumer. They did not validate live Telegram accounts, real polling/webhooks, network/TLS authentication, devices or remote CI. Python 3.14.9 and an observed 88-package PM environment were used; the fingerprint is not an attestation of exact lock equivalence. No API Key is needed for artifact review and a key would not fix the socket restriction.
 
 ## Remaining design and integration gates
 
-1. Establish an upstream-supported **command-only** context seam. The prototype intercepts `command_context` across generic callable proxies; custom hooks using that keyword can behave differently hosted versus in-process. Resolve the collision and prove compatibility before adoption.
+1. Adopt an upstream-supported **command-only** context seam. The local repair now selects only the exact native registration handler and preserves generic hook/tool keyword data. This is tested prototype behavior, not an accepted public host API or independently authenticated per-plugin command boundary.
 2. Provide monotonic policy, route, connection and session revision fencing. Snapshot equality does not detect historical A→B→A (ABA) changes and cannot close revocation/action races. One-shot consumption is not an atomic permission-to-action transaction.
 3. Design first-session enrollment explicitly: first-ever commands without an existing native session receive no observation. Never compensate with a caller-supplied identity or restored flag.
 4. Implement canonical Primary Bot discovery/binding, explicit owner enrollment and current persisted grants. Check owner, policy, grant, session and worker provenance atomically at each protected-read/action admission, with revocation and recovery behavior.
@@ -54,7 +62,7 @@ ARTIFACT="/path/to/hermes-superagent/experiments/command-context"
 COPY="/path/to/disposable-hermes"
 test "$(git -C "$COPY" rev-parse HEAD)" = 90d6b98fd86d20981ee06ddd5b7d93e4320f26a4
 test -z "$(git -C "$COPY" status --porcelain)"
-printf '%s  %s\n' ab47d5f7c25c4cbc007332cb05e4f5dbf146ba701ef90cd77e09df10a5af1f20 "$ARTIFACT/command-context-prototype.patch" | sha256sum --check -
+printf '%s  %s\n' fd437b865f54bf64cfb453db05b60aa8417653840ff83587a9f5cfcd3cc92ad3 "$ARTIFACT/command-context-prototype.patch" | sha256sum --check -
 git -C "$COPY" apply --check "$ARTIFACT/command-context-prototype.patch"
 ```
 

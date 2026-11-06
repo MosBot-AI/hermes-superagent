@@ -26,7 +26,7 @@ The [unified voice design](docs/19-unified-voice-provider-contracts.md) covers l
 
 The [local search guide](docs/22-local-task-search.md) adds literal title/details retrieval with bounded pages. A separate [native voice IPC experiment](docs/21-native-voice-ipc-experiment.md) includes a reviewable host patch and verification record; it is not applied or integrated by this plugin.
 
-The [local project groups](docs/24-local-project-groups.md) add explicit task labels, project filters and progress counts, with a schema-v3 upgrade preserving old receipts. These are local groups, not native Projects or permission scopes. The [host command-context experiment](docs/23-host-command-context-experiment.md) packages a separate unintegrated identity-observation patch and its remaining gates; no owner authorization is enabled.
+The [local project groups](docs/24-local-project-groups.md) add explicit task labels, project filters and progress counts, with a schema-v3 upgrade preserving old receipts. These are local groups, not native Projects or permission scopes. The [host command-context experiment](docs/23-host-command-context-experiment.md) packages a separate unintegrated identity-observation patch and its remaining gates; no owner authorization is enabled. Its command-only repair is verified separately with 87 guarded tests; nine historical socket setup failures remain unresolved.
 
 The opt-in [native planning blueprint](docs/25-native-planning-blueprint.md) is available through Hermes’s existing Blueprint/Cron interfaces. Loading registers a template only, not a job. Native scheduling can incur model costs; existing jobs survive plugin removal. Default delivery is local, not a tool or privacy sandbox.
 

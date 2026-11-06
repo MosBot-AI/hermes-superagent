@@ -54,7 +54,7 @@ E0.6 是独立的可选客户端契约路线，不阻塞 channel-first M0/M1 退
 
 当前准备性实现：[Owner 入口与只读授权基础](18-owner-entry-and-read-authorization-zh.md)提供纯内部评估器和始终拒绝访问的诊断。E0.7 原生 source/IPC 测试证实公开接收 Bot 身份缺失；不签发生产 verified context，不提供 owner 登记、grant/policy 持久化或私人读取。E0.7/E1 门禁尚未完成，不据此启用绑定。
 
-[host 上下文实验](23-host-command-context-experiment-zh.md)为 E0.7 打包仅供审阅的原型。来源真实性、当前 owner/策略准入及受支持的公共 IPC 契约仍是独立门禁。历史九项环境受限测试不计为通过，也不启用主 Bot 或私人读取。
+[host 上下文实验](23-host-command-context-experiment-zh.md)为 E0.7 打包仅供审阅的原型。来源真实性、当前 owner/策略准入及受支持的公共 IPC 契约仍是独立门禁。本地仅命令调用修复通过 87 项受守卫测试，但历史九项环境受限测试仍未解决；不启用主 Bot 或私人读取。
 
 ### E2. 建立个人领域与记忆（P0/P1，M1–M2）
 

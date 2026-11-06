@@ -1,0 +1,113 @@
+{
+  "schema_version": 1,
+  "scope": "Local command-only observation repair; not deployed or integrated",
+  "base_commit": "90d6b98fd86d20981ee06ddd5b7d93e4320f26a4",
+  "previous_prototype_commit": "adfb1feb207943d2bb539555adcbb667bcb571ab",
+  "prototype_commit": "b93642ca32739d4426293603e66175a72582de98",
+  "prototype_tree": "d5c40d30e8a436448e266ce31277cf9c93dd82b4",
+  "patch_sha256": "fd437b865f54bf64cfb453db05b60aa8417653840ff83587a9f5cfcd3cc92ad3",
+  "source_files": [
+    {
+      "path": "gateway/command_context.py",
+      "sha256": "e7fca2f5aac6f51888a5d49f7d52d7de479395cca8be25a90747c691d9c955c6"
+    },
+    {
+      "path": "gateway/run_inbound_hooks.py",
+      "sha256": "9304abe5d73ff39873093fe6ad530407bde5f46bedbfe70cdc52ccd9a7d877c5"
+    },
+    {
+      "path": "hermes_cli/plugin_command_context_bridge.py",
+      "sha256": "20310a51f014aff15c6e6a70338a7482e2279912fea747d4578886a92c3af2cb"
+    },
+    {
+      "path": "hermes_cli/plugin_host.py",
+      "sha256": "86c8774c61ed74ea16249645edf3358de1cd3f30e3d0d203a36e844a6aaaf3fa"
+    },
+    {
+      "path": "hermes_cli/plugin_host_child.py",
+      "sha256": "03745d94522abbac282331ac45833ced1b501ba222146e94465e5c5ac5f3f40a"
+    },
+    {
+      "path": "plugins/platforms/telegram/adapter.py",
+      "sha256": "8806c55de3edc51b4d1f93c07ac7028669d03a1d8294e3e7dac08d6a9f17a990"
+    },
+    {
+      "path": "plugins/platforms/telegram/telegram_command_context.py",
+      "sha256": "22e53e972faef5f64e0f03ed14849244011b4c3875815da25fba1988f2720287"
+    },
+    {
+      "path": "tests/gateway/test_command_provenance.py",
+      "sha256": "cea17397e7f118dc9b50fd87bfa41848dbbaf1ba8282ca0a7bb3018357762f38"
+    },
+    {
+      "path": "tests/hermes_cli/test_command_context_callable_transport.py",
+      "sha256": "f5772c30208d26b0684d3c82824dcc9caa24feffe25146477730cf35e374cf53"
+    },
+    {
+      "path": "tests/hermes_cli/test_command_provenance_host.py",
+      "sha256": "5f876c51fafc5bf4c288caa70850288a441583c7f4875937bfa6ce82682e1cf2"
+    }
+  ],
+  "revision_files": [
+    "hermes_cli/plugin_host.py",
+    "hermes_cli/plugin_host_child.py",
+    "tests/hermes_cli/test_command_context_callable_transport.py",
+    "tests/hermes_cli/test_command_provenance_host.py"
+  ],
+  "python": "3.14.9",
+  "uv_lock_sha256": "5057a8a3cbc6d2b1f2059d66e27ffa43f447021f89779599dca416056574c064",
+  "installed_package_count": 88,
+  "installed_packages_sha256": "7993c25b433be4f0c8fabdd484f49a447ea08b10592195bbdda391eb52190d7d",
+  "environment_origin": "Existing caller-supplied isolated PM test environment; observed fingerprint only",
+  "lock_environment_equivalence_attested": false,
+  "guarded_tests": {
+    "passed": 87,
+    "failed": 0,
+    "skipped": 0,
+    "files": [
+      {
+        "path": "tests/gateway/test_command_provenance.py",
+        "passed": 35
+      },
+      {
+        "path": "tests/hermes_cli/test_command_provenance_host.py",
+        "passed": 35
+      },
+      {
+        "path": "tests/hermes_cli/test_command_context_callable_transport.py",
+        "passed": 17
+      }
+    ],
+    "new_tests": 17,
+    "command": "HERMES_PYTHON=\"$HERMES_PYTHON\" HERMES_TEST_FILE_RETRIES=0 scripts/run_tests.sh tests/gateway/test_command_provenance.py tests/hermes_cli/test_command_provenance_host.py tests/hermes_cli/test_command_context_callable_transport.py -p tests.hermes_cli.test_command_context_callable_transport",
+    "parent_and_child_socket_guards": true,
+    "guarded_operations": [
+      "bind",
+      "listen",
+      "connect",
+      "connect_ex",
+      "create_connection"
+    ],
+    "production_argv_preserved": true,
+    "child_guard_marker_and_distinct_pid_verified": true,
+    "test_only_environment_change": "Temporary sitecustomize guard prepended to PYTHONPATH through PluginHost._env; no runtime dependency or settings change",
+    "log_sha256": "43c7e2db9493dde3ffe743c04146b0bd585097dc22596cddc350d3e268884b5b"
+  },
+  "static_checks": {
+    "passed": 14,
+    "blocking": 0,
+    "advisory": 0,
+    "command": "python scripts/check --base 90d6b98fd86d20981ee06ddd5b7d93e4320f26a4",
+    "initial_default_command": "Could not select absent local main merge-base; explicit known upstream base used",
+    "log_sha256": "ac9f57249ada72eda968552068122f00fb1c1118a21d1c1530933a9c0c12847e"
+  },
+  "regressions_demonstrated_red_before_fix": false,
+  "historical_socket_setup_failures_unresolved": 9,
+  "restricted_suites_retried": false,
+  "full_upstream_suite_run": false,
+  "live_ingress_tested": false,
+  "remote_upstream_ci_run": false,
+  "owner_authorization_enabled": false,
+  "current_prototype_full_release_gate_passed": false,
+  "patch_apply_check_on_clean_base": "passed; non-mutating check, official tracked sources unchanged"
+}

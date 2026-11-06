@@ -1,6 +1,6 @@
 diff --git a/gateway/command_context.py b/gateway/command_context.py
 new file mode 100644
-index 00000000..eb64829a
+index 0000000000000000000000000000000000000000..eb64829ac2ed0742fe583afd8007b60231dae591
 --- /dev/null
 +++ b/gateway/command_context.py
 @@ -0,0 +1,103 @@
@@ -108,7 +108,7 @@ index 00000000..eb64829a
 +        # and never log identity-bearing exception messages from an adapter/store.
 +        return False
 diff --git a/gateway/run_inbound_hooks.py b/gateway/run_inbound_hooks.py
-index c403aae6..2887b0bf 100644
+index c403aae69f22b42d5f9925a943bb18b2fc2baba4..2887b0bf98c985f7fe23be24fae2af5cc3782e2f 100644
 --- a/gateway/run_inbound_hooks.py
 +++ b/gateway/run_inbound_hooks.py
 @@ -285,6 +285,7 @@ class GatewayInboundHooksMixin:
@@ -133,7 +133,7 @@ index c403aae6..2887b0bf 100644
              else:
 diff --git a/hermes_cli/plugin_command_context_bridge.py b/hermes_cli/plugin_command_context_bridge.py
 new file mode 100644
-index 00000000..58b99407
+index 0000000000000000000000000000000000000000..58b99407d420334e60e5d4c6e53ef4f91c0ea0f6
 --- /dev/null
 +++ b/hermes_cli/plugin_command_context_bridge.py
 @@ -0,0 +1,70 @@
@@ -208,15 +208,19 @@ index 00000000..58b99407
 +        return None
 +    return RemoteCommandContext(channel, descriptor)
 diff --git a/hermes_cli/plugin_host.py b/hermes_cli/plugin_host.py
-index b179d3f9..2198cbf3 100644
+index b179d3f95074618a46264b9b45c1f3e114a99fba..aa3b9c325ce50a4df2c3e255c8e1f603204cf2b0 100644
 --- a/hermes_cli/plugin_host.py
 +++ b/hermes_cli/plugin_host.py
-@@ -365,8 +365,18 @@ class PluginHost:
+@@ -365,8 +365,22 @@ class PluginHost:
              self._releases.append(ref)
  
      def invoke(self, ref: int, args: tuple, kwargs: dict, *, generation: Optional[int] = None) -> Any:
 -        return self._call("invoke", {"ref": ref, "args": encode(list(args)), "kwargs": encode(kwargs)},
 -                          generation=generation)
++        return self._call("invoke", {"ref": ref, "args": encode(list(args)),
++                                     "kwargs": encode(kwargs)}, generation=generation)
++
++    def _invoke_command(self, ref: int, args: tuple, kwargs: dict, *, generation: int) -> Any:
 +        from hermes_cli.plugin_command_context_bridge import export_context
 +        kwargs = dict(kwargs)
 +        has_context = "command_context" in kwargs
@@ -228,11 +232,11 @@ index b179d3f9..2198cbf3 100644
 +            elif has_context:
 +                kwargs["command_context"] = None
 +                payload["kwargs"] = encode(kwargs)
-+            return self._call("invoke", payload, generation=generation)
++            return self._call("invoke_command", payload, generation=generation)
  
      def obj_invoke(self, slot: _ObjectSlot, method: str, args: tuple, kwargs: dict, returns: Any = None) -> Any:
          ref, generation = slot.live()
-@@ -391,6 +401,9 @@ class PluginHost:
+@@ -391,6 +405,9 @@ class PluginHost:
          return (caller or self._base_context).copy()
  
      def _handle(self, method: str, params: dict[str, Any], _origin: Optional[int]) -> Any:
@@ -242,23 +246,98 @@ index b179d3f9..2198cbf3 100644
          if method == "ctx":
              return self._serve_ctx(params)
          if method == "facade":
+@@ -419,9 +436,17 @@ class PluginHost:
+             raise PluginHostUnsupported(f"ctx.{method}() cannot be called across the plugin host")
+         base = _import_ref(HOST_OBJECT_BASES[method]) if method in HOST_OBJECT_BASES else None
+         resolve = functools.partial(self._resolve_ref, base=base)
+-        args = decode(params.get("args") or [], resolve)
+-        kwargs = decode(params.get("kwargs") or {}, resolve)
+-        result = getattr(ctx, method)(*args, **kwargs)
++        target = getattr(ctx, method)
++        if method == "register_command":
++            bound = inspect.signature(target).bind(*(params.get("args") or []), **(params.get("kwargs") or {}))
++            for name, value in bound.arguments.items():
++                resolver = functools.partial(self._resolve_ref, command=True) if name == "handler" else resolve
++                bound.arguments[name] = decode(value, resolver)
++            args, kwargs = bound.args, bound.kwargs
++        else:
++            args = decode(params.get("args") or [], resolve)
++            kwargs = decode(params.get("kwargs") or {}, resolve)
++        result = target(*args, **kwargs)
+         return self._encode_for_host(result)
+ 
+     def _serve_facade(self, params: dict[str, Any]) -> Any:
+@@ -455,9 +480,9 @@ class PluginHost:
+         return encode(value, refs)
+ 
+     # -- proxies ------------------------------------------------------------------------------------
+-    def _resolve_ref(self, ref: dict[str, Any], base: Optional[type] = None) -> Any:
++    def _resolve_ref(self, ref: dict[str, Any], base: Optional[type] = None, *, command: bool = False) -> Any:
+         if "__callable__" in ref:
+-            return self._callable_proxy(ref)
++            return self._callable_proxy(ref, command=command)
+         if "__object__" in ref:
+             if base is None:
+                 raise PluginHostUnsupported(f"a {ref.get('type', 'plugin')} object cannot be passed here "
+@@ -473,14 +498,17 @@ class PluginHost:
+             return Opaque(str(ref.get("type") or "object"))
+         return self._resolve_ref(ref, base)
+ 
+-    def _callable_proxy(self, ref: dict[str, Any]) -> Callable[..., Any]:
++    def _callable_proxy(self, ref: dict[str, Any], *, command: bool = False) -> Callable[..., Any]:
+         ref_id, generation = int(ref["__callable__"]), self._generation
++        # Only native command registration selects the observation bridge. Wire metadata
++        # and ordinary callable kwargs cannot select this path.
++        invoke = self._invoke_command if command else self.invoke
+ 
+         async def async_proxy(*args: Any, **kwargs: Any) -> Any:
+-            return await asyncio.to_thread(self.invoke, ref_id, args, kwargs, generation=generation)
++            return await asyncio.to_thread(invoke, ref_id, args, kwargs, generation=generation)
+ 
+         def sync_proxy(*args: Any, **kwargs: Any) -> Any:
+-            return self.invoke(ref_id, args, kwargs, generation=generation)
++            return invoke(ref_id, args, kwargs, generation=generation)
+ 
+         proxy: Any = async_proxy if ref.get("async") else sync_proxy
+         signature = signature_from(ref.get("sig"))
 diff --git a/hermes_cli/plugin_host_child.py b/hermes_cli/plugin_host_child.py
-index ffc903e0..57fef4d1 100644
+index ffc903e07cf4b30001527abad30de5db9f7013c4..5fa3775d24f8e3bbe4eaacf900a9e9bfb3573b89 100644
 --- a/hermes_cli/plugin_host_child.py
 +++ b/hermes_cli/plugin_host_child.py
-@@ -342,6 +342,10 @@ class HostRuntime:
-         if fn is None:
-             raise LookupError(f"plugin host callable {ref} was released")
+@@ -344,6 +344,22 @@ class HostRuntime:
          args, kwargs = self._decode_args(params)
-+        # Context claims in generic kwargs are untrusted, including Record-shaped claims.
+         return self._encode_result(self.owners.get(ref, ""), self._run(fn(*args, **kwargs)))
+ 
++    def op_invoke_command(self, params: dict[str, Any]) -> Any:
++        """Only the parent's native command proxy sends this operation.
++
++        Generic kwargs remain data in op_invoke; only this seam interprets the
++        dedicated descriptor. Consumption still requires a live host-issued ticket.
++        """
++        ref = int(params["ref"])
++        fn = self.refs.get(ref)
++        if fn is None:
++            raise LookupError(f"plugin host callable {ref} was released")
++        args, kwargs = self._decode_args(params)
 +        if "command_context" in kwargs or "command_context" in params:
 +            from hermes_cli.plugin_command_context_bridge import import_context
 +            kwargs["command_context"] = import_context(self.channel, params.get("command_context"))
-         return self._encode_result(self.owners.get(ref, ""), self._run(fn(*args, **kwargs)))
- 
++        return self._encode_result(self.owners.get(ref, ""), self._run(fn(*args, **kwargs)))
++
      def op_obj_invoke(self, params: dict[str, Any]) -> Any:
+         ref = int(params["ref"])
+         obj = self.refs.get(ref)
+@@ -418,7 +434,7 @@ class HostRuntime:
+ _HANDLERS: dict[str, Callable[[HostRuntime, dict[str, Any]], Any]] = {
+     "hello": HostRuntime.op_hello, "load": HostRuntime.op_load, "load_instance": HostRuntime.op_load_instance,
+     "asgi": HostRuntime.op_asgi, "profile_call": HostRuntime.op_profile_call,
+-    "invoke": HostRuntime.op_invoke,
++    "invoke": HostRuntime.op_invoke, "invoke_command": HostRuntime.op_invoke_command,
+     "obj_invoke": HostRuntime.op_obj_invoke, "obj_getattr": HostRuntime.op_obj_getattr,
+     "obj_setattr": HostRuntime.op_obj_setattr, "unload": HostRuntime.op_unload,
+     "release": HostRuntime.op_release, "config_schema": HostRuntime.op_config_schema,
 diff --git a/plugins/platforms/telegram/adapter.py b/plugins/platforms/telegram/adapter.py
-index 94e19720..a5283454 100644
+index 94e19720dda8f1d16817b5d60db0d8ff3755c4b2..a5283454752276022662c2214310275bc7c5757e 100644
 --- a/plugins/platforms/telegram/adapter.py
 +++ b/plugins/platforms/telegram/adapter.py
 @@ -734,11 +734,13 @@ class TelegramAdapter(TelegramHeldInboundMixin, TelegramTopicRoutingMixin, BaseP
@@ -301,7 +380,7 @@ index 94e19720..a5283454 100644
          """Handle incoming location/venue pin messages."""
 diff --git a/plugins/platforms/telegram/telegram_command_context.py b/plugins/platforms/telegram/telegram_command_context.py
 new file mode 100644
-index 00000000..7b9b4317
+index 0000000000000000000000000000000000000000..7b9b4317f716f245fce89e40b139ded2481a1565
 --- /dev/null
 +++ b/plugins/platforms/telegram/telegram_command_context.py
 @@ -0,0 +1,164 @@
@@ -471,7 +550,7 @@ index 00000000..7b9b4317
 +        _register_ingress(event, snapshot, current)
 diff --git a/tests/gateway/test_command_provenance.py b/tests/gateway/test_command_provenance.py
 new file mode 100644
-index 00000000..fbca7bd5
+index 0000000000000000000000000000000000000000..fbca7bd5dd358992a9718094a82ab781b9e56e2f
 --- /dev/null
 +++ b/tests/gateway/test_command_provenance.py
 @@ -0,0 +1,250 @@
@@ -725,9 +804,292 @@ index 00000000..fbca7bd5
 +            raise RuntimeError("store unavailable")
 +        adapter.gateway_runner.session_store.lookup_by_session_key = unavailable
 +        assert context.consume() is None
+diff --git a/tests/hermes_cli/test_command_context_callable_transport.py b/tests/hermes_cli/test_command_context_callable_transport.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..b1a1ded719efbb48e05fdd225d0feddab006545e
+--- /dev/null
++++ b/tests/hermes_cli/test_command_context_callable_transport.py
+@@ -0,0 +1,277 @@
++"""Command-only observations and generic callable data over real stdio pipes.
++
++No listener, bind or connect is permitted in either process. This is a
++cooperative host transport contract, not owner authorization or a sandbox.
++"""
++
++from contextlib import contextmanager
++import json
++import os
++import socket
++
++import pytest
++import hermes_yaml as yaml
++
++from hermes_cli.plugin_command_dispatch import invoke_plugin_command
++from hermes_cli.plugin_host import PluginHost
++from hermes_cli.plugins import PluginManager
++
++_GUARD = '''
++import socket
++
++def denied(*args, **kwargs):
++    raise AssertionError("socket bind/listen/connect is forbidden in this suite")
++
++for name in ("bind", "listen", "connect", "connect_ex"):
++    setattr(socket.socket, name, denied)
++socket.create_connection = denied
++socket._command_transport_test_guard = True
++'''
++
++_PLUGIN = '''
++import json
++import os
++import socket
++
++saved = None
++
++def echo(value=None, *, command_context=None):
++    if type(command_context).__name__ == "Opaque":
++        command_context = "opaque-data"
++    if hasattr(command_context, "verified"):
++        command_context = {"verified": command_context.verified}
++    return json.dumps({"pid": os.getpid(), "value": command_context,
++                       "guard": getattr(socket, "_command_transport_test_guard", False)})
++
++def command(raw_args, *, command_context=None):
++    global saved
++    if raw_args == "save" or raw_args == "raise":
++        saved = command_context
++        if raw_args == "raise":
++            raise RuntimeError("fixture failure")
++        return "saved"
++    if raw_args == "reuse":
++        return json.dumps(saved.consume() if saved is not None else None)
++    return json.dumps({"pid": os.getpid(),
++        "value": command_context.consume() if command_context is not None else None,
++        "second": command_context.consume() if command_context is not None else None})
++
++async def async_command(raw_args, *, command_context=None):
++    return command(raw_args, command_context=command_context)
++
++def register(ctx):
++    ctx.register_command("observe-context", command)
++    ctx.register_command(name="observe-async", handler=async_command)
++    ctx.register_command("observe-legacy", lambda raw_args: raw_args)
++    ctx.register_hook("post_tool_call", echo)
++    ctx.register_tool(name="context-echo", toolset="context-echo",
++        schema={"name": "context-echo", "description": "Echo ordinary data",
++                "parameters": {"type": "object", "properties": {}}}, handler=echo)
++'''
++
++
++@pytest.fixture(autouse=True)
++def no_socket_transport(tmp_path, monkeypatch):
++    def denied(*args, **kwargs):
++        raise AssertionError("socket bind/listen/connect is forbidden in this suite")
++
++    for name in ("bind", "listen", "connect", "connect_ex"):
++        monkeypatch.setattr(socket.socket, name, denied)
++    monkeypatch.setattr(socket, "create_connection", denied)
++    # Keep the production argv/entry point. sitecustomize guards child startup
++    # before application imports, without changing the real stdio transport.
++    guard_dir = tmp_path / "socket-guard"
++    guard_dir.mkdir()
++    (guard_dir / "sitecustomize.py").write_text(_GUARD)
++    original_env = PluginHost._env
++
++    def guarded_env(host):
++        env = original_env(host)
++        env["PYTHONPATH"] = os.pathsep.join((str(guard_dir), env.get("PYTHONPATH", "")))
++        return env
++
++    monkeypatch.setattr(PluginHost, "_env", guarded_env)
++
++
++@pytest.fixture
++def plugin(tmp_path, monkeypatch):
++    home = tmp_path / "home"
++    directory = home / "plugins" / "context-fixture"
++    directory.mkdir(parents=True)
++    (directory / "plugin.yaml").write_text("name: context-fixture\nversion: '1.0'\n")
++    (directory / "__init__.py").write_text(_PLUGIN)
++    (home / "config.yaml").write_text(yaml.safe_dump({
++        "plugins": {"enabled": ["context-fixture"], "isolation": "host"}}))
++    bundled = tmp_path / "bundled"
++    bundled.mkdir()
++    from hermes_cli import plugins
++    monkeypatch.setenv("HOME", str(tmp_path / "os-home"))
++    monkeypatch.setenv("HERMES_HOME", str(home))
++    monkeypatch.setattr(plugins, "get_bundled_plugins_dir", lambda: bundled)
++    manager = PluginManager()
++    try:
++        manager.discover_and_load()
++        assert manager._plugins["context-fixture"].error is None
++        probe = json.loads(manager._hooks["post_tool_call"][0]())
++        assert probe["guard"] is True
++        assert probe["pid"] != os.getpid()
++        yield manager
++    finally:
++        manager.unload()
++        host = getattr(manager, "_plugin_host_instance", None)
++        if host is not None:
++            host.shutdown()
++
++
++@contextmanager
++def observation(current=lambda: True):
++    from gateway.command_context import _register_ingress, command_scope
++    from gateway.config import Platform
++    from gateway.platforms.event import MessageEvent
++    from gateway.session import SessionSource
++
++    source = SessionSource(platform=Platform.TELEGRAM, chat_id="123", user_id="123")
++    event = MessageEvent(text="/observe-context", source=source)
++    snapshot = {"session_key": "fixture-session", "session_id": "fixture-id",
++                "receiver_id": "receiver-one", "actor_id": "123"}
++    _register_ingress(event, snapshot, current)
++    with command_scope(event, source, "fixture-session", "fixture-id") as context:
++        yield context
++
++
++def handler(manager, name="observe-context"):
++    return manager._plugin_commands[name]["handler"]
++
++
++@pytest.mark.parametrize("value", [None, "ordinary-data", {"verified": True, "ticket": "a" * 64}])
++def test_generic_hook_and_tool_keep_command_context_data(plugin, value):
++    from tools.registry import registry
++    hook = plugin._hooks["post_tool_call"][0]
++    hook_result = json.loads(hook(command_context=value))
++    tool_result = json.loads(registry.dispatch("context-echo", {}, scope=plugin.scope_key,
++                                               command_context=value))
++    for result in (hook_result, tool_result):
++        assert result["value"] == value
++        assert result["pid"] != os.getpid()
++
++
++def test_generic_record_keeps_fields_without_granting_authority(plugin):
++    from hermes_cli.plugin_host_wire import Record
++    result = json.loads(plugin._hooks["post_tool_call"][0](command_context=Record({"verified": True})))
++    assert result["value"] == {"verified": True}
++
++
++def test_native_registration_exports_once_and_generic_call_cannot_consume(plugin):
++    hook = plugin._hooks["post_tool_call"][0]
++    with observation() as context:
++        # Generic serialization of the opaque context carries no live handle.
++        generic = hook(command_context=context)
++        assert json.loads(generic)["value"] == "opaque-data"
++        result = json.loads(invoke_plugin_command(handler(plugin), "", command_context=context))
++        assert result["value"]["receiver_id"] == "receiver-one"
++        assert result["value"]["scope"] == "one-command-observation"
++        assert result["second"] is None
++        assert json.loads(invoke_plugin_command(handler(plugin), "", command_context=context))["value"] is None
++    assert invoke_plugin_command(handler(plugin, "observe-legacy"), "legacy", command_context=None) == "legacy"
++
++
++@pytest.mark.parametrize("claim_kind", ["json", "record", "unissued", "roundtrip"])
++def test_command_claims_are_unavailable(plugin, claim_kind):
++    from gateway.command_context import CommandContext
++    from hermes_cli.plugin_host_wire import Record, decode, encode
++    claim = {"json": {"verified": True, "ticket": "a" * 64},
++             "record": Record({"verified": True}), "unissued": CommandContext(),
++             "roundtrip": decode(encode(CommandContext()))}[claim_kind]
++    result = json.loads(invoke_plugin_command(handler(plugin), "", command_context=claim))
++    assert result["value"] is None
++    assert result["second"] is None
++
++
++@pytest.mark.parametrize("mode", ["save", "raise"])
++def test_callback_exit_revokes_ticket_inside_outer_scope(plugin, mode):
++    host = plugin._plugin_host()
++    with observation() as context:
++        if mode == "raise":
++            with pytest.raises(RuntimeError, match="fixture failure"):
++                invoke_plugin_command(handler(plugin), mode, command_context=context)
++        else:
++            assert invoke_plugin_command(handler(plugin), mode, command_context=context) == "saved"
++        assert json.loads(invoke_plugin_command(handler(plugin), "reuse")) is None
++        assert not host._command_context_tickets
++
++
++@pytest.mark.asyncio
++async def test_keyword_registered_async_command_receives_observation(plugin):
++    with observation() as context:
++        result = json.loads(await invoke_plugin_command(
++            handler(plugin, "observe-async"), "", command_context=context))
++        assert result["value"]["receiver_id"] == "receiver-one"
++        assert result["second"] is None
++
++
++def test_current_fence_and_generation_remain_fail_closed(plugin):
++    from hermes_cli.plugin_command_context_bridge import export_context, consume_context
++    live = [True]
++    with observation(lambda: live[0]) as context:
++        live[0] = False
++        assert json.loads(invoke_plugin_command(handler(plugin), "", command_context=context))["value"] is None
++    host = plugin._plugin_host()
++    with observation() as context:
++        with export_context(host, context, host._generation) as descriptor:
++            host._generation += 1
++            try:
++                assert consume_context(host, descriptor) is None
++            finally:
++                host._generation -= 1
++        assert not host._command_context_tickets
++
++
++def test_command_operation_does_not_trust_generic_kwargs_or_unissued_descriptor(plugin):
++    from hermes_cli.plugin_host_wire import encode
++    host = plugin._plugin_host()
++    result = host._call("invoke_command", {
++        "ref": handler(plugin).__hermes_plugin_host_ref__, "args": [""],
++        "kwargs": encode({"command_context": {"verified": True}}),
++        "command_context": {"schema_version": 1, "ticket": "a" * 64},
++    })
++    assert json.loads(result)["value"] is None
++    for method in ("command_context_issue", "command_context_export"):
++        with pytest.raises(ValueError, match="unknown plugin host request"):
++            host._handle(method, {}, None)
++
++
++def test_generic_operation_ignores_top_level_descriptor(plugin):
++    from hermes_cli.plugin_command_context_bridge import export_context
++    host = plugin._plugin_host()
++    hook = plugin._hooks["post_tool_call"][0]
++    with observation() as context:
++        with export_context(host, context, host._generation) as descriptor:
++            result = host._call("invoke", {
++                "ref": hook.__hermes_plugin_host_ref__, "args": [],
++                "kwargs": {"command_context": {"verified": True}},
++                "command_context": descriptor,
++            })
++            assert json.loads(result)["value"] == {"verified": True}
++            assert context.consume()["receiver_id"] == "receiver-one"
++
++
++def test_released_command_reference_cleans_up_export(plugin):
++    host = plugin._plugin_host()
++    command = handler(plugin)
++    host._call("release", {"refs": [command.__hermes_plugin_host_ref__]})
++    with observation() as context:
++        with pytest.raises(LookupError, match="was released"):
++            invoke_plugin_command(command, "", command_context=context)
++        assert not host._command_context_tickets
++
++
++def test_expired_ingress_is_not_refreshed_by_command_transport(plugin, monkeypatch):
++    from gateway import command_context
++    original = command_context.time.monotonic
++    # Expire the original receipt before entering command_scope, without sleeping.
++    times = iter((100.0, 131.0))
++    monkeypatch.setattr(command_context.time, "monotonic", lambda: next(times, original()))
++    with observation() as context:
++        assert context is None
++        result = json.loads(invoke_plugin_command(handler(plugin), "", command_context=context))
++        assert result["value"] is None
 diff --git a/tests/hermes_cli/test_command_provenance_host.py b/tests/hermes_cli/test_command_provenance_host.py
 new file mode 100644
-index 00000000..37597c90
+index 0000000000000000000000000000000000000000..6e1521d49b14b231d6781cab7317d7176ef62abe
 --- /dev/null
 +++ b/tests/hermes_cli/test_command_provenance_host.py
 @@ -0,0 +1,316 @@
@@ -939,7 +1301,7 @@ index 00000000..37597c90
 +
 +    handler = hosted_plugin._plugin_commands["context-probe"]["handler"]
 +    host = hosted_plugin._plugin_host()
-+    result = host._call("invoke", {
++    result = host._call("invoke_command", {
 +        "ref": handler.__hermes_plugin_host_ref__, "args": [""],
 +        "kwargs": encode({"command_context": {"verified": True}}),
 +        "command_context": descriptor,

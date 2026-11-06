@@ -8,12 +8,20 @@
 
 - 官方来源：[NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent)。
 - 基线：`90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`。
-- 本地原型提交：`adfb1feb207943d2bb539555adcbb667bcb571ab`；tree：`2eed0582216b9bdec676ac9787f8a7cb724dbe54`；分支：`prototype/verified-command-context`。
+- 本地原型提交：`b93642ca32739d4426293603e66175a72582de98`；tree：`d5c40d30e8a436448e266ce31277cf9c93dd82b4`；分支：`prototype/verified-command-context`。
 - 本地提交仅为来源标识，不是已公开的提交链接；原型没有配置远端。
-- 精确九文件[补丁](command-context-prototype.patch)，SHA-256：`ab47d5f7c25c4cbc007332cb05e4f5dbf146ba701ef90cd77e09df10a5af1f20`。
+- 精确十文件[补丁](command-context-prototype.patch)，SHA-256：`fd437b865f54bf64cfb453db05b60aa8417653840ff83587a9f5cfcd3cc92ad3`。
 - 上游衍生代码保留 [Hermes MIT 许可证](LICENSE.hermes-agent)。
 
 [manifest.json](manifest.json) 记录来源、补丁与证据哈希、文件清单、历史结果、局限及后续门槛。[verification.json](verification.json) 和 [installed-packages.json](installed-packages.json) 保留原始历史结构化记录。前者的项目提交及状态仅描述当时快照，不是本功能分支当前状态。原始完整日志含机器路径，未随本包分发；结构化记录不等于可独立复现的完整日志。
+
+## 当前仅命令调用修复
+
+此前原型 `adfb1feb207943d2bb539555adcbb667bcb571ab` 仍记录在未修改的历史回执中。当前修订修复通用 `command_context` 冲突：只有 `register_command` 的精确 handler 绑定到专用 `invoke_command` 操作。普通 hook/工具保留同名数据，通用描述符不能变成活动观察。同步/异步及旧 handler 签名、一次性使用、TTL、代次、回调作用域和已释放 ref 保留已测试行为。
+
+[revision-verification.json](revision-verification.json) 记录三个经审计文件 **87 通过、0 失败、0 跳过**：原生产者 35 项、原 host 35 项及新增命令/通用 callable 回归 17 项。它们与此前 146 项有重叠，不能相加。父子进程禁止 socket bind/listen/connect；测试保留生产 launcher，仅通过环境加入临时 sitecustomize guard，探针验证子进程 guard 及不同 PID。针对明确官方基线的 14 项静态检查全部通过。未另行证明这些回归测试在修复前的版本中失败。
+
+九项受限 socket 用例没有运行，仍未解决。这不是完整上游套件、真实 Telegram 验证或生产授权，补丁也没有远端上游 CI 结果。子进程操作仍使用协作宿主已有的引用表，不是新的逐插件认证边界。
 
 ## 原型观察什么
 
@@ -27,13 +35,13 @@
 
 历史新增契约测试通过 70 项（生产者/观察 35 项，回调/IPC 35 项）。扩展选择为 **146 通过、9 项在环境初始化阶段失败**：临时 gateway 控制 socket 绑定返回 `EPERM` / `Operation not permitted`，未到达验收断言。历史上获准复跑一次同样失败；这些测试没有被跳过、计为通过或解决。
 
-涉及 `tests/gateway/test_cli_plugin_command_in_gateway.py`（六项）、`tests/gateway/test_cli_plugin_command_own_socket.py`（两项）及 `tests/gateway/test_plugin_command_choice.py`（一项失败，另一项通过）。因此不是全绿结果。历史 14 项上游静态检查及干净基线补丁应用检查通过。本次封装不复跑任何上游或身份/socket 测试。
+涉及 `tests/gateway/test_cli_plugin_command_in_gateway.py`（六项）、`tests/gateway/test_cli_plugin_command_own_socket.py`（两项）及 `tests/gateway/test_plugin_command_choice.py`（一项失败，另一项通过）。因此不是全绿结果。历史 14 项上游静态检查及干净基线补丁应用检查通过。这些是历史结果，不是当前修订的完整测试结论。
 
 测试使用合成入口，覆盖原生生产者 → gateway handler → 真实托管子进程；未验证真实 Telegram 账户、polling/webhook、网络/TLS 认证、设备或远端 CI。使用 Python 3.14.9 和观察到的 88 包 PM 环境，指纹不是与锁文件完全等价的证明。评审无需 API Key，密钥也不能解决 socket 限制。
 
 ## 后续设计与集成门槛
 
-1. 采用上游支持的**仅命令调用**上下文接口。原型在通用 callable proxy 拦截 `command_context`，自定义 hook 同名参数可能导致托管与进程内行为差异；采用前必须消除冲突并验证兼容性。
+1. 采用上游支持的**仅命令调用**上下文接口。本地修复现仅选择原生注册的精确 handler，并保留通用 hook/工具关键字数据。这是已测试的原型行为，不是已获上游支持的公共 API，也不是独立认证的逐插件命令边界。
 2. 增加单调递增的 policy、路由、连接、会话 revision 防护。当前快照相等不能检测 A→B→A（ABA）历史变化，也不能消除撤销与操作竞态。一次性消费不是原子的权限到操作准入事务。
 3. 显式设计首次会话登记：尚无原生会话的首次命令得不到观察，不得以调用者自报身份或恢复标志替代。
 4. 完成规范 Primary Bot 发现/绑定、明确 owner 登记和持久化 grant；每次受保护读取/操作准入须原子检查当前 owner、policy、grant、session 及 worker 来源，并支持撤销与恢复。
@@ -54,7 +62,7 @@ ARTIFACT="/path/to/hermes-superagent/experiments/command-context"
 COPY="/path/to/disposable-hermes"
 test "$(git -C "$COPY" rev-parse HEAD)" = 90d6b98fd86d20981ee06ddd5b7d93e4320f26a4
 test -z "$(git -C "$COPY" status --porcelain)"
-printf '%s  %s\n' ab47d5f7c25c4cbc007332cb05e4f5dbf146ba701ef90cd77e09df10a5af1f20 "$ARTIFACT/command-context-prototype.patch" | sha256sum --check -
+printf '%s  %s\n' fd437b865f54bf64cfb453db05b60aa8417653840ff83587a9f5cfcd3cc92ad3 "$ARTIFACT/command-context-prototype.patch" | sha256sum --check -
 git -C "$COPY" apply --check "$ARTIFACT/command-context-prototype.patch"
 ```
 

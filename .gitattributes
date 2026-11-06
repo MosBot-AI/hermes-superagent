@@ -1,0 +1,3 @@
+# Unified patch context lines can be a single required prefix space.
+# Source-file whitespace is checked in each upstream experiment before packaging.
+experiments/**/*.patch -whitespace
