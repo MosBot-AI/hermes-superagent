@@ -22,6 +22,62 @@ from personal_agent.task_cli import (
 )
 from personal_agent.tasks import TaskError, validate_request
 
+# Only these fixed strings may cross the result boundary into saved diagnostics.
+DIAGNOSTIC_EXPLANATIONS = {
+    "TEXT_WORKER_FAILED": "The planning worker failed.",
+    "TIMEOUT": "The planning worker exceeded its time limit.",
+    "CANCELLED": ("The local worker result was cancelled; remote cancellation is not confirmed."),
+    "TEXT_WORKER_CONNECT_FAILED": "The connection attempt failed.",
+    "TEXT_WORKER_CONNECT_TIMEOUT": "The connection attempt timed out.",
+    "TEXT_WORKER_READ_TIMEOUT": "Waiting for response data timed out.",
+    "TEXT_WORKER_WRITE_TIMEOUT": "Sending request data timed out.",
+    "TEXT_WORKER_POOL_TIMEOUT": "Waiting for a local connection timed out.",
+    "TEXT_WORKER_READ_FAILED": "Reading response data failed.",
+    "TEXT_WORKER_WRITE_FAILED": "Writing request data failed.",
+    "TEXT_WORKER_PROTOCOL_FAILED": "The transport protocol failed.",
+    "TEXT_WORKER_TLS_VERIFY_FAILED": "TLS certificate verification failed.",
+    "TEXT_WORKER_DNS_FAILED": "The service name could not be resolved.",
+}
+FAILURE_CODES = frozenset(DIAGNOSTIC_EXPLANATIONS) - {"CANCELLED"}
+
+
+def terminal_diagnostic(result):
+    """Reduce untrusted result fields to fixed codes and local callback counts."""
+    state = result.terminal_state.value
+    code = getattr(result, "error_classification", None)
+    if type(code) is not str:
+        code = "TEXT_WORKER_FAILED"
+    if state == "SUCCEEDED":
+        code = None
+    elif state == "CANCELLED":
+        code = "CANCELLED"
+    elif state == "INTERRUPTED" or code not in FAILURE_CODES:
+        code = "TEXT_WORKER_FAILED"
+    usage = getattr(result, "usage_metadata", None)
+    attempts = usage.get("api_calls") if type(usage) is dict else None
+    if type(attempts) is not int or attempts not in (0, 1):
+        attempts = None
+    return {"code": code, "submission_attempts": attempts}
+
+
+def valid_diagnostic(state, diagnostic):
+    if type(diagnostic) is not dict or set(diagnostic) != {"code", "submission_attempts"}:
+        return False
+    attempts = diagnostic["submission_attempts"]
+    if attempts is not None and (type(attempts) is not int or attempts not in (0, 1)):
+        return False
+    code = diagnostic["code"]
+    if state == "SUCCEEDED":
+        return code is None
+    if type(code) is not str:
+        return False
+    if state == "CANCELLED":
+        return code == "CANCELLED"
+    if state == "INTERRUPTED":
+        return code == "TEXT_WORKER_FAILED"
+    return state == "FAILED" and code in FAILURE_CODES
+
+
 MAX_GRANTS = 64
 MAX_RESULT_CHARS = 32000
 APPLICATION_ID = 0x57504C31
@@ -113,7 +169,7 @@ class Ledger:
                     or envelope["route_fingerprint"] != fingerprint
                     or hashlib.sha256((fingerprint + encoded).encode("ascii")).hexdigest()
                     != envelope["sha256"]
-                    or set(data)
+                    or set(data) - {"diagnostic"}
                     != {
                         "state",
                         "ready",
@@ -123,6 +179,10 @@ class Ledger:
                         "result_hash",
                         "notice",
                     }
+                    or (
+                        "diagnostic" in data
+                        and not valid_diagnostic(data["state"], data["diagnostic"])
+                    )
                     or data["task_id"] != row["task_id"]
                     or type(data["snapshot_revision"]) is not int
                     or data["snapshot_revision"] != row["revision"]

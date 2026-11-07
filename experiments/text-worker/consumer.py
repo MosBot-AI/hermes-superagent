@@ -17,7 +17,7 @@ from personal_agent.task_cli import current_profile_home, open_task_store
 from personal_agent.task_focus import task_context
 from personal_agent.tasks import TaskError
 
-from .worker_ledger import Ledger
+from .worker_ledger import Ledger, terminal_diagnostic
 from .worker_presentation import render_worker_reply
 
 PROVIDER = "opencode-go"
@@ -414,13 +414,18 @@ class TaskPlanningWorker(SessionTaskTools):
                         "ready": result.ready,
                         "task_id": grant.task_id,
                         "snapshot_revision": grant.revision,
-                        "draft": result.summary if result.ready else None,
+                        "draft": (
+                            result.summary
+                            if result.ready and result.terminal_state.value == "SUCCEEDED"
+                            else None
+                        ),
                         "result_hash": result.result_hash,
                         "notice": (
                             "Untrusted planning draft. No task state or external action changed."
                         ),
                     }
                     if result.ready:
+                        data["diagnostic"] = terminal_diagnostic(result)
                         # A result is exposed only after its receipt commits. Failure
                         # leaves a consumed claim, never a new launch opportunity.
                         self.ledger.complete(key, data)

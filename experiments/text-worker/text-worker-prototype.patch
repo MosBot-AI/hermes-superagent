@@ -118,10 +118,10 @@ index 65865471..c8ec509d 100644
 +from agent.text_subagent import TextSubagentRequest
 diff --git a/agent/text_subagent.py b/agent/text_subagent.py
 new file mode 100644
-index 00000000..f5c102f2
+index 00000000..838bccaa
 --- /dev/null
 +++ b/agent/text_subagent.py
-@@ -0,0 +1,340 @@
+@@ -0,0 +1,392 @@
 +"""Opt-in bounded text workers. No credential resolver, agent loop, or tool executor.
 +
 +Trusted in-process plugins/middleware are not sandboxed. Cancellation and timeout
@@ -158,6 +158,53 @@ index 00000000..f5c102f2
 +_SYSTEM = "Produce a text-only planning draft from the supplied task data. Do not claim to have performed actions."
 +# Deliberately small direct Chat Completions surface for this prototype.
 +_PROVIDERS = frozenset({"openai", "deepseek", "opencode-go"})
++
++
++def _transport_failure(error):
++    """Fixed diagnostics only: never inspect exception text, request, response or errno.
++
++    Follow at most eight explicit causes of exact known transport exception types.
++    Unknown wrappers/subclasses, cycles and deeper chains fail closed to generic.
++    These codes describe an observed failure, not delivery or charging certainty.
++    """
++    import httpcore
++    import httpx
++    import socket
++    import ssl
++
++    codes = {}
++    for module in (httpx, httpcore):
++        for name, code in (
++            ("ConnectError", "CONNECT_FAILED"), ("ConnectTimeout", "CONNECT_TIMEOUT"),
++            ("ReadTimeout", "READ_TIMEOUT"), ("WriteTimeout", "WRITE_TIMEOUT"),
++            ("PoolTimeout", "POOL_TIMEOUT"), ("ReadError", "READ_FAILED"),
++            ("WriteError", "WRITE_FAILED"), ("LocalProtocolError", "PROTOCOL_FAILED"),
++            ("RemoteProtocolError", "PROTOCOL_FAILED"),
++        ):
++            codes[getattr(module, name)] = "TEXT_WORKER_" + code
++    codes[ssl.SSLCertVerificationError] = "TEXT_WORKER_TLS_VERIFY_FAILED"
++    codes[socket.gaierror] = "TEXT_WORKER_DNS_FAILED"
++    # Ordinary OS/TLS leaves carry no independently trustworthy diagnostic.
++    # Preserve only a known outer transport classification, never inspect errno.
++    leaves = {OSError, ConnectionRefusedError, ConnectionResetError,
++              ConnectionAbortedError, BrokenPipeError, TimeoutError, ssl.SSLError,
++              ssl.SSLEOFError, ssl.SSLZeroReturnError, ssl.SSLWantReadError,
++              ssl.SSLWantWriteError}
++    seen = set()
++    code = "TEXT_WORKER_FAILED"
++    for _ in range(8):
++        if id(error) in seen or type(error) not in codes.keys() | leaves:
++            return "TEXT_WORKER_FAILED"
++        seen.add(id(error))
++        # Base descriptor bypasses user-defined attribute access on subclasses.
++        cause = BaseException.__cause__.__get__(error)
++        if type(error) in leaves:
++            return code if cause is None else "TEXT_WORKER_FAILED"
++        code = codes[type(error)]
++        if cause is None:
++            return code
++        error = cause
++    return "TEXT_WORKER_FAILED"
 +
 +
 +def _refuse():
@@ -368,6 +415,7 @@ index 00000000..f5c102f2
 +    response = None
 +    client = None
 +    error = None
++    transport_error = None
 +    summary = None
 +    usage = {}
 +    guard = threading.Lock()
@@ -403,7 +451,7 @@ index 00000000..f5c102f2
 +        prepared = apply_llm_request_middleware(copy.deepcopy(payload), **context)
 +
 +        def send(next_payload):
-+            nonlocal attempted, violated, response
++            nonlocal attempted, violated, response, transport_error
 +            with guard:
 +                try:
 +                    if closed or threading.get_ident() != execution_thread:
@@ -415,7 +463,11 @@ index 00000000..f5c102f2
 +                    violated = True
 +                    raise
 +                attempted = 1  # record attempt before HTTP submission, even if it fails
-+            response = _post_text(client, route, copy.deepcopy(next_payload), admissible)
++            try:
++                response = _post_text(client, route, copy.deepcopy(next_payload), admissible)
++            except Exception as exc:  # health: allow BLE001 -- fixed type-only transport diagnostics
++                transport_error = _transport_failure(exc)
++                raise
 +            return response
 +
 +        observed = run_llm_execution_middleware(prepared.payload, send, original_request=copy.deepcopy(payload), strict_single_use=True, **context)
@@ -436,7 +488,7 @@ index 00000000..f5c102f2
 +                usage = {}
 +                _refuse()
 +    except Exception:  # health: allow BLE001 -- result boundary redacts provider/middleware exceptions that may contain credentials
-+        error = "TEXT_WORKER_FAILED"
++        error = transport_error or "TEXT_WORKER_FAILED"
 +    finally:
 +        with guard:
 +            closed = True
@@ -512,10 +564,10 @@ index 58aa4ba4..7eaedf6e 100644
      def delegation_backends(self) -> Any:
 diff --git a/tests/agent/test_text_subagent.py b/tests/agent/test_text_subagent.py
 new file mode 100644
-index 00000000..2d5e5e83
+index 00000000..3f4a4a91
 --- /dev/null
 +++ b/tests/agent/test_text_subagent.py
-@@ -0,0 +1,749 @@
+@@ -0,0 +1,866 @@
 +"""Text-worker proposal: real SDK/transport/middleware, in-memory HTTP only."""
 +import dataclasses
 +import json
@@ -1265,3 +1317,120 @@ index 00000000..2d5e5e83
 +        "x-opencode-session": "ambient-identity", "X-Unapproved": "extra"})
 +    _, result = finish(world)
 +    assert result.terminal_state == SubagentState.FAILED and not world.calls
++
++
++@pytest.mark.parametrize("exception,code", [
++    (httpx.ConnectError, "CONNECT_FAILED"), (httpx.ConnectTimeout, "CONNECT_TIMEOUT"),
++    (httpx.ReadTimeout, "READ_TIMEOUT"), (httpx.WriteTimeout, "WRITE_TIMEOUT"),
++    (httpx.PoolTimeout, "POOL_TIMEOUT"), (httpx.ReadError, "READ_FAILED"),
++    (httpx.WriteError, "WRITE_FAILED"), (httpx.RemoteProtocolError, "PROTOCOL_FAILED"),
++    (httpx.LocalProtocolError, "PROTOCOL_FAILED"),
++])
++def test_transport_diagnostics_are_fixed_and_do_not_retry(world, exception, code):
++    attempts = []
++    def fail(req):
++        attempts.append(1)
++        raise exception("PRIVATE key/body/path", request=req)
++    world.handler[0] = fail
++    _, result = finish(world)
++    assert result.error_classification == "TEXT_WORKER_" + code
++    assert result.terminal_state == SubagentState.FAILED and result.summary is None
++    assert result.usage_metadata["api_calls"] == 1 and len(attempts) == 1
++    assert "PRIVATE" not in json.dumps(dataclasses.asdict(result))
++
++
++def test_transport_classifier_safe_cause_chains():
++    import httpcore
++    import socket
++    import ssl
++    from agent.text_subagent import _transport_failure
++    for inner, expected in [(ssl.SSLCertVerificationError("PRIVATE"), "TLS_VERIFY_FAILED"),
++                            (socket.gaierror(99, "PRIVATE"), "DNS_FAILED")]:
++        outer = httpx.ConnectError("PRIVATE")
++        middle = httpcore.ConnectError("PRIVATE")
++        outer.__cause__ = middle
++        middle.__cause__ = inner
++        assert _transport_failure(outer) == "TEXT_WORKER_" + expected
++    outer.__cause__ = outer
++    assert _transport_failure(outer) == "TEXT_WORKER_FAILED"
++    outer = httpx.ReadError("PRIVATE")
++    current = outer
++    for _ in range(8):
++        current.__cause__ = httpx.ReadError("PRIVATE")
++        current = current.__cause__
++    assert _transport_failure(outer) == "TEXT_WORKER_FAILED"
++    outer.__cause__ = ValueError("PRIVATE")
++    assert _transport_failure(outer) == "TEXT_WORKER_FAILED"
++
++
++def test_transport_classifier_never_reads_poisoned_exception_attributes():
++    from agent.text_subagent import _transport_failure
++    class Poison(httpx.ConnectError):
++        def __str__(self):
++            raise AssertionError("must not render exception")
++        def __repr__(self):
++            raise AssertionError("must not render exception")
++        def __getattribute__(self, name):
++            raise AssertionError("must not read exception fields")
++    assert _transport_failure(Poison("PRIVATE")) == "TEXT_WORKER_FAILED"
++    error = httpx.ConnectError("PRIVATE", request=httpx.Request(
++        "POST", "https://private.invalid/secret", headers={"Authorization": "PRIVATE"},
++        content=b"PRIVATE"))
++    error.__context__ = ValueError("PRIVATE implicit context is ignored")
++    assert _transport_failure(error) == "TEXT_WORKER_CONNECT_FAILED"
++
++
++@pytest.mark.parametrize("category", ["tls", "dns"])
++def test_transport_cause_diagnostics_reach_redacted_result(world, category):
++    import socket
++    import ssl
++    attempts = []
++    def fail(req):
++        attempts.append(1)
++        inner = (ssl.SSLCertVerificationError("PRIVATE certificate detail") if category == "tls"
++                 else socket.gaierror(99, "PRIVATE hostname"))
++        raise httpx.ConnectError("PRIVATE", request=req) from inner
++    world.handler[0] = fail
++    _, result = finish(world)
++    expected = "TLS_VERIFY_FAILED" if category == "tls" else "DNS_FAILED"
++    assert result.error_classification == "TEXT_WORKER_" + expected
++    assert result.summary is None and result.terminal_state == SubagentState.FAILED
++    assert result.usage_metadata["api_calls"] == 1 and len(attempts) == 1
++    assert "PRIVATE" not in json.dumps(dataclasses.asdict(result))
++
++
++@pytest.mark.parametrize("kind,leaf_type,expected", [
++    ("ConnectError", ConnectionRefusedError, "CONNECT_FAILED"),
++    ("ConnectError", OSError, "CONNECT_FAILED"),
++    ("ReadError", ConnectionResetError, "READ_FAILED"),
++    ("WriteError", BrokenPipeError, "WRITE_FAILED"),
++    ("ConnectTimeout", TimeoutError, "CONNECT_TIMEOUT"),
++])
++def test_real_transport_os_cause_shape(kind, leaf_type, expected):
++    import httpcore
++    from agent.text_subagent import _transport_failure
++    leaf = leaf_type("PRIVATE")
++    outer = getattr(httpx, kind)("PRIVATE")
++    inner = getattr(httpcore, kind)("PRIVATE")
++    outer.__cause__ = inner
++    inner.__cause__ = leaf
++    assert _transport_failure(outer) == "TEXT_WORKER_" + expected
++    assert _transport_failure(leaf) == "TEXT_WORKER_FAILED"
++    leaf.__cause__ = ValueError("PRIVATE")
++    assert _transport_failure(outer) == "TEXT_WORKER_FAILED"
++
++
++def test_real_tls_cause_shape_and_unknown_subclass():
++    import httpcore
++    import ssl
++    from agent.text_subagent import _transport_failure
++    outer = httpx.ConnectError("PRIVATE")
++    inner = httpcore.ConnectError("PRIVATE")
++    outer.__cause__ = inner
++    inner.__cause__ = ssl.SSLError("PRIVATE")
++    assert _transport_failure(outer) == "TEXT_WORKER_CONNECT_FAILED"
++    assert _transport_failure(inner.__cause__) == "TEXT_WORKER_FAILED"
++    class Unrecognized(ConnectionRefusedError):
++        pass
++    inner.__cause__ = Unrecognized("PRIVATE")
++    assert _transport_failure(outer) == "TEXT_WORKER_FAILED"

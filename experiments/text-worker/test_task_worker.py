@@ -1011,3 +1011,195 @@ def test_readable_draft_quotes_controls_bidi_and_preserves_json_model_contract(h
     assert consent(host, "draft plan-1")["data"]["draft"] == result["data"]["draft"]
     assert direct(host, host.consumer, "result")["data"] == result["data"]
     assert len(host.requests) == 1
+
+
+@pytest.mark.parametrize(
+    "code",
+    [
+        "TEXT_WORKER_FAILED",
+        "TIMEOUT",
+        "TEXT_WORKER_CONNECT_FAILED",
+        "TEXT_WORKER_CONNECT_TIMEOUT",
+        "TEXT_WORKER_READ_TIMEOUT",
+        "TEXT_WORKER_WRITE_TIMEOUT",
+        "TEXT_WORKER_POOL_TIMEOUT",
+        "TEXT_WORKER_READ_FAILED",
+        "TEXT_WORKER_WRITE_FAILED",
+        "TEXT_WORKER_PROTOCOL_FAILED",
+        "TEXT_WORKER_TLS_VERIFY_FAILED",
+        "TEXT_WORKER_DNS_FAILED",
+        "HOSTILE secret https://private.invalid",
+        {"secret": "must not persist"},
+        None,
+    ],
+)
+def test_safe_failure_diagnostic_persists_and_reloads_without_draft(host, monkeypatch, code):
+    from agent.subagent_lifecycle import SubagentState
+
+    allow(host)
+    direct(host, host.consumer)
+    wait(host)
+    original = host.consumer.service.result
+
+    def failed(handle):
+        return replace(
+            original(handle),
+            terminal_state=SubagentState.FAILED,
+            summary="HOSTILE failed draft",
+            error_classification=code,
+            usage_metadata={"api_calls": 1},
+        )
+
+    monkeypatch.setattr(host.consumer.service, "result", failed)
+    result = direct(host, host.consumer, "result")
+    assert result["status"] == "ok", result
+    data = result["data"]
+    expected = (
+        code
+        if type(code) is str
+        and code
+        in {
+            "TEXT_WORKER_FAILED",
+            "TIMEOUT",
+            "TEXT_WORKER_CONNECT_FAILED",
+            "TEXT_WORKER_CONNECT_TIMEOUT",
+            "TEXT_WORKER_READ_TIMEOUT",
+            "TEXT_WORKER_WRITE_TIMEOUT",
+            "TEXT_WORKER_POOL_TIMEOUT",
+            "TEXT_WORKER_READ_FAILED",
+            "TEXT_WORKER_WRITE_FAILED",
+            "TEXT_WORKER_PROTOCOL_FAILED",
+            "TEXT_WORKER_TLS_VERIFY_FAILED",
+            "TEXT_WORKER_DNS_FAILED",
+        }
+        else "TEXT_WORKER_FAILED"
+    )
+    assert data["diagnostic"] == {"code": expected, "submission_attempts": 1}
+    assert data["draft"] is None and data["state"] == "FAILED"
+    assert "HOSTILE" not in json.dumps(data)
+    host.manager.discover_and_load(force=True)
+    host.consumer = host.manager._plugin_commands["personal-plan-worker"]["handler"].__self__
+    assert direct(host, host.consumer, "result")["data"] == data
+    view = readable(host, "draft plan-1")
+    assert expected in view and "No draft" in view
+    assert (
+        "No retry or key reset was performed. Do not use a new key to retry an uncertain outcome."
+    ) in view
+    assert "Not proof of provider execution, charges or delivery" in view
+    assert len(host.requests) == 1
+
+
+@pytest.mark.parametrize("count", [0, 1, None, True, False, -1, 2, "1", [], 1.0])
+def test_success_diagnostic_normalizes_local_callback_count(host, monkeypatch, count):
+    allow(host)
+    direct(host, host.consumer)
+    wait(host)
+    original = host.consumer.service.result
+    monkeypatch.setattr(
+        host.consumer.service,
+        "result",
+        lambda handle: replace(
+            original(handle), error_classification="HOSTILE", usage_metadata={"api_calls": count}
+        ),
+    )
+    result = direct(host, host.consumer, "result")["data"]
+    assert result["diagnostic"] == {
+        "code": None,
+        "submission_attempts": count if type(count) is int and count in (0, 1) else None,
+    }
+    assert consent(host, "draft plan-1")["data"]["diagnostic"] == result["diagnostic"]
+
+
+def rewrite_diagnostic(host, diagnostic, *, remove=False):
+    import hashlib
+
+    ledger = host.consumer.ledger
+    with ledger.connection() as conn:
+        value = json.loads(conn.execute("SELECT result FROM grants").fetchone()[0])
+        if remove:
+            value["data"].pop("diagnostic")
+        else:
+            value["data"]["diagnostic"] = diagnostic
+        encoded = json.dumps(value["data"], ensure_ascii=True, sort_keys=True)
+        value["sha256"] = hashlib.sha256(
+            (value["route_fingerprint"] + encoded).encode("ascii")
+        ).hexdigest()
+        conn.execute("UPDATE grants SET result=?", (json.dumps(value),))
+
+
+def test_old_receipt_without_diagnostic_remains_readable_without_rearming(host):
+    allow(host)
+    direct(host, host.consumer)
+    wait(host)
+    expected = direct(host, host.consumer, "result")["data"]
+    expected.pop("diagnostic")
+    rewrite_diagnostic(host, None, remove=True)
+    other = fresh_consumer(host)
+    assert direct(host, other, "result")["data"] == expected
+    assert direct(host, other)["data"] == expected
+    assert "diagnostic" not in consent(host, "draft plan-1")["data"]
+    assert len(host.requests) == 1
+
+
+@pytest.mark.parametrize(
+    "diagnostic",
+    [
+        None,
+        [],
+        {},
+        {"code": None},
+        {"code": None, "submission_attempts": True},
+        {"code": None, "submission_attempts": 2},
+        {"code": None, "submission_attempts": "1"},
+        {"code": None, "submission_attempts": None, "secret": "extra"},
+        {"code": [], "submission_attempts": 1},
+        {"code": "HOSTILE", "submission_attempts": 1},
+        {"code": "TEXT_WORKER_FAILED", "submission_attempts": 1},
+        {"code": "CANCELLED", "submission_attempts": 1},
+    ],
+)
+def test_corrupt_diagnostic_even_with_recomputed_hash_is_rejected(host, diagnostic):
+    allow(host)
+    direct(host, host.consumer)
+    wait(host)
+    assert direct(host, host.consumer, "result")["data"]["state"] == "SUCCEEDED"
+    rewrite_diagnostic(host, diagnostic)
+    other = fresh_consumer(host)
+    for action in ("result", "launch"):
+        result = direct(host, other, action)
+        assert result["error"]["code"] == "worker_ledger_corrupt" and result["data"] is None
+    assert consent(host, "draft plan-1")["error"]["code"] == "worker_ledger_corrupt"
+    assert len(host.requests) == 1
+
+
+@pytest.mark.parametrize(
+    "state,code,expected",
+    [
+        ("SUCCEEDED", {"hostile": "secret"}, None),
+        ("CANCELLED", "HOSTILE", "CANCELLED"),
+        ("FAILED", "CANCELLED", "TEXT_WORKER_FAILED"),
+        ("FAILED", "TIMEOUT", "TIMEOUT"),
+        ("INTERRUPTED", "TEXT_WORKER_READ_FAILED", "TEXT_WORKER_FAILED"),
+    ],
+)
+def test_diagnostic_state_alignment_and_non_dict_usage(host, state, code, expected):
+    import importlib
+
+    module = importlib.import_module(type(host.consumer.ledger).__module__)
+    result = SimpleNamespace(
+        terminal_state=SimpleNamespace(value=state),
+        error_classification=code,
+        usage_metadata=[("api_calls", 1)],
+    )
+    diagnostic = module.terminal_diagnostic(result)
+    assert diagnostic == {"code": expected, "submission_attempts": None}
+    assert module.valid_diagnostic(state, diagnostic)
+    assert module.DIAGNOSTIC_EXPLANATIONS["CANCELLED"] == (
+        "The local worker result was cancelled; remote cancellation is not confirmed."
+    )
+    assert not module.valid_diagnostic(state, {"code": ["HOSTILE"], "submission_attempts": 1})
+    for other in ("SUCCEEDED", "CANCELLED", "FAILED", "INTERRUPTED"):
+        if other == "SUCCEEDED" and state != other:
+            assert not module.valid_diagnostic(other, diagnostic)
+        if other == "CANCELLED" and state != other:
+            assert not module.valid_diagnostic(other, diagnostic)

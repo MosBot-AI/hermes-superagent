@@ -28,9 +28,13 @@ The host proposal no longer borrows the parent HTTP client. It builds an isolate
 
 The consumer records its single-use claim before dispatch in a separate private SQLite ledger. A crash or lost acknowledgement cannot make that request eligible again. Claims and both live/saved drafts are bound to the original exact route fingerprint, which is checked before fresh tool disclosure. This does not retract existing conversation history after a model switch. Observed terminal drafts are saved and can be read after reload; an unobserved result remains unknown, not inferred successful or retried. Pending authorization belongs to the original consumer instance. A new instance cannot silently inherit it. The bounded ledger retains tombstones and refuses new grants at capacity.
 
+## Operational failure receipts
+
+The experiment now preserves a bounded fixed failure category and local callback-attempt count in terminal receipts, including after reload. Native draft views explain those codes without exposing raw exceptions or transport data. Existing receipts without diagnostics remain valid. Delivery, charges and remote cancellation remain unconfirmed; this does not enable retries, rearm grants or alter the provider route. See the [diagnostic contract](../experiments/text-worker/README.md#safe-terminal-diagnostics).
+
 ## Real provider and installation checks
 
-The dedicated transport now supplies OpenCode Go's required affinity header via the official helper, with a fresh one-shot identifier rather than inherited parent/root context. It is restricted to the exact provider and HTTPS `opencode.ai:443` origin, without weakening target checks, redirects or fallback restrictions. The selected offline lane has 125 host and 64 consumer tests.
+The dedicated transport now supplies OpenCode Go's required affinity header via the official helper, with a fresh one-shot identifier rather than inherited parent/root context. It is restricted to the exact provider and HTTPS `opencode.ai:443` origin, without weakening target checks, redirects or fallback restrictions. The selected offline lane has 144 host and 107 consumer tests.
 
 The authorized one-shot synthetic DeepSeek transport probe failed with `ConnectError`; there was no HTTP status or model response. Delivery is unconfirmed, and it was not retried. No Gateway or native activation was involved. A separate official production-repository installation in a fresh offline profile was refused by the unchanged scanner (CAUTION, 50 findings); the plugin remained absent. Neither attempt is a passed acceptance gate. See the [bundle](../experiments/text-worker/README.md#provider-compatibility-and-actual-acceptance-attempt) for exact scope and limitations.
 

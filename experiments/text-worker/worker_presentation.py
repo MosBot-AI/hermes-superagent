@@ -3,6 +3,8 @@
 import json
 import unicodedata
 
+from .worker_ledger import DIAGNOSTIC_EXPLANATIONS
+
 MAX_VIEW_CHARS = 40000
 
 
@@ -57,6 +59,21 @@ def render_worker_reply(raw):
             lines.append(
                 f"Current revision: {data['current_revision']}"
                 + (" (snapshot is stale)" if data["stale"] else "")
+            )
+        if "diagnostic" in data:
+            diagnostic = data["diagnostic"]
+            code = diagnostic["code"]
+            if code is not None:
+                lines.append("Diagnostic: " + code + ". " + DIAGNOSTIC_EXPLANATIONS[code])
+                lines.append(
+                    "No retry or key reset was performed. "
+                    "Do not use a new key to retry an uncertain outcome."
+                )
+            attempts = diagnostic["submission_attempts"]
+            lines.append(
+                "Local callback submission attempts: "
+                + ("unknown" if attempts is None else str(attempts))
+                + ". Not proof of provider execution, charges or delivery."
             )
         if "draft" in data:
             lines.append(

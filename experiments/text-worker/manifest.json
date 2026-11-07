@@ -2,9 +2,9 @@
   "schema_version": 1,
   "status": "Review-only host proposal and experimental task consumer; not enabled",
   "base": "90d6b98fd86d20981ee06ddd5b7d93e4320f26a4",
-  "staged_tree": "6b5cb4daebfcb161a58c9faca77f558c1ede17c6",
+  "staged_tree": "82fe2eeed2273b0f731090f02dc575a59b0a672a",
   "patch_file": "text-worker-prototype.patch",
-  "patch_sha256": "f7a222d67b92b2d85f7e5119bee5583dc43703388770807565acd67c4f4060a8",
+  "patch_sha256": "7b2b193b0142d998f2111577366e651f12fc4a08b02c08aee13fb4562b5315aa",
   "changed_files": 5,
   "patch_files": [
     "agent/subagent_lifecycle.py",
@@ -14,10 +14,10 @@
     "tests/agent/test_text_subagent.py"
   ],
   "source_hashes": {
-    "consumer.py": "05c549380f909a298db54d74034bf24fa3a0b0fd791c84e9e9c0654a704ac0ed",
-    "worker_ledger.py": "c6db8898b82148e2b1232b5ee6ee703b9ba976f37f296764cbff3d207dcf2445",
-    "worker_presentation.py": "c9c019d017bf2a0a41352c165e6ef97d46c6b0c0a517eebd97562c4e39e532c8",
-    "test_task_worker.py": "3b33b7eed230440031e264803971f8d0fb949dfd11e0f0d09091684df35e72d0"
+    "consumer.py": "2355927b23069e292966b735f48b195f51d759435abc543b2ba6f745b2c2cf80",
+    "worker_ledger.py": "d15507d585b8817ca0df2e5ce74575e4cc3e2eb0286d6a12209688185f982422",
+    "worker_presentation.py": "a3b3fb4e6e42739dfc03077d7aac26675f45dc4f405a10568702874526e395bd",
+    "test_task_worker.py": "b3886f0297fe6e2e340bd147f44cbf0105ca40f6b2106f58ced217046525f3da"
   },
   "artifact_files": [
     "LICENSE.hermes-agent",
@@ -37,9 +37,9 @@
     "tests/hermes_cli/test_plugins_middleware_chain.py"
   ],
   "selected_suite": {
-    "host_passed": 125,
-    "consumer_passed": 64,
-    "passed": 189,
+    "host_passed": 144,
+    "consumer_passed": 107,
+    "passed": 251,
     "failed": 0,
     "skipped": 0,
     "retries": 0,
@@ -76,7 +76,8 @@
     "No task state mutation, full orchestration, Gateway end-to-end or automatic memory acceptance",
     "Exact route fingerprints gate fresh live/cached draft returns; previously returned parent history is not retracted or isolated from later model switches",
     "Native workbench reads persisted receipts via explicit scoped LOCAL commands; it neither polls a live worker nor cancels admitted work",
-    "Native exec output uses audited client display paths, not model submission; clients may cache it and live UI acceptance remains untested"
+    "Native exec output uses audited client display paths, not model submission; clients may cache it and live UI acceptance remains untested",
+    "Fixed terminal failure diagnostics and local callback attempt counts do not establish remote delivery, billing, cancellation or retry eligibility; old receipts without diagnostics remain unchanged"
   ],
   "clean_base_apply_check": true,
   "live_model_acceptance_passed": false,
@@ -97,7 +98,8 @@
     "whole_profile_unchanged_attested": false,
     "retries": 0,
     "gateway_used": false,
-    "acceptance_passed": false
+    "acceptance_passed": false,
+    "host_text_transport_sha256_at_attempt": "8c817eacd1a421cc02b616611736533188d7aa2fed7f81e1dea3d1ed188a9958"
   },
   "official_install_attempt": {
     "scope": "Production repository at local d4581ce (same tree as published 7c6b11b), fresh credential-free profile",
