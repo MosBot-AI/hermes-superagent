@@ -53,13 +53,19 @@ def setup_tasks_cli(parent: argparse._SubParsersAction) -> None:
     review.add_argument("--per-bucket-limit", type=int, default=5)
     review.add_argument("--max-chars", type=int, default=16000)
     for reader in (listing, search, agenda, review):
+        reader.add_argument(
+            "--work-status",
+            choices=("ready", "in_progress", "waiting", "blocked"),
+            default=argparse.SUPPRESS,
+            help="Filter active tasks by recorded work status",
+        )
         filters = reader.add_mutually_exclusive_group()
         filters.add_argument("--project", default=argparse.SUPPRESS, help="Exact project label")
         filters.add_argument("--unassigned", action="store_true", default=argparse.SUPPRESS)
     projects = commands.add_parser("projects", help="Count current local task project labels")
     projects.add_argument("--limit", type=int, default=20)
     projects.add_argument("--after", default=None, help="Exclusive binary-order project label")
-    for name in ("update", "complete", "cancel"):
+    for name in ("update", "complete", "cancel", "progress"):
         command = commands.add_parser(name, help=f"{name.capitalize()} a local task explicitly")
         command.add_argument("task_id")
         command.add_argument("--expected-revision", type=int, required=True)
@@ -87,6 +93,12 @@ def setup_tasks_cli(parent: argparse._SubParsersAction) -> None:
             )
         else:
             command.add_argument("--note", required=True)
+            if name == "progress":
+                command.add_argument(
+                    "--work-status",
+                    required=True,
+                    choices=("ready", "in_progress", "waiting", "blocked"),
+                )
 
 
 def command_request(args: argparse.Namespace) -> tuple[str, dict]:
@@ -103,10 +115,11 @@ def command_request(args: argparse.Namespace) -> tuple[str, dict]:
             "max_chars",
             "project",
             "unassigned",
+            "work_status",
         ),
-        "list": ("state", "limit", "after", "project", "unassigned"),
-        "search": ("query", "state", "limit", "after", "project", "unassigned"),
-        "agenda": ("on", "limit", "after", "project", "unassigned"),
+        "list": ("state", "limit", "after", "project", "unassigned", "work_status"),
+        "search": ("query", "state", "limit", "after", "project", "unassigned", "work_status"),
+        "agenda": ("on", "limit", "after", "project", "unassigned", "work_status"),
         "update": (
             "task_id",
             "expected_revision",
@@ -116,6 +129,7 @@ def command_request(args: argparse.Namespace) -> tuple[str, dict]:
             "due_date",
             "project",
         ),
+        "progress": ("task_id", "expected_revision", "request_id", "work_status", "note"),
         "complete": ("task_id", "expected_revision", "request_id", "note"),
         "cancel": ("task_id", "expected_revision", "request_id", "note"),
     }

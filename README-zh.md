@@ -60,6 +60,8 @@ Hermes 原生 personal-agent 插件，目标是让一个主 agent 管理项目�
 
 [本地记忆元数据检查点](docs/39-local-memory-checkpoints-zh.md)：显式原生命令创建持久元数据标记，验证事件与记录一致性，检查水位并查询是否过时；不备份正文，也不满足原生压缩检查点。
 
+[本地任务进度指南](docs/42-local-task-progress-zh.md)新增明确的工作中/等待/阻碍说明、安全版本写入和过滤回顾。任务 schema v4 原子升级自有旧库并保留历史回执，已记录进度不等于原生执行证据。
+
 ## 开发验证
 
 基线为 `compatibility.json` 内的 Hermes commit；当前实际运行目标是 Python 3.14。没有根据单一 SHA 宣称宽泛的 `requires_hermes` 版本范围。

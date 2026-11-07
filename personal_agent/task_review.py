@@ -4,7 +4,7 @@ import json
 import sqlite3
 from datetime import date, timedelta
 
-_SUMMARY_COLUMNS = ("id", "title", "project", "due_date", "revision")
+_SUMMARY_COLUMNS = ("id", "title", "project", "due_date", "revision", "work_status")
 
 
 def task_review(connection: sqlite3.Connection, request: dict) -> dict:
@@ -26,17 +26,25 @@ def task_review(connection: sqlite3.Connection, request: dict) -> dict:
     elif request.get("unassigned"):
         where += " AND project IS NULL"
         filters["unassigned"] = True
+    if "work_status" in request:
+        where += " AND work_status = ?"
+        parameters.append(request["work_status"])
+        filters["work_status"] = request["work_status"]
     # A single aggregate starts the read snapshot before individual summaries.
     counts = connection.execute(
         "SELECT count(*), coalesce(sum(due_date < ?), 0), "
         "coalesce(sum(due_date = ?), 0), "
         "coalesce(sum(due_date > ? AND due_date <= ?), 0), "
-        "coalesce(sum(due_date > ?), 0), coalesce(sum(due_date IS NULL), 0) "
+        "coalesce(sum(due_date > ?), 0), coalesce(sum(due_date IS NULL), 0), "
+        "coalesce(sum(work_status = 'ready'), 0), "
+        "coalesce(sum(work_status = 'in_progress'), 0), "
+        "coalesce(sum(work_status = 'waiting'), 0), "
+        "coalesce(sum(work_status = 'blocked'), 0) "
         f"FROM tasks WHERE {where}",
         (on, on, on, through, through, *parameters),
     ).fetchone()
     names = ("total_active", "overdue", "due_today", "upcoming", "later", "undated")
-    totals = dict(zip(names, counts, strict=True))
+    totals = dict(zip(names, counts[:6], strict=True))
     buckets: dict[str, dict] = {
         name: {"total": totals[name], "items": [], "omitted": totals[name]}
         for name in ("overdue", "due_today", "upcoming", "undated")
@@ -46,6 +54,9 @@ def task_review(connection: sqlite3.Connection, request: dict) -> dict:
         "through": through,
         "filters": filters,
         "counts": totals,
+        "progress_counts": dict(
+            zip(("ready", "in_progress", "waiting", "blocked"), counts[6:], strict=True)
+        ),
         "buckets": buckets,
     }
     conditions = (

@@ -8,6 +8,9 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Added explicit local task progress (ready/in-progress/waiting/blocked) with notes, CAS and durable retries, native CLI/conversation/model entry points, progress filters and daily-review counts. Atomic task schema v1/v2/v3→v4 migration preserves legacy receipts and events; no worker dispatch or automatic status inference.
+
+
 - Added a bounded daily task review across CLI, native conversation and activated task read tools: exact active counts, project filters, complete title summaries, serialized budgets and one-snapshot consistency. No schedule, new permission, model call or schema change.
 
 - [Local memory metadata checkpoints](docs/39-local-memory-checkpoints.md): Explicit native commands create durable metadata-only markers with event/record consistency checks, watermark fencing and stale-status inspection. These do not back up payload or satisfy native compression checkpoints.

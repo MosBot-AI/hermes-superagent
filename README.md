@@ -60,6 +60,8 @@ The [daily task review](docs/40-daily-task-review.md) combines exact overdue/tod
 
 [Local memory metadata checkpoints](docs/39-local-memory-checkpoints.md): Explicit native commands create durable metadata-only markers with event/record consistency checks, watermark fencing and stale-status inspection. These do not back up payload or satisfy native compression checkpoints.
 
+The [local task progress guide](docs/42-local-task-progress.md) adds explicit working/waiting/blocker notes, revision-safe writes and filtered daily reviews. Task schema v4 upgrades owned older stores atomically while preserving historical receipts; recorded progress is not native execution evidence.
+
 ## Development checks
 
 `compatibility.json` records the Hermes baseline commit. The current runtime target is Python 3.14. A single tested SHA does not justify a broad `requires_hermes` version range.

@@ -25,7 +25,7 @@ The example UUID is synthetic. Use an actual returned ID rather than copying it 
 
 ## 2. Bounded Result and Cursor Contract
 
-History returns `task_id`, `current_revision`, `current_state`, `items`, `has_more` and `next_cursor` inside the entry point's existing `data` envelope. Each item contains only `revision`, `operation` and the original UTC `timestamp`. Operations are `capture`, `update`, `complete` or `cancel`, ordered by increasing task revision. Task titles, details, project labels, old field values, resolution notes and receipt bodies are not included.
+History returns `task_id`, `current_revision`, `current_state`, `items`, `has_more` and `next_cursor` inside the entry point's existing `data` envelope. Each item contains only `revision`, `operation` and the original UTC `timestamp`. Operations are `capture`, `update`, `progress`, `complete` or `cancel`, ordered by increasing task revision. Task titles, details, project labels, old field values, resolution notes and receipt bodies are not included.
 
 `limit` defaults to 20 and accepts integers from 1 to 100. `after_revision` defaults to 0, which starts at the beginning. To continue a non-final page, pass its integer `next_cursor` as `after_revision` with the **same task ID**. This is different from the `after` string field used by other readers. A positive cursor must identify an existing event for that task; a future or missing revision returns `invalid_cursor`. Unknown task IDs return `not_found`. Wrong types, unrelated fields, missing IDs and invalid bounds return the existing redacted `invalid_request` error.
 
@@ -33,7 +33,7 @@ Each page's current metadata and events share one SQLite read snapshot. Pages ar
 
 ## 3. Persistence, Privacy and Limits
 
-History reads the existing schema-v3 `events` table and adds no migration, new record type, automatic ingestion or background work. Existing v1/v2 stores retain their event rows through the already-supported upgrade. Metadata survives plugin reload and process restart. The operation itself uses a deferred read transaction; the existing storage opener still performs its standard schema verification or supported legacy upgrade.
+History reads the existing `events` table and adds no migration, automatic ingestion or background work. The [task progress follow-on](42-local-task-progress.md) upgrades tasks to schema v4 and adds the `progress` operation while preserving old events. Metadata survives plugin reload and process restart. The operation itself uses a deferred read transaction; the existing storage opener still performs its standard schema verification or supported legacy upgrade.
 
 This is operation metadata, not a verified author audit or a transcript. It does not distinguish CLI/slash/model authors, record which fields changed, reconstruct old task content or prove that a real-world task was performed. `complete` means the local record was marked done. This feature does not solve broader task retention, restore, deletion or native Kanban/worker reconciliation requirements.
 

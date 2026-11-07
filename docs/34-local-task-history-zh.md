@@ -25,7 +25,7 @@ hermes personal-agent tasks history TASK_ID --after-revision 20 --limit 20
 
 ## 2. 有界结果与游标约定
 
-历史在各入口现有的 `data` 响应中返回 `task_id`、`current_revision`、`current_state`、`items`、`has_more` 和 `next_cursor`。每条记录仅包含 `revision`、`operation` 和原始 UTC `timestamp`。操作值为 `capture`、`update`、`complete` 或 `cancel`，按任务版本递增排列。不返回任务标题、详情、项目标签、旧字段值、完成说明或回执正文。
+历史在各入口现有的 `data` 响应中返回 `task_id`、`current_revision`、`current_state`、`items`、`has_more` 和 `next_cursor`。每条记录仅包含 `revision`、`operation` 和原始 UTC `timestamp`。操作值为 `capture`、`update`、`progress`、`complete` 或 `cancel`，按任务版本递增排列。不返回任务标题、详情、项目标签、旧字段值、完成说明或回执正文。
 
 `limit` 默认为 20，接受 1 至 100 的整数。`after_revision` 默认为 0，表示从头开始。非末页需要继续时，将整数 `next_cursor` 传入 `after_revision`，并保持**同一个任务 ID**。它与其他读取操作使用的字符串 `after` 字段不同。正数游标必须对应该任务已有的事件；未来或缺失的版本返回 `invalid_cursor`。未知任务 ID 返回 `not_found`。类型错误、无关字段、缺失 ID 和越界参数返回既有的脱敏 `invalid_request` 错误。
 
@@ -33,7 +33,7 @@ hermes personal-agent tasks history TASK_ID --after-revision 20 --limit 20
 
 ## 3. 持久化、隐私与边界
 
-历史复用 schema-v3 的既有 `events` 表，不新增迁移、记录类型、自动摄取或后台工作。已有 v1/v2 数据库通过原先支持的升级保留事件行。元数据在插件重载与进程重启后仍可查询。操作本身使用延迟读取事务；既有存储入口仍进行标准 schema 校验或受支持的旧版本升级。
+历史复用既有 `events` 表，本身不新增迁移、自动摄取或后台工作。[任务进度后续切片](42-local-task-progress-zh.md)将任务库升级为 schema v4 并新增 progress 操作，同时保留旧事件。元数据在插件重载与进程重启后仍可查询。操作本身使用延迟读取事务；既有存储入口仍进行标准 schema 校验或受支持的旧版本升级。
 
 这是操作元数据，不是已验证作者的审计或对话记录。它不区分 CLI、slash、模型作者，不记录具体字段变化，不重建任务旧内容，也不能证明现实中的工作已完成。`complete` 仅表示本地记录被标为完成。本功能不解决完整任务保留、恢复、删除策略或原生 Kanban/worker 对账要求。
 

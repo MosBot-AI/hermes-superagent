@@ -25,7 +25,7 @@ from .tasks import TaskError
 MAX_RAW_ARGUMENTS = 32768
 MAX_TOKENS = 256
 _SESSION = re.compile(r"[A-Za-z0-9._-]{1,128}")
-_WRITES = frozenset(("capture", "update", "complete", "cancel"))
+_WRITES = frozenset(("capture", "update", "complete", "cancel", "progress"))
 HELP = (
     'Use POSIX quotes: add "Title" [--details "Text"] [--project "Project"] '
     "[--due-date YYYY-MM-DD]; list [--state all] [--project LABEL | --unassigned]; "
@@ -33,6 +33,9 @@ HELP = (
     "review --on YYYY-MM-DD [--lookahead-days N] [--per-bucket-limit N] [--max-chars N]; "
     "history TASK_ID [--limit N] [--after-revision N] (operation metadata only). "
     "Readers support --limit and --after where applicable. "
+    "list/search/agenda/review accept --work-status ready|in_progress|waiting|blocked "
+    "for active tasks. "
+    'progress TASK_ID --expected-revision N --work-status STATUS --note "Progress or blocker"; '
     "update TASK_ID --expected-revision N [--title TITLE] [--details TEXT] "
     "[--project LABEL | --clear-project] [--due-date YYYY-MM-DD | --clear-due]; "
     'done TASK_ID --expected-revision N --note "Reason"; '

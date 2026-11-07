@@ -68,7 +68,8 @@ def test_all_buckets_counts_date_edges_order_and_minimal_summaries(store):
     }
     assert result["filters"] == {}
     assert result["buckets"]["overdue"]["items"][0] == {
-        key: oldest[key] for key in ("id", "title", "project", "due_date", "revision")
+        key: oldest[key]
+        for key in ("id", "title", "project", "due_date", "revision", "work_status")
     }
     expected = {
         "overdue": ["overdue-oldest", "overdue-newer"],
@@ -276,5 +277,5 @@ def test_review_survives_legacy_upgrade_and_restart(tmp_path, version):
         store = TaskStore(connection)
         store.initialize()
         assert review(store) == before
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 3
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 4
     assert path.read_bytes() == raw

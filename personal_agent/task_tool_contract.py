@@ -9,13 +9,15 @@ owns action-specific requirements, bounds, normalization and rejection.
 from .tasks import TaskError, validate_request
 
 _READ_ACTIONS = ("list", "show", "search", "projects", "agenda", "history", "review")
-_WRITE_ACTIONS = ("capture", "update", "complete", "cancel")
+_WRITE_ACTIONS = ("capture", "update", "complete", "cancel", "progress")
 
 PERSONAL_TASKS_READ_SCHEMA = {
     "name": "personal_tasks_read",
     "description": (
         "Read this profile's local task inbox; results become visible to the configured model. "
-        "No external action, scheduling or reminders. Projects are exact task labels, not "
+        "No external action, scheduling or reminders. Recorded work_status is explicit local "
+        "progress, not proof of native execution. Work-status filters select active tasks only. "
+        "Projects are exact task labels, not "
         "native Project entities. Use only fields relevant to the selected action. "
         "show/history require task_id from an earlier result; never invent IDs. search requires "
         "literal query text. agenda requires an explicit on date and returns active tasks "
@@ -81,6 +83,14 @@ PERSONAL_TASKS_READ_SCHEMA = {
                 "type": "boolean",
                 "description": "list/search/agenda/review only: true selects unlabeled tasks.",
             },
+            "work_status": {
+                "type": "string",
+                "enum": ["ready", "in_progress", "waiting", "blocked"],
+                "description": (
+                    "list/search/agenda/review only: filter recorded active progress. "
+                    "With list/search, state must be omitted or captured."
+                ),
+            },
             "lookahead_days": {
                 "type": "integer",
                 "minimum": 0,
@@ -119,10 +129,12 @@ PERSONAL_TASKS_WRITE_SCHEMA = {
         "the task. Results become visible to the configured model. Every write requires a "
         "stable request_id: reuse it with identical arguments on retry, never generate a "
         "fresh key after an uncertain outcome. capture requires title. update requires "
-        "at least one of title/details/due_date/project. update/complete/cancel require "
+        "at least one of title/details/due_date/project. update/complete/cancel/progress require "
         "task_id and expected_revision from a prior read for compare-and-swap (CAS); "
         "never invent IDs or revisions. On revision conflict, read and reconcile first. "
-        "complete/cancel require a nonblank note. Only use fields relevant to the action. "
+        "complete/cancel/progress require a nonblank note. progress also requires work_status "
+        "and records a local working/waiting/blocker update, never starts a worker or verifies "
+        "external progress. Only use fields relevant to the action. "
         "Projects are labels, not native Project entities. Dates must be explicit."
     ),
     "parameters": {
@@ -141,13 +153,13 @@ PERSONAL_TASKS_WRITE_SCHEMA = {
             "task_id": {
                 "type": "string",
                 "format": "uuid",
-                "description": "update/complete/cancel: exact canonical UUIDv4 from a result.",
+                "description": ("update/complete/cancel/progress: canonical UUIDv4 from a result."),
             },
             "expected_revision": {
                 "type": "integer",
                 "minimum": 1,
                 "maximum": 2**63 - 2,
-                "description": "update/complete/cancel: revision returned by a prior read.",
+                "description": "update/complete/cancel/progress: revision from a prior read.",
             },
             "title": {"type": "string", "minLength": 1, "maxLength": 240},
             "details": {"type": "string", "maxLength": 5000},
@@ -165,11 +177,16 @@ PERSONAL_TASKS_WRITE_SCHEMA = {
                     "Null means unassigned (clears the label on update)."
                 ),
             },
+            "work_status": {
+                "type": "string",
+                "enum": ["ready", "in_progress", "waiting", "blocked"],
+                "description": "progress only: explicitly requested local work status.",
+            },
             "note": {
                 "type": "string",
                 "minLength": 1,
                 "maxLength": 2000,
-                "description": "complete/cancel only: explicit nonblank resolution note.",
+                "description": "complete/cancel/progress: explicit resolution or progress note.",
             },
         },
     },

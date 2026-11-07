@@ -41,7 +41,7 @@ plugins:
 `enable-write` 后，可以对已有主模型说“在 Personal Agent 项目中添加准备演示的任务”“查看该项目的任务”“将演示任务标记为完成”。模型必须调用注册工具并使用返回 ID/revision，而非只承诺记住任务。自然语言理解和工具选择取决于已配置模型，仍需真实验收。
 
 - `personal_tasks_read`：`list`、`show`、字面 `search`、通过 `projects` 查看项目标签计数、显式日期 `agenda`，以及仅含元数据、使用整数 `after_revision` 游标的任务 `history`。参见[操作历史](34-local-task-history-zh.md)。
-- `personal_tasks_write`：`capture`、`update`、`complete`、`cancel`。所有修改要求稳定 `request_id`；编辑和终态变更还要求之前读取的 `task_id` 与 `expected_revision`。完成/取消要求 note。
+- `personal_tasks_write`：`capture`、`update`、`complete`、`cancel` 和明确的 `progress`。[任务进度](42-local-task-progress-zh.md)说明状态、说明和过滤契约。所有修改要求稳定 `request_id`；编辑、进度和终态变更还要求之前读取的 `task_id` 与 `expected_revision`。完成/取消/进度要求 note。
 - 由同一 TaskStore 校验器拒绝未知、不相关、身份/批准字段及错误类型。`show` 映射为存储的 `get`；没有其他隐含动作别名。
 - 日期必须明确。项目名仍是标签，不是原生 Project、worker 派发或权限范围。完成记录不等于实际执行对应现实任务。不发送提醒或外部副作用。
 - 读取结果继续遵守已有页/详情上限。只返回所请求操作的数据，不自动将整个 profile 当记忆加载。
@@ -57,7 +57,7 @@ plugins:
 }
 ```
 
-结果使用 `personal.session-task-tools.v1`，包含 `scope: activated_trusted_local_session`、`status`、`data`、`error`、`request_id` 和 `replayed`。任务存储保持 schema v3，包括历史 `source: local_cli`；该字段标识明确本地操作功能系列，不是可信 session/Bot 来源。稳定回执、冲突 key 拒绝和 revision 规则与确定性命令相同。结果不确定时重试同 payload/key 或先查看任务；换新 key 可能重复录入。插件绝不自动重试。
+结果使用 `personal.session-task-tools.v1`，包含 `scope: activated_trusted_local_session`、`status`、`data`、`error`、`request_id` 和 `replayed`。任务存储现为 schema v4，包括历史 `source: local_cli`；该字段标识明确本地操作功能系列，不是可信 session/Bot 来源。稳定回执、冲突 key 拒绝和 revision 规则与确定性命令相同。结果不确定时重试同 payload/key 或先查看任务；换新 key 可能重复录入。插件绝不自动重试。
 
 ## 3. 准入与撤销边界
 

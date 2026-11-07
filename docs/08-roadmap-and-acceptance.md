@@ -88,6 +88,8 @@ A further local E2.1/E2.2 precursor adds [project groups](24-local-project-group
 
 Current local memory precursor: [31](31-explicit-local-memory.md) implements opt-in native operator commands and a bounded SQLite backend behind an internal interface. It reuses the verified E6.8 command entry and local storage contracts, without enabling the provider modes still gated by E0.9. No automatic retrieval/ingestion, complete SDK, FTS/Markdown projections, consistent migration or native bridge is implemented; existing task model tools do not gain memory access. The separately enabled [memory model-tool follow-on](32-session-scoped-memory-tools.md) adds independent session activation and model-origin provenance; real-provider natural-language acceptance is still pending. These advance but do not complete E2.6/E2.7 or the full memory gates.
 
+The [local task progress follow-on](42-local-task-progress.md) adds explicitly recorded working/waiting/blocker state, notes, revision-safe retries and active review filters. Task schema v4 preserves old receipts/events through an atomic upgrade. This is local state, not native worker liveness or E3.2/E3.5 completion.
+
 ### E3. Connect Native Projects and Tasks (P0/P1, M1–M2)
 
 Depends on E0.3, E1.1–E1.5, and E2.1.

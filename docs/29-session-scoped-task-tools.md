@@ -41,7 +41,7 @@ In the existing native local session, use one of:
 After `enable-write`, example requests to the existing main model are “Add a task to prepare the demo in project Personal Agent,” “Show that project's tasks,” and “Mark the demo task complete.” The model must call the registered tools and use the returned IDs/revisions rather than merely promise to remember the task. Natural-language interpretation and tool selection depend on the configured model and still require live acceptance testing.
 
 - `personal_tasks_read`: `list`, `show`, literal `search`, project-label counts via `projects`, explicit-date `agenda`, and metadata-only task `history` with an integer `after_revision` cursor. See [operation history](34-local-task-history.md).
-- `personal_tasks_write`: `capture`, `update`, `complete`, `cancel`. Every mutation requires a stable `request_id`; updates and terminal transitions also require a previously read `task_id` and `expected_revision`. Completion/cancellation require a note.
+- `personal_tasks_write`: `capture`, `update`, `complete`, `cancel`, and explicit `progress`. See [task progress](42-local-task-progress.md) for status, note and filtering contracts. Every mutation requires a stable `request_id`; updates, progress and terminal transitions also require a previously read `task_id` and `expected_revision`. Completion/cancellation/progress require a note.
 - Unknown, irrelevant, identity/approval fields and wrong types are rejected by the same TaskStore validator. `show` maps to the store's `get`; there are no other hidden action aliases.
 - Dates must be explicit. Project names remain labels, not native Projects, worker dispatch or permission scopes. Completing a record does not carry out the underlying real-world task. No reminder or external effect is sent.
 - Read results remain bounded by existing page/detail limits. Data is returned only for the requested operation, not automatically loaded as all-profile memory.
@@ -57,7 +57,7 @@ A synthetic tool call might be:
 }
 ```
 
-Results use `personal.session-task-tools.v1`, with `scope: activated_trusted_local_session`, `status`, `data`, `error`, `request_id` and `replayed`. The task store is unchanged schema v3, including historical `source: local_cli`; that field identifies the explicit local-operator feature family, not verified session/Bot provenance. Stable receipts, conflicting-key rejection and revision rules match the deterministic commands. After an uncertain outcome, retry the same payload/key or inspect the task first; a new key may duplicate a capture. The plugin never retries automatically.
+Results use `personal.session-task-tools.v1`, with `scope: activated_trusted_local_session`, `status`, `data`, `error`, `request_id` and `replayed`. The task store now uses schema v4, including historical `source: local_cli`; that field identifies the explicit local-operator feature family, not verified session/Bot provenance. Stable receipts, conflicting-key rejection and revision rules match the deterministic commands. After an uncertain outcome, retry the same payload/key or inspect the task first; a new key may duplicate a capture. The plugin never retries automatically.
 
 ## 3. Admission and revocation boundary
 

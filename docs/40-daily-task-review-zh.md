@@ -21,7 +21,7 @@ hermes personal-agent tasks review --on 2026-11-07
 {"action":"review","on":"2026-11-07","lookahead_days":7,"per_bucket_limit":5,"max_chars":16000,"project":"Demo"}
 ```
 
-`project` 与 `unassigned` 可选且互斥。项目标签精确匹配，区分大小写，标点按字面值处理。`unassigned: true` 选择无标签任务，false 不过滤。不新增项目实体、原生 Kanban 映射或跨 profile 读取。Review 不接受 `limit`、`after`、`state`、写字段或调用者自报的身份/上下文。
+`project` 与 `unassigned` 可选且互斥。[进度后续切片](42-local-task-progress-zh.md)还新增活动任务的可选 work_status 过滤。项目标签精确匹配，区分大小写，标点按字面值处理。`unassigned: true` 选择无标签任务，false 不过滤。不新增项目实体、原生 Kanban 映射或跨 profile 读取。Review 不接受 `limit`、`after`、`state`、写字段或调用者自报的身份/上下文。
 
 ## 2. 日期、数量与摘要顺序
 
@@ -38,7 +38,7 @@ hermes personal-agent tasks review --on 2026-11-07
 
 四个摘要分组为 `overdue`、`due_today`、`upcoming` 和 `undated`，均包含 `total`、`items` 和 `omitted`。有日期的条目先按截止日期、再按最初录入顺序排列；无日期条目按最初录入顺序排列。这种确定性顺序不推断重要性、工作量、阻碍或执行意愿。已完成和已取消任务不计入。前瞻天数为零时，近期分组为空，所有未来有日期任务计入 later。
 
-每条摘要仅含 `id`、`title`、`project`、`due_date` 和当前 `revision`。不会加载或返回详情、完成说明、receipt 或操作历史。标题和项目标签仍可能含有个人信息或不可信文本，读取器不会执行其中指令。决定修改前可用 `show` 查看当前完整详情，revision 仍受正常的比较交换检查约束。
+响应还包含 ready/in_progress/waiting/blocked 的 progress_counts，总和等于 total_active。每条摘要仅含 id、title、project、due_date、当前 revision 和 work_status。不会加载或返回详情、进度/完成说明、receipt 或操作历史。标题和项目标签仍可能含有个人信息或不可信文本，读取器不会执行其中指令。决定修改前可用 `show` 查看当前完整详情，revision 仍受正常的比较交换检查约束。
 
 ## 3. 输出上限与快照语义
 
@@ -46,7 +46,7 @@ hermes personal-agent tasks review --on 2026-11-07
 
 摘要按逾期、今天、近期、无日期的分组顺序尝试加入。某分组的下一条完整摘要超出预算时，停止该分组；后续分组仍可能容纳较短摘要。标题、ID 和 revision 不会截断。`omitted = total - len(items)` 同时覆盖单组上限和共享预算造成的省略。总数大于零但 items 为空表示摘要被省略，并非没有任务。Review 不提供分页游标；要进一步检查，可用既有 `list`、`agenda`、`search` 和 `show` 读取器。`later` 有意只提供数量。
 
-全部数量与摘要共享一个延迟 SQLite 读取事务，并发更改不会让单次结果混入更改前后两种状态。下一次回顾是新快照，可能不同。不承诺持久快照、完成证明或跨调用冻结游标。读取失败释放事务并保留任务、事件和 receipt。已有自有 v1/v2 存储沿用 schema-v3 升级，本功能不新增迁移。
+全部数量与摘要共享一个延迟 SQLite 读取事务，并发更改不会让单次结果混入更改前后两种状态。下一次回顾是新快照，可能不同。不承诺持久快照、完成证明或跨调用冻结游标。读取失败释放事务并保留任务、事件和 receipt。任务进度后续切片将自有 v1/v2/v3 存储升级到 schema v4，回顾本身不新增迁移。
 
 ## 4. 隐私、准入与验证
 

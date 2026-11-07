@@ -12,7 +12,7 @@ from uuid import UUID, uuid4
 from .task_review import task_review
 
 _APPLICATION_ID = 0x5041544B
-_SCHEMA_VERSION = 3
+_SCHEMA_VERSION = 4
 _COLUMNS = (
     "id",
     "title",
@@ -26,6 +26,9 @@ _COLUMNS = (
     "source",
     "due_date",
     "project",
+    "work_status",
+    "progress_note",
+    "progress_updated_at",
 )
 _SCHEMA_V1 = {
     "tasks": """CREATE TABLE tasks (
@@ -45,7 +48,18 @@ _SCHEMA_V1 = {
 
 # Match SQLite ADD COLUMN serialization so fresh and migrated stores validate identically.
 _SCHEMA_V2 = {**_SCHEMA_V1, "tasks": _SCHEMA_V1["tasks"][:-1] + ", due_date TEXT)"}
-_SCHEMA = {**_SCHEMA_V2, "tasks": _SCHEMA_V2["tasks"][:-1] + ", project TEXT)"}
+_SCHEMA_V3 = {**_SCHEMA_V2, "tasks": _SCHEMA_V2["tasks"][:-1] + ", project TEXT)"}
+_WORK_STATUSES = ("ready", "in_progress", "waiting", "blocked")
+_PROGRESS_COLUMNS = (
+    "work_status TEXT NOT NULL DEFAULT 'ready' "
+    "CHECK(work_status IN ('ready','in_progress','waiting','blocked'))",
+    "progress_note TEXT NOT NULL DEFAULT ''",
+    "progress_updated_at TEXT",
+)
+_SCHEMA = {
+    **_SCHEMA_V3,
+    "tasks": _SCHEMA_V3["tasks"][:-1] + ", " + ", ".join(_PROGRESS_COLUMNS) + ")",
+}
 
 
 class TaskError(Exception):
@@ -77,7 +91,10 @@ def _project(value: Any) -> str:
     return value
 
 
-def _project_filter(request: dict, clauses: list, arguments: list) -> None:
+def _task_filters(request: dict, clauses: list, arguments: list) -> None:
+    if "work_status" in request:
+        clauses.append("work_status = ?")
+        arguments.append(request["work_status"])
     if "project" in request:
         clauses.append("project = ? COLLATE BINARY")
         arguments.append(request["project"])
@@ -115,17 +132,25 @@ def validate_request(operation: str, payload: dict) -> dict:
             {"task_id", "expected_revision", "request_id"},
             {"title", "details", "due_date", "project"},
         ),
+        "progress": ({"task_id", "expected_revision", "request_id", "work_status", "note"}, set()),
         "complete": ({"task_id", "expected_revision", "request_id", "note"}, set()),
         "cancel": ({"task_id", "expected_revision", "request_id", "note"}, set()),
         "get": ({"task_id"}, set()),
         "history": ({"task_id"}, {"limit", "after_revision"}),
-        "list": (set(), {"state", "limit", "after", "project", "unassigned"}),
-        "search": ({"query"}, {"state", "limit", "after", "project", "unassigned"}),
-        "agenda": ({"on"}, {"limit", "after", "project", "unassigned"}),
+        "list": (set(), {"state", "limit", "after", "project", "unassigned", "work_status"}),
+        "search": ({"query"}, {"state", "limit", "after", "project", "unassigned", "work_status"}),
+        "agenda": ({"on"}, {"limit", "after", "project", "unassigned", "work_status"}),
         "projects": (set(), {"limit", "after"}),
         "review": (
             {"on"},
-            {"lookahead_days", "per_bucket_limit", "max_chars", "project", "unassigned"},
+            {
+                "lookahead_days",
+                "per_bucket_limit",
+                "max_chars",
+                "project",
+                "unassigned",
+                "work_status",
+            },
         ),
     }
     if not isinstance(operation, str) or operation not in fields or not isinstance(payload, dict):
@@ -149,6 +174,11 @@ def validate_request(operation: str, payload: dict) -> dict:
     if "project" in result:
         if not (operation in ("capture", "update") and result["project"] is None):
             result["project"] = _project(result["project"])
+    if "work_status" in result:
+        if type(result["work_status"]) is not str or result["work_status"] not in _WORK_STATUSES:
+            raise TaskError("invalid_request")
+        if operation in ("list", "search") and result.get("state", "captured") != "captured":
+            raise TaskError("invalid_request")
     if "unassigned" in result:
         if type(result["unassigned"]) is not bool or "project" in result:
             raise TaskError("invalid_request")
@@ -236,7 +266,7 @@ class TaskStore:
             pass
 
     def initialize(self) -> None:
-        """Create v3, atomically migrate exact owned v1/v2, or verify v3."""
+        """Create v4, atomically migrate exact owned v1/v2/v3, or verify v4."""
         self._initialized = False
         began = False
         try:
@@ -255,13 +285,16 @@ class TaskStore:
                 conn.execute(f"PRAGMA user_version = {_SCHEMA_VERSION}")
             elif app_id != _APPLICATION_ID:
                 raise TaskError("foreign_database")
-            elif version in (1, 2):
-                legacy = _SCHEMA_V1 if version == 1 else _SCHEMA_V2
+            elif version in (1, 2, 3):
+                legacy = {1: _SCHEMA_V1, 2: _SCHEMA_V2, 3: _SCHEMA_V3}[version]
                 if dict(rows) != legacy or len(rows) != len(legacy):
                     raise TaskError("unsupported_schema")
                 if version == 1:
                     conn.execute("ALTER TABLE tasks ADD COLUMN due_date TEXT")
-                conn.execute("ALTER TABLE tasks ADD COLUMN project TEXT")
+                if version < 3:
+                    conn.execute("ALTER TABLE tasks ADD COLUMN project TEXT")
+                for column in _PROGRESS_COLUMNS:
+                    conn.execute("ALTER TABLE tasks ADD COLUMN " + column)
                 conn.execute(f"PRAGMA user_version = {_SCHEMA_VERSION}")
             elif version != _SCHEMA_VERSION:
                 raise TaskError("unsupported_schema")
@@ -291,7 +324,7 @@ class TaskStore:
 
     def _list(self, request: dict) -> dict:
         clauses, arguments = [], []
-        _project_filter(request, clauses, arguments)
+        _task_filters(request, clauses, arguments)
         if "query" in request:
             # Literal, case-sensitive matching; bind text without normalization.
             clauses.append("(instr(title, ?) > 0 OR instr(details, ?) > 0)")
@@ -321,7 +354,7 @@ class TaskStore:
         """Read live keyset pages; edits between pages may change membership."""
         clauses = ["state = 'captured'", "due_date IS NOT NULL", "due_date <= ?"]
         arguments = [request["on"]]
-        _project_filter(request, clauses, arguments)
+        _task_filters(request, clauses, arguments)
         if request["after"] is not None:
             row = self._connection.execute(
                 "SELECT due_date, sequence FROM tasks WHERE id = ?", (request["after"],)
@@ -491,7 +524,7 @@ class TaskStore:
                 state = {"complete": "done", "cancel": "cancelled"}.get(operation, "captured")
                 cursor = self._connection.execute(
                     "UPDATE tasks SET title=?, details=?, due_date=?, project=?, state=?,"
-                    " revision=revision+1,"
+                    " work_status=?, progress_note=?, progress_updated_at=?, revision=revision+1,"
                     " updated_at=?, resolved_at=?, resolution_note=? WHERE id=? AND revision=?",
                     (
                         request.get("title", task["title"]),
@@ -499,9 +532,12 @@ class TaskStore:
                         request.get("due_date", task["due_date"]),
                         request.get("project", task["project"]),
                         state,
+                        request["work_status"] if operation == "progress" else task["work_status"],
+                        request["note"] if operation == "progress" else task["progress_note"],
+                        now if operation == "progress" else task["progress_updated_at"],
                         now,
                         now if state != "captured" else None,
-                        request.get("note"),
+                        request["note"] if operation in ("complete", "cancel") else None,
                         task_id,
                         request["expected_revision"],
                     ),

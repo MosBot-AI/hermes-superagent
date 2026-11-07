@@ -21,7 +21,7 @@ Native commands still require `mode: local_tasks` and `local_conversation: true`
 {"action":"review","on":"2026-11-07","lookahead_days":7,"per_bucket_limit":5,"max_chars":16000,"project":"Demo"}
 ```
 
-`project` and `unassigned` are optional and mutually exclusive. Project labels match exactly, including case and literal punctuation. `unassigned: true` selects unlabeled tasks; false does not filter. There is no separate project entity, native Kanban mapping or cross-profile read. Review does not accept `limit`, `after`, `state`, write fields or caller-supplied identity/context.
+`project` and `unassigned` are optional and mutually exclusive. The [progress follow-on](42-local-task-progress.md) also adds optional `work_status` filtering for active tasks. Project labels match exactly, including case and literal punctuation. `unassigned: true` selects unlabeled tasks; false does not filter. There is no separate project entity, native Kanban mapping or cross-profile read. Review does not accept `limit`, `after`, `state`, write fields or caller-supplied identity/context.
 
 ## 2. Dates, Counts and Summary Order
 
@@ -38,7 +38,7 @@ Only tasks currently in `captured` state contribute. Counts cover every matching
 
 The four summary buckets are `overdue`, `due_today`, `upcoming` and `undated`, each containing `total`, `items` and `omitted`. Dated items sort by due date, then original capture order. Undated items use original capture order. This deterministic order does not infer importance, effort, blockers or willingness to work. Done and cancelled tasks are excluded. With a zero-day lookahead, upcoming is empty and all future dated tasks count as later.
 
-Each summary contains only `id`, `title`, `project`, `due_date` and current `revision`. Details, resolution notes, receipts and operation history are not loaded or returned. Titles and project labels can still be personal or contain untrusted text. The reader does not follow instructions stored in them. Use `show` for current full details before deciding on a change; revisions remain subject to normal compare-and-swap checks.
+The response also includes `progress_counts` for ready/in_progress/waiting/blocked; these sum to total_active. Each summary contains only `id`, `title`, `project`, `due_date`, current `revision` and `work_status`. Details, progress/resolution notes, receipts and operation history are not loaded or returned. Titles and project labels can still be personal or contain untrusted text. The reader does not follow instructions stored in them. Use `show` for current full details before deciding on a change; revisions remain subject to normal compare-and-swap checks.
 
 ## 3. Output Bounds and Snapshot Semantics
 
@@ -46,7 +46,7 @@ Each summary contains only `id`, `title`, `project`, `due_date` and current `rev
 
 Summaries are considered in overdue, today, upcoming, undated order. If the next whole summary does not fit, that bucket stops; later buckets may still fit smaller summaries. Titles, IDs and revisions are never truncated. `omitted = total - len(items)` accounts for both per-bucket limits and the shared budget. A positive total with no items means summaries were omitted, not that no task exists. Review has no pagination cursor; use existing `list`, `agenda`, `search` and `show` readers to inspect more tasks. `later` intentionally has only a count.
 
-All counts and summaries share one deferred SQLite read transaction. A concurrent change cannot make a single result mix before/after states. A later review is a fresh snapshot and may differ. No durable snapshot, completion proof or frozen cross-call cursor is promised. Read failures release the transaction and preserve task records, events and receipts. Existing owned v1/v2 stores retain the established schema-v3 upgrade; this feature introduces no migration.
+All counts and summaries share one deferred SQLite read transaction. A concurrent change cannot make a single result mix before/after states. A later review is a fresh snapshot and may differ. No durable snapshot, completion proof or frozen cross-call cursor is promised. Read failures release the transaction and preserve task records, events and receipts. The task-progress follow-on upgrades owned v1/v2/v3 stores to schema v4; review itself adds no migration.
 
 ## 4. Privacy, Admission and Verification
 
