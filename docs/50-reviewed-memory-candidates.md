@@ -125,6 +125,17 @@ They verify read-only capture, exact source/Unicode offsets, scope refusals,
 revocation, reused turn IDs, post closure, acceptance/forget/reload replay,
 transaction rollback, concurrent acceptance, corruption, quotas and migrations.
 
+The host-free `tests/unit/test_memory_crash_recovery.py` matrix terminates a
+separate Python process with `os._exit` after record/event/receipt writes, after
+candidate closure, and immediately before/after transaction COMMIT. Eleven
+cases verify full rollback before COMMIT, durable replay after COMMIT, database
+integrity, single canonical creation and no resurrection after forgetting and
+reopening. This exercises SQLite process-crash recovery with synthetic data and
+DELETE journaling, not power-loss durability, physical erasure, real Gateway,
+provider, filesystem/device failure or full E8 release certification. Reproduce
+with `python -m pytest tests/unit/test_memory_crash_recovery.py -q` using the
+project's Python 3.14 environment. Refs #21.
+
 This is a practical opt-in draft-and-review workflow, not automatic canonical
 extraction. Real configured-model usefulness, source-coverage checkpoints,
 background retention enforcement, semantic/Chinese recall quality and remote
