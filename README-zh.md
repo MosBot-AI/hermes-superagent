@@ -66,9 +66,9 @@ cd ../hermes-superagent
 
 准备环境需要从官方源下载依赖；测试使用合成输入、临时 home 和 Python socket 网络禁用，不访问真实个人账号。检查脚本核对上游 HEAD 与 tracked 文件清洁状态，记录 Python 版本、lock/package 指纹，再调用 Hermes 官方 `scripts/run_tests.sh`。缺少 checkout 或依赖会失败，不会跳过后冒称兼容。已安装包的指纹是所用解释器的观察证据，不证明任意传入环境必定与 lock 完全一致。
 
-只运行 检查器通过 pytest 配置传递宿主和插件源码目录，使导入路径在宿主清空环境变量后仍然有效，也支持含空格的目录。这不会向测试环境传递凭据，无需再手动设置 `PYTHONPATH`。
+检查器通过 pytest 配置传递宿主和插件源码目录，使导入路径在宿主清空环境变量后仍然有效，也支持含空格的目录。这不会向测试环境传递凭据，无需再手动设置 `PYTHONPATH`。
 
-`python scripts/check.py` 会做本仓库单元测试、Ruff、ty 和双语文档结构/链接及 JSON 示例语法检查，并明确打印 Hermes compatibility **NOT RUN**。测试工具版本随固定 Hermes dev group，不是插件运行依赖。
+只运行 `python scripts/check.py` 会做本仓库单元测试、Ruff、ty 和双语文档结构/链接及 JSON 示例语法检查，并明确打印 Hermes compatibility **NOT RUN**。测试工具版本随固定 Hermes dev group，不是插件运行依赖。
 
 ## 在隔离 Hermes 中试用
 
