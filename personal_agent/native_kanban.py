@@ -150,7 +150,7 @@ def _private(path, *, directory=False):
     return info
 
 
-def _binding(kb, board):
+def _binding(kb, board, *, owned_write=False):
     if type(board) is not str or re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,63}", board) is None:
         _fail("invalid_request")
     root = Path(kb.kanban_home()).absolute()
@@ -178,7 +178,7 @@ def _binding(kb, board):
         sidecar = Path(str(intended) + suffix)
         if sidecar.exists() or sidecar.is_symlink():
             _private(sidecar)
-            if suffix == "-journal":
+            if suffix == "-journal" and not owned_write:
                 _fail("native_unsafe_storage")
     return {
         "root": str(root),
@@ -191,8 +191,32 @@ def _binding(kb, board):
     }
 
 
-def _check(binding, kb):
-    if type(binding) is not dict or _binding(kb, binding.get("board")) != binding:
+def _check(binding, kb, *, owned_write_connection=None):
+    owned_write = False
+    if owned_write_connection is not None:
+        # Only the post-insert check inside our native write_txn supplies this
+        # connection. BEGIN IMMEDIATE owns the writer lock; a DELETE-mode
+        # journal created by these inserts is expected, not a pre-existing hot
+        # journal to recover. Before opening/starting and after COMMIT, journal
+        # presence is still refused. Never read/close a raw journal descriptor.
+        conn = owned_write_connection
+        databases = conn.execute("PRAGMA database_list").fetchall()
+        owned_write = (
+            conn.in_transaction
+            and conn.execute("PRAGMA journal_mode").fetchone()[0] == "delete"
+            # SQLite integrity_check may initialize its unnamed temp schema.
+            # It is not an attached file, and the authorizer still denies temp
+            # SQL. No other database or nonempty temp filename is admitted.
+            and [(row[1], row[2]) for row in databases if row[1] != "temp"]
+            == [("main", binding["path"])]
+            and all(row[2] == "" for row in databases if row[1] == "temp")
+        )
+        if not owned_write:
+            _fail("native_unsafe_storage")
+    if (
+        type(binding) is not dict
+        or _binding(kb, binding.get("board"), owned_write=owned_write) != binding
+    ):
         _fail("native_destination_changed")
 
 
@@ -427,7 +451,12 @@ def create_parked(binding: dict, *, key: str, title: str, body: str, admit) -> d
                 if result != {"outcome": "parked", "card_id": card_id, "status": "blocked"}:
                     _fail("native_result_invalid")
                 _host()
-                _check(binding, kb)
+                # WAL has no rollback journal; DELETE needs the narrow owned
+                # journal allowance only while this write transaction is live.
+                if conn.execute("PRAGMA journal_mode").fetchone()[0] == "delete":
+                    _check(binding, kb, owned_write_connection=conn)
+                else:
+                    _check(binding, kb)
                 admit()
             _check(binding, kb)
             admit()

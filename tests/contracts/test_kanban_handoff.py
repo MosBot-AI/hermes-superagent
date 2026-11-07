@@ -10,8 +10,8 @@ from personal_agent import native_kanban as adapter
 from personal_agent.tasks import TaskError
 
 
-@pytest.fixture
-def board(tmp_path, monkeypatch):
+@pytest.fixture(params=["native-default", "delete"])
+def board(tmp_path, monkeypatch, request):
     from hermes_cli import kanban_db_connect as kbc
 
     root = tmp_path / "kanban-root"
@@ -29,6 +29,10 @@ def board(tmp_path, monkeypatch):
     path = root / "kanban.db"
     # Fixture setup only: actual host initializes a fresh synthetic board.
     conn = kbc.connect(path)
+    if request.param == "delete":
+        # Isolated fixture only: exercise supported rollback journaling without
+        # forcing WAL or disabling the host's SQLite-version safety fallback.
+        assert conn.execute("PRAGMA journal_mode=DELETE").fetchone()[0] == "delete"
     conn.close()
     for item in root.iterdir():
         if item.is_file():

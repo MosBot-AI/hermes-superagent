@@ -6,6 +6,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ## Unreleased
 
+- Fix parked Kanban creation under the host’s safe DELETE-journal fallback; keep pre-existing journal refusal and test both native-default and DELETE modes.
+
 - Added default-off [parked native Kanban handoff](docs/52-parked-kanban-handoff.md): explicit board, preview/digest commit, durable single-use claim and bounded read-only reconciliation. No worker dispatch, storage initialization or live acceptance.
 
 ### Added

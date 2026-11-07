@@ -23,8 +23,8 @@ def no_network(monkeypatch):
     monkeypatch.setattr(socket, "create_connection", denied)
 
 
-@pytest.fixture
-def board(tmp_path, monkeypatch):
+@pytest.fixture(params=["native-default", "delete"])
+def board(tmp_path, monkeypatch, request):
     home = tmp_path / "private"
     home.mkdir(mode=0o700)
     monkeypatch.setenv("HERMES_HOME", str(home))
@@ -35,6 +35,8 @@ def board(tmp_path, monkeypatch):
     previous = os.umask(0o077)
     try:
         conn = kbc.connect(home / "kanban.db")
+        if request.param == "delete":
+            assert conn.execute("PRAGMA journal_mode=DELETE").fetchone()[0] == "delete"
         conn.close()
         yield adapter.destination("default")
     finally:
@@ -161,7 +163,15 @@ def test_concurrent_same_key_native_outer_transaction(board):
 
     with ThreadPoolExecutor(max_workers=2) as pool:
         results = list(pool.map(work, (0, 1)))
-    assert sorted(results) == ["native_key_conflict", "parked"]
+    assert results.count("parked") == 1
+    assert set(results) <= {
+        "parked",
+        "native_key_conflict",
+        "native_unsafe_storage",
+        "native_unavailable",
+    }
+    assert fixture_sql(board, "SELECT count(*) FROM tasks") == [(1,)]
+    assert fixture_sql(board, "SELECT count(*) FROM task_events") == [(2,)]
 
 
 @pytest.mark.parametrize("mutation", ["trigger", "extra", "missing"])
@@ -231,6 +241,8 @@ def test_named_board_explicit_scratch_does_not_inherit_project(board):
     for path in (root / "kanban", root / "kanban" / "boards", root / "kanban" / "boards" / "named"):
         path.chmod(0o700)
     conn = kbc.connect(board="named")
+    if fixture_sql(board, "PRAGMA journal_mode") == [("delete",)]:
+        assert conn.execute("PRAGMA journal_mode=DELETE").fetchone()[0] == "delete"
     conn.close()
     named = adapter.destination("named")
     result = create(named)
@@ -283,3 +295,49 @@ def test_existing_rollback_journal_is_refused_without_open(board):
     fail(lambda: observe(board), "native_unsafe_storage")
     fail(lambda: create(board), "native_unsafe_storage")
     assert journal.read_bytes() == before
+
+
+@pytest.mark.parametrize("revoke", [False, True])
+def test_own_journal_exists_only_during_transaction(board, revoke):
+    from pathlib import Path
+
+    journal = Path(board["path"] + "-journal")
+    mode = fixture_sql(board, "PRAGMA journal_mode")[0][0]
+    calls = 0
+    seen = []
+
+    def admit():
+        nonlocal calls
+        calls += 1
+        if calls == 3:
+            seen.append(journal.exists())
+            if revoke:
+                raise TaskError("disabled")
+
+    if revoke:
+        fail(lambda: create(board, admit=admit), "disabled")
+        assert observe(board) == {"outcome": "missing"}
+    else:
+        assert create(board, admit=admit)["outcome"] == "parked"
+        assert observe(board)["outcome"] == "parked"
+    assert seen == [mode == "delete"]
+    assert not journal.exists()
+    assert fixture_sql(board, "PRAGMA journal_mode") == [(mode,)]
+
+
+def test_owned_journal_check_rejects_real_attached_database(board):
+    from hermes_cli.sqlite_safe_read import connect_tracked
+
+    conn = connect_tracked(board["path"], isolation_level=None)
+    try:
+        conn.row_factory = sqlite3.Row
+        assert conn.execute("PRAGMA journal_mode=DELETE").fetchone()[0] == "delete"
+        conn.execute("ATTACH DATABASE ':memory:' AS unexpected")
+        conn.execute("BEGIN IMMEDIATE")
+        fail(
+            lambda: adapter._check(board, kb, owned_write_connection=conn),
+            "native_unsafe_storage",
+        )
+        conn.execute("ROLLBACK")
+    finally:
+        conn.close()
