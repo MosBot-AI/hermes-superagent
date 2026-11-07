@@ -38,8 +38,9 @@ python scripts/build_runtime_distribution.py --source-commit FULL_SOURCE_SHA --o
 ## 下载推送构建的运行包
 
 `Foundation checks` 的分支 **push** 运行成功后，会在该运行的 **Artifacts** 区域提供
-`hermes-personal-agent-runtime-FULL_COMMIT_SHA`。拉取请求运行仍检查源码契约，
-但不发布运行包。这是保留 30 天的 CI 产物，不是正式发行、签名或安装批准。
+`hermes-personal-agent-runtime-FULL_COMMIT_SHA`。拉取请求运行也会构建并验证精确的 PR head 提交，包括冷会话门槛，
+但不发布运行包。它使用普通的 `pull_request` 事件、只读令牌，不持久化检出凭据，
+不使用仓库密钥；不会引入特权 `pull_request_target` 执行。这是保留 30 天的 CI 产物，不是正式发行、签名或安装批准。
 信任下载前应核对仓库、分支、提交和工作流成功状态；`PROVENANCE.json` 与哈希
 只证明内容对应，不证明作者身份。
 
@@ -47,7 +48,7 @@ python scripts/build_runtime_distribution.py --source-commit FULL_SOURCE_SHA --o
 压缩包中是独立的 `hermes-personal-agent/` 目录。校验报告应放在旁边，不放进插件。
 GitHub 产物 ZIP 的摘要不同于内部 tar 包的 SHA-256。
 
-推送流水线先执行源码和干净宿主契约，再从当前精确提交构建两份，不使用 Git
+推送和拉取请求流水线都会先执行源码和干净宿主契约，再从当前精确提交构建两份，不使用 Git
 替换对象。归档条目排序、时间戳与所有者固定，文件权限为 `0644`、目录为 `0755`；
 两份压缩归档必须逐字节相同。随后解包，测试前再次与已提交源码核对。
 

@@ -50,7 +50,10 @@ subdirectory packages remains unverified.
 
 Successful branch **push** runs of `Foundation checks` produce
 `hermes-personal-agent-runtime-FULL_COMMIT_SHA` in the run's **Artifacts** section.
-Pull-request runs still check source contracts but do not publish a runtime package.
+Pull-request runs also build and validate the exact PR head commit, including the
+cold conversation gate, but do not publish a runtime package. They use the ordinary
+`pull_request` event, a read-only token, no persisted checkout credentials and no
+repository secrets; no privileged `pull_request_target` execution is introduced.
 These are 30-day CI artifacts, not releases, signatures or installation approval.
 Check the repository, branch, commit and completed workflow before trusting a download;
 `PROVENANCE.json` and hashes prove correspondence, not authorship.
@@ -60,7 +63,7 @@ The artifact contains `hermes-personal-agent.tar.gz`, `VALIDATION.json` and
 Keep the validation report beside it, not inside the plugin. The GitHub artifact
 ZIP digest differs from the inner tarball's SHA-256.
 
-The push pipeline runs source and clean-host contracts first, then builds twice
+Both push and pull-request pipelines run source and clean-host contracts first, then builds twice
 from the exact checked-out commit, with no Git replacement objects. Archives have
 sorted entries, fixed timestamps/owners and `0644` files / `0755` directories;
 the two compressed archives must be byte-identical. It extracts the resulting
