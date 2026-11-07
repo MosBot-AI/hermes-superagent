@@ -14,6 +14,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Added opt-in [Gateway bootstrap diagnostics](docs/gateway-boot-diagnostics.md) that preserve the upstream listener failure traceback, with read-only planning and offline regression coverage. Native transport permission and acceptance remain separate gates.
+
 - [Project task dependencies](docs/51-project-task-dependencies.md) now enforce explicit same-project prerequisites before starting or completing work, with a ready queue and fresh dependency snapshots in review/focus. Cancelled prerequisites remain blockers; no worker is launched and no native Kanban state is modified.
 
 - [Reviewed memory candidates](docs/50-reviewed-memory-candidates.md) add separately opted-in drafting from current native input, exact source quotes and native acceptance with an explicit retention choice. Candidates stay out of recall until accepted; expiry cleanup is lazy, and no extra model request or automatic canonical write is introduced.

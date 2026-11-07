@@ -14,6 +14,8 @@
 
 ### 新增
 
+- 新增显式启用的 [Gateway 启动诊断](docs/gateway-boot-diagnostics-zh.md)，保留上游监听器失败堆栈，提供只读规划与离线回归覆盖。原生传输权限与验收仍是独立关卡。
+
 - [项目任务依赖](docs/51-project-task-dependencies-zh.md)现可在开始/完成前执行明确的同项目先后约束，并在 ready 队列、review 和 focus 中提供新鲜依赖快照。取消前置仍会阻塞，不启动 worker 或修改原生 Kanban。
 
 - [经审核的记忆候选](docs/50-reviewed-memory-candidates-zh.md)新增独立启用的当前原生输入草稿、精确引文和明确保留期限的原生接受流程。接受前不参与召回；到期清理是延迟执行，不新增额外模型请求或自动正式写入。
