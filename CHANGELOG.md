@@ -8,8 +8,9 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
-- Added explicit local task progress (ready/in-progress/waiting/blocked) with notes, CAS and durable retries, native CLI/conversation/model entry points, progress filters and daily-review counts. Atomic task schema v1/v2/v3→v4 migration preserves legacy receipts and events; no worker dispatch or automatic status inference.
+- [Optional native memory recall](docs/41-native-memory-recall.md): An explicitly selected real MemoryProvider can supply fresh bounded local-record context to supported native primary sessions. It performs no ingestion or canonical writes; strict native checkpoints remain unavailable.
 
+- Added explicit local task progress (ready/in-progress/waiting/blocked) with notes, CAS and durable retries, native CLI/conversation/model entry points, progress filters and daily-review counts. Atomic task schema v1/v2/v3→v4 migration preserves legacy receipts and events; no worker dispatch or automatic status inference.
 
 - Added a bounded daily task review across CLI, native conversation and activated task read tools: exact active counts, project filters, complete title summaries, serialized budgets and one-snapshot consistency. No schedule, new permission, model call or schema change.
 

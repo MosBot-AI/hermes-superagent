@@ -80,9 +80,10 @@ class LocalMemoryBackend:
         self._namespace = None
         self._session = None
         self._source_kind = None
+        self._read_only = False
 
     def describe(self) -> dict:
-        return {
+        result = {
             "adapter_id": "local_sqlite",
             "api_version": 1,
             "schema_version": _SCHEMA_VERSION,
@@ -122,6 +123,14 @@ class LocalMemoryBackend:
             "export_scope": "current_records_and_tombstones_no_receipt_history",
             "data_recipients": [],
         }
+
+        if self._read_only:
+            result["capabilities"] = [
+                name
+                for name in result["capabilities"]
+                if name not in {"durable_write", "cas", "idempotency"}
+            ]
+        return result
 
     def open(
         self,
@@ -234,12 +243,62 @@ class LocalMemoryBackend:
         except sqlite3.Error:
             pass
 
+    def open_readonly(
+        self, connection: sqlite3.Connection, *, namespace_id: str, session_ref: str
+    ) -> None:
+        """Bind an existing current-schema store without creation, migration or writes."""
+        if self._connection is not None:
+            raise MemoryError("already_open")
+        namespace_id = _text(namespace_id, 256)
+        session_ref = _text(session_ref, 256)
+        if connection.in_transaction:
+            raise MemoryError("connection_in_transaction")
+        try:
+            connection.execute("PRAGMA query_only=ON")
+            connection.execute("BEGIN")
+            self._validate_readonly(connection, namespace_id)
+            connection.execute("COMMIT")
+        except BaseException as error:
+            self._rollback(connection)
+            if isinstance(error, sqlite3.Error):
+                raise _storage_error(error) from None
+            raise
+        self._connection, self._namespace, self._session = connection, namespace_id, session_ref
+        self._read_only = True
+
+    @staticmethod
+    def _validate_readonly(connection, namespace_id):
+        """Caller owns a read transaction; establish its snapshot before mode admission."""
+        if connection.execute("PRAGMA application_id").fetchone()[0] != _APPLICATION_ID:
+            raise MemoryError("foreign_database")
+        if connection.execute("PRAGMA journal_mode").fetchone()[0] != "delete":
+            raise MemoryError("memory_reader_format_unsupported")
+        version = connection.execute("PRAGMA user_version").fetchone()[0]
+        rows = connection.execute(
+            "SELECT name, sql FROM sqlite_master WHERE name NOT GLOB 'sqlite_*'"
+        ).fetchall()
+        if version != _SCHEMA_VERSION or not LocalMemoryBackend._valid_schema(version, rows):
+            raise MemoryError("readonly_schema_unavailable")
+        if connection.execute("SELECT id FROM namespace").fetchall() != [(namespace_id,)]:
+            raise MemoryError("namespace_mismatch")
+        if connection.execute("SELECT count(*) FROM records").fetchone()[0] > 1000:
+            raise MemoryError("record_limit")
+
     def close(self) -> None:
         """Detach, without closing the host-owned connection."""
         self._connection = self._namespace = self._session = self._source_kind = None
+        self._read_only = False
 
     def execute(self, operation: str, payload: dict) -> dict:
         request = validate_request(operation, payload)
+        if self._read_only and operation in {
+            "remember",
+            "correct",
+            "forget",
+            "consumer_advance",
+            "checkpoint_create",
+        }:
+            raise MemoryError("read_only_backend")
         conn = self._connection
         if conn is None:
             raise MemoryError("not_open")
@@ -254,6 +313,8 @@ class LocalMemoryBackend:
                 else "BEGIN"
             )
             began = True
+            if self._read_only:
+                self._validate_readonly(conn, self._namespace)
             if operation in {"remember", "correct", "forget"}:
                 result = self._mutate(conn, operation, request)
             elif operation == "changes":

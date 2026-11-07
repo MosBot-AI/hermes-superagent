@@ -73,10 +73,10 @@ E0.6 是独立的可选客户端契约路线，不阻塞 profile-first local M0/
 - E2.5：可选 memory provider 适配评估；兼容用户现有单 provider，不强制替换。 分别评估可替换项目 MemoryBackend 适配器与可选原生 MemoryProvider 桥接；用户可提供合规适配器，并显式选择/迁移。
 - E2.6：Define Pluggable Memory Contracts（M1，In Progress；狭窄本地先导）：依赖 E0.9、E1.5 本地审计/数据分类/secret 引用合同及适用本地 E2.1/E2.2 合同。定义版本化 service/backend SDK、record/event/receipt、删除语义与符合性 fixture。
 - E2.7：Build Local Memory Backend（M2，In Progress；显式记录先导）：依赖 E2.6、本地 E2.1/E2.2 及适用 E8.1/E8.2 harness。实现权威 SQLite record/event/FTS、生成 Markdown、有界检索、纠错/遗忘与显式本地命令。
-- E2.8：Integrate Native Memory Lifecycle（M2，Backlog）：依赖 E0.9/E2.6/E2.7 及适用 E6.8/E6.9 入口合同。增加可选单槽桥接、经同意的来源绑定候选/召回，以及带预算的持久生命周期/checkpoint 处理。显式本地记忆工具不要求启用桥接。
+- E2.8：Integrate Native Memory Lifecycle（M2，In Progress：只读召回）：依赖 E0.9/E2.6/E2.7 及适用 E6.8/E6.9 入口合同。增加可选单槽桥接、经同意的来源绑定候选/召回，以及带预算的持久生命周期/checkpoint 处理。显式本地记忆工具不要求启用桥接。
 - E2.9：Validate Memory Migration and Recall（M3，Backlog）：依赖 E2.7/E2.8 及 E8.1/E8.2/E8.3 harness。验证适配器符合性、带栅栏的导出/切换/恢复/删除竞态及中文/长期召回。
 
-E0.9/E2.8/E2.9 保持 Backlog。E2.6/E2.7 仅因下述狭窄显式记录先导切片设为 In Progress。[30](30-pluggable-memory-contracts-zh.md) 是完整方案，不是实现报告。现有 E2.1–E2.5 保留其清单 ID 和本地任务证据，不重复创建工作包。
+E0.9/E2.9 保持 Backlog。E2.8 现有 [41](41-native-memory-recall-zh.md) 的可选只读原生召回切片；摄取和持久会话检查点仍待实现。E2.6/E2.7 仅因下述狭窄显式记录先导切片设为 In Progress。[30](30-pluggable-memory-contracts-zh.md) 是完整方案，不是实现报告。现有 E2.1–E2.5 保留其清单 ID 和本地任务证据，不重复创建工作包。
 
 验收：长期事实都有 provenance 或 inference 标记；跨 profile/群聊不可读；纠错与删除后的检索测试通过。
 
@@ -238,6 +238,6 @@ Project 链接、Issue 号与最终字段以实际创建结果为准。若 API/�
 
 代码审阅 + 对应设计/ADR 更新 + 单元/契约/集成测试 + 安全反例 + 恢复测试 + 用户可见失败路径 + 兼容版本记录 + 真实验收证据。涉及外部系统时保留可脱敏的 receipt/读回，不以模型文字作为证明。任何未执行测试写明原因和风险。
 
-[有界召回扩展](36-bounded-memory-recall-zh.md)新增同一当前读取快照内的显式多关键词字面排序和完整记录预算。E2.7 保持 In Progress；FTS、Markdown 投影及 E2.8 原生生命周期桥接仍未实现。
+[有界召回扩展](36-bounded-memory-recall-zh.md)新增同一当前读取快照内的显式多关键词字面排序和完整记录预算。E2.7 保持 In Progress；FTS 和 Markdown 投影仍未实现。[41](41-native-memory-recall-zh.md) 后续增加有限的 E2.8 只读原生召回桥接。
 
 [37](37-durable-memory-progress-zh.md)新增本地事件元数据变更分页和持久化消费者进度，并进行原子 v3 迁移。E2.7 保持 In Progress；游标不等于原生对话 checkpoint 覆盖，也不代表完成 E2.8。

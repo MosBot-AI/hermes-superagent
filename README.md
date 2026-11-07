@@ -40,7 +40,7 @@ The [fenced read-admission core](docs/27-fenced-read-admission.md) adds current-
 
 [Session-scoped task tools](docs/29-session-scoped-task-tools.md) add `personal_tasks_read` / `personal_tasks_write`. Separately enable `local_model_tools: true`, then activate 30 minutes with `/personal-tools enable-read` or `enable-write` in the native session. Task results enter the configured model context; all model activity in that session shares access, not per-instruction human-intent verification. Only ordinary native in-process mode is supported, not managed workers/hosted plugins; do not disable isolation. Real-model acceptance has not run.
 
-The [pluggable memory design](docs/30-pluggable-memory-contracts.md) specifies a replaceable project backend and user-written adapter SDK, default SQLite records/events/FTS with Markdown projections, and an optional real Hermes MemoryProvider bridge. Existing native providers remain selected until an approved replacement. Memory ingestion, lifecycle integration, retrieval and migration are **planned, not implemented** by the current task tools.
+The [pluggable memory design](docs/30-pluggable-memory-contracts.md) specifies a replaceable project backend and user-written adapter SDK, default SQLite records/events/FTS with Markdown projections, and an optional real Hermes MemoryProvider bridge. Existing native providers remain selected until an approved replacement. The explicit local-record and optional native read-only recall slices below implement limited parts of that design. Automatic ingestion, durable conversation checkpoints and migration remain planned.
 
 The first [explicit local memory slice](docs/31-explicit-local-memory.md) now supports `/personal-memory remember`, `search`, `show`, `correct`, `forget` and bounded `export` in an existing trusted native session after separate `local_memory: true` opt-in. It uses a dedicated SQLite store behind a small internal backend interface, preserves native providers, and performs no automatic recall/extraction. Commands/results may enter normal host history; forgetting does not erase that history or backups.
 
@@ -59,6 +59,8 @@ The [durable progress guide](docs/37-durable-memory-progress.md) adds metadata-o
 The [daily task review](docs/40-daily-task-review.md) combines exact overdue/today/upcoming/undated counts with budgeted title summaries through existing local entry points. It preserves current read admission and adds no schedule or automatic priority decision.
 
 [Local memory metadata checkpoints](docs/39-local-memory-checkpoints.md): Explicit native commands create durable metadata-only markers with event/record consistency checks, watermark fencing and stale-status inspection. These do not back up payload or satisfy native compression checkpoints.
+
+[Optional native memory recall](docs/41-native-memory-recall.md): An explicitly selected real MemoryProvider can supply fresh bounded local-record context to supported native primary sessions. It performs no ingestion or canonical writes; strict native checkpoints remain unavailable.
 
 The [local task progress guide](docs/42-local-task-progress.md) adds explicit working/waiting/blocker notes, revision-safe writes and filtered daily reviews. Task schema v4 upgrades owned older stores atomically while preserving historical receipts; recorded progress is not native execution evidence.
 

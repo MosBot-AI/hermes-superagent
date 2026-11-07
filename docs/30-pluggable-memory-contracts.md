@@ -10,6 +10,8 @@ Implementation update: [31](31-explicit-local-memory.md) now provides a narrow e
 
 The first product lane is [profile-first trusted local use](28-profile-first-local-conversations.md), with [session-scoped task tools](29-session-scoped-task-tools.md) separately enabled. Optional verified remote-owner, Primary Bot, HTTP and voice lanes retain their own gates. Memory does not require a canonical Bot Chat. Read [04](04-domain-data-and-memory.md), [06](06-plugins-mcp-and-security.md), [10](10-interface-contracts.md) and [19](19-unified-voice-provider-contracts.md) alongside this contract.
 
+Implementation update: [41](41-native-memory-recall.md) adds an explicitly selected native read-only recall provider with profile/session lifecycle contracts. It does not ingest transcripts, implement checkpoints or activate itself. E2.8 now has this limited In Progress slice; source coverage and checkpoint-v2 remain open.
+
 ## 1. Decision and Non-Goals
 
 Use a small, replaceable **MemoryBackend** behind a stable project-owned **MemoryService**. Ship a lightweight local backend using SQLite records/events/FTS plus readable Markdown projections. Users may select a reviewed alternative or write an adapter. Keep governance, current authorization, source attribution, deletion suppression, token budgets and task/action authority outside provider-generated prose.
@@ -299,12 +301,12 @@ Run synthetic corpora and fake backends first, then approved real-data/provider/
 | E0.9 Verify Memory Provider Contracts | M0; Backlog; E0.1/E0.2/E0.5 | Public loading/lifecycle/single-slot, profile/cron/worker, compression checkpoint and source-reference matrix; actual isolation gaps |
 | E2.6 Define Pluggable Memory Contracts | M1; In Progress (local precursor); E0.9, local audit/data-classification/secret-reference contracts in E1.5 and applicable local E2.1/E2.2 contracts | Versioned backend/service, record/event/receipt/deletion semantics, SDK fixtures and trust-mode gates |
 | E2.7 Build Local Memory Backend | M2; In Progress (local precursor); E2.6, local E2.1/E2.2 and applicable E8.1/E8.2 harness | SQLite canonical records/events/FTS, Markdown projections, correction/forgetting, bounded retrieval and explicit local commands |
-| E2.8 Integrate Native Memory Lifecycle | M2; Backlog; E0.9/E2.6/E2.7 and applicable E6.8/E6.9 entry contracts | Optional single-slot bridge, consented candidates/recall, scheduled/compaction checkpoints, source coverage and budgets |
+| E2.8 Integrate Native Memory Lifecycle | M2; In Progress (read-only recall); E0.9/E2.6/E2.7 and applicable E6.8/E6.9 entry contracts | Optional single-slot bridge, consented candidates/recall, scheduled/compaction checkpoints, source coverage and budgets |
 | E2.9 Validate Memory Migration and Recall | M3; Backlog; E2.7/E2.8, E8.1/E8.2/E8.3 harness | Adapter conformance, export/cutover/restore/delete fault tests and Chinese/long-horizon recall evaluation |
 
 Existing E2.1/E2.2 schema and retrieval, E2.3 correction/forgetting/export, E2.4 disambiguation/associations and E2.5 optional-provider evaluation remain in their current Epic checklist; extend them rather than creating duplicate items. Memory does not block the already implemented local task loop. Verified remote-owner modes additionally require applicable E1.1–E1.4 and resource-adoption gates; HTTP, Primary Bot and voice dependencies apply only to those selected modes. A native provider bridge is optional, not a prerequisite for local explicit memory tools or permission to displace the user's existing provider.
 
-Start with explicit local records and deterministic retrieval, add tested source-bound candidate extraction, then optional native lifecycle integration. Only add remote or vector backends with a concrete need and measured benefit. At initial design publication all packages were Backlog. E2.6/E2.7 now have the narrow In Progress precursor in [31](31-explicit-local-memory.md); other packages remain Backlog.
+Start with explicit local records and deterministic retrieval, add tested source-bound candidate extraction, then optional native lifecycle integration. Only add remote or vector backends with a concrete need and measured benefit. At initial design publication all packages were Backlog. E2.6/E2.7 now have the narrow In Progress precursor in [31](31-explicit-local-memory.md); E2.8 additionally has the read-only native recall slice in [41](41-native-memory-recall.md); other packages remain Backlog.
 
 ## 18. Pinned Evidence
 

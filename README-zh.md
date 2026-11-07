@@ -40,7 +40,7 @@ Hermes 原生 personal-agent 插件，目标是让一个主 agent 管理项目�
 
 [会话范围任务工具](docs/29-session-scoped-task-tools-zh.md)进一步支持 `personal_tasks_read` / `personal_tasks_write`。单独启用 `local_model_tools: true` 后，在原生会话中使用 `/personal-tools enable-read` 或 `enable-write` 激活30分钟。任务结果进入已配置模型上下文；所有该会话模型活动共享访问，并非逐条用户意图验证。仅支持正常原生进程内模式，不支持 managed worker/hosted plugin，不能为此关闭隔离。真实模型验收尚未运行。
 
-[可插拔记忆方案](docs/30-pluggable-memory-contracts-zh.md)定义可替换的项目后端与用户自写适配器 SDK，默认采用 SQLite 记录/事件/FTS 加 Markdown 投影，并可选桥接实际 Hermes MemoryProvider。获准替换前保留现有原生 provider。当前任务工具**尚未实现**记忆摄取、生命周期集成、检索与迁移。
+[可插拔记忆方案](docs/30-pluggable-memory-contracts-zh.md)定义可替换的项目后端与用户自写适配器 SDK，默认采用 SQLite 记录/事件/FTS 加 Markdown 投影，并可选桥接实际 Hermes MemoryProvider。获准替换前保留现有原生 provider。下述显式本地记录及可选原生只读召回切片已实现该设计的有限部分；自动摄取、持久会话检查点及迁移仍待实现。
 
 首个[显式本地记忆切片](docs/31-explicit-local-memory-zh.md)现支持在已有可信原生会话中使用 `/personal-memory remember`、`search`、`show`、`correct`、`forget` 和有界 `export`，需另行显式设置 `local_memory: true`。它通过小型内部后端接口使用独立 SQLite 存储，保留原生 provider，不自动召回/提取。命令/结果可能进入正常宿主历史；遗忘不会擦除该历史或备份。
 
@@ -59,6 +59,8 @@ Hermes 原生 personal-agent 插件，目标是让一个主 agent 管理项目�
 [每日任务回顾](docs/40-daily-task-review-zh.md)通过已有本地入口，一次提供逾期/今天/近期/无日期的精确数量与有预算的标题摘要。沿用当前读取准入，不新增调度或自动优先级决策。
 
 [本地记忆元数据检查点](docs/39-local-memory-checkpoints-zh.md)：显式原生命令创建持久元数据标记，验证事件与记录一致性，检查水位并查询是否过时；不备份正文，也不满足原生压缩检查点。
+
+[可选原生记忆召回](docs/41-native-memory-recall-zh.md): 显式选择真实 MemoryProvider 后，可为支持的原生主会话提供即时、有界的本地记录上下文；不摄取或改写规范记录，仍不支持严格原生检查点。
 
 [本地任务进度指南](docs/42-local-task-progress-zh.md)新增明确的工作中/等待/阻碍说明、安全版本写入和过滤回顾。任务 schema v4 原子升级自有旧库并保留历史回执，已记录进度不等于原生执行证据。
 
