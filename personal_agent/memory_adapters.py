@@ -15,6 +15,7 @@ from .memory_backend import MemoryError
 ENTRY_POINT_GROUP = "hermes_personal_agent.memory_backends"
 _CAPABILITIES = frozenset(
     {
+        "record_expiry",
         "explicit_records",
         "durable_write",
         "cas",
@@ -111,6 +112,10 @@ class BackendDescriptor:
     def check_request(self, operation: str, payload: dict) -> None:
         required = _OPERATION_CAPABILITIES.get(operation)
         if required is None or not required <= self.capabilities:
+            raise MemoryError("capability_unavailable")
+        if ("expires_at" in payload or "include_expired" in payload) and (
+            "record_expiry" not in self.capabilities
+        ):
             raise MemoryError("capability_unavailable")
         limits = dict(self.limits)
         for field in ("content", "topic", "query"):

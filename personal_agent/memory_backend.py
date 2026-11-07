@@ -2,6 +2,7 @@
 
 import re
 import unicodedata
+from datetime import datetime
 from typing import Protocol, runtime_checkable
 from uuid import UUID
 
@@ -39,14 +40,33 @@ def _identifier(value: object) -> str:
     return value
 
 
+def validate_expiry(value: object, *, error_code: str = "invalid_request") -> str | None:
+    """Accept only a full, canonical Gregorian UTC second, or explicit null."""
+    if value is None:
+        return None
+    if (
+        not isinstance(value, str)
+        or re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z", value) is None
+    ):
+        raise MemoryError(error_code)
+    try:
+        datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ")
+    except ValueError:
+        raise MemoryError(error_code) from None
+    return value
+
+
 def validate_request(operation: str, payload: dict) -> dict:
     fields = {
-        "remember": ({"content", "request_id"}, {"topic"}),
-        "correct": ({"record_id", "expected_revision", "request_id"}, {"content", "topic"}),
+        "remember": ({"content", "request_id"}, {"topic", "expires_at"}),
+        "correct": (
+            {"record_id", "expected_revision", "request_id"},
+            {"content", "topic", "expires_at"},
+        ),
         "forget": ({"record_id", "expected_revision", "request_id"}, set()),
         "get": ({"record_id"}, set()),
-        "list": (set(), {"limit", "after"}),
-        "search": ({"query"}, {"limit", "after"}),
+        "list": (set(), {"limit", "after", "include_expired"}),
+        "search": ({"query"}, {"limit", "after", "include_expired"}),
         "recall": ({"queries"}, {"limit", "max_chars"}),
         "export": (set(), {"limit", "after"}),
         "changes": (set(), {"limit", "after_sequence", "through_sequence"}),
@@ -66,7 +86,7 @@ def validate_request(operation: str, payload: dict) -> dict:
     result = dict(payload)
     if operation == "remember":
         result.setdefault("topic", "")
-    if operation == "correct" and not ({"content", "topic"} & result.keys()):
+    if operation == "correct" and not ({"content", "topic", "expires_at"} & result.keys()):
         raise MemoryError("invalid_request")
     for key, maximum, empty, multiline in (
         ("content", 2048, False, True),
@@ -75,6 +95,11 @@ def validate_request(operation: str, payload: dict) -> dict:
     ):
         if key in result:
             result[key] = _text(result[key], maximum, empty=empty, multiline=multiline)
+    # Do not inject defaults: historical mutation digests must remain identical.
+    if "expires_at" in result:
+        result["expires_at"] = validate_expiry(result["expires_at"])
+    if "include_expired" in result and type(result["include_expired"]) is not bool:
+        raise MemoryError("invalid_request")
     if "record_id" in result:
         result["record_id"] = _identifier(result["record_id"])
     if "checkpoint_id" in result:

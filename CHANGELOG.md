@@ -8,6 +8,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- [Explicit memory expiry](docs/45-explicit-memory-expiry.md) adds explicit UTC deadlines, default expiry filtering, deliberate inspection and schema-v5 migration. Expiry affects fresh recall eligibility, not stored status or deletion; native read-only recall never migrates storage.
+
 - [Native checkpoint evidence boundaries](docs/43-native-checkpoint-boundary.md) add bounded I/O-free candidate preparation and pinned-host contracts. Stable UIDs, pending input and revision limits are verified; automatic ingestion and checkpoint-v2 remain disabled.
 
 - Added readable native task command views, bounded task/review pages, safe continuation hints and explicit retry/error wording. Native commands now default to text; leading `--json` retains structured replies. CLI JSON defaults and model-tool schemas remain unchanged.

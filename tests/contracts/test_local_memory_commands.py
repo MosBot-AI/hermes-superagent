@@ -78,6 +78,28 @@ def test_load_help_preserve_native_memory_and_do_not_create_store(host):
     assert source.read_text() == "Synthetic native memory must not be imported"
 
 
+def test_native_expiry_commands_preserve_receipts_and_require_explicit_reactivation(host):
+    before_config = (host.home / "config.yaml").read_bytes()
+    raw = 'remember "临时出差计划" --expires-at 2000-01-01T00:00:00Z --request-id expiry-save'
+    saved = command(host, raw)
+    assert saved["status"] == "ok", saved
+    rid = saved["data"]["record_id"]
+    assert command(host, "list")["data"]["items"] == []
+    assert command(host, 'recall "出差"')["data"]["items"] == []
+    expired = command(host, "list --include-expired")["data"]["items"][0]
+    assert expired["record_id"] == rid and expired["expired"] is True
+    assert expired["content"] == "临时出差计划"
+    assert command(host, raw)["replayed"]
+    clear = f"correct {rid} --clear-expiry --expected-revision 1 --request-id expiry-clear"
+    assert command(host, clear)["data"]["revision"] == 2
+    assert command(host, clear)["replayed"]
+    restored = command(host, 'recall "出差"')["data"]["items"][0]
+    assert restored["expires_at"] is None and restored["expired"] is False
+    assert command(host, raw)["data"] == saved["data"]
+    assert command(host, f"show {rid}")["data"]["expires_at"] is None
+    assert (host.home / "config.yaml").read_bytes() == before_config
+
+
 def test_absent_and_disabled_memory_do_not_register(native):
     home, manager = native
     # The shared fixture enables task conversations, but not personal memory.

@@ -2,6 +2,8 @@
 
 [English](41-native-memory-recall.md) | 简体中文
 
+后续：[45](45-explicit-memory-expiry-zh.md)要求 schema v5，并按每次新召回捕获的 UTC 墙上时钟时间排除已到期记录。只读 provider 永远不迁移。恢复召回前，获准打开存储的命令或已经激活的模型工具操作均可升级自有旧存储；建议操作员使用 /personal-memory list 主动完成升级。评估时间在实际取得 SQLite 快照后采样，而非在等待锁之前。不更改 provider 选择或配置。到期无法撤回已进入原生历史或模型上下文的召回包。
+
 状态：可选的真实 Hermes `MemoryProvider` 已把现有本地记忆存储接入原生 prefetch 和会话生命周期。它对**规范记录只读**，不执行摄取，仍声明 checkpoint API v1。不支持必需的原生 checkpoint-v2。这是经过离线测试的实现，不是真实在线提供方验收或生产启用。
 
 ## 1. 显式选择与数据披露

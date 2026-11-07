@@ -243,3 +243,5 @@ Project 链接、Issue 号与最终字段以实际创建结果为准。若 API/�
 [有界召回扩展](36-bounded-memory-recall-zh.md)新增同一当前读取快照内的显式多关键词字面排序和完整记录预算。E2.7 保持 In Progress；FTS 和 Markdown 投影仍未实现。[41](41-native-memory-recall-zh.md) 后续增加有限的 E2.8 只读原生召回桥接。
 
 [37](37-durable-memory-progress-zh.md)新增本地事件元数据变更分页和持久化消费者进度，并进行原子 v3 迁移。E2.7 保持 In Progress；游标不等于原生对话 checkpoint 覆盖，也不代表完成 E2.8。
+
+[显式到期](45-explicit-memory-expiry-zh.md)增加按 UTC 判断的新召回资格及 schema-v5 迁移，不是删除或自动摄取。E2.7 仍为 In Progress；严格原生 checkpoint-v2、来源对账和原生 worker 编排仍未完成。仅时间流逝不会改变 revision/事件，也不证明检查点的召回有效性。

@@ -2,6 +2,8 @@
 
 English | [简体中文](39-local-memory-checkpoints-zh.md)
 
+Follow-on: [45](45-explicit-memory-expiry.md) upgrades owned stores to schema v5 while preserving checkpoint receipts. A metadata checkpoint certifies stored revisions/events/statuses, not time-valid recall eligibility. Time passage alone causes no event or revision and need not make a checkpoint stale.
+
 Status: implemented explicit metadata-only checkpoints for the local record store. These add verified event/current-record linkage and durable recovery markers beyond the caller-reported [consumer cursors](37-durable-memory-progress.md). They do not checkpoint a native conversation, produce a backup, publish projections, perform extraction or satisfy Hermes required checkpoint-v2. The generic `checkpoint` and `native_lifecycle` backend capabilities remain unsupported.
 
 ## 1. Capture and Inspect

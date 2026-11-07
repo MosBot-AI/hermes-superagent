@@ -2,6 +2,8 @@
 
 [English](36-bounded-memory-recall.md) | 简体中文
 
+后续：[45](45-explicit-memory-expiry-zh.md)按一次捕获的 UTC evaluated_at，在排序/预算计算前排除已到期的 active 记录。召回没有包含已到期记录的覆盖选项。返回行含 expires_at/expired；先前返回的包在到期后仍可能留在宿主/模型上下文中。
+
 状态：已在现有本地记录库上实现，提供显式原生命令和独立激活的模型读取操作。这是推进 [30](30-pluggable-memory-contracts-zh.md) 的一项实用检索能力，不是自动提示注入、语义搜索、绑定来源的提取或原生 MemoryProvider 桥接。现有 provider 和 profile 设置保持不变。
 
 ## 1. 命令与激活

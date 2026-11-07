@@ -68,6 +68,8 @@ The [local task progress guide](docs/42-local-task-progress.md) adds explicit wo
 
 The [readable task workbench](docs/44-readable-task-workbench.md) makes existing native task commands usable as concise text views, with exact IDs, revision/retry guidance and bounded continuation. Use `/personal-tasks --json ...` for structured native output; CLI and model-tool JSON remain unchanged.
 
+[Explicit memory expiry](docs/45-explicit-memory-expiry.md) adds explicit UTC deadlines, default expiry filtering, deliberate inspection and schema-v5 migration. Expiry affects fresh recall eligibility, not stored status or deletion; native read-only recall never migrates storage.
+
 ## Development checks
 
 `compatibility.json` records the Hermes baseline commit. The current runtime target is Python 3.14. A single tested SHA does not justify a broad `requires_hermes` version range.

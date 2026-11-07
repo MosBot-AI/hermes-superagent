@@ -19,17 +19,23 @@ from .memory_storage import open_memory_backend
 from .task_cli import current_profile_home
 
 HELP = (
-    'remember "Text" [--topic LABEL] [--request-id KEY]; list [--limit N --after ID]; '
-    'search "Text" [--limit N --after ID]; show ID; '
+    'remember "Text" [--topic LABEL] [--expires-at UTC] [--request-id KEY]; '
+    "list [--include-expired --limit N --after ID]; "
+    'search "Text" [--include-expired --limit N --after ID]; show ID; '
     'recall "Keyword" ["Other keyword" ...] [--limit N --max-chars N]; '
     "changes [--after-sequence N --through-sequence N --limit N]; "
     "checkpoint --expected-watermark N [--request-id KEY]; checkpoint-status ID; "
-    'correct ID --text "Replacement" [--topic LABEL] --expected-revision N '
+    'correct ID [--text "Replacement"] [--topic LABEL] [--expires-at UTC | --clear-expiry] '
+    "--expected-revision N "
     "[--request-id KEY]; forget ID --expected-revision N [--request-id KEY]; "
     "export [--limit N --after ID]. Use POSIX quotes. "
     "Recall ranks 1-8 distinct literal keywords; defaults to 6 whole records and a 6000-character "
     "ASCII JSON items budget, not tokens. It reports omitted matches and is not semantic search. "
     "Checkpoints cover local record metadata only, not native conversations or backups. "
+    "Expiry uses an explicit UTC YYYY-MM-DDTHH:MM:SSZ timestamp; no default is inferred. "
+    "Expired records are excluded from ordinary list/search/recall, not deleted. "
+    "Use --include-expired or show to inspect, correct --clear-expiry to restore eligibility, "
+    "or forget to clear canonical payload. Expiry does not erase previous model context. "
     "Writes return metadata receipts, not remembered content. Generated request IDs are "
     "echoed; reuse the same key and payload for an uncertain result, never retry blindly. "
     "Explicit local operator records only, not verified facts or permission grants. "
@@ -70,6 +76,7 @@ def parse_command(raw_args: str) -> tuple[str, dict]:
     remember = commands.add_parser("remember")
     remember.add_argument("content")
     remember.add_argument("--topic", default="")
+    remember.add_argument("--expires-at", default=argparse.SUPPRESS)
     remember.add_argument("--request-id")
     show = commands.add_parser("show")
     show.add_argument("record_id")
@@ -77,6 +84,8 @@ def parse_command(raw_args: str) -> tuple[str, dict]:
         reader = commands.add_parser(operation)
         if operation == "search":
             reader.add_argument("query")
+        if operation in ("list", "search"):
+            reader.add_argument("--include-expired", action="store_true", default=argparse.SUPPRESS)
         reader.add_argument("--limit", type=int, default=20)
         reader.add_argument("--after", default=None)
     recall = commands.add_parser("recall")
@@ -100,6 +109,15 @@ def parse_command(raw_args: str) -> tuple[str, dict]:
         if operation == "correct":
             writer.add_argument("--text", dest="content", default=argparse.SUPPRESS)
             writer.add_argument("--topic", default=argparse.SUPPRESS)
+            expiry = writer.add_mutually_exclusive_group()
+            expiry.add_argument("--expires-at", default=argparse.SUPPRESS)
+            expiry.add_argument(
+                "--clear-expiry",
+                dest="expires_at",
+                action="store_const",
+                const=None,
+                default=argparse.SUPPRESS,
+            )
     payload = vars(parser.parse_args(tokens))
     operation = payload.pop("operation")
     if operation == "show":

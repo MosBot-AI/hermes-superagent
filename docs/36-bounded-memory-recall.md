@@ -2,6 +2,8 @@
 
 English | [简体中文](36-bounded-memory-recall-zh.md)
 
+Follow-on: [45](45-explicit-memory-expiry.md) excludes expired active records before ranking/budgeting at one captured UTC evaluated_at. Recall has no include-expired override. Returned rows carry expires_at/expired; a previously returned pack can remain in host/model context after expiry.
+
 Status: implemented on the existing local record store, as an explicit native command and separately activated model read action. This is a useful retrieval step toward [30](30-pluggable-memory-contracts.md), not automatic prompt injection, semantic search, source-bound extraction or the native MemoryProvider bridge. Existing providers and profile settings are unchanged.
 
 ## 1. Commands and Activation

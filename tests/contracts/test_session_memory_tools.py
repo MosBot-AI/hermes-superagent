@@ -93,6 +93,37 @@ def call(host, args=None, *, write=False, sid=None, task_id="native-task"):
     )
 
 
+def test_native_expiry_tools_use_existing_activation_and_current_record_revision(host):
+    saved = memory.command(
+        host,
+        'remember "Temporary flight plan" --expires-at 2000-01-01T00:00:00Z '
+        "--request-id expiry-direct",
+    )
+    assert saved["status"] == "ok"
+    rid = saved["data"]["record_id"]
+    activate(host, "enable-read")
+    clear = {
+        "action": "correct",
+        "record_id": rid,
+        "expected_revision": 1,
+        "request_id": "expiry-model-clear",
+        "expires_at": None,
+    }
+    with turn(host):
+        assert call(host)["data"]["items"] == []
+        expired = call(host, {"action": "list", "include_expired": True})["data"]["items"][0]
+        assert expired["expired"] and expired["record_id"] == rid
+        assert call(host, clear, write=True)["error"]["code"] == "session_write_not_activated"
+    activate(host, "enable-write")
+    with turn(host):
+        changed = call(host, clear, write=True)
+        assert changed["data"]["revision"] == 2
+        assert call(host, clear, write=True)["replayed"]
+        current = call(host, {"action": "recall", "queries": ["flight"]})["data"]["items"][0]
+        assert current["expires_at"] is None and current["expired"] is False
+        assert current["source"] == "activated_session_model"
+
+
 def test_native_slash_activation_to_real_model_dispatch_lifecycle(host):
     from agent.relay_runtime import active_turn
 

@@ -8,6 +8,8 @@
 
 ### 新增
 
+- [显式记忆到期](docs/45-explicit-memory-expiry-zh.md) 增加明确 UTC 截止时间、默认到期过滤、主动检查和 schema-v5 迁移。到期影响新的召回资格，不改变存储状态或删除正文；原生只读召回永远不迁移存储。
+
 - [原生检查点证据边界](docs/43-native-checkpoint-boundary-zh.md)新增有界、无 I/O 的候选准备和固定宿主契约测试。验证稳定 UID、待存尾部与 revision 的实际边界；未启用自动摄取或 checkpoint-v2。
 
 - 新增可读原生任务命令视图、有界任务/回顾页面、安全翻页提示和明确重试/错误说明。原生命令现默认文字，开头 --json 保留结构化回复；CLI 默认 JSON 与模型工具 schema 不变。

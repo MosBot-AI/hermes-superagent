@@ -56,7 +56,8 @@
 42. [本地任务进度](42-local-task-progress-zh.md)：明确的工作中/等待/阻碍说明、安全版本写入、活动过滤和原子 schema-v4 迁移。
 43. [原生检查点证据边界](43-native-checkpoint-boundary-zh.md)新增有界、无 I/O 的候选准备和固定宿主契约测试。验证稳定 UID、待存尾部与 revision 的实际边界；未启用自动摄取或 checkpoint-v2。
 44. [可读任务工作台](44-readable-task-workbench-zh.md)：原生文字视图、明确 JSON 兼容、安全分页和准确重试/错误提示。
-45. [架构决策记录](adr/README-zh.md)：为什么选择这些约束。
+45. [显式记忆到期](45-explicit-memory-expiry-zh.md): 增加明确 UTC 截止时间、默认到期过滤、主动检查和 schema-v5 迁移。到期影响新的召回资格，不改变存储状态或删除正文；原生只读召回永远不迁移存储。
+46. [架构决策记录](adr/README-zh.md)：为什么选择这些约束。
 
 ## 三类陈述必须分开
 

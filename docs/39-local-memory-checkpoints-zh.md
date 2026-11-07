@@ -2,6 +2,8 @@
 
 [English](39-local-memory-checkpoints.md) | 简体中文
 
+后续：[45](45-explicit-memory-expiry-zh.md)将自有存储升级至 schema v5，并保留检查点回执。元数据检查点证明存储的 revision/事件/状态，不证明具有时间有效性的召回资格。仅时间流逝不生成事件或 revision，也未必使检查点过时。
+
 状态：已实现本地记录存储的显式、仅含元数据的检查点。在调用方自行报告的[消费者游标](37-durable-memory-progress-zh.md)之外，新增事件与当前记录的一致性验证及持久恢复标记。它不保存原生会话检查点、不生成备份、不发布投影、不提取记忆，也不满足 Hermes 必需的 checkpoint-v2。后端仍不支持通用 `checkpoint` 和 `native_lifecycle` 能力。
 
 ## 1. 创建与查看

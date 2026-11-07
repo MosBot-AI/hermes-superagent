@@ -121,6 +121,35 @@ def test_actual_manager_preserves_required_checkpoint_failure(native_recall):
         )
 
 
+def test_native_recall_expires_at_boundary_without_canonical_writes(native_recall, monkeypatch):
+    from personal_agent import memory_expiry
+
+    home, provider, native_manager, _ = native_recall
+    clock = {"now": "2030-04-05T09:59:59Z"}
+    monkeypatch.setattr(memory_expiry, "utc_now", lambda: clock["now"])
+    with open_memory_backend(home, "operator") as backend:
+        saved = backend.execute(
+            "remember",
+            {
+                "content": "Temporary breakfast plan",
+                "expires_at": "2030-04-05T10:00:00Z",
+                "request_id": "expiry-native",
+            },
+        )
+    db = home / "plugin-data/hermes-personal-agent/memory/records.sqlite3"
+    before = db.read_bytes()
+    first = json.loads(native_manager.prefetch_all("breakfast", session_id="session-one"))
+    assert first["memory"]["items"][0]["record_id"] == saved["data"]["record_id"]
+    assert first["memory"]["evaluated_at"] == clock["now"]
+    assert provider.recall_status() is not None
+    clock["now"] = "2030-04-05T10:00:00Z"
+    assert native_manager.prefetch_all("breakfast", session_id="session-one") == ""
+    assert provider.recall_status() is None
+    clock["now"] = "2030-04-05T10:00:01Z"
+    assert native_manager.prefetch_all("breakfast", session_id="session-one") == ""
+    assert db.read_bytes() == before
+
+
 def test_native_session_switch_revoke_and_forget_do_not_return_stale_pack(native_recall):
     home, provider, native_manager, config = native_recall
     rid = save(home)

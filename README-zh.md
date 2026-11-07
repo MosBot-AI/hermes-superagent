@@ -68,6 +68,8 @@ Hermes 原生 personal-agent 插件，目标是让一个主 agent 管理项目�
 
 [可读任务工作台](docs/44-readable-task-workbench-zh.md)将已有原生任务命令展示为简洁文字，保留准确 ID、版本/重试说明和有界翻页。结构化原生输出使用 /personal-tasks --json ...，CLI 与模型工具 JSON 不变。
 
+[显式记忆到期](docs/45-explicit-memory-expiry-zh.md) 增加明确 UTC 截止时间、默认到期过滤、主动检查和 schema-v5 迁移。到期影响新的召回资格，不改变存储状态或删除正文；原生只读召回永远不迁移存储。
+
 ## 开发验证
 
 基线为 `compatibility.json` 内的 Hermes commit；当前实际运行目标是 Python 3.14。没有根据单一 SHA 宣称宽泛的 `requires_hermes` 版本范围。

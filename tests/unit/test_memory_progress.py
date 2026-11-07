@@ -248,12 +248,13 @@ def test_exact_v2_migration_preserves_records_receipts_events_and_model_source()
             for name in ("namespace", "records", "events", "receipts", "sqlite_sequence")
         }
         backend.close()
+        conn.execute("ALTER TABLE records DROP COLUMN expires_at")
         conn.execute("DROP TABLE record_checkpoints")
         conn.execute("DROP TABLE consumer_cursors")
         conn.execute("DROP TABLE consumer_receipts")
         conn.execute("PRAGMA user_version=2")
         backend.open(conn, namespace_id="progress-test", session_ref="new")
-        assert conn.execute("PRAGMA user_version").fetchone() == (4,)
+        assert conn.execute("PRAGMA user_version").fetchone() == (5,)
         assert {name: conn.execute(f"SELECT * FROM {name}").fetchall() for name in before} == before
         assert save(backend) == rid
         assert backend.execute("get", {"record_id": rid})["source"] == "activated_session_model"

@@ -241,3 +241,5 @@ Code review + corresponding design/ADR updates + unit/contract/integration tests
 The [bounded recall follow-on](36-bounded-memory-recall.md) adds explicit multi-keyword literal ranking and complete-record budgets over one current read snapshot. E2.7 remains In Progress; FTS and Markdown projections remain unimplemented. [41](41-native-memory-recall.md) later adds the limited E2.8 read-only native recall bridge.
 
 [37](37-durable-memory-progress.md) adds local event-metadata change pages and durable consumer progress with atomic v3 migration. E2.7 remains In Progress; the cursor is not native transcript checkpoint coverage and does not complete E2.8.
+
+[Explicit expiry](45-explicit-memory-expiry.md) adds UTC-bounded fresh recall eligibility and schema-v5 migration, not deletion or automatic ingestion. E2.7 remains In Progress; strict native checkpoint-v2, source reconciliation and native worker orchestration remain open. Time passage alone does not change revisions/events or certify checkpoint recall validity.

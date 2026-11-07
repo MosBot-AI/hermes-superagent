@@ -10,6 +10,7 @@ import json
 import os
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import test_local_memory_commands as memory
@@ -117,6 +118,64 @@ def tool(action, *, write=False, **arguments):
 def assert_disabled(results):
     assert results[0]["data"]["access"] == "disabled"
     assert results[1]["error"]["code"] == "session_tools_not_activated"
+
+
+def stable_recall(data):
+    # Evaluation time is fresh read metadata, never part of a durable receipt.
+    result = dict(data)
+    timestamp = result.pop("evaluated_at")
+    assert len(timestamp) == 20 and timestamp.endswith("Z")
+    assert datetime.fromisoformat(timestamp).tzinfo is not None
+    return result
+
+
+def test_expired_record_and_explicit_clear_survive_native_process_restarts(tmp_path):
+    home = tmp_path / "profile"
+    install(home)
+    memory.configure(home, memory_model_tools=True)
+    (tmp_path / "bundled").mkdir()
+    raw = 'remember "临时行程" --expires-at 2000-01-01T00:00:00Z --request-id expiring'
+    first = restart(home, [{"command": raw}])
+    assert first[0]["status"] == "ok"
+    rid = first[0]["data"]["record_id"]
+    second = restart(
+        home,
+        [
+            {"command": "list"},
+            {"command": "list --include-expired"},
+            {"command": f"show {rid}"},
+            {"activate": "enable-read"},
+            tool("recall", queries=["行程"]),
+            {"command": raw},
+        ],
+    )
+    assert second[0]["data"]["items"] == []
+    assert second[1]["data"]["items"][0]["expired"] is True
+    assert second[2]["data"]["expires_at"] == "2000-01-01T00:00:00Z"
+    assert second[4]["data"]["items"] == []
+    assert second[5]["replayed"] and second[5]["data"] == first[0]["data"]
+    third = restart(
+        home,
+        [{"command": f"correct {rid} --clear-expiry --expected-revision 1 --request-id renew"}],
+    )
+    assert third[0]["data"]["revision"] == 2
+    fourth = restart(
+        home,
+        [
+            {"activate": "status"},
+            tool("list"),
+            {"activate": "enable-read"},
+            tool("recall", queries=["行程"]),
+            {"command": raw},
+            {"command": f"show {rid}"},
+        ],
+    )
+    assert_disabled(fourth)
+    current = fourth[3]["data"]["items"][0]
+    assert current["content"] == "临时行程" and current["expires_at"] is None
+    assert current["expired"] is False and current["revision"] == 2
+    assert fourth[4]["replayed"] and fourth[4]["data"] == first[0]["data"]
+    assert fourth[5]["data"]["expires_at"] is None
 
 
 def test_chinese_correction_and_terminal_forget_survive_fresh_processes(tmp_path):
@@ -339,7 +398,9 @@ def test_bounded_recall_after_restart_correction_and_forget(tmp_path):
         ],
     )
     assert current[0]["error"]["code"] == "session_tools_not_activated"
-    assert current[2]["data"] == saved[2]["data"]
+    # Each fresh process evaluates time-based eligibility independently. Stable
+    # record/recall data survives restart; evaluated_at is not a durable receipt.
+    assert stable_recall(current[2]["data"]) == stable_recall(saved[2]["data"])
     assert current[5]["data"]["items"][0]["content"] == "早餐燕麦奶"
     assert current[5]["data"]["items"][0]["revision"] == 2
     assert current[5]["data"]["items"][0]["matched_queries"] == [0, 1]
@@ -353,7 +414,7 @@ def test_bounded_recall_after_restart_correction_and_forget(tmp_path):
             query,
         ],
     )
-    assert forgotten[1]["data"] == current[5]["data"]
+    assert stable_recall(forgotten[1]["data"]) == stable_recall(current[5]["data"])
     assert forgotten[3]["data"]["items"] == []
     final = restart(home, [{"activate": "enable-read"}, query])
     assert final[1]["data"]["items"] == []

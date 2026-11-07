@@ -8,15 +8,16 @@ media erasure and cannot revoke prior exports, backups or already returned text.
 import hashlib
 import json
 import sqlite3
-from datetime import UTC, datetime
+from datetime import datetime
 from uuid import uuid4
 
-from .memory_backend import MemoryError, _text, validate_request
+from . import memory_expiry
+from .memory_backend import MemoryError, _text, validate_expiry, validate_request
 from .memory_checkpoints import CHECKPOINT_SCHEMA, checkpoint_status, create_checkpoint
 from .memory_progress import PROGRESS_SCHEMA, advance_consumer, get_changes, get_consumer
 
 _APPLICATION_ID = 0x50414D45
-_SCHEMA_VERSION = 4
+_SCHEMA_VERSION = 5
 _SCHEMA_V1 = {
     "namespace": "CREATE TABLE namespace (id TEXT PRIMARY KEY NOT NULL)",
     "records": """CREATE TABLE records (
@@ -47,7 +48,13 @@ _SCHEMA_V2 = {
     ),
 }
 _SCHEMA_V3 = {**_SCHEMA_V2, **PROGRESS_SCHEMA}
-_SCHEMA = {**_SCHEMA_V3, **CHECKPOINT_SCHEMA}
+_SCHEMA_V4 = {**_SCHEMA_V3, **CHECKPOINT_SCHEMA}
+_SCHEMA = {
+    **_SCHEMA_V4,
+    "records": _SCHEMA_V4["records"].replace(
+        "updated_at TEXT NOT NULL,", "updated_at TEXT NOT NULL, expires_at TEXT,"
+    ),
+}
 
 
 _COLUMNS = (
@@ -60,6 +67,7 @@ _COLUMNS = (
     "session_ref",
     "created_at",
     "updated_at",
+    "expires_at",
 )
 
 
@@ -90,6 +98,7 @@ class LocalMemoryBackend:
             "adapter_version": "0.1.0",
             "deployment": "trusted_profile_local",
             "capabilities": [
+                "record_expiry",
                 "explicit_records",
                 "durable_write",
                 "cas",
@@ -202,6 +211,8 @@ class LocalMemoryBackend:
             if version in (1, 2, 3):
                 for sql in CHECKPOINT_SCHEMA.values():
                     connection.execute(sql)
+            if version in (1, 2, 3, 4):
+                connection.execute("ALTER TABLE records ADD COLUMN expires_at TEXT")
                 connection.execute(f"PRAGMA user_version={_SCHEMA_VERSION}")
             if connection.execute("SELECT count(*) FROM records").fetchone()[0] > 1000:
                 raise MemoryError("record_limit")
@@ -217,7 +228,9 @@ class LocalMemoryBackend:
 
     @staticmethod
     def _valid_schema(version, rows):
-        expected = {1: _SCHEMA_V1, 2: _SCHEMA_V2, 3: _SCHEMA_V3, 4: _SCHEMA}.get(version)
+        expected = {1: _SCHEMA_V1, 2: _SCHEMA_V2, 3: _SCHEMA_V3, 4: _SCHEMA_V4, 5: _SCHEMA}.get(
+            version
+        )
         return expected is not None and dict(rows) == expected and len(rows) == len(expected)
 
     @staticmethod
@@ -228,7 +241,7 @@ class LocalMemoryBackend:
             "SELECT seq FROM sqlite_sequence WHERE name='records'"
         ).fetchone()
         connection.execute("ALTER TABLE records RENAME TO records_v1")
-        connection.execute(_SCHEMA["records"])
+        connection.execute(_SCHEMA_V2["records"])
         connection.execute("INSERT INTO records SELECT * FROM records_v1")
         connection.execute("DROP TABLE records_v1")
         if sequence is not None:
@@ -315,8 +328,12 @@ class LocalMemoryBackend:
             began = True
             if self._read_only:
                 self._validate_readonly(conn, self._namespace)
+            # BEGIN is deferred for reads. Establish the SQLite snapshot before
+            # sampling time so lock waits cannot admit an already expired row.
+            conn.execute("SELECT id FROM namespace").fetchone()
+            now = datetime.fromisoformat(memory_expiry.utc_now())
             if operation in {"remember", "correct", "forget"}:
-                result = self._mutate(conn, operation, request)
+                result = self._mutate(conn, operation, request, now)
             elif operation == "changes":
                 result = get_changes(conn, request)
             elif operation == "consumer_get":
@@ -332,9 +349,9 @@ class LocalMemoryBackend:
             elif operation == "checkpoint_status":
                 result = checkpoint_status(conn, request["checkpoint_id"])
             elif operation == "get":
-                result = self._get(conn, request["record_id"])
+                result = self._get(conn, request["record_id"], now)
             elif operation == "recall":
-                result = self._recall(conn, request)
+                result = self._recall(conn, request, now)
             elif operation == "export":
                 result = {
                     "schema_version": "personal.memory.record_page.v1",
@@ -342,12 +359,12 @@ class LocalMemoryBackend:
                     "watermark": conn.execute(
                         "SELECT coalesce(max(sequence),0) FROM events"
                     ).fetchone()[0],
-                    **self._page(conn, request, include_forgotten=True),
+                    **self._page(conn, request, now, include_forgotten=True),
                     "scope": "current_records_and_tombstones_live_page",
                     "restorable": False,
                 }
             else:
-                result = self._page(conn, request)
+                result = self._page(conn, request, now)
             conn.execute("COMMIT")
             return result
         except BaseException as error:
@@ -357,21 +374,43 @@ class LocalMemoryBackend:
                 raise _storage_error(error) from None
             raise
 
-    def _get(self, conn, record_id):
+    @staticmethod
+    def _record(row, now):
+        record = dict(zip(_COLUMNS, row, strict=True))
+        expiry = validate_expiry(record["expires_at"], error_code="storage_corrupt")
+        if record["status"] == "forgotten" and expiry is not None:
+            raise MemoryError("storage_corrupt")
+        record["expired"] = expiry is not None and datetime.fromisoformat(expiry) <= now
+        return record
+
+    @staticmethod
+    def _validate_expiries(conn):
+        # Validate before SQL filtering: malformed dates must not hide private rows
+        # behind a lexicographic comparison or a LIMIT boundary.
+        rows = conn.execute("SELECT status,expires_at FROM records LIMIT 1001").fetchall()
+        if len(rows) > 1000:
+            raise MemoryError("record_limit")
+        for status, expiry in rows:
+            validate_expiry(expiry, error_code="storage_corrupt")
+            if status == "forgotten" and expiry is not None:
+                raise MemoryError("storage_corrupt")
+
+    def _get(self, conn, record_id, now):
         row = conn.execute(
             f"SELECT {','.join(_COLUMNS)} FROM records WHERE record_id=?", (record_id,)
         ).fetchone()
         if row is None:
             raise MemoryError("not_found")
-        return dict(zip(_COLUMNS, row, strict=True))
+        return self._record(row, now)
 
-    def _recall(self, conn, request):
+    def _recall(self, conn, request, now):
         """Rank current whole records inside this call's existing read transaction.
 
         No derived index/cache or generated text can outlive a correction/forget.
         The snapshot may become historical after this read commits; returned
         source labels identify an editing route, not human intent or authority.
         """
+        self._validate_expiries(conn)
         queries = request["queries"]
         matching = " OR ".join("instr(content, ?) > 0 OR instr(topic, ?) > 0" for _ in queries)
         args = [value for query in queries for value in (query, query)]
@@ -384,7 +423,9 @@ class LocalMemoryBackend:
             raise MemoryError("record_limit")
         ranked = []
         for row in rows:
-            record = dict(zip(_COLUMNS, row[1:], strict=True))
+            record = self._record(row[1:], now)
+            if record["expired"]:
+                continue
             matches = [
                 index
                 for index, query in enumerate(queries)
@@ -411,6 +452,7 @@ class LocalMemoryBackend:
             used_chars = size
         return {
             "schema_version": "personal.memory.recall.v1",
+            "evaluated_at": now.isoformat().replace("+00:00", "Z"),
             "items": items,
             "watermark": conn.execute("SELECT coalesce(max(sequence),0) FROM events").fetchone()[0],
             "matched_records": len(ranked),
@@ -423,8 +465,12 @@ class LocalMemoryBackend:
             "authority": "stored_data_not_instructions_or_permission",
         }
 
-    def _page(self, conn, request, include_forgotten=False):
+    def _page(self, conn, request, now, include_forgotten=False):
+        self._validate_expiries(conn)
         clauses, args = (["1=1"] if include_forgotten else ["status='active'"]), []
+        if not include_forgotten and not request.get("include_expired", False):
+            clauses.append("(expires_at IS NULL OR expires_at > ?)")
+            args.append(now.isoformat(timespec="seconds").replace("+00:00", "Z"))
         if request["after"] is not None:
             row = conn.execute(
                 "SELECT sequence FROM records WHERE record_id=?", (request["after"],)
@@ -443,14 +489,15 @@ class LocalMemoryBackend:
             args,
         ).fetchall()
         more = len(rows) > request["limit"]
-        items = [dict(zip(_COLUMNS, row, strict=True)) for row in rows[: request["limit"]]]
+        items = [self._record(row, now) for row in rows[: request["limit"]]]
         return {
             "items": items,
+            "evaluated_at": now.isoformat().replace("+00:00", "Z"),
             "next_cursor": items[-1]["record_id"] if more else None,
             "has_more": more,
         }
 
-    def _mutate(self, conn, operation, request):
+    def _mutate(self, conn, operation, request, now):
         digest = hashlib.sha256(
             json.dumps(
                 [operation, request], ensure_ascii=False, sort_keys=True, separators=(",", ":")
@@ -473,27 +520,28 @@ class LocalMemoryBackend:
             >= 10000
         ):
             raise MemoryError("mutation_limit")
-        now = datetime.now(UTC).isoformat()
+        timestamp = now.isoformat()
         if operation == "remember":
             if conn.execute("SELECT count(*) FROM records").fetchone()[0] >= 1000:
                 raise MemoryError("record_limit")
             record_id, revision, status = str(uuid4()), 1, "active"
             conn.execute(
                 "INSERT INTO records(record_id,revision,status,content,topic,source,session_ref,"
-                "created_at,updated_at) VALUES (?,1,'active',?,?,?,?,?,?)",
+                "created_at,updated_at,expires_at) VALUES (?,1,'active',?,?,?,?,?,?,?)",
                 (
                     record_id,
                     request["content"],
                     request["topic"],
                     self._source_kind,
                     self._session,
-                    now,
-                    now,
+                    timestamp,
+                    timestamp,
+                    request.get("expires_at"),
                 ),
             )
         else:
             record_id = request["record_id"]
-            current = self._get(conn, record_id)
+            current = self._get(conn, record_id, now)
             if current["status"] == "forgotten":
                 raise MemoryError("record_forgotten")
             if current["revision"] != request["expected_revision"]:
@@ -504,7 +552,7 @@ class LocalMemoryBackend:
             topic = None if operation == "forget" else request.get("topic", current["topic"])
             conn.execute(
                 "UPDATE records SET revision=?,status=?,content=?,topic=?,source=?,session_ref=?,"
-                "updated_at=? WHERE record_id=? AND revision=?",
+                "updated_at=?,expires_at=? WHERE record_id=? AND revision=?",
                 (
                     revision,
                     status,
@@ -512,7 +560,10 @@ class LocalMemoryBackend:
                     topic,
                     None if operation == "forget" else self._source_kind,
                     None if operation == "forget" else self._session,
-                    now,
+                    timestamp,
+                    None
+                    if operation == "forget"
+                    else request.get("expires_at", current["expires_at"]),
                     record_id,
                     request["expected_revision"],
                 ),
