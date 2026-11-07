@@ -235,7 +235,7 @@ def test_schemas_are_flat_closed_json_objects():
         (
             PERSONAL_TASKS_READ_SCHEMA,
             READ,
-            ["list", "show", "search", "projects", "agenda", "history"],
+            ["list", "show", "search", "projects", "agenda", "history", "review"],
             ["action"],
         ),
         (

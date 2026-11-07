@@ -56,6 +56,8 @@ The native [`personal-agent routing inspect`](docs/38-routing-readiness-inspecti
 
 The [durable progress guide](docs/37-durable-memory-progress.md) adds metadata-only memory change pages and internal restart-safe consumer cursors. It preserves existing record receipts during v1/v2→v3 migration and does not claim native compression checkpoint support.
 
+The [daily task review](docs/40-daily-task-review.md) combines exact overdue/today/upcoming/undated counts with budgeted title summaries through existing local entry points. It preserves current read admission and adds no schedule or automatic priority decision.
+
 [Local memory metadata checkpoints](docs/39-local-memory-checkpoints.md): Explicit native commands create durable metadata-only markers with event/record consistency checks, watermark fencing and stale-status inspection. These do not back up payload or satisfy native compression checkpoints.
 
 ## Development checks

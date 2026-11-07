@@ -5,9 +5,11 @@ import json
 import re
 import sqlite3
 import unicodedata
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
+
+from .task_review import task_review
 
 _APPLICATION_ID = 0x5041544B
 _SCHEMA_VERSION = 3
@@ -121,13 +123,17 @@ def validate_request(operation: str, payload: dict) -> dict:
         "search": ({"query"}, {"state", "limit", "after", "project", "unassigned"}),
         "agenda": ({"on"}, {"limit", "after", "project", "unassigned"}),
         "projects": (set(), {"limit", "after"}),
+        "review": (
+            {"on"},
+            {"lookahead_days", "per_bucket_limit", "max_chars", "project", "unassigned"},
+        ),
     }
     if not isinstance(operation, str) or operation not in fields or not isinstance(payload, dict):
         raise TaskError("invalid_request")
     required, optional = fields[operation]
     if not required <= payload.keys() or payload.keys() - required - optional:
         raise TaskError("invalid_request")
-    result = dict(payload)
+    result: dict = dict(payload)
     if operation == "capture":
         result.setdefault("details", "")
     if operation == "update" and not ({"title", "details", "due_date", "project"} & result.keys()):
@@ -160,6 +166,19 @@ def validate_request(operation: str, payload: dict) -> dict:
         value = result["expected_revision"]
         if type(value) is not int or not 1 <= value < 2**63 - 1:
             raise TaskError("invalid_request")
+    if operation == "review":
+        result = {"lookahead_days": 7, "per_bucket_limit": 5, "max_chars": 16000, **result}
+        for key, minimum, maximum in (
+            ("lookahead_days", 0, 90),
+            ("per_bucket_limit", 1, 20),
+            ("max_chars", 2048, 64000),
+        ):
+            if type(result[key]) is not int or not minimum <= result[key] <= maximum:
+                raise TaskError("invalid_request")
+        try:
+            date.fromisoformat(result["on"]) + timedelta(days=result["lookahead_days"])
+        except OverflowError:
+            raise TaskError("invalid_request") from None
     if operation == "history":
         result = {"limit": 20, "after_revision": 0, **result}
         if type(result["limit"]) is not int or not 1 <= result["limit"] <= 100:
@@ -402,19 +421,20 @@ class TaskStore:
         try:
             if self._connection.in_transaction:
                 raise TaskError("connection_in_transaction")
-            if operation in ("get", "list", "search", "agenda", "projects", "history"):
+            if operation in ("get", "list", "search", "agenda", "projects", "history", "review"):
                 if operation == "get":
                     data = self._get(request["task_id"])
-                elif operation in ("projects", "history"):
+                elif operation in ("projects", "history", "review"):
                     # Related queries share one read snapshot. A deferred
                     # transaction avoids acquiring an unnecessary write lock.
                     self._connection.execute("BEGIN")
                     began = True
-                    data = (
-                        self._projects(request)
-                        if operation == "projects"
-                        else self._history(request)
-                    )
+                    if operation == "review":
+                        data = task_review(self._connection, request)
+                    elif operation == "projects":
+                        data = self._projects(request)
+                    else:
+                        data = self._history(request)
                     self._connection.execute("COMMIT")
                 elif operation == "agenda":
                     data = self._agenda(request)

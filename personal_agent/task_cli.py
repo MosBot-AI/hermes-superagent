@@ -47,7 +47,12 @@ def setup_tasks_cli(parent: argparse._SubParsersAction) -> None:
     agenda.add_argument("--on", required=True, help="Explicit YYYY-MM-DD date; no clock inference")
     agenda.add_argument("--limit", type=int, default=20)
     agenda.add_argument("--after", default=None)
-    for reader in (listing, search, agenda):
+    review = commands.add_parser("review", help="Read a bounded daily task overview")
+    review.add_argument("--on", required=True, help="Explicit YYYY-MM-DD date; no clock inference")
+    review.add_argument("--lookahead-days", type=int, default=7)
+    review.add_argument("--per-bucket-limit", type=int, default=5)
+    review.add_argument("--max-chars", type=int, default=16000)
+    for reader in (listing, search, agenda, review):
         filters = reader.add_mutually_exclusive_group()
         filters.add_argument("--project", default=argparse.SUPPRESS, help="Exact project label")
         filters.add_argument("--unassigned", action="store_true", default=argparse.SUPPRESS)
@@ -91,6 +96,14 @@ def command_request(args: argparse.Namespace) -> tuple[str, dict]:
         "get": ("task_id",),
         "history": ("task_id", "limit", "after_revision"),
         "projects": ("limit", "after"),
+        "review": (
+            "on",
+            "lookahead_days",
+            "per_bucket_limit",
+            "max_chars",
+            "project",
+            "unassigned",
+        ),
         "list": ("state", "limit", "after", "project", "unassigned"),
         "search": ("query", "state", "limit", "after", "project", "unassigned"),
         "agenda": ("on", "limit", "after", "project", "unassigned"),

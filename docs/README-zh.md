@@ -51,7 +51,8 @@
 37. [持久化本地记忆进度](37-durable-memory-progress-zh.md)：元数据变更分页、内部 CAS/幂等消费者游标和原子 schema-v3 迁移；不等于原生压缩 checkpoint。
 38. [已保存路由诊断](38-routing-readiness-inspection-zh.md)：原生本地声明诊断，不解析凭据/模型，也不启用路由。
 39. [本地记忆元数据检查点](39-local-memory-checkpoints-zh.md)：显式原生命令创建持久元数据标记，验证事件与记录一致性，检查水位并查询是否过时；不备份正文，也不满足原生压缩检查点。
-40. [架构决策记录](adr/README-zh.md)：为什么选择这些约束。
+40. [每日任务回顾](40-daily-task-review-zh.md)：同一快照的活动数量、仅含标题的摘要、精确项目过滤和输出预算。
+41. [架构决策记录](adr/README-zh.md)：为什么选择这些约束。
 
 ## 三类陈述必须分开
 

@@ -8,7 +8,7 @@ owns action-specific requirements, bounds, normalization and rejection.
 
 from .tasks import TaskError, validate_request
 
-_READ_ACTIONS = ("list", "show", "search", "projects", "agenda", "history")
+_READ_ACTIONS = ("list", "show", "search", "projects", "agenda", "history", "review")
 _WRITE_ACTIONS = ("capture", "update", "complete", "cancel")
 
 PERSONAL_TASKS_READ_SCHEMA = {
@@ -20,6 +20,10 @@ PERSONAL_TASKS_READ_SCHEMA = {
         "show/history require task_id from an earlier result; never invent IDs. search requires "
         "literal query text. agenda requires an explicit on date and returns active tasks "
         "due on or before it. list/search default to captured. projects returns label counts. "
+        "review requires an explicit on date and returns exact active-task counts plus bounded "
+        "title summaries for overdue, due-today, upcoming and undated tasks in one snapshot. "
+        "Its omitted counts include all unshown tasks; use show/list/agenda for details. "
+        "review is not priority inference, task execution or a reminder. "
         "history returns operation metadata in revision order, not previous task text or "
         "proof the real-world task was performed. For history, pass returned next_cursor "
         "as after_revision; other pages use after. Pages are live, not frozen snapshots."
@@ -45,12 +49,12 @@ PERSONAL_TASKS_READ_SCHEMA = {
                 "type": "integer",
                 "minimum": 1,
                 "maximum": 100,
-                "description": "All reads except show; defaults to 20.",
+                "description": "list/search/projects/agenda/history only; defaults to 20.",
             },
             "after": {
                 "type": ["string", "null"],
                 "description": (
-                    "All reads except show/history: returned next_cursor, or null. "
+                    "list/search/projects/agenda only: returned next_cursor, or null. "
                     "projects uses an exact label (1-80 characters); others use a task UUIDv4."
                 ),
             },
@@ -68,18 +72,40 @@ PERSONAL_TASKS_READ_SCHEMA = {
                 "minLength": 1,
                 "maxLength": 80,
                 "description": (
-                    "list/search/agenda only: exact case-sensitive label, no outer whitespace. "
+                    "list/search/agenda/review only: exact case-sensitive label, "
+                    "no outer whitespace. "
                     "Mutually exclusive with unassigned."
                 ),
             },
             "unassigned": {
                 "type": "boolean",
-                "description": "list/search/agenda only: true selects unlabeled tasks.",
+                "description": "list/search/agenda/review only: true selects unlabeled tasks.",
+            },
+            "lookahead_days": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 90,
+                "description": "review only: days after on included in upcoming; defaults to 7.",
+            },
+            "per_bucket_limit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 20,
+                "description": "review only: maximum summaries per bucket; defaults to 5.",
+            },
+            "max_chars": {
+                "type": "integer",
+                "minimum": 2048,
+                "maximum": 64000,
+                "description": (
+                    "review only: ASCII-serialized data budget, excluding the outer tool envelope; "
+                    "defaults to 16000. Summaries are omitted whole, never text-truncated."
+                ),
             },
             "on": {
                 "type": "string",
                 "format": "date",
-                "description": "agenda only: explicit YYYY-MM-DD date; do not infer a date.",
+                "description": "agenda/review only: explicit YYYY-MM-DD date; do not infer a date.",
             },
         },
     },

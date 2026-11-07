@@ -30,6 +30,7 @@ HELP = (
     'Use POSIX quotes: add "Title" [--details "Text"] [--project "Project"] '
     "[--due-date YYYY-MM-DD]; list [--state all] [--project LABEL | --unassigned]; "
     'search "Text"; show TASK_ID; projects; agenda --on YYYY-MM-DD; '
+    "review --on YYYY-MM-DD [--lookahead-days N] [--per-bucket-limit N] [--max-chars N]; "
     "history TASK_ID [--limit N] [--after-revision N] (operation metadata only). "
     "Readers support --limit and --after where applicable. "
     "update TASK_ID --expected-revision N [--title TITLE] [--details TEXT] "

@@ -56,6 +56,8 @@ Hermes 原生 personal-agent 插件，目标是让一个主 agent 管理项目�
 
 [持久化进度指南](docs/37-durable-memory-progress-zh.md)新增纯元数据记忆变更分页和可跨重启保留的内部消费者游标。v1/v2→v3 迁移保留原始记录回执，不宣称支持原生压缩 checkpoint。
 
+[每日任务回顾](docs/40-daily-task-review-zh.md)通过已有本地入口，一次提供逾期/今天/近期/无日期的精确数量与有预算的标题摘要。沿用当前读取准入，不新增调度或自动优先级决策。
+
 [本地记忆元数据检查点](docs/39-local-memory-checkpoints-zh.md)：显式原生命令创建持久元数据标记，验证事件与记录一致性，检查水位并查询是否过时；不备份正文，也不满足原生压缩检查点。
 
 ## 开发验证
