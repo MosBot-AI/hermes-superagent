@@ -66,6 +66,8 @@ cd ../hermes-superagent
 
 Environment preparation downloads dependencies from official sources. Tests use synthetic inputs, temporary homes, and a Python socket connection guard; they do not access real personal accounts. The checker verifies the upstream HEAD and clean tracked sources, records Python and lock/package fingerprints, and invokes the official Hermes `scripts/run_tests.sh`. Missing checkouts or dependencies fail rather than silently skipping compatibility checks. The recorded package inventory is evidence of the interpreter used, not proof that an arbitrary supplied environment exactly matches the lock.
 
+The checker forwards both source roots through pytest configuration after the host runner clears environment variables. This preserves imports for external plugin checkouts, including paths containing spaces, without passing credentials into the test environment. No manual `PYTHONPATH` override is required.
+
 `python scripts/check.py` alone runs repository unit tests, Ruff, ty, and bilingual document structure/link and JSON-example syntax checks, and explicitly reports Hermes compatibility **NOT RUN**. Test-tool versions come from the pinned Hermes dev group, not plugin runtime dependencies.
 
 ## Try it in an isolated Hermes profile

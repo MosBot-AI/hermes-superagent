@@ -5,6 +5,7 @@ import argparse
 import hashlib
 import json
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -107,6 +108,12 @@ def main() -> int:
                     str(ROOT / "tests/contracts"),
                     "--file-retries",
                     "0",
+                    "--",
+                    # The host runner scrubs PYTHONPATH with env -i. Pass both
+                    # import roots through pytest's per-file configuration;
+                    # quote each path because pytest splits this value itself.
+                    "-o",
+                    f"pythonpath={shlex.quote(str(checkout))} {shlex.quote(str(ROOT))}",
                     "-q",
                     "--tb=short",
                 ],
