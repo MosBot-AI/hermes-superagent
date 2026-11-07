@@ -10,6 +10,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from . import PLUGIN_ID
+from .task_presentation import render_task_result
 from .tasks import TaskError, TaskStore, validate_request
 
 
@@ -99,6 +100,14 @@ def setup_tasks_cli(parent: argparse._SubParsersAction) -> None:
                     required=True,
                     choices=("ready", "in_progress", "waiting", "blocked"),
                 )
+    for command in commands.choices.values():
+        command.add_argument(
+            "--format",
+            dest="output_format",
+            choices=("json", "text"),
+            default=None,
+            help="Output format; CLI defaults to JSON, native conversation defaults to text",
+        )
 
 
 def command_request(args: argparse.Namespace) -> tuple[str, dict]:
@@ -228,7 +237,8 @@ def open_task_store(bound_home: Path) -> Generator[TaskStore]:
 def run_tasks_cli(
     args: argparse.Namespace, *, read_mode: Callable[[], object], bound_home: Path
 ) -> int:
-    """Print one redacted JSON result; a host handler's integer is its exit code."""
+    """Print one redacted result; keep CLI JSON default and existing exit codes."""
+    operation, payload = "", {}
     try:
         # get_config can recreate a missing profile in this host version.
         # Refuse before consulting configuration, not just before storage opens.
@@ -264,5 +274,12 @@ def run_tasks_cli(
             "error": {"code": error.code, "retryable": error.retryable},
         }
         code = 1
-    print(json.dumps(output, ensure_ascii=False, sort_keys=True))
+    if getattr(args, "output_format", None) == "text":
+        print(
+            render_task_result(
+                output, operation=operation, payload=payload, prefix="hermes personal-agent tasks"
+            )
+        )
+    else:
+        print(json.dumps(output, ensure_ascii=False, sort_keys=True))
     return code

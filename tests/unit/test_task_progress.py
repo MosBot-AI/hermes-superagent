@@ -226,9 +226,10 @@ def test_entrypoint_normalization_stable_keys_and_no_accidental_update_access(st
         f"progress {task['id']} --expected-revision 1 --work-status blocked "
         '--note "Waiting for input"'
     )
-    operation, implicit = _parse(raw)
+    operation, implicit, output_format = _parse(raw)
+    assert output_format is None
     assert operation == "progress" and len(implicit["request_id"]) == 36
-    assert _parse(raw + " --request-id explicit") == ("progress", args)
+    assert _parse(raw + " --request-id explicit") == ("progress", args, None)
     assert _parse(f"review --on {ON} --work-status waiting")[1]["work_status"] == "waiting"
     with pytest.raises(TaskError, match="invalid_request"):
         normalize_task_tool_request("personal_tasks_read", {"action": "progress", **args})

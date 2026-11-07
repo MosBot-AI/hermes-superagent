@@ -202,7 +202,7 @@ def test_cli_slash_and_model_normalization_without_mutation():
     normalized = validate_request("review", request)
     assert normalized == {**request, "lookahead_days": 7, "per_bucket_limit": 5, "max_chars": 16000}
     assert request == {"on": ON, "project": "Work"}
-    assert _parse(f'review --on {ON} --project "Work"') == ("review", normalized)
+    assert _parse(f'review --on {ON} --project "Work"') == ("review", normalized, None)
     assert normalize_task_tool_request("personal_tasks_read", {"action": "review", **request}) == (
         "review",
         normalized,

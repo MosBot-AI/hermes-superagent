@@ -64,6 +64,10 @@ Hermes 原生 personal-agent 插件，目标是让一个主 agent 管理项目�
 
 [本地任务进度指南](docs/42-local-task-progress-zh.md)新增明确的工作中/等待/阻碍说明、安全版本写入和过滤回顾。任务 schema v4 原子升级自有旧库并保留历史回执，已记录进度不等于原生执行证据。
 
+[原生检查点证据边界](docs/43-native-checkpoint-boundary-zh.md)新增有界、无 I/O 的候选准备和固定宿主契约测试。验证稳定 UID、待存尾部与 revision 的实际边界；未启用自动摄取或 checkpoint-v2。
+
+[可读任务工作台](docs/44-readable-task-workbench-zh.md)将已有原生任务命令展示为简洁文字，保留准确 ID、版本/重试说明和有界翻页。结构化原生输出使用 /personal-tasks --json ...，CLI 与模型工具 JSON 不变。
+
 ## 开发验证
 
 基线为 `compatibility.json` 内的 Hermes commit；当前实际运行目标是 Python 3.14。没有根据单一 SHA 宣称宽泛的 `requires_hermes` 版本范围。

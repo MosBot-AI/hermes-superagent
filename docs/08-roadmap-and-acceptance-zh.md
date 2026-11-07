@@ -76,6 +76,8 @@ E0.6 是独立的可选客户端契约路线，不阻塞 profile-first local M0/
 - E2.8：Integrate Native Memory Lifecycle（M2，In Progress：只读召回）：依赖 E0.9/E2.6/E2.7 及适用 E6.8/E6.9 入口合同。增加可选单槽桥接、经同意的来源绑定候选/召回，以及带预算的持久生命周期/checkpoint 处理。显式本地记忆工具不要求启用桥接。
 - E2.9：Validate Memory Migration and Recall（M3，Backlog）：依赖 E2.7/E2.8 及 E8.1/E8.2/E8.3 harness。验证适配器符合性、带栅栏的导出/切换/恢复/删除竞态及中文/长期召回。
 
+[43](43-native-checkpoint-boundary-zh.md) 增加固定宿主证据门禁与未接入运行时的候选准备；完整检查点仍需与原生提交绑定的来源覆盖交接，不能仅靠 UID 或返回成功。
+
 E0.9/E2.9 保持 Backlog。E2.8 现有 [41](41-native-memory-recall-zh.md) 的可选只读原生召回切片；摄取和持久会话检查点仍待实现。E2.6/E2.7 仅因下述狭窄显式记录先导切片设为 In Progress。[30](30-pluggable-memory-contracts-zh.md) 是完整方案，不是实现报告。现有 E2.1–E2.5 保留其清单 ID 和本地任务证据，不重复创建工作包。
 
 验收：长期事实都有 provenance 或 inference 标记；跨 profile/群聊不可读；纠错与删除后的检索测试通过。

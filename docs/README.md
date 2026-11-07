@@ -54,7 +54,9 @@ Extend Hermes into a long-lived personal agent for one user: one main agent unde
 40. [Daily task review](40-daily-task-review.md): one-snapshot active counts, title-only summaries, exact project filters and output budgets.
 41. [Optional native memory recall](41-native-memory-recall.md): An explicitly selected real MemoryProvider can supply fresh bounded local-record context to supported native primary sessions. It performs no ingestion or canonical writes; strict native checkpoints remain unavailable.
 42. [Local task progress](42-local-task-progress.md): explicit working/waiting/blocker notes, revision-safe writes, active filters and atomic schema-v4 migration.
-43. [Architecture decision records](adr/README.md): reasons for the constraints.
+43. [Native checkpoint evidence boundaries](43-native-checkpoint-boundary.md) add bounded I/O-free candidate preparation and pinned-host contracts. Stable UIDs, pending input and revision limits are verified; automatic ingestion and checkpoint-v2 remain disabled.
+44. [Readable task workbench](44-readable-task-workbench.md): native human views, explicit JSON compatibility, safe pagination and accurate retry/error messages.
+45. [Architecture decision records](adr/README.md): reasons for the constraints.
 
 ## Keep three kinds of statements separate
 

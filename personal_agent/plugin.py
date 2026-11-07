@@ -252,6 +252,7 @@ def register(ctx: PluginContext) -> None:
                 source=source,
                 session_id=session_id,
                 session_key=session_key,
+                default_format="text",
             )
 
         ctx.register_command(
@@ -260,7 +261,7 @@ def register(ctx: PluginContext) -> None:
             description=(
                 "Manage tasks/project groups in an explicitly trusted single-user local session."
             ),
-            args_hint="<command> [arguments]",
+            args_hint="[--json] <command> [arguments]",
         )
 
     if memory_enabled:

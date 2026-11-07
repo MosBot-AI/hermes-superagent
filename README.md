@@ -64,6 +64,10 @@ The [daily task review](docs/40-daily-task-review.md) combines exact overdue/tod
 
 The [local task progress guide](docs/42-local-task-progress.md) adds explicit working/waiting/blocker notes, revision-safe writes and filtered daily reviews. Task schema v4 upgrades owned older stores atomically while preserving historical receipts; recorded progress is not native execution evidence.
 
+[Native checkpoint evidence boundaries](docs/43-native-checkpoint-boundary.md) add bounded I/O-free candidate preparation and pinned-host contracts. Stable UIDs, pending input and revision limits are verified; automatic ingestion and checkpoint-v2 remain disabled.
+
+The [readable task workbench](docs/44-readable-task-workbench.md) makes existing native task commands usable as concise text views, with exact IDs, revision/retry guidance and bounded continuation. Use `/personal-tasks --json ...` for structured native output; CLI and model-tool JSON remain unchanged.
+
 ## Development checks
 
 `compatibility.json` records the Hermes baseline commit. The current runtime target is Python 3.14. A single tested SHA does not justify a broad `requires_hermes` version range.

@@ -6,6 +6,8 @@ Status: implemented opt-in deterministic command slice, not a complete conversat
 
 The follow-on [session-scoped task tools](29-session-scoped-task-tools.md) are now implemented separately. This document still records the deterministic command path; model tools require separate configuration and session activation, not this default setup alone.
 
+Native task replies now default to [readable text](44-readable-task-workbench.md). Prefix with `--json` (for example `/personal-tasks --json list`) to retain the structured envelope, including admission/parse failures. The operations and permissions below are unchanged.
+
 ## 1. Product decision and trust boundary
 
 Use an existing Hermes native local session to manage the selected profile's local tasks. Do not require selecting a Bot, discovering a canonical Bot Chat, or activating the unfinished remote-owner protocol first. One main Hermes agent remains in charge; this plugin adds no agent loop, gateway, login, listener or second scheduler.

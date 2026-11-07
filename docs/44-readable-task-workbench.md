@@ -1,0 +1,55 @@
+# 44. Readable Native Task Workbench
+
+English | [简体中文](44-readable-task-workbench-zh.md)
+
+Implemented: readable views over the existing local task operations. Native `/personal-tasks` commands now default to text rather than a JSON envelope. Task tools still return their existing JSON schema; the local CLI remains JSON by default. No task, project, permission, execution or scheduling capability is added by this presentation layer.
+
+## 1. Start with the Existing Commands
+
+Keep the existing trusted-local configuration and native session admission. The empty command or `help` shows a compact workflow; all examples below require the existing local task opt-in.
+
+```text
+/personal-tasks help
+/personal-tasks add "Review the draft" --project "Demo" --request-id draft-1
+/personal-tasks review --on 2026-11-07
+/personal-tasks list --work-status blocked
+/personal-tasks show TASK_ID
+/personal-tasks progress TASK_ID --expected-revision N --work-status waiting --note "Waiting for the attachment" --request-id waiting-1
+```
+
+Use an actual returned task ID/revision, a distinct key for each intended mutation, and the intended calendar date. Text output displays the exact ID/revision, recorded progress, project label and due date. `show` and successful mutations also show task details and the current progress/resolution notes when present. Progress is not evidence that a worker is running. Done/cancelled results explicitly describe a local record change, not proof that real-world work or an external cancellation was executed.
+
+Stored titles, labels and multiline notes are quoted; embedded line breaks and controls are escaped so they cannot appear as separate generated status lines. Stored content remains untrusted data. Quoting is not a model-instruction security boundary, and this plugin does not secure other Hermes tools. The initial presentation labels are English; stored Unicode text is preserved.
+
+## 2. Keep Machine Contracts Explicit
+
+Native output has intentionally changed for people. Scripts that previously parsed `/personal-tasks` output should use the leading `--json` selector. This preserves the existing `personal.local-conversation-tasks.v1` envelope, including early profile/origin/configuration denials and malformed-command errors:
+
+```text
+/personal-tasks --json list
+/personal-tasks --json review --on 2026-11-07
+/personal-tasks --json add "Review the draft" --request-id draft-1
+hermes personal-agent tasks list
+hermes personal-agent tasks list --format text
+hermes personal-agent tasks review --on 2026-11-07 --format text
+```
+
+A trailing `--format json` or `--format text` is also accepted after a valid native command, but it is parsed only after admission. Use the leading `--json` form when a consumer must parse every native reply, including pre-admission failures. Combining leading `--json` with `--format text` is rejected. Presentation options do not enter the store request or idempotency digest. The CLI's ordinary JSON output and integer success/failure exit codes are unchanged. Generated CLI continuation commands preserve `--format text`.
+
+`personal_tasks_read` / `personal_tasks_write` remain unchanged machine surfaces. They do not accept presentation flags and still require the existing explicit configuration, session activation and turn context. Choosing JSON or text does not activate tools, authorize a write, change profiles or bypass a denied source.
+
+## 3. Bounded Views and Safe Next Steps
+
+List, search, agenda, project and history text views show at most 20 entries. When either the store page or the text view has more entries, a `More:` command continues after the last entry actually shown. The generated read command preserves the original filters and uses a page size of 20. It is a suggestion only; no command is automatically executed. Values are shell-quoted and passed as `--name=value` so valid labels/queries beginning with a dash remain values rather than options.
+
+Daily review shows at most five title summaries in each of the four date buckets, retaining exact full-population date/progress counts. Each bucket states how many matching tasks are not shown, accounting for both the original result budget and the additional display limit. Future tasks beyond the date window remain count-only. There is no invented review cursor or inferred priority; existing `show` and filtered `list` commands inspect more detail. A page with no matches says so without claiming all work is finished.
+
+List/review views omit task bodies and blocker notes; `show` retrieves a selected task's full stored information. Full titles/IDs/revisions and displayed notes are not silently truncated. Text uses the existing field limits and item caps. The review `max_chars` setting still measures its structured data as described in [40](40-daily-task-review.md), not the human view's punctuation or character count.
+
+## 4. Receipts, Failures and Verification
+
+Successful mutations display their request ID, including a key generated by the native command. An identical successful retry is labeled as a replayed saved receipt that may describe an older revision. Use `show` for current state. A stale revision asks the user to read and reconcile; an idempotency conflict does not suggest replacing the key blindly. Error messages use stable redacted codes and do not include raw exceptions, local paths or failed private input.
+
+Rendering happens after the same existing operation. It performs no extra read, write, model/provider call, dispatch, automatic retry or remote action. If an unexpected legacy result cannot be rendered, the actual structured result is returned instead of misreporting a committed write as a failure. Storage schema, receipts, events, activation and admission remain unchanged.
+
+Tests cover native text/JSON parity, identical-key deduplication across formats, old receipts, terminal/progress wording, explicit dates, bounded lists/reviews, complete fields, quoted multiline content, safe continuation round trips including leading-dash labels, early refusal without private parsing, CLI exit codes and unchanged model-tool JSON. Pinned-host tests exercise the actual native command entry. Tests use synthetic temporary profiles with the network guard; actual GUI/mobile rendering and live-provider natural-language task orchestration remain unverified.

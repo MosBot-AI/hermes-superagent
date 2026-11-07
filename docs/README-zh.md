@@ -54,7 +54,9 @@
 40. [每日任务回顾](40-daily-task-review-zh.md)：同一快照的活动数量、仅含标题的摘要、精确项目过滤和输出预算。
 41. [可选原生记忆召回](41-native-memory-recall-zh.md): 显式选择真实 MemoryProvider 后，可为支持的原生主会话提供即时、有界的本地记录上下文；不摄取或改写规范记录，仍不支持严格原生检查点。
 42. [本地任务进度](42-local-task-progress-zh.md)：明确的工作中/等待/阻碍说明、安全版本写入、活动过滤和原子 schema-v4 迁移。
-43. [架构决策记录](adr/README-zh.md)：为什么选择这些约束。
+43. [原生检查点证据边界](43-native-checkpoint-boundary-zh.md)新增有界、无 I/O 的候选准备和固定宿主契约测试。验证稳定 UID、待存尾部与 revision 的实际边界；未启用自动摄取或 checkpoint-v2。
+44. [可读任务工作台](44-readable-task-workbench-zh.md)：原生文字视图、明确 JSON 兼容、安全分页和准确重试/错误提示。
+45. [架构决策记录](adr/README-zh.md)：为什么选择这些约束。
 
 ## 三类陈述必须分开
 

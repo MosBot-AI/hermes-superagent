@@ -74,6 +74,8 @@ Dependencies follow the trust mode. Explicit trusted-profile local memory reuses
 - E2.8: Integrate Native Memory Lifecycle (M2, In Progress: read-only recall): depends on E0.9/E2.6/E2.7 and applicable E6.8/E6.9 entry contracts. Add the optional single-slot bridge, consented source-bound candidates/recall and durable lifecycle/checkpoint handling with budgets. The bridge is not required for explicit local memory tools.
 - E2.9: Validate Memory Migration and Recall (M3, Backlog): depends on E2.7/E2.8 and E8.1/E8.2/E8.3 harness. Validate adapter conformance, fenced export/cutover/restore/delete races and Chinese/long-horizon recall.
 
+[43](43-native-checkpoint-boundary.md) adds pinned-host evidence gates and unwired candidate preparation; full checkpointing still needs source-coverage handoff bound to native commit, not UID presence or a successful return alone.
+
 E0.9/E2.9 remain Backlog. E2.8 now has the optional read-only native recall slice in [41](41-native-memory-recall.md); ingestion and durable conversation checkpointing remain open. E2.6/E2.7 are In Progress only for the narrow explicit-record precursor below. [30](30-pluggable-memory-contracts.md) is the complete design, not an implementation report. Existing E2.1–E2.5 retain their checklist IDs and local-task evidence; no duplicate work packages are created.
 
 Acceptance: Long-term facts have provenance or inference labels; they are not readable across profiles/group chats; retrieval tests after correction and deletion pass.

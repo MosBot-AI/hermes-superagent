@@ -146,7 +146,9 @@ def command(host, text, **extra):
     from gateway.session_commands import execute_command
 
     result = asyncio.run(
-        execute_command(host.connection, host.ref, {"command": "personal-tasks " + text, **extra})
+        execute_command(
+            host.connection, host.ref, {"command": "personal-tasks --json " + text, **extra}
+        )
     )
     assert result["type"] == "exec"
     return json.loads(result["output"])
@@ -256,7 +258,11 @@ def test_reload_unload_and_retained_callback_rechecks_config(native):
     configure(home, enabled=False)
     result = json.loads(
         callback(
-            "list", platform="cli", source=None, session_id="synthetic", session_key="synthetic"
+            "--json list",
+            platform="cli",
+            source=None,
+            session_id="synthetic",
+            session_key="synthetic",
         )
     )
     assert result["error"]["code"] == "local_conversation_disabled"
@@ -276,7 +282,7 @@ def test_real_inbound_dispatch_rejects_nonlocal_before_storage(host, platform):
     from gateway.platforms.base import MessageEvent
 
     source = replace(host.source, platform=Platform(platform))
-    event = MessageEvent(text="/personal-tasks list", source=source)
+    event = MessageEvent(text="/personal-tasks --json list", source=source)
     entry = host.runner.session_store.lookup_by_session_key(host.live.route)
     callback = host.manager._plugin_commands["personal-tasks"]["handler"]
     result = asyncio.run(host.runner._hm_run_plugin_handler(callback, event, source, entry))
@@ -344,7 +350,7 @@ def test_source_host_wire_record_requires_no_isolation_downgrade(host):
     callback = host.manager._plugin_commands["personal-tasks"]["handler"]
     result = json.loads(
         callback(
-            'add "Wire source" --request-id wire',
+            '--json add "Wire source" --request-id wire',
             platform="local",
             source=source,
             session_id=host.ref.session_id,
@@ -414,7 +420,7 @@ def test_two_profile_native_dispatch_and_retained_callback_scope(native, tmp_pat
     with _profile_runtime_scope(home_b):
         refused = json.loads(
             callback_a(
-                'add "Wrong retained scope" --request-id forbidden',
+                '--json add "Wrong retained scope" --request-id forbidden',
                 platform="local",
                 source=host_b.source,
                 session_id=host_b.ref.session_id,

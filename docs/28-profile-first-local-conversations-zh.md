@@ -6,6 +6,8 @@
 
 后续实现见[会话范围任务工具](29-session-scoped-task-tools-zh.md)。本篇仍记录确定性命令路径；模型工具另需配置和会话激活，不能把本篇默认配置视作已经启用模型读取。
 
+原生任务回复现默认[可读文字](44-readable-task-workbench-zh.md)。使用开头 --json（例如 /personal-tasks --json list）保留结构化响应，包括准入/解析失败。下列操作和权限不变。
+
 ## 1. 产品决策与信任边界
 
 在已有 Hermes 原生本地会话中管理所选 profile 的本地任务，无须先选择 Bot、发现 canonical Bot Chat 或激活尚未完成的远程 owner 协议。仍由一个 Hermes 主 agent 负责；本插件不新增 agent loop、网关、登录、监听器或第二套排程器。
