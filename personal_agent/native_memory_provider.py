@@ -15,12 +15,17 @@ from .task_cli import current_profile_home
 
 def read_native_config(home):
     from agent.safe_worker_policy import worker_config_snapshot  # ty: ignore[unresolved-import]
+    from hermes_cli import managed_scope  # ty: ignore[unresolved-import]
     from hermes_cli.config_backend import (  # ty: ignore[unresolved-import]
         FileBackend,
         get_config_backend,
     )
 
-    if worker_config_snapshot() is not None or os.environ.get("HERMES_PLUGIN_HOST_PROCESS") == "1":
+    if (
+        worker_config_snapshot() is not None
+        or os.environ.get("HERMES_PLUGIN_HOST_PROCESS") == "1"
+        or managed_scope.get_managed_dir() is not None
+    ):
         raise MemoryError("native_recall_runtime_unsupported")
     if current_profile_home() != home:
         raise MemoryError("profile_context_changed")
@@ -31,6 +36,11 @@ def read_native_config(home):
     if type(backend) is not FileBackend:
         raise MemoryError("native_recall_runtime_unsupported")
     config = backend.read_user_doc(home)
+    # Raw user opt-in cannot override a managed policy layer. This narrow
+    # provider refuses any host-detected scope, including empty/malformed policy,
+    # rather than treating the host's fail-open policy parser as authorization.
+    if managed_scope.get_managed_dir() is not None:
+        raise MemoryError("native_recall_runtime_unsupported")
     if current_profile_home() != home:
         raise MemoryError("profile_context_changed")
     return config
@@ -54,7 +64,7 @@ class PersonalRecordsProvider(MemoryProvider):
     def unavailable_reason(self):
         return (
             "Explicit personal-records recall opt-in and trusted local "
-            "in-process configuration required."
+            "in-process configuration without a managed policy scope required."
         )
 
     def initialize(self, session_id, **kwargs):

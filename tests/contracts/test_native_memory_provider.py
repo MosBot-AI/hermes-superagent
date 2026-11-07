@@ -195,3 +195,100 @@ def test_live_native_plugin_disable_stops_new_recall(native_recall):
     (home / "config.yaml").write_text(json.dumps(config))
     assert native_manager.prefetch_all("早餐", session_id="session-one") == ""
     assert provider.recall_status() is None
+
+
+@pytest.mark.parametrize(
+    "managed_contents",
+    [
+        json.dumps({"memory": {"personal_records": {"recall_enabled": False}}}),
+        json.dumps({"plugins": {"disabled": ["personal-records"]}}),
+        json.dumps({"plugins": {"disabled": ["hermes-personal-agent"]}}),
+        "",
+        "memory: [malformed",
+    ],
+)
+def test_live_managed_scope_stops_new_recall_before_storage(
+    native_recall, tmp_path, monkeypatch, managed_contents
+):
+    home, provider, native_manager, _ = native_recall
+    save(home)
+    before_config = (home / "config.yaml").read_bytes()
+    assert native_manager.prefetch_all("早餐", session_id="session-one")
+
+    def forbidden_reader(*_args):
+        pytest.fail("Managed scope must be refused before opening canonical storage")
+
+    monkeypatch.setattr(provider._lifecycle, "_reader", forbidden_reader)
+    managed = tmp_path / "managed-policy"
+    managed.mkdir(mode=0o700)
+    (managed / "config.yaml").write_text(managed_contents)
+    monkeypatch.setenv("HERMES_MANAGED_DIR", str(managed))
+    assert not provider.is_available()
+    assert native_manager.prefetch_all("早餐", session_id="session-one") == ""
+    assert provider.recall_status() is None
+    assert (home / "config.yaml").read_bytes() == before_config
+
+
+def test_managed_scope_present_at_initialization_never_opens_store(home, tmp_path, monkeypatch):  # noqa: F811
+    from agent.memory_manager import MemoryManager
+
+    (home / "config.yaml").write_text(json.dumps(configuration()))
+    managed = tmp_path / "managed-policy"
+    managed.mkdir(mode=0o700)
+    monkeypatch.setenv("HERMES_MANAGED_DIR", str(managed))
+    with scoped(home):
+        provider = PersonalRecordsProvider()
+        native_manager = MemoryManager()
+        native_manager.add_provider(provider)
+        native_manager.initialize_all(
+            session_id="session", hermes_home=str(home), platform="cli", agent_context="primary"
+        )
+        assert not provider.is_available()
+        assert native_manager.prefetch_all("private", session_id="session") == ""
+        native_manager.shutdown_all()
+    assert not (home / "plugin-data").exists()
+
+
+def test_managed_scope_appearing_during_user_config_read_is_refused(
+    native_recall, tmp_path, monkeypatch
+):
+    from hermes_cli.config_backend import FileBackend
+
+    home, provider, native_manager, _ = native_recall
+    save(home)
+    original = FileBackend.read_user_doc
+    managed = tmp_path / "managed-policy"
+    monkeypatch.setenv("HERMES_MANAGED_DIR", str(managed))
+
+    def read_then_add_scope(backend, profile):
+        result = original(backend, profile)
+        managed.mkdir(mode=0o700, exist_ok=True)
+        return result
+
+    def forbidden_reader(*_args):
+        pytest.fail("A newly observed managed scope must block storage admission")
+
+    monkeypatch.setattr(FileBackend, "read_user_doc", read_then_add_scope)
+    monkeypatch.setattr(provider._lifecycle, "_reader", forbidden_reader)
+    assert native_manager.prefetch_all("早餐", session_id="session-one") == ""
+    assert provider.recall_status() is None
+
+
+def test_managed_scope_appearing_during_record_read_discards_pack(
+    native_recall, tmp_path, monkeypatch
+):
+    home, provider, native_manager, _ = native_recall
+    save(home)
+    managed = tmp_path / "managed-policy"
+    monkeypatch.setenv("HERMES_MANAGED_DIR", str(managed))
+    original = provider._lifecycle._reader
+
+    @contextmanager
+    def read_then_add_scope(profile, session):
+        with original(profile, session) as backend:
+            yield backend
+        managed.mkdir(mode=0o700)
+
+    monkeypatch.setattr(provider._lifecycle, "_reader", read_then_add_scope)
+    assert native_manager.prefetch_all("早餐", session_id="session-one") == ""
+    assert provider.recall_status() is None
