@@ -8,6 +8,10 @@
 
 消费者的固定流程为：选择任务 → 短时单任务授权 → 真实主轮次准入 → 不可变任务快照 → 文本 worker → 带修订/过时标记的草稿。不会标记任务完成，不把返回指令视为授权，也不执行一般 worker 工具。
 
+## 宿主采用与真实包加载
+
+宿主提案现在在原有准确路由 opt-in 之外，使用 Hermes 标准的仅通过同意授予的 `llm.text_worker` 权限。Context 能力查询和文本生命周期句柄绑定创建它们的插件 profile，阻止跨 profile 借用；普通委派行为不变。消费者依赖仓库根目录导入的缺陷已修复，冷启动隔离进程只加载复制出的插件包，并完成离线任务到草稿/重新加载流程。这不代表真实安装通过。具体采用步骤和剩余门槛参见[宿主集成约定](../experiments/text-worker/README-zh.md#原生宿主授权与包边界)。
+
 ## 面向操作者的工作台
 
 原生 `/personal-plan-worker` 命令现支持 `list [--after KEY]`、`status KEY`、`draft KEY` 和 `stop KEY`。默认输出可读文本，前置 `--json` 保留结构化响应。列表每页最多十条范围内元数据，不含任务正文或草稿。`receipt_saved` 表示有 worker 回执，不表示任务已执行。
@@ -34,7 +38,7 @@
 
 ## 真实提供商及安装检查
 
-专用传输现在通过官方 helper 提供 OpenCode Go 必需的 affinity header，使用新的单次标识，而不继承父/根上下文。仅限准确提供商及 HTTPS `opencode.ai:443` 源站，不放宽目标、重定向或 fallback 限制。所选离线测试为 144 项宿主及 107 项消费者测试。
+专用传输现在通过官方 helper 提供 OpenCode Go 必需的 affinity header，使用新的单次标识，而不继承父/根上下文。仅限准确提供商及 HTTPS `opencode.ai:443` 源站，不放宽目标、重定向或 fallback 限制。所选离线测试为 247 项宿主及 109 项消费者测试。
 
 已授权的单次合成 DeepSeek 传输探针以 `ConnectError` 失败，没有 HTTP 状态或模型响应。是否送达未确认，未重试；未涉及 Gateway 或原生激活。另一次全新离线 profile 中的官方生产仓库安装被未修改的扫描器拒绝（CAUTION，50 条发现），插件仍不存在。两次尝试均不算通过验收。准确范围和限制参见[工件说明](../experiments/text-worker/README-zh.md#提供商兼容性及实际验收尝试)。
 

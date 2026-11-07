@@ -8,6 +8,16 @@
 
 [清单](manifest.json)记录准确补丁、源文件哈希、选定验证和限制。[宿主补丁](text-worker-prototype.patch)保留上游 [MIT 许可证](LICENSE.hermes-agent)。在本项目功能分支分发不等于上游发布。
 
+## 原生宿主授权与包边界
+
+提案现在向 Hermes 现有能力注册表加入**仅通过明确同意授予的 `llm.text_worker` 权限**。实验插件应在 manifest 声明它，以进入普通宿主同意界面。授予记录位于 `plugins.entries.<id>.granted_capabilities`；旧 `allow_*` 标志或只启用 `text_workers` 均不构成授予，宿主不会自动授权。启动及新模型工具披露，同时要求当前权限和准确提供商/模型/base URL opt-in，并从同一配置快照读取。
+
+`PluginContext.has_capability("llm.text_worker")` 从创建该 context 的插件管理器 profile 读取权限。文本生命周期服务也绑定同一规范化 profile home。保留 profile A 的 context 后切换到 B，不能借用 B 的权限或句柄，即使插件 ID 和模型相同。撤销会阻止后续准入/发送/模型工具披露检查，但不能收回已发送数据、旧父会话历史或扣费。普通 `launch()` 行为及其他插件能力保持不变。
+
+消费者和账本现在相对导入同包的 `personal_agent`，不再意外依赖开发仓库的 `PYTHONPATH`。冷启动隔离 `python -I` 测试阻止全局 `personal_agent` 导入，覆盖原生包发现、任务记录、明确授权、通过 mock HTTP transport 的拟议宿主请求、保存草稿和重新加载，并检查模块来源和同包错误类型身份。这修复了实际的包加载缺陷，但仍是**离线安装形态测试，不是官方安装或真实 Gateway 验收**。
+
+受支持插件的采用路径为：审阅/发布本宿主权限约定 → 把实验消费者与其生产同包模块一起打包并声明权限 → 单独批准安装/宿主同意及准确路由 → 授权单任务 → 真实验收。正式生产 manifest 和入口仍不声明或加载 worker。未安装包、未提交上游，也未增加 DNS/代理/TLS 绕行。
+
 ## 收窄后的实用流程
 
 [实验消费者](consumer.py)把真实本地任务接到拟议的 `ctx.subagent_lifecycle.launch_text` API：
@@ -60,7 +70,7 @@
 
 ## 提供商兼容性及实际验收尝试
 
-OpenCode Go 要求 session-affinity header。专用客户端现在仅对准确的 `opencode-go` 提供商及 HTTPS `opencode.ai:443` 源站，在空上下文中以全新单次标识调用官方宿主 affinity helper。不继承父/根会话标识或任意 header。已配置的 `/inference/go/openai/v1` 与元数据 `/zen/go/v1` 路径均保留准确目标检查。其他源站、相似域名及其他提供商不会获得此 header。所选离线测试现为 144 项宿主及 107 项消费者测试。
+OpenCode Go 要求 session-affinity header。专用客户端现在仅对准确的 `opencode-go` 提供商及 HTTPS `opencode.ai:443` 源站，在空上下文中以全新单次标识调用官方宿主 affinity helper。不继承父/根会话标识或任意 header。已配置的 `/inference/go/openai/v1` 与元数据 `/zen/go/v1` 路径均保留准确目标检查。其他源站、相似域名及其他提供商不会获得此 header。所选离线测试现为 247 项宿主及 109 项消费者测试。
 
 一次明确获授权的合成请求通过官方凭据解析器及本传输路径访问 `https://opencode.ai/inference/go/openai/v1`，只请求 `deepseek-v4.1-flash`。请求以 `ConnectError` 失败，没有 HTTP 状态或模型响应。是否送达未确认；未重试、fallback 或改用其他路由。`config.yaml` 未变；官方解析器可能维护凭据元数据，不能据此声称整个 profile 未变。未使用原生激活、worker 启动或 Gateway。**真实 worker/模型验收仍未完成。**
 
@@ -87,6 +97,8 @@ git -C "$COPY" apply --index "$ARTIFACT/text-worker-prototype.patch"
 [运行器](run_tests.py)先验证准确基线、已暂存补丁字节和消费者/测试哈希，再调用宿主标准测试运行器。不应用补丁、不安装包、不创建依赖环境、不配置个人配置档。`--check-only` 只检查上述条件，不执行宿主 Python。测试使用临时 home 与 HTTP mock transport，无监听器、真实模型/提供商请求或凭据。消费者测试运行真实原生命令授权、轮次准入、SQLite 任务存储、宿主生命周期、专用 HTTP 请求序列化及官方响应解析。
 
 普通项目检查器仅验证工件完整性，继续针对**未修改的干净宿主**进行契约测试。准确提交的项目 CI 不是该宿主提案的上游 CI，也不是真实模型验收。隔离实验是单独选定的测试范围，不是全量上游测试。没有重试曾被拒绝的 Gateway socket 测试。
+
+扩大后的受影响宿主回归覆盖 14 个文件：**422 通过、1 失败、0 跳过**。同一数据库路径断言在未修改基线上也失败，原因是本环境 `/var/tmp` 指向 `/tmp`，而官方 runner 使用 `/var/tmp`；未改源码或断言掩盖失败。上述可重现所选工件测试为 356 项通过。两条测试通道都不是完整上游套件，后者还包含不可用或已禁止的真实传输场景。
 
 ## 剩余发布门槛
 

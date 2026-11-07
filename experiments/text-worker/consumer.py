@@ -11,12 +11,11 @@ import time
 from dataclasses import dataclass
 from uuid import uuid4
 
-from personal_agent import session_task_tools as admission
-from personal_agent.session_task_tools import SessionTaskTools
-from personal_agent.task_cli import current_profile_home, open_task_store
-from personal_agent.task_focus import task_context
-from personal_agent.tasks import TaskError
-
+from .personal_agent import session_task_tools as admission
+from .personal_agent.session_task_tools import SessionTaskTools
+from .personal_agent.task_cli import current_profile_home, open_task_store
+from .personal_agent.task_focus import task_context
+from .personal_agent.tasks import TaskError
 from .worker_ledger import Ledger, terminal_diagnostic
 from .worker_presentation import render_worker_reply
 

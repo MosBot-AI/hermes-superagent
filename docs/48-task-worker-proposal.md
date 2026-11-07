@@ -8,6 +8,10 @@ The [review-only text-worker bundle](../experiments/text-worker/README.md) conne
 
 The consumer's fixed flow is task selection → short-lived one-task grant → real primary turn admission → immutable task snapshot → text worker → draft with revision/staleness metadata. It never marks a task complete or interprets returned instructions as authority. There is no general worker tool execution.
 
+## Host adoption and real package loading
+
+The host proposal now uses Hermes' canonical consent-only `llm.text_worker` capability in addition to the existing exact route opt-in. Context probing and text lifecycle handles bind to the originating plugin profile, preventing cross-profile borrowing. General delegation behavior stays unchanged. The consumer's repository-root import dependency is fixed; a cold isolated process now loads only the copied plugin package and completes the offline task-to-draft/reload flow. This does not claim a live installation. See the [host integration contract](../experiments/text-worker/README.md#native-host-consent-and-package-boundary) for the concrete adoption sequence and remaining gates.
+
 ## Operator-facing workbench
 
 The native `/personal-plan-worker` command now supports `list [--after KEY]`, `status KEY`, `draft KEY` and `stop KEY`. Output defaults to readable text; leading `--json` preserves structured responses. Lists show ten scoped metadata records at a time, never task text or draft content. `receipt_saved` means a worker receipt exists, not that the task was performed.
@@ -34,7 +38,7 @@ The experiment now preserves a bounded fixed failure category and local callback
 
 ## Real provider and installation checks
 
-The dedicated transport now supplies OpenCode Go's required affinity header via the official helper, with a fresh one-shot identifier rather than inherited parent/root context. It is restricted to the exact provider and HTTPS `opencode.ai:443` origin, without weakening target checks, redirects or fallback restrictions. The selected offline lane has 144 host and 107 consumer tests.
+The dedicated transport now supplies OpenCode Go's required affinity header via the official helper, with a fresh one-shot identifier rather than inherited parent/root context. It is restricted to the exact provider and HTTPS `opencode.ai:443` origin, without weakening target checks, redirects or fallback restrictions. The selected offline lane has 247 host and 109 consumer tests.
 
 The authorized one-shot synthetic DeepSeek transport probe failed with `ConnectError`; there was no HTTP status or model response. Delivery is unconfirmed, and it was not retried. No Gateway or native activation was involved. A separate official production-repository installation in a fresh offline profile was refused by the unchanged scanner (CAUTION, 50 findings); the plugin remained absent. Neither attempt is a passed acceptance gate. See the [bundle](../experiments/text-worker/README.md#provider-compatibility-and-actual-acceptance-attempt) for exact scope and limitations.
 

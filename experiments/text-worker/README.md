@@ -8,6 +8,16 @@ This is an isolated host proposal plus a concrete experimental task consumer. It
 
 The [manifest](manifest.json) records the exact patch, source hashes, selected verification and limitations. The [host patch](text-worker-prototype.patch) retains the upstream [MIT license](LICENSE.hermes-agent). Distribution on this project's feature branch is not an upstream release.
 
+## Native host consent and package boundary
+
+The proposal now registers a **consent-only `llm.text_worker` capability** in Hermes' existing capability registry. An experimental plugin must declare it for the ordinary host consent UI. Its grant lives at `plugins.entries.<id>.granted_capabilities`; neither a legacy `allow_*` flag nor merely enabling `text_workers` grants it. The host never auto-grants it. Launch and fresh model-tool disclosure require both this current grant and the exact configured provider/model/base URL opt-in, read from one configuration snapshot.
+
+`PluginContext.has_capability("llm.text_worker")` reads the originating plugin manager's profile. The text lifecycle service is bound to that same canonical profile home. Keeping a context from profile A and switching to profile B cannot borrow B's grant or handle, even with the same plugin ID and model. Revocation blocks subsequent admission/send/model-tool disclosure checks; it cannot retract already sent data, past parent history or billing. Ordinary `launch()` behavior and other plugin capabilities are unchanged.
+
+The consumer and ledger now import their sibling `personal_agent` package relatively, rather than accidentally depending on the development repository's `PYTHONPATH`. A cold isolated `python -I` test blocks global `personal_agent` imports and exercises native package discovery, task capture, explicit grant, the proposed host request through a mock HTTP transport, saved draft and reload. Module origins and the shared package's error identity are checked. This fixes a real package-loading defect; it is still **offline installed-shaped testing, not official installation or live Gateway acceptance**.
+
+For a supported plugin, the adoption path is: review/release this host capability contract → package the experimental consumer with its production sibling modules and declare the capability → separately approve installation/host consent and exact route → grant one task → run real acceptance. The shipped production manifest and entrypoint still do not declare or load the worker. No package was installed, no upstream change was submitted, and no DNS/proxy/TLS workaround was added.
+
 ## The narrow useful flow
 
 The [experimental consumer](consumer.py) connects real local tasks to the proposed `ctx.subagent_lifecycle.launch_text` API:
@@ -60,7 +70,7 @@ These are local observations, not proof of provider execution, delivery, billing
 
 ## Provider compatibility and actual acceptance attempt
 
-OpenCode Go requires a session-affinity header. For the exact `opencode-go` provider and HTTPS `opencode.ai:443` origin only, the dedicated client now calls the official host affinity helper with a fresh one-shot identifier in an empty context. It does not inherit the parent/root session identifier or arbitrary headers. Both the configured `/inference/go/openai/v1` path and metadata `/zen/go/v1` path retain exact-target checks. Foreign origins, lookalike hosts and other providers do not receive this header. The selected offline lane now has 144 host and 107 consumer tests.
+OpenCode Go requires a session-affinity header. For the exact `opencode-go` provider and HTTPS `opencode.ai:443` origin only, the dedicated client now calls the official host affinity helper with a fresh one-shot identifier in an empty context. It does not inherit the parent/root session identifier or arbitrary headers. Both the configured `/inference/go/openai/v1` path and metadata `/zen/go/v1` path retain exact-target checks. Foreign origins, lookalike hosts and other providers do not receive this header. The selected offline lane now has 247 host and 109 consumer tests.
 
 One explicitly authorized synthetic request used the official credential resolver and this transport at `https://opencode.ai/inference/go/openai/v1`, requesting only `deepseek-v4.1-flash`. It failed with `ConnectError` before an HTTP status or model response was available. Delivery is unconfirmed; no retry, fallback or alternative route was attempted. `config.yaml` remained unchanged; the official resolver can maintain credential metadata, so this is not a claim that the whole profile was unchanged. No native activation, worker launch or Gateway was involved. **Live worker/model acceptance is still open.**
 
@@ -87,6 +97,8 @@ git -C "$COPY" apply --index "$ARTIFACT/text-worker-prototype.patch"
 The [runner](run_tests.py) verifies exact base, staged patch bytes and consumer/test hashes before invoking the host's canonical test runner. It does not apply patches, install packages, provision an environment or configure a personal profile. `--check-only` validates those guards without executing host Python. The test lane uses temporary homes and HTTP mock transports, with no listeners, real model/provider calls or credentials. The concrete consumer tests run the real native command authorization, turn admission, SQLite task store, host lifecycle, dedicated HTTP request serialization and official response parsing.
 
 The ordinary project checker tests artifact integrity only and continues testing the **clean unmodified host**. Exact-commit project CI is not the proposed host's upstream CI, nor a live-model acceptance result. The isolated experiment suite is a separate selected lane, not the full upstream suite. No previously denied Gateway socket test is retried.
+
+The broader affected-host regression covered 14 files: **422 passed, 1 failed, 0 skipped**. The same database-path assertion fails on the untouched baseline because this environment aliases `/var/tmp` to `/tmp` while the canonical runner uses `/var/tmp`. No source/assertion was changed to suppress it. The reproducible selected bundle above passes 356 tests; neither lane is the full upstream suite, which also includes unavailable or prohibited live transport coverage.
 
 ## Remaining release gates
 

@@ -1,5 +1,5 @@
 diff --git a/agent/subagent_lifecycle.py b/agent/subagent_lifecycle.py
-index 65865471..c8ec509d 100644
+index 65865471..a3274960 100644
 --- a/agent/subagent_lifecycle.py
 +++ b/agent/subagent_lifecycle.py
 @@ -144,6 +144,10 @@ class _Record:
@@ -22,14 +22,16 @@ index 65865471..c8ec509d 100644
  
  
  _REGISTRY = _Registry()
-@@ -271,8 +275,23 @@ class SubagentLifecycleService:
+@@ -271,8 +275,25 @@ class SubagentLifecycleService:
      completed results stay until process exit; ``reconnect`` reports that a serialized handle cannot
      reconnect after a restart instead of launching work again."""
  
 -    def __init__(self, parent_agent_resolver: Callable[[], Any]) -> None:
-+    def __init__(self, parent_agent_resolver: Callable[[], Any], *, plugin_id: str = "") -> None:
++    def __init__(self, parent_agent_resolver: Callable[[], Any], *, plugin_id: str = "", profile_home=None) -> None:
          self._parent_agent_resolver = parent_agent_resolver
 +        self._plugin_id = plugin_id
++        from hermes_constants import hermes_home_key
++        self._text_profile_home = str(hermes_home_key(profile_home))
 +
 +    def authorize_text_route(self, provider: str, model: str, parent_session_id: str) -> str:
 +        """Read-only current authorization; return an opaque route fingerprint, never credentials."""
@@ -47,7 +49,7 @@ index 65865471..c8ec509d 100644
  
      def launch(self, request: SubagentLaunchRequest | Mapping[str, Any]) -> SubagentHandle:
          parent = self._parent_agent_resolver()
-@@ -350,6 +369,11 @@ class SubagentLifecycleService:
+@@ -350,6 +371,11 @@ class SubagentLifecycleService:
          with _REGISTRY.lock:
              if record.result is not None:
                  return SubagentCancelResult(False, already_terminal=True, state=record.state)
@@ -59,7 +61,7 @@ index 65865471..c8ec509d 100644
              agent = record.agent
              record.state = SubagentState.CANCEL_REQUESTED
              record.updated_at = time.time()
-@@ -365,6 +389,13 @@ class SubagentLifecycleService:
+@@ -365,6 +391,13 @@ class SubagentLifecycleService:
          record = self._record(handle)
          if record is None:
              return SubagentResult(handle, SubagentState.UNKNOWN, False, error_classification="UNKNOWN_HANDLE")
@@ -73,7 +75,7 @@ index 65865471..c8ec509d 100644
          with _REGISTRY.lock:
              return record.result or SubagentResult(record.handle, record.state, False, error_classification="NOT_READY")
  
-@@ -383,6 +414,8 @@ class SubagentLifecycleService:
+@@ -383,6 +416,8 @@ class SubagentLifecycleService:
          with _REGISTRY.lock:
              if record.result is not None:
                  return False
@@ -82,7 +84,7 @@ index 65865471..c8ec509d 100644
          from tools.delegate_tool_registry import steer_subagent
          return steer_subagent(record.handle.subagent_id, text.strip())
  
-@@ -397,7 +430,12 @@ class SubagentLifecycleService:
+@@ -397,7 +432,14 @@ class SubagentLifecycleService:
          if _session_id_of(self._parent_agent_resolver()) != handle.parent_session_id:
              return None
          with _REGISTRY.lock:
@@ -90,13 +92,15 @@ index 65865471..c8ec509d 100644
 +            record = _REGISTRY.records.get(handle.subagent_id)
 +            if record is not None and record.text_owner is not None:
 +                from hermes_constants import hermes_home_key
-+                if record.text_owner != (str(hermes_home_key()), self._plugin_id) or record.handle != handle:
++                if (str(hermes_home_key()) != self._text_profile_home
++                        or record.text_owner != (self._text_profile_home, self._plugin_id)
++                        or record.handle != handle):
 +                    return None
 +            return record
  
      @staticmethod
      def _cleanup_locked() -> None:
-@@ -408,9 +446,10 @@ class SubagentLifecycleService:
+@@ -408,9 +450,10 @@ class SubagentLifecycleService:
              if record.result is not None and record.completed_at is not None and record.completed_at < cutoff
          ]
          for subagent_id in expired:
@@ -109,7 +113,7 @@ index 65865471..c8ec509d 100644
  
      def _run(self, record: _Record, goal: str, parent: Any) -> None:
          with _REGISTRY.lock:
-@@ -470,3 +509,6 @@ class SubagentLifecycleService:
+@@ -470,3 +513,6 @@ class SubagentLifecycleService:
          enabled = getattr(parent, "enabled_toolsets", None)
          if enabled is not None and not set(request.allowed_toolsets).issubset(set(enabled)):
              raise SubagentLifecycleError("Requested toolsets would broaden parent permissions.")
@@ -118,10 +122,10 @@ index 65865471..c8ec509d 100644
 +from agent.text_subagent import TextSubagentRequest
 diff --git a/agent/text_subagent.py b/agent/text_subagent.py
 new file mode 100644
-index 00000000..838bccaa
+index 00000000..565b3db2
 --- /dev/null
 +++ b/agent/text_subagent.py
-@@ -0,0 +1,392 @@
+@@ -0,0 +1,396 @@
 +"""Opt-in bounded text workers. No credential resolver, agent loop, or tool executor.
 +
 +Trusted in-process plugins/middleware are not sandboxed. Cancellation and timeout
@@ -308,10 +312,13 @@ index 00000000..838bccaa
 +
 +def _authorize(service, parent, request, owner):
 +    from hermes_cli.config import load_config_readonly
++    from hermes_cli.plugin_capabilities import plugin_capability_granted
 +    from hermes_constants import hermes_home_key
 +    from openai import OpenAI
 +
-+    if parent is None or not service._plugin_id or str(hermes_home_key()) != owner[0]:
++    if (parent is None or not service._plugin_id
++            or owner != (service._text_profile_home, service._plugin_id)
++            or str(hermes_home_key()) != service._text_profile_home):
 +        _refuse()
 +    provider, model, base_url, mode, client, identity = _route(parent)
 +    if (provider not in _PROVIDERS or provider != request.provider or model != request.model
@@ -334,7 +341,10 @@ index 00000000..838bccaa
 +    if not session or request.parent_session_id not in (None, session):
 +        _refuse()
 +    try:
-+        cfg = load_config_readonly()["plugins"]["entries"][service._plugin_id]["text_workers"]
++        snapshot = load_config_readonly()
++        if not plugin_capability_granted(service._plugin_id, "llm.text_worker", config=snapshot):
++            _refuse()
++        cfg = snapshot["plugins"]["entries"][service._plugin_id]["text_workers"]
 +        route = {"provider": provider, "model": model, "base_url": base_url}
 +        if cfg.get("enabled") is not True or route not in cfg.get("routes", []):
 +            _refuse()
@@ -352,7 +362,6 @@ index 00000000..838bccaa
 +
 +def authorize_text_route(service, provider, model, parent_session_id):
 +    """Disclosure gate for persisted drafts; no client construction or request."""
-+    from hermes_constants import hermes_home_key
 +
 +    request = _request(TextSubagentRequest(
 +        goal="Validate text-worker route", provider=provider, model=model, parent_session_id=parent_session_id,
@@ -360,7 +369,7 @@ index 00000000..838bccaa
 +    if type(parent_session_id) is not str or not parent_session_id.strip():
 +        _refuse()
 +    _, route = _authorize(service, service._parent_agent_resolver(), request,
-+                          (str(hermes_home_key()), service._plugin_id))
++                          (service._text_profile_home, service._plugin_id))
 +    return _route_fingerprint(route)
 +
 +
@@ -368,11 +377,10 @@ index 00000000..838bccaa
 +    from agent.subagent_lifecycle import (
 +        PUBLIC_CONTRACT_VERSION, SubagentHandle, SubagentState, _Record, _REGISTRY, _EXECUTOR,
 +    )
-+    from hermes_constants import hermes_home_key
 +
 +    request = _request(raw)
 +    parent = service._parent_agent_resolver()
-+    owner = (str(hermes_home_key()), service._plugin_id)
++    owner = (service._text_profile_home, service._plugin_id)
 +    session, route = _authorize(service, parent, request, owner)
 +    created = time.time()
 +    deadline = time.monotonic() + request.timeout_seconds
@@ -549,25 +557,88 @@ index 6efd1a77..f40a776a 100644
 +    if strict_single_use and repeated_call:
 +        raise RuntimeError("Repeated downstream execution refused.")
 +    return result
+diff --git a/hermes_cli/plugin_capabilities.py b/hermes_cli/plugin_capabilities.py
+index b10c8673..57050967 100644
+--- a/hermes_cli/plugin_capabilities.py
++++ b/hermes_cli/plugin_capabilities.py
+@@ -44,6 +44,9 @@ _CAPABILITY_ROWS = (
+     ("llm.task_override", ("llm", "allow_task_override"),
+      "Route its LLM calls through the host's built-in auxiliary "
+      "task lanes"),
++    ("llm.text_worker", (),
++     "Send supplied task text to the active approved provider/model, spending tokens; "
++     "no tools or session history are supplied."),
+     ("llm.side_question", (),
+      "Ask your agent a short question after each turn. It sees the "
+      "whole session, including memory, and spends your main model's tokens."),
 diff --git a/hermes_cli/plugins.py b/hermes_cli/plugins.py
-index 58aa4ba4..7eaedf6e 100644
+index 58aa4ba4..2241362d 100644
 --- a/hermes_cli/plugins.py
 +++ b/hermes_cli/plugins.py
-@@ -389,7 +389,7 @@ class PluginContext(PluginCapabilityCtxMixin):
-         """Plugin-safe subagent lifecycle service: serializable handles and immutable snapshots,
-         never a live agent or private registry."""
-         from agent.subagent_lifecycle import SubagentLifecycleService, get_active_subagent_parent
--        return SubagentLifecycleService(get_active_subagent_parent)
-+        return SubagentLifecycleService(get_active_subagent_parent, plugin_id=self.plugin_id)
+@@ -384,13 +384,6 @@ class PluginContext(PluginCapabilityCtxMixin):
+             self._llm = PluginLlm(plugin_id=self.plugin_id)
+         return self._llm
  
+-    @cached_property
+-    def subagent_lifecycle(self) -> Any:
+-        """Plugin-safe subagent lifecycle service: serializable handles and immutable snapshots,
+-        never a live agent or private registry."""
+-        from agent.subagent_lifecycle import SubagentLifecycleService, get_active_subagent_parent
+-        return SubagentLifecycleService(get_active_subagent_parent)
+-
      @cached_property
      def delegation_backends(self) -> Any:
+         """``agent.delegation_backends.DelegationBackends``: list delegation backends and save one, optionally
+diff --git a/hermes_cli/plugins_capability_ctx.py b/hermes_cli/plugins_capability_ctx.py
+index 8aa55ff3..5d45b30b 100644
+--- a/hermes_cli/plugins_capability_ctx.py
++++ b/hermes_cli/plugins_capability_ctx.py
+@@ -4,7 +4,8 @@
+ from __future__ import annotations
+ 
+ import logging
+-from typing import Optional
++from functools import cached_property
++from typing import Any, Optional
+ 
+ from hermes_cli.plugin_capabilities import plugin_capability_granted
+ from hermes_cli.plugins_loader import _plugin_home_scope
+@@ -15,6 +16,14 @@ logger = logging.getLogger(__name__)
+ class PluginCapabilityCtxMixin:
+     """Mixed into :class:`hermes_cli.plugins.PluginContext` (``manifest``, ``_manager``, ``plugin_id``)."""
+ 
++    @cached_property
++    def subagent_lifecycle(self) -> Any:
++        """Plugin-safe subagent lifecycle service: serializable handles and immutable snapshots,
++        never a live agent or private registry."""
++        from agent.subagent_lifecycle import SubagentLifecycleService, get_active_subagent_parent
++        return SubagentLifecycleService(get_active_subagent_parent, plugin_id=self.plugin_id,
++                                        profile_home=self._manager.home_path)
++
+     # -- capability probing (#64228) -----------------------------------------
+     def has_capability(self, capability: str) -> bool:
+         """True when *capability* is live for this plugin (probe, then degrade gracefully). Bundled
+@@ -22,6 +31,14 @@ class PluginCapabilityCtxMixin:
+         ``allow_*`` key decides. Unknown ids / unreadable consent -> False (fail closed)."""
+         if self.manifest.source == "bundled" and capability == "tools.override":
+             return True
++        if capability == "llm.text_worker":
++            try:
++                from hermes_cli.config import load_config_readonly
++                with _plugin_home_scope(self._manager.home_path):
++                    cfg = load_config_readonly()
++            except Exception:  # health: allow BLE001 -- unreadable capability consent fails closed
++                return False
++            return plugin_capability_granted(self.plugin_id, capability, config=cfg)
+         return plugin_capability_granted(self.plugin_id, capability)
+ 
+     def side_question(self, token: str, prompt: str, *, timeout: float = 15.0) -> Optional[str]:
 diff --git a/tests/agent/test_text_subagent.py b/tests/agent/test_text_subagent.py
 new file mode 100644
-index 00000000..3f4a4a91
+index 00000000..904f1f1c
 --- /dev/null
 +++ b/tests/agent/test_text_subagent.py
-@@ -0,0 +1,866 @@
+@@ -0,0 +1,950 @@
 +"""Text-worker proposal: real SDK/transport/middleware, in-memory HTTP only."""
 +import dataclasses
 +import json
@@ -593,7 +664,7 @@ index 00000000..3f4a4a91
 +    home = get_hermes_home()
 +    home.mkdir(exist_ok=True, parents=True)
 +    route = {"provider": "opencode-go", "model": "deepseek-v4.1-flash", "base_url": "https://text.test/v1"}
-+    config = {"plugins": {"entries": {"planner": {"text_workers": {"enabled": True, "routes": [route]}}}}}
++    config = {"plugins": {"entries": {"planner": {"granted_capabilities": ["llm.text_worker"], "text_workers": {"enabled": True, "routes": [route]}}}}}
 +    def save():
 +        (home / "config.yaml").write_text(json.dumps(config))
 +    save()
@@ -1434,3 +1505,134 @@ index 00000000..3f4a4a91
 +        pass
 +    inner.__cause__ = Unrecognized("PRIVATE")
 +    assert _transport_failure(outer) == "TEXT_WORKER_FAILED"
++
++
++@pytest.mark.parametrize("grant", [None, [], ["llm.side_question"], "llm.text_worker", True])
++def test_text_worker_capability_required_before_client_or_disclosure(world, grant):
++    entry = world.config["plugins"]["entries"]["planner"]
++    entry["granted_capabilities"] = grant
++    entry["llm"] = {"allow_text_worker": True}  # not a legacy capability
++    world.save()
++    with pytest.raises(SubagentLifecycleError):
++        world.service.launch_text(request())
++    with pytest.raises(SubagentLifecycleError):
++        world.service.authorize_text_route(world.route["provider"], world.route["model"], "parent")
++    assert not world.children and not world.calls
++
++
++def test_text_worker_capability_revoke_before_send(world, monkeypatch):
++    from agent import text_subagent
++    original = text_subagent._new_http_client
++    def revoke(timeout):
++        world.config["plugins"]["entries"]["planner"]["granted_capabilities"] = []
++        world.save()
++        return original(timeout)
++    monkeypatch.setattr(text_subagent, "_new_http_client", revoke)
++    handle, hidden = finish(world)
++    assert not hidden.ready and hidden.summary is None
++    # Restore only to inspect the already-failed receipt; no launch is repeated.
++    world.config["plugins"]["entries"]["planner"]["granted_capabilities"] = ["llm.text_worker"]
++    world.save()
++    result = world.service.result(handle)
++    assert result.terminal_state == SubagentState.FAILED and result.summary is None
++    assert result.usage_metadata["api_calls"] == 0 and not world.calls
++
++
++def test_text_worker_capability_revoke_hides_completed_result(world):
++    handle, result = finish(world)
++    assert result.summary == "A planning draft"
++    world.config["plugins"]["entries"]["planner"]["granted_capabilities"] = []
++    world.save()
++    hidden = world.service.result(handle)
++    assert hidden.summary is None and not hidden.ready
++    assert hidden.error_classification == "TEXT_ROUTE_UNAVAILABLE"
++    assert len(world.calls) == 1
++
++
++def test_text_worker_authorization_uses_one_readonly_snapshot(world, monkeypatch):
++    import copy
++    from hermes_cli import config, plugin_capabilities
++    snapshot = copy.deepcopy(world.config)
++    reads = []
++    checks = []
++    original = plugin_capabilities.plugin_capability_granted
++    def read():
++        reads.append(1)
++        return snapshot
++    def check(plugin_id, capability, config=None):
++        checks.append(config)
++        return original(plugin_id, capability, config=config)
++    monkeypatch.setattr(config, "load_config_readonly", read)
++    monkeypatch.setattr(plugin_capabilities, "plugin_capability_granted", check)
++    stamp = world.service.authorize_text_route(world.route["provider"], world.route["model"], "parent")
++    assert len(stamp) == 64 and reads == [1] and checks == [snapshot]
++    assert checks[0] is snapshot
++    assert not world.children and not world.calls
++
++
++def test_held_plugin_context_cannot_borrow_another_profiles_grant(world, monkeypatch, tmp_path):
++    foreign = tmp_path / "other-profile"
++    foreign.mkdir()
++    (foreign / "config.yaml").write_text(json.dumps(world.config))
++    original_home = world.home
++    world.config["plugins"]["entries"]["planner"]["granted_capabilities"] = []
++    world.save()
++    monkeypatch.setenv("HERMES_HOME", str(foreign))
++    assert not world.ctx.has_capability("llm.text_worker")
++    # Obtain a fresh service from the held A context while B is active.
++    held = world.ctx.subagent_lifecycle
++    with pytest.raises(SubagentLifecycleError):
++        held.launch_text(request())
++    with pytest.raises(SubagentLifecycleError):
++        held.authorize_text_route(world.route["provider"], world.route["model"], "parent")
++    assert not world.children and not world.calls
++    monkeypatch.setenv("HERMES_HOME", str(original_home))
++    with pytest.raises(SubagentLifecycleError):
++        held.launch_text(request())  # A's consent is still revoked
+diff --git a/tests/hermes_cli/test_plugin_capabilities.py b/tests/hermes_cli/test_plugin_capabilities.py
+index cfee0a0d..55e12753 100644
+--- a/tests/hermes_cli/test_plugin_capabilities.py
++++ b/tests/hermes_cli/test_plugin_capabilities.py
+@@ -45,7 +45,7 @@ class TestRegistry:
+     def test_every_capability_has_legacy_gate(self):
+         # llm.side_question postdates the consent flow: declare + consent is its only gate.
+         for spec in CAPABILITY_REGISTRY.values():
+-            assert bool(spec.legacy_path) is (spec.id != "llm.side_question"), spec.id
++            assert bool(spec.legacy_path) is (spec.id not in {"llm.side_question", "llm.text_worker"}), spec.id
+             assert spec.description
+ 
+ 
+@@ -433,3 +433,33 @@ class TestConsentFlow:
+         )
+         assert granted is True
+         console.input.assert_not_called()
++
++
++def test_text_worker_manifest_consent_and_probe(hermes_home, tmp_path):
++    from hermes_cli.plugins import PluginContext, PluginManager, parse_manifest_file
++    plugin_dir = tmp_path / "textplug"
++    plugin_dir.mkdir()
++    path = plugin_dir / "plugin.yaml"
++    path.write_text("name: textplug\nversion: '1.0'\ncapabilities:\n  - llm.text_worker\n")
++    manifest = parse_manifest_file(path, plugin_dir, "user", "")
++    assert manifest.capabilities == ["llm.text_worker"]
++    ctx = PluginContext(manifest, PluginManager())
++    assert not ctx.has_capability("llm.text_worker")
++    assert pending_capabilities("textplug", manifest.capabilities) == ["llm.text_worker"]
++    record_consent("textplug", manifest.capabilities, manifest.capabilities)
++    assert ctx.has_capability("llm.text_worker")
++    assert pending_capabilities("textplug", manifest.capabilities) == []
++    assert CAPABILITY_REGISTRY["llm.text_worker"].legacy_path == ()
++
++
++@pytest.mark.parametrize("answer,interactive,expected", [("y", True, True), ("n", True, False), ("y", False, False)])
++def test_text_worker_standard_consent_flow(hermes_home, answer, interactive, expected):
++    from hermes_cli.plugins_cmd import _run_capability_consent
++    console = MagicMock()
++    console.input.return_value = answer
++    with patch("sys.stdin") as stdin, patch("sys.stdout") as stdout:
++        stdin.isatty.return_value = interactive
++        stdout.isatty.return_value = interactive
++        result = _run_capability_consent(console, "textplug", ["llm.text_worker"], context="install")
++    assert result is expected
++    assert plugin_capability_granted("textplug", "llm.text_worker") is expected

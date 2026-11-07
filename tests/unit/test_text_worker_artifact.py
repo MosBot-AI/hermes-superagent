@@ -12,7 +12,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 ARTIFACT = ROOT / "experiments/text-worker"
-SHA = "7b2b193b0142d998f2111577366e651f12fc4a08b02c08aee13fb4562b5315aa"
+SHA = "786df9797425f189ef0f242f406a1a310faf866b7e0a14c658991a2b4fc02572"
 BASE = "90d6b98fd86d20981ee06ddd5b7d93e4320f26a4"
 
 

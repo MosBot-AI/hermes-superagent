@@ -33,12 +33,15 @@ def host(native, monkeypatch):  # noqa: F811
     config = json.loads((home / "config.yaml").read_text())
     entry = config["plugins"]["entries"][PLUGIN_ID]
     entry["settings"].update(local_model_tools=True, experimental_text_worker=True)
+    entry["granted_capabilities"] = ["llm.text_worker"]
     entry["text_workers"] = {
         "enabled": True,
         "routes": [{"provider": PROVIDER, "model": MODEL, "base_url": BASE_URL}],
     }
     (home / "config.yaml").write_text(json.dumps(config))
     plugin = home / "plugins" / PLUGIN_ID
+    with (plugin / "plugin.yaml").open("a") as file:
+        file.write("\ncapabilities:\n  - llm.text_worker\n")
     shutil.copy2(HERE / "consumer.py", plugin / "worker_consumer.py")
     shutil.copy2(HERE / "worker_ledger.py", plugin / "worker_ledger.py")
     shutil.copy2(HERE / "worker_presentation.py", plugin / "worker_presentation.py")
@@ -496,11 +499,13 @@ def test_crash_after_durable_claim_before_submission_never_rearms(host):
     key = (host.ref.session_id, host.live.route, "plan-1")
     row = ledger.get(key)
     code = """
-import importlib.util, os, sys
-spec=importlib.util.spec_from_file_location("isolated_ledger", sys.argv[1])
-module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+import os, sys
 from pathlib import Path
-ledger=module.Ledger(Path(sys.argv[2]), sys.argv[3])
+from hermes_cli.plugins import get_plugin_manager
+manager = get_plugin_manager()
+manager.discover_and_load()
+consumer = manager._plugin_commands["personal-plan-worker"]["handler"].__self__
+ledger=type(consumer.ledger)(Path(sys.argv[2]), sys.argv[3])
 assert ledger.claim(tuple(sys.argv[4:7]),sys.argv[7],sys.argv[8])[1]
 os._exit(23)
 """
@@ -535,7 +540,9 @@ def test_durable_capacity_refuses_without_evicting_after_new_owner(host):
     row = ledger.get(key)
     for n in range(63):
         ledger.authorize((key[0], key[1], f"extra-{n}"), row["task_id"], 1, row["context_hash"], 0)
-    from personal_agent.tasks import TaskError
+    import importlib
+
+    TaskError = importlib.import_module(type(host.consumer.ledger).__module__).TaskError
 
     other = fresh_consumer(host)
     with pytest.raises(TaskError, match="grant_capacity_reached"):
@@ -646,7 +653,9 @@ def test_foreign_ledger_schema_is_refused_without_adoption(host):
 
 
 def test_profile_global_key_cannot_cross_session_or_route(host):
-    from personal_agent.tasks import TaskError
+    import importlib
+
+    TaskError = importlib.import_module(type(host.consumer.ledger).__module__).TaskError
 
     allow(host)
     ledger = host.consumer.ledger
@@ -662,7 +671,9 @@ def test_profile_global_key_cannot_cross_session_or_route(host):
 
 
 def test_invalid_terminal_receipt_rolls_back_to_consumed_claim(host):
-    from personal_agent.tasks import TaskError
+    import importlib
+
+    TaskError = importlib.import_module(type(host.consumer.ledger).__module__).TaskError
 
     allow(host)
     ledger = host.consumer.ledger
@@ -1037,20 +1048,24 @@ def test_safe_failure_diagnostic_persists_and_reloads_without_draft(host, monkey
     from agent.subagent_lifecycle import SubagentState
 
     allow(host)
-    direct(host, host.consumer)
-    wait(host)
     original = host.consumer.service.result
 
     def failed(handle):
+        result = original(handle)
+        if not result.ready:
+            return result
         return replace(
-            original(handle),
+            result,
             terminal_state=SubagentState.FAILED,
             summary="HOSTILE failed draft",
             error_classification=code,
             usage_metadata={"api_calls": 1},
         )
 
+    # Patch before launch: its first poll can already observe a terminal result.
     monkeypatch.setattr(host.consumer.service, "result", failed)
+    direct(host, host.consumer)
+    wait(host)
     result = direct(host, host.consumer, "result")
     assert result["status"] == "ok", result
     data = result["data"]
@@ -1092,16 +1107,18 @@ def test_safe_failure_diagnostic_persists_and_reloads_without_draft(host, monkey
 @pytest.mark.parametrize("count", [0, 1, None, True, False, -1, 2, "1", [], 1.0])
 def test_success_diagnostic_normalizes_local_callback_count(host, monkeypatch, count):
     allow(host)
+    original = host.consumer.service.result
+
+    def counted(handle):
+        result = original(handle)
+        if not result.ready:
+            return result
+        return replace(result, error_classification="HOSTILE", usage_metadata={"api_calls": count})
+
+    # Install before the first poll, preserving pending results verbatim.
+    monkeypatch.setattr(host.consumer.service, "result", counted)
     direct(host, host.consumer)
     wait(host)
-    original = host.consumer.service.result
-    monkeypatch.setattr(
-        host.consumer.service,
-        "result",
-        lambda handle: replace(
-            original(handle), error_classification="HOSTILE", usage_metadata={"api_calls": count}
-        ),
-    )
     result = direct(host, host.consumer, "result")["data"]
     assert result["diagnostic"] == {
         "code": None,
@@ -1203,3 +1220,94 @@ def test_diagnostic_state_alignment_and_non_dict_usage(host, state, code, expect
             assert not module.valid_diagnostic(other, diagnostic)
         if other == "CANCELLED" and state != other:
             assert not module.valid_diagnostic(other, diagnostic)
+
+
+def test_installed_module_origins_share_task_error_identity(host):
+    import importlib
+
+    consumer = importlib.import_module(type(host.consumer).__module__)
+    ledger = importlib.import_module(type(host.consumer.ledger).__module__)
+    package = consumer.__package__
+    tasks = importlib.import_module(package + ".personal_agent.tasks")
+    admission = importlib.import_module(package + ".personal_agent.session_task_tools")
+    plugin_root = host.home / "plugins" / PLUGIN_ID
+    for module in (consumer, ledger, tasks, admission):
+        assert Path(module.__file__).resolve().is_relative_to(plugin_root.resolve())
+    assert consumer.TaskError is ledger.TaskError is tasks.TaskError
+    assert consumer.admission is admission
+    assert host.manager._plugins[PLUGIN_ID].manifest.capabilities == ["llm.text_worker"]
+
+
+def test_installed_shaped_flow_without_repository_imports(tmp_path):
+    """Copy test plumbing, never add the source repository to the child's import path."""
+    import os
+    import subprocess
+    import sys
+
+    import hermes_cli.plugins
+
+    source = HERE.parents[1]
+    harness = tmp_path / "standalone-harness"
+    harness.mkdir()
+    for name in ("test_local_task_cli", "test_local_conversation_tasks", "test_session_task_tools"):
+        text = (source / "tests/contracts" / (name + ".py")).read_text()
+        if name == "test_local_task_cli":
+            # The source tree is a copy input, not a Python import location.
+            text = text.replace(
+                "PLUGIN_ROOT = Path(__file__).resolve().parents[2]",
+                "PLUGIN_ROOT = Path(" + repr(str(source)) + ")",
+            )
+        (harness / (name + ".py")).write_text(text)
+    for name in (
+        "test_task_worker.py",
+        "consumer.py",
+        "worker_ledger.py",
+        "worker_presentation.py",
+    ):
+        shutil.copy2(HERE / name, harness / name)
+    host_root = Path(hermes_cli.plugins.__file__).resolve().parents[1]
+    bootstrap = """
+import importlib.abc, pathlib, socket, sys
+host, harness, source = map(pathlib.Path, sys.argv[1:])
+assert not any(pathlib.Path(p or ".").resolve() == source for p in sys.path)
+sys.path[:0] = [str(host), str(harness)]
+class NoGlobalPersonalAgent(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname == "personal_agent" or fullname.startswith("personal_agent."):
+            raise AssertionError("Standalone plugin must not import global personal_agent")
+sys.meta_path.insert(0, NoGlobalPersonalAgent())
+def deny(*args, **kwargs):
+    raise AssertionError("No network or Gateway socket allowed")
+for name in ("connect", "connect_ex", "bind", "listen"):
+    setattr(socket.socket, name, deny)
+import pytest
+result = pytest.main([
+    str(harness / "test_task_worker.py"), "-q", "--tb=short", "-k",
+    "test_native_task_grant_to_real_host_worker_and_draft_without_task_mutation or "
+    "test_installed_module_origins_share_task_error_identity or "
+    "test_observed_draft_survives_plugin_reload"
+])
+assert "personal_agent" not in sys.modules
+assert not any(pathlib.Path(p or ".").resolve() == source for p in sys.path)
+raise SystemExit(result)
+"""
+    env = {
+        "PATH": os.environ.get("PATH", os.defpath),
+        "HOME": str(tmp_path / "isolated-home"),
+        "HERMES_HOME": str(tmp_path / "isolated-profile"),
+        "HERMES_RUNTIME_DIR": str(tmp_path / "isolated-runtime"),
+        "HERMES_ENABLE_PROJECT_PLUGINS": "0",
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+        "LANG": "C.UTF-8",
+        "TZ": "UTC",
+    }
+    completed = subprocess.run(
+        [sys.executable, "-I", "-c", bootstrap, str(host_root), str(harness), str(source)],
+        cwd=harness,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=90,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    assert "3 passed" in completed.stdout

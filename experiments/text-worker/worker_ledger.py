@@ -14,13 +14,13 @@ import sqlite3
 import time
 from contextlib import contextmanager
 
-from personal_agent import PLUGIN_ID
-from personal_agent.task_cli import (
+from .personal_agent import PLUGIN_ID
+from .personal_agent.task_cli import (
     _private_database_file,
     _private_storage_directory,
     current_profile_home,
 )
-from personal_agent.tasks import TaskError, validate_request
+from .personal_agent.tasks import TaskError, validate_request
 
 # Only these fixed strings may cross the result boundary into saved diagnostics.
 DIAGNOSTIC_EXPLANATIONS = {
