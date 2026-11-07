@@ -134,3 +134,7 @@ To try the local inbox, explicitly change only this plugin’s mode to `local_ta
 [MIT](LICENSE). The review-only voice and command-context experiments include limited upstream-derived patches and their licenses; the Hermes host itself is not vendored or modified by plugin installation. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for attribution and licensing.
 
 The [task-to-worker proposal](docs/48-task-worker-proposal.md) adds a review-only host patch and concrete experimental consumer for an explicitly authorized one-task planning draft. The isolated proposal now includes a dedicated no-redirect client, conservative durable draft/retry receipts and a readable native request workbench (list/status/saved draft/stop before submission). It does not enable production dispatch, tool execution, automatic recovery of uncertain provider outcomes or real-model acceptance.
+
+## Parked native Kanban handoff
+
+[Explicit preview/commit handoff](docs/52-parked-kanban-handoff.md) can park a local task on an explicitly named shared native board. It is default-off, creates no assignee or dispatch, and preserves uncertain outcomes without retry. Registration/status do not probe native storage; operation-time compatibility checks and live acceptance remain separate.

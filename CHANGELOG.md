@@ -6,6 +6,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ## Unreleased
 
+- Added default-off [parked native Kanban handoff](docs/52-parked-kanban-handoff.md): explicit board, preview/digest commit, durable single-use claim and bounded read-only reconciliation. No worker dispatch, storage initialization or live acceptance.
+
 ### Added
 
 - [Project task dependencies](docs/51-project-task-dependencies.md) now enforce explicit same-project prerequisites before starting or completing work, with a ready queue and fresh dependency snapshots in review/focus. Cancelled prerequisites remain blockers; no worker is launched and no native Kanban state is modified.

@@ -5,6 +5,7 @@ import json
 import re
 import sqlite3
 import unicodedata
+from contextlib import contextmanager
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
@@ -358,6 +359,28 @@ class TaskStore:
         if row is None:
             raise TaskError("not_found")
         return dependencies.metadata(self._connection, dict(zip(_COLUMNS, row, strict=True)))
+
+    @contextmanager
+    def snapshot_task(self, task_id: str):
+        """Hold a current source read snapshot for a separately confirmed handoff.
+
+        This own rollback-journal store keeps writers from committing a changed
+        task until the snapshot closes. No cross-database atomicity is claimed.
+        """
+        request = validate_request("get", {"task_id": task_id})
+        if not self._initialized:
+            raise TaskError("store_not_initialized")
+        if self._connection.in_transaction:
+            raise TaskError("connection_in_transaction")
+        try:
+            if self._connection.execute("PRAGMA journal_mode").fetchone()[0] != "delete":
+                raise TaskError("unsupported_source_journal")
+            self._connection.execute("BEGIN")
+            yield self._get(request["task_id"])
+        except sqlite3.Error as error:
+            raise _database_error(error) from None
+        finally:
+            self._rollback()
 
     def _capture(self, request: dict, now: str) -> dict:
         task_id = str(uuid4())

@@ -6,6 +6,8 @@
 
 ## 未发布
 
+- 新增默认关闭的[停放式原生 Kanban 交接](docs/52-parked-kanban-handoff-zh.md)：明确看板、预览/摘要提交、持久单次领取和有界只读核对。不派发 worker、不初始化存储，也不宣称真实验收。
+
 ### 新增
 
 - [项目任务依赖](docs/51-project-task-dependencies-zh.md)现可在开始/完成前执行明确的同项目先后约束，并在 ready 队列、review 和 focus 中提供新鲜依赖快照。取消前置仍会阻塞，不启动 worker 或修改原生 Kanban。

@@ -8,7 +8,7 @@ from .enforcement import build_enforcement_inventory
 from .identity import build_access_diagnostic
 from .routing_cli import RoutingInspector, setup_routing_cli
 from .routing_inspection import inspection_failure
-from .status import build_status
+from .status import build_status, validate_kanban_configuration
 from .task_cli import current_profile_home, run_tasks_cli, setup_tasks_cli
 from .voice_cli import run_voice_cli, setup_voice_cli
 
@@ -66,6 +66,8 @@ def _status_result(
     local_memory: bool = False,
     memory_model_tools: bool = False,
     memory_candidates: bool = False,
+    kanban_handoff: bool = False,
+    kanban_handoff_board: str = "",
 ) -> str:
     if not isinstance(args, dict) or args:
         return json.dumps(
@@ -83,6 +85,8 @@ def _status_result(
             local_memory=local_memory,
             memory_model_tools=memory_model_tools,
             memory_candidates=memory_candidates,
+            kanban_handoff=kanban_handoff,
+            kanban_handoff_board=kanban_handoff_board,
         ),
         ensure_ascii=False,
         sort_keys=True,
@@ -145,6 +149,11 @@ def register(ctx: PluginContext) -> None:
         raise ValueError("memory_candidates must be a boolean")
     if candidates_enabled and not memory_models_enabled:
         raise ValueError("memory_candidates requires memory_model_tools and local_memory")
+    handoff_enabled = ctx.get_config("kanban_handoff", False)
+    handoff_board = ctx.get_config("kanban_handoff_board", "")
+    validate_kanban_configuration(
+        ctx.get_config("mode", "read_only"), conversation_enabled, handoff_enabled, handoff_board
+    )
     bound_home = current_profile_home()
     routing_inspector = RoutingInspector(bound_home)
     ctx.on_unload(routing_inspector.close)
@@ -181,6 +190,9 @@ def register(ctx: PluginContext) -> None:
                 memory_candidates and not memory_model_tools
             ):
                 raise ValueError("invalid memory candidates configuration")
+            handoff = ctx.get_config("kanban_handoff", False)
+            board = ctx.get_config("kanban_handoff_board", "")
+            validate_kanban_configuration(mode, local_conversation, handoff, board)
             return _status_result(
                 args,
                 mode,
@@ -189,6 +201,8 @@ def register(ctx: PluginContext) -> None:
                 local_memory=local_memory,
                 memory_model_tools=memory_model_tools,
                 memory_candidates=memory_candidates,
+                kanban_handoff=handoff,
+                kanban_handoff_board=board,
             )
         except Exception:
             return json.dumps({"status": "blocked", "error": {"code": "invalid_configuration"}})
@@ -250,6 +264,16 @@ def register(ctx: PluginContext) -> None:
 
     if conversation_enabled:
         from .conversation_tasks import run_conversation_tasks
+        from .kanban_handoff import LocalKanbanHandoff
+
+        handoff = LocalKanbanHandoff(bound_home=bound_home, read_config=ctx.get_config)
+        ctx.on_unload(handoff.close)
+        ctx.register_command(
+            "personal-handoff",
+            handler=handoff.command,
+            description="Explicitly park a local task on a shared native board; no dispatch.",
+            args_hint="prepare | commit | reconcile | show | list | cancel",
+        )
 
         def local_tasks_command(
             raw_args: str,

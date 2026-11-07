@@ -216,26 +216,29 @@ def _private_database_file(path: Path, *, create: bool = True) -> None:
     """Check main/sidecar files; never repair, chmod or truncate existing data."""
     if os.name != "posix" or not hasattr(os, "O_NOFOLLOW"):
         raise TaskError("unsupported_storage_platform")
-    flags = os.O_RDWR | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NONBLOCK", 0)
-    if create:
-        flags |= os.O_CREAT
+    # Merely opening then closing an existing SQLite inode can release another
+    # connection's process-wide POSIX locks. Inspect existing files with lstat;
+    # only a newly created exclusive inode ever gets a raw descriptor here.
     try:
-        fd = os.open(path, flags, 0o600)
+        info = path.lstat()
     except FileNotFoundError:
         if not create:
             return
-        raise
-    try:
-        info = os.fstat(fd)
-        if (
-            not stat.S_ISREG(info.st_mode)
-            or info.st_nlink != 1
-            or info.st_uid != os.getuid()
-            or stat.S_IMODE(info.st_mode) & 0o077
-        ):
-            raise TaskError("unsafe_storage_file")
-    finally:
-        os.close(fd)
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
+        try:
+            fd = os.open(path, flags, 0o600)
+        except FileExistsError:
+            pass
+        else:
+            os.close(fd)
+        info = path.lstat()
+    if (
+        not stat.S_ISREG(info.st_mode)
+        or info.st_nlink != 1
+        or info.st_uid != os.getuid()
+        or stat.S_IMODE(info.st_mode) & 0o077
+    ):
+        raise TaskError("unsafe_storage_file")
 
 
 def _private_storage_directory(path: Path) -> None:

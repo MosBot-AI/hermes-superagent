@@ -42,3 +42,11 @@ config_schema:
     type: bool
     default: false
     description: Allow separately activated candidate-on drafting from current native turn input; requires memory_model_tools. Drafts require native review before becoming memory, with seven-day lazy payload expiry; no extra model or provider replacement.
+  kanban_handoff:
+    type: bool
+    default: false
+    description: Opt in to explicit preview/commit of parked native Kanban cards; requires local_tasks, local_conversation and an explicit board. Does not dispatch workers.
+  kanban_handoff_board:
+    type: str
+    default: ""
+    description: Exact native shared-board slug, including explicit default; no implicit board selection. Validated at registration and again for operations.

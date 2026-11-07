@@ -1,9 +1,24 @@
 """Bounded, non-personal diagnostics. This is not an authorization service."""
 
 import os
+import re
 
 from . import HERMES_BASELINE, PLUGIN_ID, VERSION
 from .enforcement import build_enforcement_summary
+
+
+def validate_kanban_configuration(mode, conversation, enabled, board):
+    """Validate declarations only; never inspect the native host or its storage."""
+    if type(enabled) is not bool or type(board) is not str:
+        raise ValueError("invalid kanban handoff configuration")
+    if enabled and (
+        mode != "local_tasks"
+        or not conversation
+        or re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,63}", board) is None
+    ):
+        raise ValueError(
+            "kanban_handoff requires local_tasks, local_conversation and an explicit board"
+        )
 
 
 def build_status(
@@ -14,6 +29,8 @@ def build_status(
     local_memory: bool = False,
     memory_model_tools: bool = False,
     memory_candidates: bool = False,
+    kanban_handoff: bool = False,
+    kanban_handoff_board: str = "",
 ) -> dict[str, object]:
     """Return a fresh result without consulting credentials, files, or providers."""
     if mode not in ("read_only", "local_tasks"):
@@ -28,6 +45,7 @@ def build_status(
         raise ValueError("invalid memory model tools configuration")
     if type(memory_candidates) is not bool or (memory_candidates and not memory_model_tools):
         raise ValueError("invalid memory candidates configuration")
+    validate_kanban_configuration(mode, local_conversation, kanban_handoff, kanban_handoff_board)
     platform_supported = os.name == "posix" and hasattr(os, "O_NOFOLLOW")
     local_tasks = mode == "local_tasks" and platform_supported
     return {
@@ -95,6 +113,17 @@ def build_status(
                 "Explicit commands under host session authorization; all admitted controllers "
                 "share access. LOCAL is not physical-locality or independent owner proof."
             ),
+        },
+        "kanban_handoff": {
+            "configured": kanban_handoff,
+            "enabled": kanban_handoff and local_conversation and local_tasks,
+            "command_registered": local_conversation,
+            "native_runtime_verified": False,
+            "native_schema_verified": False,
+            "operation_checks_required": True,
+            "dispatch_enabled": False,
+            "surface": "explicit_native_local_command",
+            "scope": "Parked shared-board card only; not worker dispatch or task completion.",
         },
         "local_model_tools": {
             "implemented": True,

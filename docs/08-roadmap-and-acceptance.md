@@ -255,3 +255,5 @@ The [bounded recall follow-on](36-bounded-memory-recall.md) adds explicit multi-
 [The task-to-worker proposal](48-task-worker-proposal.md) advances E3.3 feasibility through a review-only no-tool planning path and real host/consumer offline integration. Its dedicated no-redirect client, durable single-claim/draft receipts and scoped native operator workbench improve feasibility, but do not satisfy live provider acceptance, unknown-outcome reconciliation, budget control or general tool containment; E3.3/E3.5 stay incomplete.
 
 [Reviewed candidate workflow](50-reviewed-memory-candidates.md) now implements a narrow E2.8 input-to-draft-to-operator-review path on supported hooks. Only explicit acceptance creates canonical memory; actual-model usefulness, durable transcript coverage and checkpoint-v2 remain open. Schema-v6 migration and lazy seven-day candidate expiry do not imply background deletion.
+
+[Parked Kanban handoff](52-parked-kanban-handoff.md) adds explicit preview, single-use commit and bounded reconciliation into a shared native board. It does not complete worker dispatch, universal task mapping or live Kanban acceptance; those gates remain open.
