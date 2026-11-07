@@ -50,6 +50,8 @@ def validate_request(operation: str, payload: dict) -> dict:
         "recall": ({"queries"}, {"limit", "max_chars"}),
         "export": (set(), {"limit", "after"}),
         "changes": (set(), {"limit", "after_sequence", "through_sequence"}),
+        "checkpoint_create": ({"expected_watermark", "request_id"}, set()),
+        "checkpoint_status": ({"checkpoint_id"}, set()),
         "consumer_get": ({"consumer_id"}, set()),
         "consumer_advance": (
             {"consumer_id", "through_sequence", "expected_revision", "request_id"},
@@ -75,6 +77,8 @@ def validate_request(operation: str, payload: dict) -> dict:
             result[key] = _text(result[key], maximum, empty=empty, multiline=multiline)
     if "record_id" in result:
         result["record_id"] = _identifier(result["record_id"])
+    if "checkpoint_id" in result:
+        result["checkpoint_id"] = _identifier(result["checkpoint_id"])
     if "request_id" in result:
         value = result["request_id"]
         if not isinstance(value, str) or re.fullmatch(r"[A-Za-z0-9._-]{1,128}", value) is None:
@@ -106,7 +110,7 @@ def validate_request(operation: str, payload: dict) -> dict:
         result = {"limit": 20, "after_sequence": 0, "through_sequence": None, **result}
         if type(result["limit"]) is not int or not 1 <= result["limit"] <= 50:
             raise MemoryError("invalid_request")
-    for key in ("after_sequence", "through_sequence"):
+    for key in ("after_sequence", "through_sequence", "expected_watermark"):
         if key in result:
             value = result[key]
             if key == "through_sequence" and value is None and operation == "changes":
@@ -149,6 +153,6 @@ class MemoryService:
         request = validate_request(operation, payload)
         self.descriptor.check_request(operation, request)
         result = self.backend.execute(operation, request)
-        if operation in {"remember", "correct", "forget", "consumer_advance"}:
+        if operation in {"remember", "correct", "forget", "consumer_advance", "checkpoint_create"}:
             return result
         return {"data": result, "replayed": False}

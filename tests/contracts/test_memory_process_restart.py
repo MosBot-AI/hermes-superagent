@@ -359,3 +359,56 @@ def test_bounded_recall_after_restart_correction_and_forget(tmp_path):
     assert final[1]["data"]["items"] == []
     assert final[1]["data"]["watermark"] == 3
     assert (home / "config.yaml").read_bytes() == original_config
+
+
+def test_metadata_checkpoints_survive_restart_without_resurrecting_forgotten_payload(tmp_path):
+    home = tmp_path / "profile"
+    install(home)
+    memory.configure(home, memory_model_tools=True)
+    (tmp_path / "bundled").mkdir()
+    before = (home / "config.yaml").read_bytes()
+    checkpoint = {"command": "checkpoint --expected-watermark 1 --request-id marker"}
+    first = restart(
+        home,
+        [
+            {"command": 'remember "私密检查点内容" --request-id original'},
+            checkpoint,
+        ],
+    )
+    rid = first[0]["data"]["record_id"]
+    receipt = first[1]["data"]
+    status = {"command": f"checkpoint-status {receipt['checkpoint_id']}"}
+    second = restart(
+        home,
+        [
+            status,
+            {
+                "command": f'correct {rid} --text "更新的私密内容" '
+                "--expected-revision 1 --request-id corrected"
+            },
+            status,
+            {"activate": "enable-write"},
+            tool("checkpoint_create", write=True, expected_watermark=2, request_id="model"),
+        ],
+    )
+    assert second[0]["data"]["is_current"]
+    assert not second[2]["data"]["is_current"]
+    assert second[-1]["error"]["code"] == "invalid_request"
+    third = restart(
+        home,
+        [
+            {"command": f"forget {rid} --expected-revision 2 --request-id forgotten"},
+            {"command": "checkpoint --expected-watermark 3 --request-id final"},
+            checkpoint,
+            status,
+            {"command": "list"},
+        ],
+    )
+    assert third[1]["data"]["forgotten_count"] == 1
+    assert third[1]["data"]["active_count"] == 0
+    assert third[2]["data"] == receipt and third[2]["replayed"]
+    assert not third[3]["data"]["is_current"]
+    assert third[3]["data"]["current_watermark"] == 3
+    assert third[4]["data"]["items"] == []
+    assert "私密" not in json.dumps(third, ensure_ascii=False)
+    assert (home / "config.yaml").read_bytes() == before

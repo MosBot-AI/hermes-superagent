@@ -50,7 +50,8 @@ Extend Hermes into a long-lived personal agent for one user: one main agent unde
 36. [Bounded explicit memory recall](36-bounded-memory-recall.md): multi-keyword literal ranking, whole-record JSON budgets, current revisions and one read snapshot; no automatic prompt injection.
 37. [Durable local memory progress](37-durable-memory-progress.md): metadata change pages, internal CAS/idempotent consumer cursors and atomic schema-v3 migration; not native compression checkpointing.
 38. [Saved routing inspection](38-routing-readiness-inspection.md): native local declaration diagnostics without credential/model resolution or routing activation.
-39. [Architecture decision records](adr/README.md): reasons for the constraints.
+39. [Local memory metadata checkpoints](39-local-memory-checkpoints.md): Explicit native commands create durable metadata-only markers with event/record consistency checks, watermark fencing and stale-status inspection. These do not back up payload or satisfy native compression checkpoints.
+40. [Architecture decision records](adr/README.md): reasons for the constraints.
 
 ## Keep three kinds of statements separate
 

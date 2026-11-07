@@ -12,10 +12,11 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from .memory_backend import MemoryError, _text, validate_request
+from .memory_checkpoints import CHECKPOINT_SCHEMA, checkpoint_status, create_checkpoint
 from .memory_progress import PROGRESS_SCHEMA, advance_consumer, get_changes, get_consumer
 
 _APPLICATION_ID = 0x50414D45
-_SCHEMA_VERSION = 3
+_SCHEMA_VERSION = 4
 _SCHEMA_V1 = {
     "namespace": "CREATE TABLE namespace (id TEXT PRIMARY KEY NOT NULL)",
     "records": """CREATE TABLE records (
@@ -45,7 +46,8 @@ _SCHEMA_V2 = {
         "source IN ('explicit_local_operator','activated_session_model')",
     ),
 }
-_SCHEMA = {**_SCHEMA_V2, **PROGRESS_SCHEMA}
+_SCHEMA_V3 = {**_SCHEMA_V2, **PROGRESS_SCHEMA}
+_SCHEMA = {**_SCHEMA_V3, **CHECKPOINT_SCHEMA}
 
 
 _COLUMNS = (
@@ -96,6 +98,7 @@ class LocalMemoryBackend:
                 "bounded_recall",
                 "metadata_changes",
                 "durable_consumer_cursor",
+                "local_metadata_checkpoint",
             ],
             "unsupported": [
                 "fts",
@@ -187,6 +190,9 @@ class LocalMemoryBackend:
             if version in (1, 2):
                 for sql in PROGRESS_SCHEMA.values():
                     connection.execute(sql)
+            if version in (1, 2, 3):
+                for sql in CHECKPOINT_SCHEMA.values():
+                    connection.execute(sql)
                 connection.execute(f"PRAGMA user_version={_SCHEMA_VERSION}")
             if connection.execute("SELECT count(*) FROM records").fetchone()[0] > 1000:
                 raise MemoryError("record_limit")
@@ -202,7 +208,7 @@ class LocalMemoryBackend:
 
     @staticmethod
     def _valid_schema(version, rows):
-        expected = {1: _SCHEMA_V1, 2: _SCHEMA_V2, 3: _SCHEMA}.get(version)
+        expected = {1: _SCHEMA_V1, 2: _SCHEMA_V2, 3: _SCHEMA_V3, 4: _SCHEMA}.get(version)
         return expected is not None and dict(rows) == expected and len(rows) == len(expected)
 
     @staticmethod
@@ -243,7 +249,8 @@ class LocalMemoryBackend:
         try:
             conn.execute(
                 "BEGIN IMMEDIATE"
-                if operation in {"remember", "correct", "forget", "consumer_advance"}
+                if operation
+                in {"remember", "correct", "forget", "consumer_advance", "checkpoint_create"}
                 else "BEGIN"
             )
             began = True
@@ -257,6 +264,12 @@ class LocalMemoryBackend:
                 if self._source_kind != "explicit_local_operator":
                     raise MemoryError("consumer_scope_required")
                 result = advance_consumer(conn, request)
+            elif operation == "checkpoint_create":
+                if self._source_kind != "explicit_local_operator":
+                    raise MemoryError("checkpoint_scope_required")
+                result = create_checkpoint(conn, request)
+            elif operation == "checkpoint_status":
+                result = checkpoint_status(conn, request["checkpoint_id"])
             elif operation == "get":
                 result = self._get(conn, request["record_id"])
             elif operation == "recall":

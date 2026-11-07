@@ -4,6 +4,8 @@
 
 状态：已实现有界事件元数据读取和持久化内部消费者游标，为后续本地投影与生命周期 worker 提供重启/重试基础。没有实现后台 worker、原生 MemoryProvider 桥接或成功的原生压缩前 checkpoint。后端仍将 `checkpoint` 声明为不支持。
 
+实现更新：[39](39-local-memory-checkpoints-zh.md) 新增显式元数据检查点，验证事件与记录的关联并查询是否过时，仍不满足原生检查点。其 schema-v4 迁移接续本页记载的 v3 存储阶段。
+
 ## 1. 读取元数据变更流
 
 启用现有[本地记忆配置](31-explicit-local-memory-zh.md)后，可信原生 LOCAL 会话可以读取：

@@ -4,6 +4,8 @@ English | [简体中文](37-durable-memory-progress-zh.md)
 
 Status: implemented bounded event-metadata reads and durable internal consumer cursors. This supplies restart/retry groundwork for later local projection and lifecycle workers. It does not implement a background worker, native MemoryProvider bridge or a successful native pre-compression checkpoint. The backend still declares `checkpoint` unsupported.
 
+Implementation update: [39](39-local-memory-checkpoints.md) now adds explicit metadata-only checkpoints with verified event/record linkage and stale-status inspection. These still do not satisfy native checkpoints. Its schema-v4 migration supersedes the v3 storage stage documented here.
+
 ## 1. Read the Metadata Change Feed
 
 With the existing [local memory configuration](31-explicit-local-memory.md), a trusted native LOCAL session can read:

@@ -23,11 +23,13 @@ HELP = (
     'search "Text" [--limit N --after ID]; show ID; '
     'recall "Keyword" ["Other keyword" ...] [--limit N --max-chars N]; '
     "changes [--after-sequence N --through-sequence N --limit N]; "
+    "checkpoint --expected-watermark N [--request-id KEY]; checkpoint-status ID; "
     'correct ID --text "Replacement" [--topic LABEL] --expected-revision N '
     "[--request-id KEY]; forget ID --expected-revision N [--request-id KEY]; "
     "export [--limit N --after ID]. Use POSIX quotes. "
     "Recall ranks 1-8 distinct literal keywords; defaults to 6 whole records and a 6000-character "
     "ASCII JSON items budget, not tokens. It reports omitted matches and is not semantic search. "
+    "Checkpoints cover local record metadata only, not native conversations or backups. "
     "Writes return metadata receipts, not remembered content. Generated request IDs are "
     "echoed; reuse the same key and payload for an uncertain result, never retry blindly. "
     "Explicit local operator records only, not verified facts or permission grants. "
@@ -85,6 +87,11 @@ def parse_command(raw_args: str) -> tuple[str, dict]:
     changes.add_argument("--after-sequence", type=int, default=0)
     changes.add_argument("--through-sequence", type=int, default=None)
     changes.add_argument("--limit", type=int, default=20)
+    checkpoint = commands.add_parser("checkpoint")
+    checkpoint.add_argument("--expected-watermark", type=int, required=True)
+    checkpoint.add_argument("--request-id")
+    checkpoint_status = commands.add_parser("checkpoint-status")
+    checkpoint_status.add_argument("checkpoint_id")
     for operation in ("correct", "forget"):
         writer = commands.add_parser(operation)
         writer.add_argument("record_id")
@@ -97,7 +104,13 @@ def parse_command(raw_args: str) -> tuple[str, dict]:
     operation = payload.pop("operation")
     if operation == "show":
         operation = "get"
-    if operation in ("remember", "correct", "forget") and payload["request_id"] is None:
+    operation = {"checkpoint": "checkpoint_create", "checkpoint-status": "checkpoint_status"}.get(
+        operation, operation
+    )
+    if (
+        operation in ("remember", "correct", "forget", "checkpoint_create")
+        and payload["request_id"] is None
+    ):
         payload["request_id"] = str(uuid4())
     return operation, validate_request(operation, payload)
 

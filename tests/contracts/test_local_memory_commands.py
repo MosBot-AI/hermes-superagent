@@ -420,3 +420,29 @@ def test_native_metadata_changes_are_bounded_and_respect_existing_admission(host
     with pytest.raises(RuntimeStoreError):
         command(host, "changes")
     assert (host.home / "config.yaml").read_bytes() == before
+
+
+def test_native_checkpoint_requires_current_watermark_and_preserves_native_provider(host):
+    from hermes_state_runtime import RuntimeStoreError
+
+    before = (host.home / "config.yaml").read_bytes()
+    rid = command(host, 'remember "private checkpoint text" --request-id r')["data"]["record_id"]
+    assert (
+        command(host, "checkpoint --expected-watermark 0")["error"]["code"] == "watermark_conflict"
+    )
+    first = command(host, "checkpoint --expected-watermark 1 --request-id check")
+    assert first["status"] == "ok"
+    receipt = first["data"]
+    cid = receipt["checkpoint_id"]
+    assert not receipt["native_checkpoint"] and not receipt["restorable"]
+    assert "private checkpoint text" not in json.dumps(first)
+    assert command(host, f"checkpoint-status {cid}")["data"]["is_current"]
+    command(host, f"forget {rid} --expected-revision 1 --request-id f")
+    assert not command(host, f"checkpoint-status {cid}")["data"]["is_current"]
+    replay = command(host, "checkpoint --expected-watermark 1 --request-id check")
+    assert replay["data"] == receipt and replay["replayed"]
+    assert (host.home / "config.yaml").read_bytes() == before
+    assert not host.manager._plugins[PLUGIN_ID].hooks_registered
+    host.connection.actor = replace(host.connection.actor, capabilities=frozenset())
+    with pytest.raises(RuntimeStoreError):
+        command(host, "checkpoint --expected-watermark 2")

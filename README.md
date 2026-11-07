@@ -56,6 +56,8 @@ The native [`personal-agent routing inspect`](docs/38-routing-readiness-inspecti
 
 The [durable progress guide](docs/37-durable-memory-progress.md) adds metadata-only memory change pages and internal restart-safe consumer cursors. It preserves existing record receipts during v1/v2→v3 migration and does not claim native compression checkpoint support.
 
+[Local memory metadata checkpoints](docs/39-local-memory-checkpoints.md): Explicit native commands create durable metadata-only markers with event/record consistency checks, watermark fencing and stale-status inspection. These do not back up payload or satisfy native compression checkpoints.
+
 ## Development checks
 
 `compatibility.json` records the Hermes baseline commit. The current runtime target is Python 3.14. A single tested SHA does not justify a broad `requires_hermes` version range.

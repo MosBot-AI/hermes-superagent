@@ -56,6 +56,8 @@ Hermes 原生 personal-agent 插件，目标是让一个主 agent 管理项目�
 
 [持久化进度指南](docs/37-durable-memory-progress-zh.md)新增纯元数据记忆变更分页和可跨重启保留的内部消费者游标。v1/v2→v3 迁移保留原始记录回执，不宣称支持原生压缩 checkpoint。
 
+[本地记忆元数据检查点](docs/39-local-memory-checkpoints-zh.md)：显式原生命令创建持久元数据标记，验证事件与记录一致性，检查水位并查询是否过时；不备份正文，也不满足原生压缩检查点。
+
 ## 开发验证
 
 基线为 `compatibility.json` 内的 Hermes commit；当前实际运行目标是 Python 3.14。没有根据单一 SHA 宣称宽泛的 `requires_hermes` 版本范围。

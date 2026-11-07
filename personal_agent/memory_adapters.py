@@ -24,6 +24,7 @@ _CAPABILITIES = frozenset(
         "bounded_recall",
         "metadata_changes",
         "durable_consumer_cursor",
+        "local_metadata_checkpoint",
     }
 )
 _LIMITS = {
@@ -60,6 +61,14 @@ _OPERATION_CAPABILITIES = {
     "recall": {"explicit_records", "literal_search", "bounded_recall"},
     "export": {"explicit_records", "bounded_record_export"},
     "changes": {"explicit_records", "metadata_changes"},
+    "checkpoint_create": {
+        "explicit_records",
+        "local_metadata_checkpoint",
+        "durable_write",
+        "cas",
+        "idempotency",
+    },
+    "checkpoint_status": {"explicit_records", "local_metadata_checkpoint"},
     "consumer_get": {"explicit_records", "durable_consumer_cursor"},
     "consumer_advance": {
         "explicit_records",
