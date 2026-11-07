@@ -39,7 +39,7 @@ plugins:
 
 写激活后，可让已有模型记住偏好、查找、更正和遗忘，例如“记住我偏好简洁的中文摘要”，再问“查一下我的摘要偏好”。这是发给已配置模型的操作员请求，不代表已验证每个模型都会选择正确工具。应检查返回回执并读回记录，而不是仅接受口头“我记住了”。
 
-- `personal_memory_read`：`list`、`show`、`search`，不向模型提供 export。每页最多 50 条，查询最多 128 字符，为区分大小写的字面匹配，不是语义搜索。
+- `personal_memory_read`：`list`、`show`、`search`、`recall`，不向模型提供 export。每页最多 50 条，查询最多 128 字符，为区分大小写的字面匹配，不是语义搜索。
 - `personal_memory_write`：`remember`、`correct`、`forget`。每次修改要求稳定 `request_id`；更正/遗忘要求从读取获得的真实记录 ID 和当前 `expected_revision`，更正可改内容和/或主题。
 - 未知、无关及 owner/profile/session/source/approval 字段均被拒绝。模型不能选择存储路径或冒称操作员来源。内容上限仍为 2,048 字符，主题为 128 字符。
 - Schema 提示模型只执行明确要求的修改，不从任意文字推断长期偏好或 grant。但准入边界仍是已激活会话，不是对每条新人工指令的确定性证明。
@@ -77,3 +77,5 @@ plugins:
 测试使用合成记录、临时 profile，以及真实固定版本的 slash/SessionAuthority 准入、TurnFacade 生命周期与 `model_tools.handle_function_call`，不连接真实模型。覆盖任务/记忆独立激活、读写降级、TTL/session/route/profile 不匹配、finalization 竞态、关闭/卸载/重载、来源标签、校验、CAS、遗忘后重放、精确 v1 迁移与回滚。已有任务工具和直接记忆命令回归也通过。历史受限的九个身份 socket 用例未重跑。
 
 真实自然语言验收仍需符合条件的会话、明确选择的 provider/model，以及在必要时安全配置凭据。这些测试不隐含 API Key 配置、凭据保存、收费请求或生产部署。使用真实个人记录前，应先用合成数据验收“记住 → 查询 → 更正 → 遗忘 → 关闭后拒绝”。本切片推进本地 E2.6/E2.7；E0.9 完整原生 provider 矩阵及 E2.8 自动生命周期集成仍为独立门禁。
+
+[36](36-bounded-memory-recall-zh.md)补充 `recall` 的多关键词字面排序、完整记录预算和当前快照规则；它沿用独立记忆激活，不启用自动召回。

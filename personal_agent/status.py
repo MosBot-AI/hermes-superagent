@@ -109,6 +109,7 @@ def build_status(
         },
         "local_memory": {
             "explicit_records_implemented": True,
+            "bounded_literal_recall_implemented": True,
             "configured": local_memory,
             "enabled": local_memory and local_tasks,
             "surface": "trusted_native_local_command",

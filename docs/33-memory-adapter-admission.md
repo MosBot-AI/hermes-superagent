@@ -39,3 +39,5 @@ python scripts/check.py --hermes ../hermes-agent --hermes-python ../hermes-test-
 ```
 
 No new package is installed or selected, no production profile is modified, and no paid provider call is required. E2.6 gains a strict explicit-record contract and metadata-review precursor; it is not complete. The public loader/SDK, replacement activation/migration, source-bound extraction, native bridge, checkpoint durability, projections and external storage remain future work. Passing these tests is not permission to enable them.
+
+[36](36-bounded-memory-recall.md) adds the optional `bounded_recall` capability for explicit, single-snapshot literal retrieval with a whole-record JSON budget. Missing capability fails closed; it does not enable automatic native recall.

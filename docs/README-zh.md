@@ -46,7 +46,8 @@
 32. [会话范围记忆工具](32-session-scoped-memory-tools-zh.md)：独立30分钟读写激活、模型来源、v1→v2迁移与待完成的真实模型验收。
 33. [记忆适配器准入](33-memory-adapter-admission-zh.md)：严格的显式记录描述、能力/上限检查、仅元数据审查及可复用离线一致性门禁；不加载第三方代码。
 34. [本地任务操作历史](34-local-task-history-zh.md)：持久化版本元数据、有界分页及既有原生读取限制。
-35. [架构决策记录](adr/README-zh.md)：为什么选择这些约束。
+36. [有界显式记忆召回](36-bounded-memory-recall-zh.md)：多关键词字面排序、完整记录的 JSON 预算、当前 revision 与同一读取快照；没有自动提示注入。
+37. [架构决策记录](adr/README-zh.md)：为什么选择这些约束。
 
 ## 三类陈述必须分开
 

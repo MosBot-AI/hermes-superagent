@@ -140,6 +140,8 @@ def test_describe_exception_is_redacted():
             "cas",
         ),
         ("search", {"query": "test"}, "literal_search"),
+        ("recall", {"queries": ["test"]}, "bounded_recall"),
+        ("recall", {"queries": ["test"]}, "literal_search"),
         ("export", {}, "bounded_record_export"),
     ],
 )
@@ -163,6 +165,8 @@ def test_missing_capabilities_rejected_before_call(operation, payload, capabilit
             2,
         ),
         ("search", {"query": "abc"}, "max_query_chars", 2),
+        ("recall", {"queries": ["a", "abc"]}, "max_query_chars", 2),
+        ("recall", {"queries": ["a"], "limit": 3}, "max_page_records", 2),
         ("list", {}, "max_page_records", 10),
         ("export", {"limit": 3}, "max_page_records", 2),
     ],

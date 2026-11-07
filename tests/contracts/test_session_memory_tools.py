@@ -170,10 +170,11 @@ def test_native_slash_activation_to_real_model_dispatch_lifecycle(host):
         ({"profile": "/synthetic/foreign"}, "no_active_local_turn"),
     ],
 )
-def test_real_turn_wrong_scope_never_opens_storage(host, change, code):
+@pytest.mark.parametrize("read_args", [{"action": "list"}, {"action": "recall", "queries": ["茶"]}])
+def test_real_turn_wrong_scope_never_opens_storage(host, change, code, read_args):
     activate(host)
     with turn(host, **change):
-        result = call(host, sid=change.get("sid"))
+        result = call(host, read_args, sid=change.get("sid"))
     assert result["error"]["code"] == code, result
     assert not memory.database(host.home).exists()
 
@@ -249,17 +250,18 @@ def test_native_reload_discards_activation_and_unload_closes_retained_callbacks(
     assert not memory.database(host.home).exists()
 
 
-def test_native_delegated_and_cron_context_denied(host):
+@pytest.mark.parametrize("read_args", [{"action": "list"}, {"action": "recall", "queries": ["茶"]}])
+def test_native_delegated_and_cron_context_denied(host, read_args):
     from agent.delegation_context import delegated_child_context
     from gateway.session_context import clear_session_vars, set_session_vars
 
     activate(host)
     with turn(host), delegated_child_context():
-        assert call(host)["error"]["code"] == "no_active_local_turn"
+        assert call(host, read_args)["error"]["code"] == "no_active_local_turn"
     tokens = set_session_vars(cron_session="1")
     try:
         with turn(host):
-            assert call(host)["error"]["code"] == "no_active_local_turn"
+            assert call(host, read_args)["error"]["code"] == "no_active_local_turn"
     finally:
         clear_session_vars(tokens)
     assert not memory.database(host.home).exists()
@@ -275,7 +277,8 @@ def test_admitted_operator_can_activate_same_session_without_owner_claim(host):
         assert call(host)["status"] == "ok"
 
 
-def test_finalized_context_and_uncopied_worker_have_no_admission(host):
+@pytest.mark.parametrize("read_args", [{"action": "list"}, {"action": "recall", "queries": ["茶"]}])
+def test_finalized_context_and_uncopied_worker_have_no_admission(host, read_args):
     from concurrent.futures import ThreadPoolExecutor
 
     from agent import relay_runtime
@@ -283,10 +286,10 @@ def test_finalized_context_and_uncopied_worker_have_no_admission(host):
     activate(host)
     with turn(host) as context:
         with ThreadPoolExecutor(max_workers=1) as pool:
-            result = pool.submit(call, host).result(timeout=5)
+            result = pool.submit(call, host, read_args).result(timeout=5)
         assert result["error"]["code"] == "no_active_local_turn"
         relay_runtime.SESSION_COORDINATOR.end_turn(context, outcome="success")
-        assert call(host)["error"]["code"] == "no_active_local_turn"
+        assert call(host, read_args)["error"]["code"] == "no_active_local_turn"
     assert not memory.database(host.home).exists()
 
 
@@ -335,8 +338,9 @@ def test_real_turn_facade_dispatches_tools_and_finalizes_on_exception(host, monk
         assert call(host)["error"]["code"] == "no_active_local_turn"
 
 
+@pytest.mark.parametrize("read_args", [{"action": "list"}, {"action": "recall", "queries": ["茶"]}])
 def test_actual_finalization_lock_waits_for_admitted_storage_then_fences_copied_context(
-    host, monkeypatch
+    host, monkeypatch, read_args
 ):
     import importlib
     import threading
@@ -373,7 +377,7 @@ def test_actual_finalization_lock_waits_for_admitted_storage_then_fences_copied_
             coordinator.end_turn(context, outcome="success")
 
         with ThreadPoolExecutor(max_workers=2) as pool:
-            work = pool.submit(worker_context.run, call, host)
+            work = pool.submit(worker_context.run, call, host, read_args)
             try:
                 assert admitted.wait(5)
                 # The store is running in another thread. Prove it owns the real
@@ -391,9 +395,9 @@ def test_actual_finalization_lock_waits_for_admitted_storage_then_fences_copied_
             assert work.result(timeout=5)["status"] == "ok"
             finished.result(timeout=5)
         assert context.closed
-        assert stale_context.run(call, host)["error"]["code"] == "no_active_local_turn"
-        assert call(host)["error"]["code"] == "no_active_local_turn"
-        assert store_calls == ["list"]
+        assert stale_context.run(call, host, read_args)["error"]["code"] == "no_active_local_turn"
+        assert call(host, read_args)["error"]["code"] == "no_active_local_turn"
+        assert store_calls == [read_args["action"]]
 
 
 @pytest.mark.parametrize(
@@ -457,14 +461,15 @@ def test_memory_model_tools_register_without_task_model_tools(native, monkeypatc
     assert not memory.database(home).exists()
 
 
-def test_disable_config_clears_activation_before_storage(host):
+@pytest.mark.parametrize("read_args", [{"action": "list"}, {"action": "recall", "queries": ["茶"]}])
+def test_disable_config_clears_activation_before_storage(host, read_args):
     activate(host)
     memory.configure(host.home, memory_model_tools=False, local_model_tools=True)
     with turn(host):
-        assert call(host)["error"]["code"] == "memory_model_tools_disabled"
+        assert call(host, read_args)["error"]["code"] == "memory_model_tools_disabled"
     memory.configure(host.home, memory_model_tools=True, local_model_tools=True)
     with turn(host):
-        assert call(host)["error"]["code"] == "session_tools_not_activated"
+        assert call(host, read_args)["error"]["code"] == "session_tools_not_activated"
     assert not memory.database(host.home).exists()
 
 
@@ -495,7 +500,8 @@ def test_model_arguments_cannot_export_or_claim_provenance(host, args, write):
     assert not memory.database(host.home).exists()
 
 
-def test_activation_ttl_status_and_read_downgrade(host, monkeypatch):
+@pytest.mark.parametrize("read_args", [{"action": "list"}, {"action": "recall", "queries": ["茶"]}])
+def test_activation_ttl_status_and_read_downgrade(host, monkeypatch, read_args):
     import importlib
 
     module = host.manager._plugins[PLUGIN_ID].module
@@ -508,7 +514,7 @@ def test_activation_ttl_status_and_read_downgrade(host, monkeypatch):
     clock[0] += 1
     assert activate(host, "status")["data"]["access"] == "disabled"
     with turn(host):
-        assert call(host)["error"]["code"] == "session_tools_not_activated"
+        assert call(host, read_args)["error"]["code"] == "session_tools_not_activated"
     activate(host)
     assert activate(host, "enable-read")["data"]["access"] == "read"
     with turn(host):
@@ -523,7 +529,7 @@ def test_registered_memory_schemas_exclude_export_and_identity(host):
     from tools.registry import registry
 
     for name, actions in (
-        ("personal_memory_read", {"list", "show", "search"}),
+        ("personal_memory_read", {"list", "show", "search", "recall"}),
         ("personal_memory_write", {"remember", "correct", "forget"}),
     ):
         schema = registry.get_entry(name).schema
@@ -566,3 +572,64 @@ def test_unbound_activation_cannot_be_granted_by_copied_source(host):
     with turn(host):
         assert call(host)["error"]["code"] == "session_tools_not_activated"
     assert not memory.database(host.home).exists()
+
+
+def test_native_bounded_recall_obeys_separate_activation_and_current_revisions(host):
+    from tools.registry import registry
+
+    args = {"action": "recall", "queries": ["早餐", "燕麦奶"], "limit": 2, "max_chars": 2000}
+    # Task activation cannot admit the memory recall action.
+    assert task_tools.activate(host, "enable-read")["data"]["access"] == "read"
+    with turn(host):
+        assert call(host, args)["error"]["code"] == "session_tools_not_activated"
+    assert not memory.database(host.home).exists()
+    activate(host)
+    with turn(host):
+        saved = call(
+            host,
+            {
+                "action": "remember",
+                "content": "早餐豆浆",
+                "topic": "早餐",
+                "request_id": "recall-save",
+            },
+            write=True,
+        )
+        rid = saved["data"]["record_id"]
+        data = call(host, args)["data"]
+        assert data["items"][0]["record_id"] == rid
+        assert data["items"][0]["source"] == "activated_session_model"
+        assert data["items_json_chars"] <= 2000
+        assert data["watermark"] == 1
+        updated = call(
+            host,
+            {
+                "action": "correct",
+                "record_id": rid,
+                "expected_revision": 1,
+                "content": "早餐燕麦奶",
+                "request_id": "recall-correct",
+            },
+            write=True,
+        )
+        assert updated["data"]["revision"] == 2
+        current = call(host, args)["data"]
+        assert current["items"][0]["matched_queries"] == [0, 1]
+        assert current["items"][0]["content"] == "早餐燕麦奶"
+        assert current["watermark"] == 2
+    activate(host, "enable-read")
+    with turn(host):
+        assert call(host, args)["data"] == current
+        assert (
+            call(host, {"action": "recall", "queries": ["早餐"], "after": rid})["error"]["code"]
+            == "invalid_request"
+        )
+        assert call(host, args, write=True)["error"]["code"] == "session_write_not_activated"
+    retained = registry.get_entry("personal_memory_read").handler
+    activate(host, "disable")
+    with turn(host):
+        assert call(host, args)["error"]["code"] == "session_tools_not_activated"
+    host.manager.unload()
+    with turn(host):
+        denied = json.loads(retained(args, session_id=host.ref.session_id, task_id="native-task"))
+        assert denied["error"]["code"] == "memory_model_tools_unloaded"

@@ -377,3 +377,20 @@ def test_invalid_commands_redact_arguments_and_do_not_open_store(host, text):
     assert result["data"] is None
     assert "SECRET_MUST_NOT_BE_REFLECTED" not in json.dumps(result)
     assert not (host.home / "plugin-data").exists()
+
+
+def test_native_recall_command_budget_and_provider_preservation(host):
+    before = (host.home / "config.yaml").read_bytes()
+    saved = command(host, 'remember "Chinese summary preference" --topic "summary" --request-id r')
+    rid = saved["data"]["record_id"]
+    data = command(host, 'recall "summary" "Chinese" --limit 1 --max-chars 1024')["data"]
+    assert data["items"][0]["record_id"] == rid
+    assert data["items"][0]["source"] == "explicit_local_operator"
+    assert data["items"][0]["matched_queries"] == [0, 1]
+    assert data["items_json_chars"] == len(json.dumps(data["items"], sort_keys=True)) <= 1024
+    assert command(host, 'recall "missing"')["data"]["matched_records"] == 0
+    assert command(host, 'recall "summary" --max-chars 1')["error"]["code"] == "invalid_request"
+    command(host, f"forget {rid} --expected-revision 1 --request-id f")
+    assert command(host, 'recall "summary" "Chinese"')["data"]["items"] == []
+    assert (host.home / "config.yaml").read_bytes() == before
+    assert not host.manager._plugins[PLUGIN_ID].hooks_registered

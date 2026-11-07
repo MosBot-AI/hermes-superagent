@@ -39,3 +39,5 @@ python scripts/check.py --hermes ../hermes-agent --hermes-python ../hermes-test-
 ```
 
 不安装或选择新包，不修改生产配置档案，也不需要付费 provider 调用。E2.6 新增严格的显式记录契约及元数据审查先导，仍未完成。公共加载器/SDK、替换激活/迁移、绑定来源的提取、原生桥接、checkpoint 持久性、投影和外部存储仍待实现。测试通过不构成启用这些能力的授权。
+
+[36](36-bounded-memory-recall-zh.md)增加可选的 `bounded_recall` 能力，用于带完整记录 JSON 预算的显式单快照字面检索。缺少能力会拒绝，不启用自动原生召回。

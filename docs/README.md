@@ -46,7 +46,8 @@ Extend Hermes into a long-lived personal agent for one user: one main agent unde
 32. [Session-scoped memory tools](32-session-scoped-memory-tools.md): independent 30-minute read/write activation, model provenance, v1→v2 migration and pending real-model acceptance.
 33. [Memory adapter admission](33-memory-adapter-admission.md): strict explicit-record descriptors, capability/limit checks, metadata-only review and reusable offline conformance gates; no third-party loading.
 34. [Local task operation history](34-local-task-history.md): persistent revision-ordered metadata, bounded pages and existing native read gates.
-35. [Architecture decision records](adr/README.md): reasons for the constraints.
+36. [Bounded explicit memory recall](36-bounded-memory-recall.md): multi-keyword literal ranking, whole-record JSON budgets, current revisions and one read snapshot; no automatic prompt injection.
+37. [Architecture decision records](adr/README.md): reasons for the constraints.
 
 ## Keep three kinds of statements separate
 

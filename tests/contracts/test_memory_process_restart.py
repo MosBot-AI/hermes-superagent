@@ -214,3 +214,61 @@ def test_chinese_correction_and_terminal_forget_survive_fresh_processes(tmp_path
         assert text not in serialized
     assert (home / "config.yaml").read_bytes() == original_config
     assert not (home / "plugin-data" / PLUGIN_ID / "tasks.sqlite3").exists()
+
+
+def test_bounded_recall_after_restart_correction_and_forget(tmp_path):
+    home = tmp_path / "profile"
+    install(home)
+    memory.configure(home, memory_model_tools=True)
+    (tmp_path / "bundled").mkdir()
+    original_config = (home / "config.yaml").read_bytes()
+    query = tool("recall", queries=["早餐", "燕麦奶"], limit=2, max_chars=2000)
+    saved = restart(
+        home,
+        [
+            {"activate": "enable-write"},
+            tool("remember", write=True, content="早餐豆浆", topic="饮食", request_id="r"),
+            query,
+        ],
+    )
+    rid = saved[1]["data"]["record_id"]
+    assert saved[2]["data"]["items"][0]["record_id"] == rid
+    current = restart(
+        home,
+        [
+            query,
+            {"activate": "enable-read"},
+            query,
+            {"activate": "enable-write"},
+            tool(
+                "correct",
+                write=True,
+                record_id=rid,
+                expected_revision=1,
+                content="早餐燕麦奶",
+                request_id="c",
+            ),
+            query,
+        ],
+    )
+    assert current[0]["error"]["code"] == "session_tools_not_activated"
+    assert current[2]["data"] == saved[2]["data"]
+    assert current[5]["data"]["items"][0]["content"] == "早餐燕麦奶"
+    assert current[5]["data"]["items"][0]["revision"] == 2
+    assert current[5]["data"]["items"][0]["matched_queries"] == [0, 1]
+    assert current[5]["data"]["items_json_chars"] <= 2000
+    forgotten = restart(
+        home,
+        [
+            {"activate": "enable-write"},
+            query,
+            tool("forget", write=True, record_id=rid, expected_revision=2, request_id="f"),
+            query,
+        ],
+    )
+    assert forgotten[1]["data"] == current[5]["data"]
+    assert forgotten[3]["data"]["items"] == []
+    final = restart(home, [{"activate": "enable-read"}, query])
+    assert final[1]["data"]["items"] == []
+    assert final[1]["data"]["watermark"] == 3
+    assert (home / "config.yaml").read_bytes() == original_config

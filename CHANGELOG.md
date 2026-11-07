@@ -8,6 +8,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Added explicit bounded memory recall through native commands and separately activated read tools: multi-keyword literal ranking, whole-record JSON budgets and current-record snapshots. Includes capability negotiation, correction/forgetting and fresh-process contracts; no automatic prompt injection, provider replacement or new storage schema.
+
 - Added strict explicit-memory backend descriptor/capability/limit negotiation, metadata-only adapter discovery and exact reviewed-candidate checks, plus reusable offline conformance gates. No third-party import, loader, activation or native provider replacement.
 
 - Added bounded local task operation history through CLI, native slash commands and activated task read tools. Existing metadata-only events survive restart and paginate by revision; same-page snapshot consistency, replay/CAS behavior and native admission are covered. No schema change, model call, worker dispatch or new authorization is introduced.

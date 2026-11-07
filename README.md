@@ -48,6 +48,8 @@ The first [explicit local memory slice](docs/31-explicit-local-memory.md) now su
 
 [Local task operation history](docs/34-local-task-history.md) adds revision-ordered metadata through the CLI, `/personal-tasks history` and activated task read tools. It survives restart and exposes no old task text. It does not verify authors, execute work or reconcile native workers.
 
+The [bounded recall guide](docs/36-bounded-memory-recall.md) adds explicit multi-keyword literal retrieval through native memory commands and activated read tools, with complete records, current revisions and a serialized-result budget. No automatic prompt injection or native provider replacement is enabled.
+
 ## Development checks
 
 `compatibility.json` records the Hermes baseline commit. The current runtime target is Python 3.14. A single tested SHA does not justify a broad `requires_hermes` version range.

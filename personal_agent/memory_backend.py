@@ -47,6 +47,7 @@ def validate_request(operation: str, payload: dict) -> dict:
         "get": ({"record_id"}, set()),
         "list": (set(), {"limit", "after"}),
         "search": ({"query"}, {"limit", "after"}),
+        "recall": ({"queries"}, {"limit", "max_chars"}),
         "export": (set(), {"limit", "after"}),
     }
     if not isinstance(operation, str) or operation not in fields or not isinstance(payload, dict):
@@ -82,6 +83,18 @@ def validate_request(operation: str, payload: dict) -> dict:
             raise MemoryError("invalid_request")
         if result["after"] is not None:
             result["after"] = _identifier(result["after"])
+    if operation == "recall":
+        result = {"limit": 6, "max_chars": 6000, **result}
+        queries = result["queries"]
+        if type(queries) is not list or not 1 <= len(queries) <= 8:
+            raise MemoryError("invalid_request")
+        result["queries"] = [_text(query, 128) for query in queries]
+        if len(set(result["queries"])) != len(queries):
+            raise MemoryError("invalid_request")
+        if type(result["limit"]) is not int or not 1 <= result["limit"] <= 20:
+            raise MemoryError("invalid_request")
+        if type(result["max_chars"]) is not int or not 1024 <= result["max_chars"] <= 12000:
+            raise MemoryError("invalid_request")
     return result
 
 

@@ -21,6 +21,7 @@ _CAPABILITIES = frozenset(
         "idempotency",
         "literal_search",
         "bounded_record_export",
+        "bounded_recall",
     }
 )
 _LIMITS = {
@@ -54,6 +55,7 @@ _OPERATION_CAPABILITIES = {
     "get": {"explicit_records"},
     "list": {"explicit_records"},
     "search": {"explicit_records", "literal_search"},
+    "recall": {"explicit_records", "literal_search", "bounded_recall"},
     "export": {"explicit_records", "bounded_record_export"},
 }
 _RESERVED_IDS = frozenset({"local_sqlite", "builtin", "built-in", "default", "none"})
@@ -94,6 +96,8 @@ class BackendDescriptor:
             if field in payload and len(payload[field]) > limits[f"max_{field}_chars"]:
                 raise MemoryError("backend_limit_exceeded")
         if "limit" in payload and payload["limit"] > limits["max_page_records"]:
+            raise MemoryError("backend_limit_exceeded")
+        if any(len(query) > limits["max_query_chars"] for query in payload.get("queries", [])):
             raise MemoryError("backend_limit_exceeded")
 
 

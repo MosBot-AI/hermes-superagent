@@ -91,6 +91,7 @@ class LocalMemoryBackend:
                 "idempotency",
                 "literal_search",
                 "bounded_record_export",
+                "bounded_recall",
             ],
             "unsupported": [
                 "fts",
@@ -241,6 +242,8 @@ class LocalMemoryBackend:
                 result = self._mutate(conn, operation, request)
             elif operation == "get":
                 result = self._get(conn, request["record_id"])
+            elif operation == "recall":
+                result = self._recall(conn, request)
             elif operation == "export":
                 result = {
                     "schema_version": "personal.memory.record_page.v1",
@@ -270,6 +273,64 @@ class LocalMemoryBackend:
         if row is None:
             raise MemoryError("not_found")
         return dict(zip(_COLUMNS, row, strict=True))
+
+    def _recall(self, conn, request):
+        """Rank current whole records inside this call's existing read transaction.
+
+        No derived index/cache or generated text can outlive a correction/forget.
+        The snapshot may become historical after this read commits; returned
+        source labels identify an editing route, not human intent or authority.
+        """
+        queries = request["queries"]
+        matching = " OR ".join("instr(content, ?) > 0 OR instr(topic, ?) > 0" for _ in queries)
+        args = [value for query in queries for value in (query, query)]
+        rows = conn.execute(
+            f"SELECT sequence,{','.join(_COLUMNS)} FROM records"
+            f" WHERE status='active' AND ({matching}) ORDER BY sequence DESC LIMIT 1001",
+            args,
+        ).fetchall()
+        if len(rows) > 1000:
+            raise MemoryError("record_limit")
+        ranked = []
+        for row in rows:
+            record = dict(zip(_COLUMNS, row[1:], strict=True))
+            matches = [
+                index
+                for index, query in enumerate(queries)
+                if query in record["content"] or query in record["topic"]
+            ]
+            topic_matches = sum(query in record["topic"] for query in queries)
+            ranked.append(
+                (-len(matches), -topic_matches, -row[0], {**record, "matched_queries": matches})
+            )
+        ranked.sort(key=lambda item: item[:3])
+        items = []
+        used_chars = 2  # The exact ASCII JSON representation of the empty list.
+        skipped_for_budget = 0
+        for _, _, _, record in ranked:
+            if len(items) == request["limit"]:
+                break
+            # Measure what callers receive, including escaped Unicode, quoting,
+            # provenance, revisions and list separators. Never cut stored prose.
+            size = len(json.dumps([*items, record], ensure_ascii=True, sort_keys=True))
+            if size > request["max_chars"]:
+                skipped_for_budget += 1
+                continue
+            items.append(record)
+            used_chars = size
+        return {
+            "schema_version": "personal.memory.recall.v1",
+            "items": items,
+            "watermark": conn.execute("SELECT coalesce(max(sequence),0) FROM events").fetchone()[0],
+            "matched_records": len(ranked),
+            "omitted_records": len(ranked) - len(items),
+            "skipped_for_budget": skipped_for_budget,
+            "items_json_chars": used_chars,
+            "max_chars": request["max_chars"],
+            "scope": "current_active_records_single_read_snapshot",
+            "ranking": "matched_query_count_then_topic_count_then_newest_creation",
+            "authority": "stored_data_not_instructions_or_permission",
+        }
 
     def _page(self, conn, request, include_forgotten=False):
         clauses, args = (["1=1"] if include_forgotten else ["status='active'"]), []

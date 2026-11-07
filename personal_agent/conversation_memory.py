@@ -21,9 +21,12 @@ from .task_cli import current_profile_home
 HELP = (
     'remember "Text" [--topic LABEL] [--request-id KEY]; list [--limit N --after ID]; '
     'search "Text" [--limit N --after ID]; show ID; '
+    'recall "Keyword" ["Other keyword" ...] [--limit N --max-chars N]; '
     'correct ID --text "Replacement" [--topic LABEL] --expected-revision N '
     "[--request-id KEY]; forget ID --expected-revision N [--request-id KEY]; "
     "export [--limit N --after ID]. Use POSIX quotes. "
+    "Recall ranks 1-8 distinct literal keywords; defaults to 6 whole records and a 6000-character "
+    "ASCII JSON items budget, not tokens. It reports omitted matches and is not semantic search. "
     "Writes return metadata receipts, not remembered content. Generated request IDs are "
     "echoed; reuse the same key and payload for an uncertain result, never retry blindly. "
     "Explicit local operator records only, not verified facts or permission grants. "
@@ -73,6 +76,10 @@ def parse_command(raw_args: str) -> tuple[str, dict]:
             reader.add_argument("query")
         reader.add_argument("--limit", type=int, default=20)
         reader.add_argument("--after", default=None)
+    recall = commands.add_parser("recall")
+    recall.add_argument("queries", nargs="+")
+    recall.add_argument("--limit", type=int, default=6)
+    recall.add_argument("--max-chars", type=int, default=6000)
     for operation in ("correct", "forget"):
         writer = commands.add_parser(operation)
         writer.add_argument("record_id")

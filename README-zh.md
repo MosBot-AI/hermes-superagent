@@ -48,6 +48,8 @@ Hermes 原生 personal-agent 插件，目标是让一个主 agent 管理项目�
 
 [本地任务操作历史](docs/34-local-task-history-zh.md)通过 CLI、`/personal-tasks history` 和已激活的任务读取工具返回按版本排列的元数据。重启后仍可查询，不返回任务旧正文；不验证作者、执行工作或对账原生 worker。
 
+[有界召回指南](docs/36-bounded-memory-recall-zh.md)新增原生记忆命令和独立激活读取工具的显式多关键词字面检索，返回完整记录、当前 revision，并限制序列化结果大小。不启用自动提示注入或原生 provider 替换。
+
 ## 开发验证
 
 基线为 `compatibility.json` 内的 Hermes commit；当前实际运行目标是 Python 3.14。没有根据单一 SHA 宣称宽泛的 `requires_hermes` 版本范围。

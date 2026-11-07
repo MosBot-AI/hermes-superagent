@@ -140,7 +140,7 @@ def test_canonical_uuid4_required(value, arguments, field):
 @pytest.mark.parametrize(
     "schema,name,actions,required",
     [
-        (PERSONAL_MEMORY_READ_SCHEMA, READ, ["list", "show", "search"], ["action"]),
+        (PERSONAL_MEMORY_READ_SCHEMA, READ, ["list", "show", "search", "recall"], ["action"]),
         (
             PERSONAL_MEMORY_WRITE_SCHEMA,
             WRITE,

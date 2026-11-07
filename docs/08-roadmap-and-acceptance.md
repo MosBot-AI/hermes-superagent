@@ -233,3 +233,5 @@ These are targets to be measured, not commitments already achieved. Report separ
 ## 7. Definition of Done
 
 Code review + corresponding design/ADR updates + unit/contract/integration tests + adversarial security cases + recovery tests + user-visible failure paths + compatibility version records + real acceptance evidence. For external systems, retain redactable receipts/readbacks rather than treating model prose as proof. State the reason and risk for every test not run.
+
+The [bounded recall follow-on](36-bounded-memory-recall.md) adds explicit multi-keyword literal ranking and complete-record budgets over one current read snapshot. E2.7 remains In Progress; FTS, Markdown projections and the E2.8 native lifecycle bridge are still unimplemented.

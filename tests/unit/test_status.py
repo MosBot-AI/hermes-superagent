@@ -59,6 +59,7 @@ def test_status_returns_new_nested_values():
 def test_local_memory_status_is_explicit_without_provider_or_model_claims():
     default = build_status()
     assert not default["local_memory"]["enabled"]
+    assert default["local_memory"]["bounded_literal_recall_implemented"] is True
     result = build_status(mode="local_tasks", local_conversation=True, local_memory=True)
     assert result["local_memory"]["configured"] is True
     for capability in (
