@@ -12,6 +12,7 @@ from uuid import UUID, uuid4
 
 from . import task_dependencies as dependencies
 from . import task_native_sync as native_sync
+from .task_native_review import task_native_review
 from .task_review import task_review
 
 _APPLICATION_ID = 0x5041544B
@@ -155,6 +156,10 @@ def validate_request(operation: str, payload: dict) -> dict:
         "search": ({"query"}, {"state", "limit", "after", "project", "unassigned", "work_status"}),
         "agenda": ({"on"}, {"limit", "after", "project", "unassigned", "work_status"}),
         "projects": (set(), {"limit", "after"}),
+        "native_review": (
+            {"on"},
+            {"stale_after_days", "per_bucket_limit", "max_chars", "project", "unassigned"},
+        ),
         "review": (
             {"on"},
             {
@@ -233,6 +238,19 @@ def validate_request(operation: str, payload: dict) -> dict:
         # Bound the normalized request, including escaping and envelope fields.
         if len(json.dumps(result, ensure_ascii=True, sort_keys=True)) > MAX_PLAN_CHARS:
             raise TaskError("invalid_request")
+    if operation == "native_review":
+        result = {"stale_after_days": 7, "per_bucket_limit": 5, "max_chars": 16000, **result}
+        for key, minimum, maximum in (
+            ("stale_after_days", 1, 365),
+            ("per_bucket_limit", 1, 20),
+            ("max_chars", 2048, 32000),
+        ):
+            if type(result[key]) is not int or not minimum <= result[key] <= maximum:
+                raise TaskError("invalid_request")
+        try:
+            date.fromisoformat(result["on"]) - timedelta(days=result["stale_after_days"])
+        except OverflowError:
+            raise TaskError("invalid_request") from None
     if operation == "review":
         result = {"lookahead_days": 7, "per_bucket_limit": 5, "max_chars": 16000, **result}
         for key, minimum, maximum in (
@@ -570,6 +588,7 @@ class TaskStore:
                 "projects",
                 "history",
                 "review",
+                "native_review",
                 "ready",
             ):
                 self._connection.execute("BEGIN")
@@ -578,6 +597,8 @@ class TaskStore:
                     data = self._get(request["task_id"])
                 elif operation == "review":
                     data = task_review(self._connection, request)
+                elif operation == "native_review":
+                    data = task_native_review(self._connection, request)
                 elif operation == "ready":
                     data = dependencies.ready(self._connection, request, self._get)
                 elif operation == "projects":

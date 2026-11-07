@@ -128,3 +128,5 @@ This file distinguishes design work, development changes, and released capabilit
 - Documented the Hermes-native personal-agent architecture, DSH research, authorization/revocation semantics, reliable delivery, memory, mobile/voice, and E0–E8 roadmap in commit `c254c86a17c61e1bd13d74d00d5b44016abab13d`.
 - Added the native worker model/effort routing design, shadow-first rollout, host constraint gaps, open-source comparisons, and E9.1–E9.6 work packages in commit `e4eb446c0d0c20d3ce83aa20f7b5139261d593f9`.
 - Those commits delivered designs and plans, not running product features.
+
+Added [saved native attention review](docs/54-saved-native-attention.md): local snapshots only, overlapping buckets with unique counts, no live-board read or completion change.

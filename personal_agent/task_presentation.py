@@ -195,6 +195,7 @@ def _help(prefix: str) -> str:
             + prefix
             + ' plan --project "Demo" --task "First" --task "Second" --request-id plan-1',
             "Review: " + prefix + " review --on YYYY-MM-DD",
+            "Saved native attention: " + prefix + " native-review --on YYYY-MM-DD",
             "Blocked: " + prefix + " list --work-status blocked",
             "Projects: " + prefix + " projects",
             "Available: " + prefix + " ready [--project LABEL | --unassigned]",
@@ -338,6 +339,42 @@ def _review(data: dict, prefix: str) -> list[str]:
     return lines
 
 
+def _native_review(data: dict) -> list[str]:
+    counts = data["counts"]
+    lines = [
+        f"Saved native attention review for {data['on']}",
+        "Saved observations need manual verification; not live state or local completion.",
+        f"Stale before {data['stale_before']} (UTC; explicit date, not background monitoring).",
+        f"Active: {counts['total_active']} | observed: {counts['active_observed']} | "
+        f"unobserved: {counts['active_unobserved']}",
+        f"Unique attention: {counts['unique_attention']} (buckets may overlap).",
+        "Unobserved does not mean no linked card exists.",
+    ]
+    filters = data["filters"]
+    if "project" in filters:
+        lines.append("Project: " + _quoted(filters["project"]))
+    elif filters.get("unassigned"):
+        lines.append("Project: unassigned")
+    for name, label in (
+        ("awaiting_review", "Saved board awaiting review"),
+        ("board_closed", "Saved board done or archived"),
+        ("identity_issue", "Saved identity issue"),
+        ("stale", "Stale saved observation"),
+    ):
+        bucket = data["buckets"][name]
+        shown = bucket["items"][:_PAGE_ITEMS]
+        lines.extend(["", f"{label}: {bucket['total']}"])
+        for task in shown:
+            lines.extend(_task_lines(task))
+        omitted = bucket["total"] - len(shown)
+        if omitted:
+            lines.append(f"Not shown: {omitted} task(s), due to result or display limits.")
+        elif not shown:
+            lines.append("None.")
+    lines.append("Local snapshots only. No board refresh, completion, unblocking or dispatch.")
+    return lines
+
+
 def _render(result: dict, *, operation: str, payload: dict, prefix: str) -> str:
     request_id = result.get("request_id") or payload.get("request_id")
     if result["status"] != "ok":
@@ -365,6 +402,8 @@ def _render(result: dict, *, operation: str, payload: dict, prefix: str) -> str:
             "All tasks saved together. No work, dependency ordering or reminder was executed."
         )
         lines.append("Browse: " + _command(prefix, "list", {"project": data["project"]}))
+    elif operation == "native_review":
+        lines = _native_review(data)
     elif operation == "review":
         lines = _review(data, prefix)
     elif operation == "projects":

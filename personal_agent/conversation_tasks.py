@@ -34,6 +34,9 @@ HELP = (
     'plan --project "Project" --task "First" --task "Second" --request-id KEY '
     "(1-20 tasks, one atomic write; a stable request ID is required); "
     "review --on YYYY-MM-DD [--lookahead-days N] [--per-bucket-limit N] [--max-chars N]; "
+    "native-review --on YYYY-MM-DD [--stale-after-days N] [--per-bucket-limit N] "
+    "[--max-chars N] [--project LABEL | --unassigned] reads saved observations only; "
+    "it never refreshes the board or changes task completion. "
     "history TASK_ID [--limit N] [--after-revision N] (operation metadata only). "
     "Readers support --limit and --after where applicable. "
     "list/search/agenda/review accept --work-status ready|in_progress|waiting|blocked "

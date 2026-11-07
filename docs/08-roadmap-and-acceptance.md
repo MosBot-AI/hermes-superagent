@@ -259,3 +259,5 @@ The [bounded recall follow-on](36-bounded-memory-recall.md) adds explicit multi-
 [Parked Kanban handoff](52-parked-kanban-handoff.md) adds explicit preview, single-use commit and bounded reconciliation into a shared native board. It does not complete worker dispatch, universal task mapping or live Kanban acceptance; those gates remain open.
 
 [Native progress observation](53-native-progress-observation.md) closes a narrow explicit metadata readback loop for identity-bound parked cards. It does not close worker execution, universal task mapping or real-host live acceptance gates.
+
+Added [saved native attention review](54-saved-native-attention.md): local snapshots only, overlapping buckets with unique counts, no live-board read or completion change.

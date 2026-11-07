@@ -59,6 +59,16 @@ def setup_tasks_cli(parent: argparse._SubParsersAction) -> None:
     review.add_argument("--lookahead-days", type=int, default=7)
     review.add_argument("--per-bucket-limit", type=int, default=5)
     review.add_argument("--max-chars", type=int, default=16000)
+    native_review = commands.add_parser(
+        "native-review", help="Review saved native observations without contacting the board"
+    )
+    native_review.add_argument("--on", required=True, help="Explicit UTC calendar date")
+    native_review.add_argument("--stale-after-days", type=int, default=7)
+    native_review.add_argument("--per-bucket-limit", type=int, default=5)
+    native_review.add_argument("--max-chars", type=int, default=16000)
+    native_filters = native_review.add_mutually_exclusive_group()
+    native_filters.add_argument("--project", default=argparse.SUPPRESS)
+    native_filters.add_argument("--unassigned", action="store_true", default=argparse.SUPPRESS)
     ready = commands.add_parser(
         "ready", help="Read eligible ready tasks, oldest first; never dispatch work"
     )
@@ -133,6 +143,8 @@ def setup_tasks_cli(parent: argparse._SubParsersAction) -> None:
 
 def command_request(args: argparse.Namespace) -> tuple[str, dict]:
     operation = "get" if args.task_operation == "show" else args.task_operation
+    if operation == "native-review":
+        operation = "native_review"
     if operation == "dependencies":
         operation = "set_dependencies"
     if operation == "plan":
@@ -151,6 +163,14 @@ def command_request(args: argparse.Namespace) -> tuple[str, dict]:
         "set_dependencies": ("task_id", "expected_revision", "request_id", "dependency_ids"),
         "history": ("task_id", "limit", "after_revision"),
         "projects": ("limit", "after"),
+        "native_review": (
+            "on",
+            "stale_after_days",
+            "per_bucket_limit",
+            "max_chars",
+            "project",
+            "unassigned",
+        ),
         "review": (
             "on",
             "lookahead_days",

@@ -261,3 +261,5 @@ Project 链接、Issue 号与最终字段以实际创建结果为准。若 API/�
 [停放式 Kanban 交接](52-parked-kanban-handoff-zh.md)增加面向共享原生看板的明确预览、单次提交及有界核对，不完成 worker 派发、通用任务映射或真实 Kanban 验收；这些门槛仍保持未完成。
 
 [原生进度观察](53-native-progress-observation-zh.md)补齐身份绑定停放卡片的明确元数据回读流程，不完成 worker 执行、通用任务映射或真实宿主验收门槛。
+
+新增[已存原生观察关注复盘](54-saved-native-attention-zh.md)：只读本地快照，重叠分类不重复计数，不读取实时看板或改变完成状态。

@@ -88,3 +88,5 @@ Research baselines: Hermes `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4` and DSH Su
 The design and project plan are established. The E0 foundation and opt-in local task inbox run in temporary test homes. Local CLI persistence and opt-in native LOCAL session commands are implemented; activated in-process model task tools are implemented, while remote-channel/HTTP personal-data access is not. There is no production deployment or connection to real personal data, and no claim that authorization, reminders, or mobile voice are usable. GitHub Projects tracks development; native Hermes Projects/Kanban will represent runtime work. They are different systems.
 
 E9 has a selected native worker-routing design, an offline constraint evaluator and partial native contract tests. The live routing backend is not implemented. The main agent keeps its responsibilities. See [11](11-worker-model-routing.md) for constraints, host gaps, references, and acceptance criteria.
+
+- [Saved native attention review](54-saved-native-attention.md)

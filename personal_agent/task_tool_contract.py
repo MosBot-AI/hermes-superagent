@@ -8,7 +8,17 @@ owns action-specific requirements, bounds, normalization and rejection.
 
 from .tasks import TaskError, validate_request
 
-_READ_ACTIONS = ("list", "show", "search", "projects", "agenda", "history", "review", "ready")
+_READ_ACTIONS = (
+    "list",
+    "show",
+    "search",
+    "projects",
+    "agenda",
+    "history",
+    "review",
+    "ready",
+    "native_review",
+)
 _WRITE_ACTIONS = (
     "capture",
     "capture_plan",
@@ -38,6 +48,12 @@ PERSONAL_TASKS_READ_SCHEMA = {
         "oldest first by creation sequence, not priority. It never dispatches work or proves "
         "execution. Cancelled prerequisites block; missing dependency fields in old receipts "
         "mean unknown, not clear. "
+        "native_review requires explicit on and reads saved native observations only, never "
+        "refreshes a board. It groups captured tasks by saved review status, saved done/archived "
+        "status, identity issues and observations older than UTC midnight(on)-stale_after_days. "
+        "Buckets may overlap; unique_attention is deduplicated. Saved native done/archived is "
+        "not local completion or permission to complete; inspect actual results separately. "
+        "Missing observations do not prove no linked card. No native action or model sync occurs. "
         "history returns operation metadata in revision order, not previous task text or "
         "proof the real-world task was performed. For history, pass returned next_cursor "
         "as after_revision; other pages use after. Pages are live, not frozen snapshots."
@@ -86,14 +102,16 @@ PERSONAL_TASKS_READ_SCHEMA = {
                 "minLength": 1,
                 "maxLength": 80,
                 "description": (
-                    "list/search/agenda/review/ready only: exact case-sensitive label, "
+                    "list/search/agenda/review/ready/native_review: exact case-sensitive label, "
                     "no outer whitespace. "
                     "Mutually exclusive with unassigned."
                 ),
             },
             "unassigned": {
                 "type": "boolean",
-                "description": "list/search/agenda/review/ready: true selects unlabeled tasks.",
+                "description": (
+                    "list/search/agenda/review/ready/native_review: true selects unlabeled tasks."
+                ),
             },
             "work_status": {
                 "type": "string",
@@ -102,6 +120,12 @@ PERSONAL_TASKS_READ_SCHEMA = {
                     "list/search/agenda/review only: filter recorded active progress. "
                     "With list/search, state must be omitted or captured."
                 ),
+            },
+            "stale_after_days": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 365,
+                "description": "native_review only: UTC calendar-day age cutoff; defaults to 7.",
             },
             "lookahead_days": {
                 "type": "integer",
@@ -113,21 +137,24 @@ PERSONAL_TASKS_READ_SCHEMA = {
                 "type": "integer",
                 "minimum": 1,
                 "maximum": 20,
-                "description": "review only: maximum summaries per bucket; defaults to 5.",
+                "description": "review/native_review: maximum summaries per bucket; defaults to 5.",
             },
             "max_chars": {
                 "type": "integer",
                 "minimum": 2048,
                 "maximum": 64000,
                 "description": (
-                    "review only: ASCII-serialized data budget, excluding the outer tool envelope; "
-                    "defaults to 16000. Summaries are omitted whole, never text-truncated."
+                    "review/native_review: ASCII-serialized data budget outside the tool envelope; "
+                    "defaults to 16000; native_review caps at 32000. "
+                    "Summaries are omitted whole, never text-truncated."
                 ),
             },
             "on": {
                 "type": "string",
                 "format": "date",
-                "description": "agenda/review only: explicit YYYY-MM-DD date; do not infer a date.",
+                "description": (
+                    "agenda/review/native_review: explicit YYYY-MM-DD date; do not infer a date."
+                ),
             },
         },
     },

@@ -67,6 +67,7 @@ def build_status(
             "atomic_project_plan_capture": local_tasks,
             "local_project_task_dependencies": local_tasks,
             "dependency_ready_queue": local_tasks,
+            "saved_native_attention_review": local_tasks,
             "local_task_agenda_cli": local_tasks,
             "identity_binding": False,
             "action_authorization": False,
@@ -113,6 +114,16 @@ def build_status(
                 "Explicit commands under host session authorization; all admitted controllers "
                 "share access. LOCAL is not physical-locality or independent owner proof."
             ),
+        },
+        "native_attention_review": {
+            "implemented": True,
+            "enabled": local_tasks,
+            "source": "saved_local_task_observations_only",
+            "native_access": False,
+            "automatic": False,
+            "changes_completion": False,
+            "live_verified": False,
+            "model_read_requires_existing_session_activation": True,
         },
         "kanban_handoff": {
             "configured": kanban_handoff,
