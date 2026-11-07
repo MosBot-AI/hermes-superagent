@@ -46,6 +46,8 @@ The first [explicit local memory slice](docs/31-explicit-local-memory.md) now su
 
 [Session-scoped memory tools](docs/32-session-scoped-memory-tools.md) now add bounded model remember/query/correct/forget through a separate `memory_model_tools: true` option and `/personal-memory-tools enable-read` or `enable-write` activation. Task-tool activation does not grant memory access. Model edits are labeled `activated_session_model`, not verified human instructions; native providers remain unchanged. Existing memory DBs upgrade atomically to schema v2. Real-provider natural-language acceptance remains pending.
 
+[Local task operation history](docs/34-local-task-history.md) adds revision-ordered metadata through the CLI, `/personal-tasks history` and activated task read tools. It survives restart and exposes no old task text. It does not verify authors, execute work or reconcile native workers.
+
 ## Development checks
 
 `compatibility.json` records the Hermes baseline commit. The current runtime target is Python 3.14. A single tested SHA does not justify a broad `requires_hermes` version range.

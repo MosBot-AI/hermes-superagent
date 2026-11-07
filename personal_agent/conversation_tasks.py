@@ -29,7 +29,8 @@ _WRITES = frozenset(("capture", "update", "complete", "cancel"))
 HELP = (
     'Use POSIX quotes: add "Title" [--details "Text"] [--project "Project"] '
     "[--due-date YYYY-MM-DD]; list [--state all] [--project LABEL | --unassigned]; "
-    'search "Text"; show TASK_ID; projects; agenda --on YYYY-MM-DD. '
+    'search "Text"; show TASK_ID; projects; agenda --on YYYY-MM-DD; '
+    "history TASK_ID [--limit N] [--after-revision N] (operation metadata only). "
     "Readers support --limit and --after where applicable. "
     "update TASK_ID --expected-revision N [--title TITLE] [--details TEXT] "
     "[--project LABEL | --clear-project] [--due-date YYYY-MM-DD | --clear-due]; "

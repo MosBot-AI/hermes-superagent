@@ -116,6 +116,7 @@ def validate_request(operation: str, payload: dict) -> dict:
         "complete": ({"task_id", "expected_revision", "request_id", "note"}, set()),
         "cancel": ({"task_id", "expected_revision", "request_id", "note"}, set()),
         "get": ({"task_id"}, set()),
+        "history": ({"task_id"}, {"limit", "after_revision"}),
         "list": (set(), {"state", "limit", "after", "project", "unassigned"}),
         "search": ({"query"}, {"state", "limit", "after", "project", "unassigned"}),
         "agenda": ({"on"}, {"limit", "after", "project", "unassigned"}),
@@ -158,6 +159,13 @@ def validate_request(operation: str, payload: dict) -> dict:
     if "expected_revision" in result:
         value = result["expected_revision"]
         if type(value) is not int or not 1 <= value < 2**63 - 1:
+            raise TaskError("invalid_request")
+    if operation == "history":
+        result = {"limit": 20, "after_revision": 0, **result}
+        if type(result["limit"]) is not int or not 1 <= result["limit"] <= 100:
+            raise TaskError("invalid_request")
+        value = result["after_revision"]
+        if type(value) is not int or not 0 <= value < 2**63:
             raise TaskError("invalid_request")
     if operation in ("list", "search", "agenda", "projects"):
         result = {"limit": 20, "after": None, **result}
@@ -348,6 +356,43 @@ class TaskStore:
             "has_more": more,
         }
 
+    def _history(self, request: dict) -> dict:
+        """Bounded append-only metadata in one read snapshot, never task text."""
+        task_id = request["task_id"]
+        row = self._connection.execute(
+            "SELECT revision, state FROM tasks WHERE id = ?", (task_id,)
+        ).fetchone()
+        if row is None:
+            raise TaskError("not_found")
+        revision, state = row
+        after = request["after_revision"]
+        if after and (
+            after > revision
+            or self._connection.execute(
+                "SELECT 1 FROM events WHERE task_id = ? AND revision = ?", (task_id, after)
+            ).fetchone()
+            is None
+        ):
+            raise TaskError("invalid_cursor")
+        rows = self._connection.execute(
+            "SELECT revision, operation, timestamp FROM events WHERE task_id = ?"
+            " AND revision > ? AND revision <= ? ORDER BY revision ASC LIMIT ?",
+            (task_id, after, revision, request["limit"] + 1),
+        ).fetchall()
+        more = len(rows) > request["limit"]
+        items = [
+            dict(zip(("revision", "operation", "timestamp"), item, strict=True))
+            for item in rows[: request["limit"]]
+        ]
+        return {
+            "task_id": task_id,
+            "current_revision": revision,
+            "current_state": state,
+            "items": items,
+            "next_cursor": items[-1]["revision"] if more else None,
+            "has_more": more,
+        }
+
     def run(self, operation: str, payload: dict) -> dict:
         """Execute a validated operation with atomic mutations and durable replay receipts."""
         request = validate_request(operation, payload)
@@ -357,15 +402,19 @@ class TaskStore:
         try:
             if self._connection.in_transaction:
                 raise TaskError("connection_in_transaction")
-            if operation in ("get", "list", "search", "agenda", "projects"):
+            if operation in ("get", "list", "search", "agenda", "projects", "history"):
                 if operation == "get":
                     data = self._get(request["task_id"])
-                elif operation == "projects":
-                    # Both aggregate queries share one read snapshot. A deferred
+                elif operation in ("projects", "history"):
+                    # Related queries share one read snapshot. A deferred
                     # transaction avoids acquiring an unnecessary write lock.
                     self._connection.execute("BEGIN")
                     began = True
-                    data = self._projects(request)
+                    data = (
+                        self._projects(request)
+                        if operation == "projects"
+                        else self._history(request)
+                    )
                     self._connection.execute("COMMIT")
                 elif operation == "agenda":
                     data = self._agenda(request)

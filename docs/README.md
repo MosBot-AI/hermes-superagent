@@ -44,7 +44,8 @@ Extend Hermes into a long-lived personal agent for one user: one main agent unde
 30. [Pluggable memory contracts](30-pluggable-memory-contracts.md): proposed replaceable backend/SDK, SQLite authority and Markdown projections, optional native bridge, bounded recall, deletion and migration.
 31. [Explicit local memory](31-explicit-local-memory.md): user-controlled native remember/search/correct/forget commands, bounded records and partial adapter seam; no automatic recall or provider replacement.
 32. [Session-scoped memory tools](32-session-scoped-memory-tools.md): independent 30-minute read/write activation, model provenance, v1→v2 migration and pending real-model acceptance.
-33. [Architecture decision records](adr/README.md): reasons for the constraints.
+33. [Local task operation history](34-local-task-history.md): persistent revision-ordered metadata, bounded pages and existing native read gates.
+34. [Architecture decision records](adr/README.md): reasons for the constraints.
 
 ## Keep three kinds of statements separate
 

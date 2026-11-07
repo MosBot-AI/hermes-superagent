@@ -8,7 +8,7 @@ owns action-specific requirements, bounds, normalization and rejection.
 
 from .tasks import TaskError, validate_request
 
-_READ_ACTIONS = ("list", "show", "search", "projects", "agenda")
+_READ_ACTIONS = ("list", "show", "search", "projects", "agenda", "history")
 _WRITE_ACTIONS = ("capture", "update", "complete", "cancel")
 
 PERSONAL_TASKS_READ_SCHEMA = {
@@ -17,10 +17,12 @@ PERSONAL_TASKS_READ_SCHEMA = {
         "Read this profile's local task inbox; results become visible to the configured model. "
         "No external action, scheduling or reminders. Projects are exact task labels, not "
         "native Project entities. Use only fields relevant to the selected action. "
-        "show requires task_id from an earlier result; never invent IDs. search requires "
+        "show/history require task_id from an earlier result; never invent IDs. search requires "
         "literal query text. agenda requires an explicit on date and returns active tasks "
         "due on or before it. list/search default to captured. projects returns label counts. "
-        "Use returned next_cursor for after; pages are live, not frozen snapshots."
+        "history returns operation metadata in revision order, not previous task text or "
+        "proof the real-world task was performed. For history, pass returned next_cursor "
+        "as after_revision; other pages use after. Pages are live, not frozen snapshots."
     ),
     "parameters": {
         "type": "object",
@@ -31,7 +33,7 @@ PERSONAL_TASKS_READ_SCHEMA = {
             "task_id": {
                 "type": "string",
                 "format": "uuid",
-                "description": "show only: exact canonical UUIDv4 returned by this store.",
+                "description": "show/history only: exact canonical UUIDv4 returned by this store.",
             },
             "query": {"type": "string", "minLength": 1, "maxLength": 240},
             "state": {
@@ -48,8 +50,17 @@ PERSONAL_TASKS_READ_SCHEMA = {
             "after": {
                 "type": ["string", "null"],
                 "description": (
-                    "All reads except show: returned next_cursor, or null. "
+                    "All reads except show/history: returned next_cursor, or null. "
                     "projects uses an exact label (1-80 characters); others use a task UUIDv4."
+                ),
+            },
+            "after_revision": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2**63 - 1,
+                "description": (
+                    "history only: exclusive revision cursor from next_cursor; defaults to 0. "
+                    "Use the same task_id across pages."
                 ),
             },
             "project": {

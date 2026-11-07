@@ -40,7 +40,7 @@ plugins:
 
 `enable-write` 后，可以对已有主模型说“在 Personal Agent 项目中添加准备演示的任务”“查看该项目的任务”“将演示任务标记为完成”。模型必须调用注册工具并使用返回 ID/revision，而非只承诺记住任务。自然语言理解和工具选择取决于已配置模型，仍需真实验收。
 
-- `personal_tasks_read`：`list`、`show`、字面 `search`、通过 `projects` 查看项目标签计数，以及显式日期 `agenda`。
+- `personal_tasks_read`：`list`、`show`、字面 `search`、通过 `projects` 查看项目标签计数、显式日期 `agenda`，以及仅含元数据、使用整数 `after_revision` 游标的任务 `history`。参见[操作历史](34-local-task-history-zh.md)。
 - `personal_tasks_write`：`capture`、`update`、`complete`、`cancel`。所有修改要求稳定 `request_id`；编辑和终态变更还要求之前读取的 `task_id` 与 `expected_revision`。完成/取消要求 note。
 - 由同一 TaskStore 校验器拒绝未知、不相关、身份/批准字段及错误类型。`show` 映射为存储的 `get`；没有其他隐含动作别名。
 - 日期必须明确。项目名仍是标签，不是原生 Project、worker 派发或权限范围。完成记录不等于实际执行对应现实任务。不发送提醒或外部副作用。

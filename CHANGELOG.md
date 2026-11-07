@@ -8,6 +8,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Added bounded local task operation history through CLI, native slash commands and activated task read tools. Existing metadata-only events survive restart and paginate by revision; same-page snapshot consistency, replay/CAS behavior and native admission are covered. No schema change, model call, worker dispatch or new authorization is introduced.
+
 - Added separately activated native memory model tools with read/write TTL, live-turn admission and independent task permissions. Added model-origin provenance and exact-owned memory schema v1→v2 migration preserving legacy receipts; no automatic prefetch/extraction or real-provider acceptance.
 
 - Added opt-in native `/personal-memory` operator records: remember, bounded literal search/list/export, revisioned correction and terminal forgetting. Dedicated private SQLite, metadata-only replay receipts and a narrow internal backend interface; native providers unchanged, with no automatic recall/extraction or public adapter loader.

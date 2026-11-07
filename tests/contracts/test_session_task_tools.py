@@ -129,11 +129,42 @@ def test_native_slash_activation_to_real_model_dispatch_lifecycle(host):
         assert call(host, done, write=True)["error"]["code"] == "revision_conflict"
         done["expected_revision"] = 2
         assert call(host, done, write=True)["data"]["state"] == "done"
+        history_args = {"action": "history", "task_id": task["id"], "limit": 2}
+        history = call(host, history_args)["data"]
+        assert history["current_revision"] == 3 and history["current_state"] == "done"
+        assert [item["operation"] for item in history["items"]] == ["capture", "update"]
+        final = call(host, {**history_args, "after_revision": history["next_cursor"]})["data"]
+        assert [item["operation"] for item in final["items"]] == ["complete"]
     assert active_turn(host.ref.session_id) is None
     assert call(host)["error"]["code"] == "no_active_local_turn"
+    assert call(host, history_args)["error"]["code"] == "no_active_local_turn"
     assert activate(host, "disable")["data"]["access"] == "disabled"
     with turn(host):
         assert call(host)["error"]["code"] == "session_tools_not_activated"
+        assert call(host, history_args)["error"]["code"] == "session_tools_not_activated"
+
+
+def test_native_history_read_activation_and_validation(host):
+    activate(host)
+    with turn(host):
+        task = call(
+            host,
+            {"action": "capture", "title": "Private task", "request_id": "history-task"},
+            write=True,
+        )["data"]
+    activate(host, "enable-read")
+    args = {"action": "history", "task_id": task["id"]}
+    with turn(host):
+        result = call(host, args)
+        assert result["status"] == "ok"
+        assert result["data"]["items"][0]["operation"] == "capture"
+        assert "Private task" not in json.dumps(result)
+        assert call(host, {**args, "after_revision": 2})["error"]["code"] == "invalid_cursor"
+        assert call(host, {**args, "after_revision": True})["error"]["code"] == "invalid_request"
+        assert call(host, {**args, "after": task["id"]})["error"]["code"] == "invalid_request"
+    with turn(host, sid="different-session"):
+        denied = call(host, args, sid="different-session")
+        assert denied["error"]["code"] == "session_tools_not_activated"
 
 
 @pytest.mark.parametrize(

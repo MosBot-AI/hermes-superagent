@@ -202,6 +202,7 @@ def test_no_context_or_unknown_fields(tool, arguments, field):
         ("search", {"query": "x"}),
         ("projects", {"after": "Research", "limit": 100}),
         ("agenda", {"on": "2026-11-06"}),
+        ("history", {"task_id": TASK_ID, "after_revision": 2}),
         ("capture", {"title": "x", "request_id": "x", "project": None}),
         (
             "update",
@@ -234,7 +235,7 @@ def test_schemas_are_flat_closed_json_objects():
         (
             PERSONAL_TASKS_READ_SCHEMA,
             READ,
-            ["list", "show", "search", "projects", "agenda"],
+            ["list", "show", "search", "projects", "agenda", "history"],
             ["action"],
         ),
         (

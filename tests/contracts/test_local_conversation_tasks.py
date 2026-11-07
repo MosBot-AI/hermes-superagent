@@ -174,6 +174,10 @@ def test_real_native_owner_command_sqlite_lifecycle(host):
     assert command(host, 'search "Native"')["data"]["items"][0]["id"] == task["id"]
     assert command(host, "projects")["data"]["items"][0]["project"] == "Demo project"
     assert command(host, "agenda --on 2030-01-02")["data"]["items"][0]["id"] == task["id"]
+    history = command(host, f"history {task['id']}")
+    assert history["status"] == "ok" and history["request_id"] is None
+    assert history["data"]["current_revision"] == 1
+    assert history["data"]["items"][0]["operation"] == "capture"
     updated = command(
         host,
         f"update {task['id']} --expected-revision 1 --title Changed --request-id native-update",

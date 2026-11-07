@@ -24,6 +24,10 @@ def setup_tasks_cli(parent: argparse._SubParsersAction) -> None:
     capture.add_argument("--project", default=argparse.SUPPRESS)
     show = commands.add_parser("show", help="Read one local task")
     show.add_argument("task_id")
+    history = commands.add_parser("history", help="Read bounded task operation metadata")
+    history.add_argument("task_id")
+    history.add_argument("--limit", type=int, default=20)
+    history.add_argument("--after-revision", type=int, default=0)
     listing = commands.add_parser("list", help="Read a bounded local task page, newest first")
     listing.add_argument(
         "--state", choices=("captured", "done", "cancelled", "all"), default="captured"
@@ -85,6 +89,7 @@ def command_request(args: argparse.Namespace) -> tuple[str, dict]:
     fields = {
         "capture": ("title", "details", "request_id", "due_date", "project"),
         "get": ("task_id",),
+        "history": ("task_id", "limit", "after_revision"),
         "projects": ("limit", "after"),
         "list": ("state", "limit", "after", "project", "unassigned"),
         "search": ("query", "state", "limit", "after", "project", "unassigned"),

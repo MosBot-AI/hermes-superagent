@@ -86,6 +86,11 @@ def test_read_project_agenda_search_and_mutation_workflow(local):
     assert done["data"]["revision"] == 3
     assert invoke("list")["data"]["items"] == []
     assert len(invoke("list --state all")["data"]["items"]) == 1
+    history = invoke(f"history {task_id} --limit 2")["data"]
+    assert history["current_revision"] == 3 and history["current_state"] == "done"
+    assert [item["operation"] for item in history["items"]] == ["capture", "update"]
+    last = invoke(f"history {task_id} --after-revision {history['next_cursor']}")["data"]
+    assert [item["operation"] for item in last["items"]] == ["complete"]
 
 
 def test_cancel_and_idempotency_conflict(local):
@@ -189,6 +194,10 @@ def test_deleted_profile_does_not_read_config(monkeypatch, tmp_path):
         'capture --title ""',
         'add "x" --request-id "invalid/key"',
         "show invalid",
+        "history invalid",
+        f"history {uuid4()} --after-revision -1",
+        f"history {uuid4()} --after-revision 1.5",
+        f"history {uuid4()} --limit 101",
         'capture --tit "x"',
         "list --help",
         "list --limit -1",
