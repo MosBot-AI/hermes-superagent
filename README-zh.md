@@ -146,3 +146,5 @@ plugins:
 [受门控的任务规划 worker](docs/55-gated-plan-worker-zh.md): 生产包接线默认关闭，要求准确已审阅宿主约定及当前同意，不代表安装或真实验收。
 
 [原子计划明确依赖](docs/56-atomic-plan-dependencies-zh.md): 显式一基批次引用，同事务保存任务与边，不自动执行。
+
+[明确任务拆解](docs/57-task-breakdown-zh.md): 原子记录步骤、继承前置，并让父任务依赖全部新步骤；不自动执行或完成。

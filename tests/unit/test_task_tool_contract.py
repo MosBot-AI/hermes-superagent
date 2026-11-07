@@ -254,6 +254,7 @@ def test_schemas_are_flat_closed_json_objects():
             [
                 "capture",
                 "capture_plan",
+                "breakdown",
                 "update",
                 "complete",
                 "cancel",

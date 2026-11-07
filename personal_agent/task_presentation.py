@@ -12,6 +12,14 @@ _STATUS = {
     "blocked": "blocked",
 }
 _ERRORS = {
+    "breakdown_in_progress": (
+        "An in-progress task cannot be broken down. Explicitly record a non-running "
+        "work status after reviewing actual work, then retry from its current revision."
+    ),
+    "dependency_limit": (
+        "Existing prerequisites plus new steps exceed the 20-prerequisite limit. "
+        "No steps or links were saved; review the plan without dropping required prerequisites."
+    ),
     "dependency_cycle": "These prerequisites would form a cycle. No dependency change was saved.",
     "dependency_project_required": "Dependencies require a named project on the target task.",
     "dependency_project_mismatch": "Every prerequisite must share the target's exact project.",
@@ -194,6 +202,16 @@ def _help(prefix: str) -> str:
             "Plan: "
             + prefix
             + ' plan --project "Demo" --task "First" --task "Second" --request-id plan-1',
+            "Break down: "
+            + prefix
+            + (
+                ' breakdown TASK_ID --expected-revision N --task "First" --task "Second" '
+                "--request-id breakdown-1"
+            ),
+            (
+                "Breakdown preserves and inherits existing prerequisites, then makes the "
+                "original task depend on every new step. It never completes the original task."
+            ),
             "Review: " + prefix + " review --on YYYY-MM-DD",
             "Saved native attention: " + prefix + " native-review --on YYYY-MM-DD",
             "Blocked: " + prefix + " list --work-status blocked",
@@ -389,32 +407,62 @@ def _render(result: dict, *, operation: str, payload: dict, prefix: str) -> str:
         return _help(prefix)
     if operation in ("list", "search", "agenda", "ready"):
         lines = _page(data, operation, payload, prefix)
-    elif operation == "capture_plan":
+    elif operation in ("capture_plan", "breakdown"):
+        breakdown = operation == "breakdown"
+        label = "Task breakdown" if breakdown else "Plan"
         lines = [
-            f"Plan saved: {len(data['items'])} task(s).",
+            f"{label} saved: {len(data['items'])} task(s).",
             "Project: " + _quoted(data["project"]),
         ]
         if result.get("replayed"):
             lines.insert(0, "Replayed saved plan receipt. Use show for each task's current state.")
+        if breakdown:
+            lines.append("Original task (not completed):")
+            lines.extend(_task_lines(data["parent"]))
+            inherited = data["inherited_dependency_ids"]
+            lines.append(f"Existing prerequisites inherited by every new step: {len(inherited)}.")
+            for task_id in inherited:
+                lines.append("  Inherited prerequisite: " + task_id)
+            lines.append(
+                "Original task now depends on every new step and all its previous prerequisites. "
+                "Finishing steps only unblocks it; "
+                "explicit review and completion are still required."
+            )
+            lines.append(
+                "Cancelling the original task does not cancel its steps. "
+                "These are editable dependency links, not exclusive subtask ownership."
+            )
         positions = {task["id"]: index for index, task in enumerate(data["items"], 1)}
         for index, task in enumerate(data["items"], 1):
             lines.append(f"Plan item {index}:")
             lines.extend(_task_lines(task))
             prerequisites = task.get("dependencies", [])
             if prerequisites:
-                if all(item["task_id"] in positions for item in prerequisites):
-                    needs = sorted(positions[item["task_id"]] for item in prerequisites)
+                needs = sorted(
+                    positions[item["task_id"]]
+                    for item in prerequisites
+                    if item["task_id"] in positions
+                )
+                if needs:
                     lines.append("  Needs plan item(s): " + ", ".join(map(str, needs)))
-                else:
-                    lines.append("  Some prerequisite IDs are outside this receipt; use show.")
+                if any(item["task_id"] not in positions for item in prerequisites):
+                    lines.append(
+                        "  Also requires the inherited prerequisites listed above."
+                        if breakdown
+                        else "  Some prerequisite IDs are outside this receipt; use show."
+                    )
         if all(isinstance(task.get("dependencies"), list) for task in data["items"]):
             links = sum(len(task["dependencies"]) for task in data["items"])
+            if breakdown:
+                links += len(data["items"])  # New original-task -> step edges, not preserved edges.
             lines.append(f"Saved prerequisite links: {links}. Input order is not execution order.")
         else:
             lines.append("Prerequisite metadata unavailable in this historical receipt.")
         lines.append(
             "All tasks and explicit links saved together. No task started, completed or dispatched."
         )
+        if breakdown:
+            lines.append("Original: " + _command(prefix, "show", {"task_id": data["parent"]["id"]}))
         lines.append("Browse: " + _command(prefix, "list", {"project": data["project"]}))
         lines.append("Ready: " + _command(prefix, "ready", {"project": data["project"]}))
     elif operation == "native_review":

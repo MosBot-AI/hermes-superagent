@@ -134,3 +134,5 @@ Added [saved native attention review](docs/54-saved-native-attention.md): local 
 [Gated task planning worker](docs/55-gated-plan-worker.md): Production-package integration is default-off and requires the exact reviewed host contract plus current consent; not installed or live-accepted.
 
 [Explicit atomic plan dependencies](docs/56-atomic-plan-dependencies.md): Explicit one-based batch references save tasks and edges together, without automatic execution.
+
+[Explicit task breakdown](docs/57-task-breakdown.md): Atomically captures steps, inherits prerequisites and makes the parent depend on every new step; no automatic execution or completion.

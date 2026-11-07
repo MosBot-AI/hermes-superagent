@@ -22,6 +22,7 @@ _READ_ACTIONS = (
 _WRITE_ACTIONS = (
     "capture",
     "capture_plan",
+    "breakdown",
     "update",
     "complete",
     "cancel",
@@ -180,6 +181,13 @@ PERSONAL_TASKS_WRITE_SCHEMA = {
         "Forward references are allowed; cycles, self references and out-of-range positions "
         "are rejected. Omitted/empty depends_on means no prerequisites. These local links "
         "gate start/completion but never dispatch work. "
+        "breakdown requires task_id, expected_revision and 1-20 explicit task objects in tasks, "
+        "not project: use the captured, not-in-progress parent's existing named project. "
+        "Only record an explicitly requested breakdown. Every step inherits ALL parent "
+        "prerequisites; the parent preserves those and depends on every new step. "
+        "Combined prerequisite limits still apply. No parent details are copied, no work is "
+        "executed, and no aggregate completion happens automatically. One atomic receipt "
+        "covers parent and steps; retry identical arguments/key, never separate captures. "
         "update requires "
         "at least one of title/details/due_date/project. "
         "update/complete/cancel/progress/set_dependencies require "
@@ -212,7 +220,7 @@ PERSONAL_TASKS_WRITE_SCHEMA = {
                 "type": "string",
                 "format": "uuid",
                 "description": (
-                    "update/complete/cancel/progress/set_dependencies: "
+                    "update/complete/cancel/progress/set_dependencies/breakdown: "
                     "canonical UUIDv4 from a result."
                 ),
             },
@@ -221,7 +229,8 @@ PERSONAL_TASKS_WRITE_SCHEMA = {
                 "minimum": 1,
                 "maximum": 2**63 - 2,
                 "description": (
-                    "update/complete/cancel/progress/set_dependencies: revision from a prior read."
+                    "update/complete/cancel/progress/set_dependencies/breakdown: "
+                    "revision from a prior read."
                 ),
             },
             "dependency_ids": {
@@ -238,7 +247,7 @@ PERSONAL_TASKS_WRITE_SCHEMA = {
                 "minItems": 1,
                 "maxItems": 20,
                 "description": (
-                    "capture_plan only: ordered tasks sharing the top-level project label."
+                    "capture_plan/breakdown: ordered tasks; breakdown inherits the parent project."
                 ),
                 "items": {
                     "type": "object",
@@ -256,7 +265,8 @@ PERSONAL_TASKS_WRITE_SCHEMA = {
                             "description": (
                                 "Explicit prerequisite positions, ONE-BASED in this tasks array. "
                                 "Forward references allowed; no self references or cycles. "
-                                "Omitted or [] means none, never infer from array order."
+                                "Omitted or [] means no batch-local edges; order implies none. "
+                                "Breakdown still inherits every existing parent prerequisite."
                             ),
                         },
                     },

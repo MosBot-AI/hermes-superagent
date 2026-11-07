@@ -32,6 +32,17 @@ def setup_tasks_cli(parent: argparse._SubParsersAction) -> None:
         "--tasks-json",
         help="JSON task objects with optional depends_on (one-based positions in this array)",
     )
+    breakdown = commands.add_parser(
+        "breakdown", help="Atomically record explicit steps for an existing project task"
+    )
+    breakdown.add_argument("task_id")
+    breakdown.add_argument("--expected-revision", type=int, required=True)
+    breakdown.add_argument("--request-id", required=True)
+    step_inputs = breakdown.add_mutually_exclusive_group(required=True)
+    step_inputs.add_argument("--task", action="append", help="Repeat for each explicit step title")
+    step_inputs.add_argument(
+        "--tasks-json", help="JSON steps; depends_on uses one-based positions in this array"
+    )
     show = commands.add_parser("show", help="Read one local task")
     show.add_argument("task_id")
     history = commands.add_parser("history", help="Read bounded task operation metadata")
@@ -150,12 +161,22 @@ def command_request(args: argparse.Namespace) -> tuple[str, dict]:
         operation = "native_review"
     if operation == "dependencies":
         operation = "set_dependencies"
-    if operation == "plan":
+    if operation in ("plan", "breakdown"):
         tasks = (
             [{"title": title} for title in args.task]
             if args.task is not None
             else _parse_plan_json(args.tasks_json)
         )
+        if operation == "breakdown":
+            return operation, validate_request(
+                operation,
+                {
+                    "task_id": args.task_id,
+                    "expected_revision": args.expected_revision,
+                    "tasks": tasks,
+                    "request_id": args.request_id,
+                },
+            )
         return "capture_plan", validate_request(
             "capture_plan", {"project": args.project, "tasks": tasks, "request_id": args.request_id}
         )

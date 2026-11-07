@@ -143,6 +143,7 @@ def validate_request(operation: str, payload: dict) -> dict:
         "ready": (set(), {"project", "unassigned", "limit", "after"}),
         "capture": ({"title", "request_id"}, {"details", "due_date", "project"}),
         "capture_plan": ({"project", "tasks", "request_id"}, set()),
+        "breakdown": ({"task_id", "expected_revision", "tasks", "request_id"}, set()),
         "update": (
             {"task_id", "expected_revision", "request_id"},
             {"title", "details", "due_date", "project"},
@@ -223,7 +224,7 @@ def validate_request(operation: str, payload: dict) -> dict:
         if len(set(ids)) != len(ids):
             raise TaskError("invalid_request")
         result["dependency_ids"] = sorted(ids)
-    if operation == "capture_plan":
+    if operation in ("capture_plan", "breakdown"):
         items = result["tasks"]
         if type(items) is not list or not 1 <= len(items) <= MAX_PLAN_TASKS:
             raise TaskError("invalid_request")
@@ -451,6 +452,45 @@ class TaskStore:
         )
         return self._get(task_id)
 
+    def _capture_batch(self, request, now, operation, parent=None):
+        project = request["project"] if parent is None else parent["project"]
+        inherited = [] if parent is None else [row["task_id"] for row in parent["dependencies"]]
+        items = [
+            self._capture(
+                {**{k: v for k, v in item.items() if k != "depends_on"}, "project": project}, now
+            )
+            for item in request["tasks"]
+        ]
+        for task, item in zip(items, request["tasks"], strict=True):
+            prerequisite_ids = inherited + [
+                items[position - 1]["id"] for position in item.get("depends_on", [])
+            ]
+            self._connection.executemany(
+                "INSERT INTO task_dependencies(task_id,dependency_id) VALUES (?,?)",
+                [(task["id"], prerequisite_id) for prerequisite_id in prerequisite_ids],
+            )
+        if parent is not None:
+            self._connection.executemany(
+                "INSERT INTO task_dependencies(task_id,dependency_id) VALUES (?,?)",
+                [(parent["id"], task["id"]) for task in items],
+            )
+            cursor = self._connection.execute(
+                "UPDATE tasks SET revision=revision+1,updated_at=? WHERE id=? AND revision=?",
+                (now, parent["id"], parent["revision"]),
+            )
+            if cursor.rowcount != 1:
+                raise TaskError("revision_conflict")
+        # Every edge exists before projecting metadata, including forward refs.
+        items = [self._get(task["id"]) for task in items]
+        for task in items:
+            self._record_event(task, operation, now)
+        data = {"project": project, "items": items}
+        if parent is not None:
+            data["parent"] = self._get(parent["id"])
+            data["inherited_dependency_ids"] = inherited
+            self._record_event(data["parent"], operation, now)
+        return data
+
     def _record_event(self, task: dict, operation: str, now: str) -> None:
         self._connection.execute(
             "INSERT INTO events (task_id,revision,operation,timestamp) VALUES (?,?,?,?)",
@@ -651,29 +691,20 @@ class TaskStore:
                 return {"data": data, "replayed": True}
             now = datetime.now(UTC).isoformat(timespec="microseconds")
             if operation == "capture_plan":
-                items = []
-                for item in request["tasks"]:
-                    task = self._capture(
-                        {
-                            **{k: v for k, v in item.items() if k != "depends_on"},
-                            "project": request["project"],
-                        },
-                        now,
-                    )
-                    items.append(task)
-                for task, item in zip(items, request["tasks"], strict=True):
-                    self._connection.executemany(
-                        "INSERT INTO task_dependencies(task_id,dependency_id) VALUES (?,?)",
-                        [
-                            (task["id"], items[position - 1]["id"])
-                            for position in item.get("depends_on", [])
-                        ],
-                    )
-                # All referenced tasks/edges now exist, including forward refs.
-                items = [self._get(task["id"]) for task in items]
-                for task in items:
-                    self._record_event(task, operation, now)
-                data = {"project": request["project"], "items": items}
+                data = self._capture_batch(request, now, operation)
+            elif operation == "breakdown":
+                parent = self._get(request["task_id"])
+                if parent["revision"] != request["expected_revision"]:
+                    raise TaskError("revision_conflict")
+                if parent["state"] != "captured":
+                    raise TaskError("terminal_state")
+                if parent["project"] is None:
+                    raise TaskError("dependency_project_required")
+                if parent["work_status"] == "in_progress":
+                    raise TaskError("breakdown_in_progress")
+                if len(parent["dependencies"]) + len(request["tasks"]) > 20:
+                    raise TaskError("dependency_limit")
+                data = self._capture_batch(request, now, operation, parent)
             elif operation == "capture":
                 data = self._capture(request, now)
             else:
@@ -716,7 +747,7 @@ class TaskStore:
                 if cursor.rowcount != 1:
                     raise TaskError("revision_conflict")
                 data = self._get(task_id)
-            if operation != "capture_plan":
+            if operation not in ("capture_plan", "breakdown"):
                 self._record_event(data, operation, now)
             self._connection.execute(
                 "INSERT INTO receipts (request_id,digest,receipt) VALUES (?,?,?)",
