@@ -185,8 +185,17 @@ def build_status(
             "native_progress_sync_changes_completion": False,
             "native_progress_sync_requires_anchored_identity": True,
             "native_progress_sync_live_verified": False,
+            "native_result_review_implemented": True,
+            "native_result_review_enabled": kanban_handoff and local_conversation and local_tasks,
+            "native_result_review_model_action": False,
+            "native_result_review_retains_raw_result": False,
+            "native_result_review_completes_only_on_explicit_accept": True,
+            "native_result_review_live_verified": False,
             "surface": "explicit_native_local_command",
-            "scope": "Parked shared-board card only; not worker dispatch or task completion.",
+            "scope": (
+                "Parked card handoff and explicit operator-reviewed local completion; "
+                "never worker dispatch or automatic completion."
+            ),
         },
         "local_model_tools": {
             "implemented": True,

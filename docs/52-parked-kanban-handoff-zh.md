@@ -25,3 +25,5 @@
 本轮仅使用离线夹具，不宣称真实 Kanban、安装、Gateway 或模型验收通过。现有扫描及安装限制不变。参见[路线图](08-roadmap-and-acceptance-zh.md)、[本地任务依赖](51-project-task-dependencies-zh.md)及 [worker 提案](48-task-worker-proposal-zh.md)，这些是不同的未完成门槛。
 
 [建议性进度同步](53-native-progress-observation-zh.md)为新身份绑定的交接增加明确元数据观察，不派发或自动完成本地任务。
+
+[明确原生结果审阅](58-native-result-review-zh.md)另增操作者决定：检查并重新核对有界原生结果文字后，明确完成本地记录。交接创建与建议性同步仍绝不自动完成任务。

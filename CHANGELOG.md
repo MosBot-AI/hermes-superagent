@@ -136,3 +136,5 @@ Added [saved native attention review](docs/54-saved-native-attention.md): local 
 [Explicit atomic plan dependencies](docs/56-atomic-plan-dependencies.md): Explicit one-based batch references save tasks and edges together, without automatic execution.
 
 [Explicit task breakdown](docs/57-task-breakdown.md): Atomically captures steps, inherits prerequisites and makes the parent depend on every new step; no automatic execution or completion.
+
+[Native result review and explicit local acceptance](docs/58-native-result-review.md): Review untrusted card text directly, then explicitly complete the local task with a rechecked digest and human note; no automatic completion or native mutation.

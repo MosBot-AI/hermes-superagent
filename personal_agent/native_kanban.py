@@ -240,7 +240,13 @@ def _authorizer(write):
             sqlite3.SQLITE_RECURSIVE,
         ):
             return sqlite3.SQLITE_OK
-        if action == sqlite3.SQLITE_FUNCTION and arg2 in {"count", "max", "coalesce"}:
+        if action == sqlite3.SQLITE_FUNCTION and arg2 in {
+            "count",
+            "max",
+            "coalesce",
+            "typeof",
+            "length",
+        }:
             return sqlite3.SQLITE_OK
         if (
             action == sqlite3.SQLITE_PRAGMA
@@ -502,6 +508,92 @@ def observe_progress(binding: dict, *, key: str, identity: dict, admit) -> dict:
         raise
     except Exception:
         _fail()
+
+
+def observe_result(binding: dict, *, key: str, identity: dict, admit) -> dict:
+    """Explicit bounded result disclosure, not completion proof or write authority."""
+    try:
+        identity = _identity(identity)
+        admit()
+        with _connection(binding) as (kb, conn):
+            conn.execute("BEGIN")
+            _schema(conn)
+            progress = _progress(conn, key, identity)
+            result = {
+                "card_id": progress["card_id"],
+                "outcome": progress["outcome"],
+                "status": progress.get("status"),
+                "observed_at": progress["observed_at"],
+                "result_state": "unavailable",
+                "result": None,
+                "completed_at": None,
+                "current_run_id": None,
+            }
+            if progress["outcome"] == "current":
+                _result_fields(conn, identity["card_id"], result)
+            _host()
+            _check(binding, kb)
+            admit()
+            conn.execute("COMMIT")
+            return result
+    except TaskError:
+        raise
+    except Exception:
+        _fail()
+
+
+def _result_fields(conn, card_id, projection):
+    # Never read result cells for nonterminal cards or cards with an active run.
+    if projection["status"] != "done":
+        projection["result_state"] = "not_done"
+        return
+    row = conn.execute(
+        "SELECT current_run_id,completed_at FROM tasks WHERE id=?", (card_id,)
+    ).fetchone()
+    if row is None:
+        _fail("native_unsafe_storage")
+    run, completed = row
+    if run is not None:
+        if type(run) is not int or not 0 < run < 2**63:
+            _fail("native_unsafe_storage")
+        projection.update(result_state="active_run", current_run_id=run)
+        return
+    if type(completed) is not int or not 0 <= completed <= 253402300799:
+        _fail("native_unsafe_storage")
+    projection["completed_at"] = completed
+    kind = conn.execute("SELECT typeof(result) FROM tasks WHERE id=?", (card_id,)).fetchone()[0]
+    if kind == "null":
+        projection["result_state"] = "empty"
+        return
+    if kind != "text":
+        _fail("native_unsafe_storage")
+    try:
+        length, content = conn.execute(
+            "SELECT length(result),CASE WHEN length(result)<=8000 "
+            "AND length(CAST(result AS BLOB))<=32000 "
+            "THEN result ELSE NULL END FROM tasks WHERE id=?",
+            (card_id,),
+        ).fetchone()
+    except sqlite3.DataError as error:
+        # SQLite may reject even length(TEXT) beyond its unchanged 65536 limit.
+        # Type was checked separately; report omitted oversize text, never relax it.
+        if getattr(error, "sqlite_errorcode", None) != sqlite3.SQLITE_TOOBIG:
+            raise
+        projection["result_state"] = "too_large"
+        return
+    if length > 8000:
+        projection["result_state"] = "too_large"
+        return
+    # SQLite length stops at NUL; Python length still enforces the actual bound.
+    if type(content) is not str or len(content) > 8000:
+        projection["result_state"] = "too_large"
+        return
+    if not content.strip():
+        projection["result_state"] = "empty"
+        return
+    projection.update(result_state="available", result=content)
+    if len(json.dumps(projection, ensure_ascii=True, sort_keys=True)) > 32000:
+        projection.update(result_state="too_large", result=None)
 
 
 def observe(binding: dict, *, key: str, payload_digest: str, admit, identity=None) -> dict:

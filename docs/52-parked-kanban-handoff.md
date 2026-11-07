@@ -25,3 +25,5 @@ The adapter targets host commit `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`, an e
 This slice uses offline fixtures only. No live Kanban, installation, Gateway or model acceptance is claimed. Existing scanner and installation restrictions remain unchanged. See the [roadmap](08-roadmap-and-acceptance.md), [local task dependencies](51-project-task-dependencies.md) and [worker proposal](48-task-worker-proposal.md) for distinct unfinished gates.
 
 [Advisory progress sync](53-native-progress-observation.md) adds explicit metadata observation for newly identity-bound handoffs, not dispatch or automatic local completion.
+
+[Explicit native result review](58-native-result-review.md) adds a separate operator decision to complete the local record after inspecting and rechecking bounded native result text. Handoff creation and advisory sync still never complete a task automatically.

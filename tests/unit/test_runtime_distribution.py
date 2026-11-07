@@ -65,7 +65,7 @@ def test_reproducible_and_uncommitted_ignored(source, tmp_path):
     manifest = json.loads((first / "PROVENANCE.json").read_text())
     assert manifest["source_commit"] == sha
     assert manifest["source_tree"] == git(repo, "rev-parse", "HEAD^{tree}")
-    assert len(manifest["files"]) == 60
+    assert len(manifest["files"]) == 61
 
 
 @pytest.mark.parametrize(

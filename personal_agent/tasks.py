@@ -408,6 +408,11 @@ class TaskStore:
     def _metadata(self, task):
         return native_sync.metadata(self._connection, dependencies.metadata(self._connection, task))
 
+    def accept_native_review(self, request, observe_callback):
+        from .task_result_review import accept
+
+        return accept(self, request, observe_callback)
+
     def sync_native(self, request, observe_callback):
         """Internal operator-service API; no model/run operation is registered."""
         return native_sync.sync(self, request, observe_callback)
