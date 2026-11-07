@@ -19,8 +19,8 @@
 5. [主动工作、调度与交付](05-automation-and-delivery-zh.md)：可靠提醒、重启恢复、幂等与消息交付。
 6. [插件、MCP 与安全](06-plugins-mcp-and-security-zh.md)：开放扩展、动作授权、身份和撤权。
 7. [手机与语音](07-mobile-and-voice-zh.md)：优先复用现有入口，保证同一个 agent 的连续性。
-8. [路线图与验收](08-roadmap-and-acceptance-zh.md)：按依赖排序的 epics、任务和可测试验收。
-9. [上游证据与核验边界](09-upstream-evidence-zh.md)：固定源码版本、链接和需要再验证的契约。
+8. [路线图与验收](08-roadmap-and-acceptance-zh.md)：按依赖排序的史诗、工作包和可测试的验收条件。按 [GitHub Project 执行流程](github-project-workflow-zh.md)领取、实现和核验工作。
+9. [上游证据与核验边界](09-upstream-evidence-zh.md)：固定的研究来源。[Hermes 兼容性矩阵](hermes-compatibility-matrix-zh.md)列出当前 E0.1 基线的行为测试和未完成的验收。
 10. [接口与端到端契约](10-interface-contracts-zh.md)：拟议事件、工具、适配器和关键纵向流程。
 11. [Worker 模型路由插件](11-worker-model-routing-zh.md)：按任务需求选择已许可 provider/model/effort，先 shadow 再启用。
 12. [第一开发切片](12-foundation-progress-zh.md)：原生只读插件、实际合同测试与剩余门槛。
