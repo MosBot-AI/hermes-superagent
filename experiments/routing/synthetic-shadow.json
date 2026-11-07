@@ -1,0 +1,108 @@
+{
+  "schema_version": 1,
+  "policy_id": "synthetic-policy-v1",
+  "capability_version": "synthetic-caps-v1",
+  "baseline_route_id": "baseline",
+  "candidates": [
+    {
+      "route_id": "baseline",
+      "provider": "fixture-provider",
+      "model": "fixture-model",
+      "endpoint_id": "endpoint-v1",
+      "api_mode": "fixture-api",
+      "configured": true,
+      "available": true,
+      "recipient_ids": [
+        "fixture-recipient"
+      ],
+      "data_scopes": [
+        "synthetic"
+      ],
+      "region": "fixture-region",
+      "local": false,
+      "capabilities": [
+        "text",
+        "tool_calling",
+        "structured_output"
+      ],
+      "context_limit": 8192,
+      "output_limit": 2048,
+      "effort": "high",
+      "supported_efforts": [
+        "none",
+        "low",
+        "high"
+      ],
+      "service_tier": "normal",
+      "supported_service_tiers": [
+        "normal"
+      ],
+      "evidence_id": "synthetic-evidence-v1"
+    },
+    {
+      "route_id": "preferred",
+      "provider": "fixture-provider",
+      "model": "fixture-model",
+      "endpoint_id": "endpoint-v1",
+      "api_mode": "fixture-api",
+      "configured": true,
+      "available": true,
+      "recipient_ids": [
+        "fixture-recipient"
+      ],
+      "data_scopes": [
+        "synthetic"
+      ],
+      "region": "fixture-region",
+      "local": false,
+      "capabilities": [
+        "text",
+        "tool_calling",
+        "structured_output"
+      ],
+      "context_limit": 8192,
+      "output_limit": 2048,
+      "effort": "high",
+      "supported_efforts": [
+        "none",
+        "low",
+        "high"
+      ],
+      "service_tier": "normal",
+      "supported_service_tiers": [
+        "normal"
+      ],
+      "evidence_id": "synthetic-evidence-v1"
+    }
+  ],
+  "preference_order": [
+    "preferred",
+    "baseline"
+  ],
+  "constraints": {
+    "permitted_route_ids": [
+      "baseline",
+      "preferred"
+    ],
+    "allowed_recipient_ids": [
+      "fixture-recipient"
+    ],
+    "data_scope": "synthetic",
+    "required_capabilities": [
+      "text",
+      "tool_calling",
+      "structured_output"
+    ],
+    "input_tokens": 4096,
+    "output_tokens": 1024,
+    "local_only": false,
+    "region": "fixture-region",
+    "pin_provider": null,
+    "pin_model": null,
+    "pin_route_id": null,
+    "pin_effort": null,
+    "service_tier": "normal",
+    "hard_budget": false,
+    "hard_deadline": false
+  }
+}

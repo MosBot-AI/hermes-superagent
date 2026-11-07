@@ -2,7 +2,7 @@
 
 English | [简体中文](11-worker-model-routing-zh.md)
 
-Status: **The design direction has been selected; implementation and runtime validation have not begun.** This page is based on Hermes `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`. The user wants the main agent to select an already configured provider, model, and reasoning effort automatically according to task difficulty when delegating work, and has reviewed and selected the native-plugin approach. This update covers documentation and planning only; it does not install or run a routing service.
+Status: **The design direction is selected. An offline fixture evaluator and partial native routing contracts are implemented; the live backend and runtime validation remain pending.** This page is based on Hermes `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`. The user wants the main agent to select an already configured provider, model, and reasoning effort automatically according to task difficulty when delegating work, and has reviewed and selected the native-plugin approach. The [offline precursor](35-offline-worker-routing.md) does not install or run a routing service.
 
 ## 1. Decision and Scope
 
@@ -161,7 +161,7 @@ Decision: implement the minimal native-plugin contract and local policy first. S
 
 ## 11. Phased Roadmap and Acceptance
 
-This feature uses the new **E9** epic and does not renumber E0–E8. All implementation items initially remain in Backlog; completing this page does not mean the plugin has been developed.
+This feature uses the new **E9** epic and does not renumber E0–E8. E9.1 is in progress with partial offline contract evidence; the remaining runtime work packages stay in Backlog. The offline fixture slice does not complete any runtime activation gate.
 
 | ID | Work package | Milestone | Dependencies and deliverables |
 |---|---|---|---|

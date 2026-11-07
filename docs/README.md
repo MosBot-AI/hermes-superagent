@@ -46,6 +46,7 @@ Extend Hermes into a long-lived personal agent for one user: one main agent unde
 32. [Session-scoped memory tools](32-session-scoped-memory-tools.md): independent 30-minute read/write activation, model provenance, v1→v2 migration and pending real-model acceptance.
 33. [Memory adapter admission](33-memory-adapter-admission.md): strict explicit-record descriptors, capability/limit checks, metadata-only review and reusable offline conformance gates; no third-party loading.
 34. [Local task operation history](34-local-task-history.md): persistent revision-ordered metadata, bounded pages and existing native read gates.
+35. [Offline worker routing](35-offline-worker-routing.md): strict synthetic candidate filtering, baseline gating and partial native routing contracts; no live backend.
 36. [Bounded explicit memory recall](36-bounded-memory-recall.md): multi-keyword literal ranking, whole-record JSON budgets, current revisions and one read snapshot; no automatic prompt injection.
 37. [Architecture decision records](adr/README.md): reasons for the constraints.
 
@@ -71,4 +72,4 @@ Research baselines: Hermes `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4` and DSH Su
 
 The design and project plan are established. The E0 foundation and opt-in local task inbox run in temporary test homes. Local CLI persistence and opt-in native LOCAL session commands are implemented; activated in-process model task tools are implemented, while remote-channel/HTTP personal-data access is not. There is no production deployment or connection to real personal data, and no claim that authorization, reminders, or mobile voice are usable. GitHub Projects tracks development; native Hermes Projects/Kanban will represent runtime work. They are different systems.
 
-E9 remains a design for the native worker model routing plugin. The user reviewed and selected the plugin approach, but it is not implemented. The main agent keeps its responsibilities. See [11](11-worker-model-routing.md) for constraints, host gaps, references, and acceptance criteria.
+E9 has a selected native worker-routing design, an offline constraint evaluator and partial native contract tests. The live routing backend is not implemented. The main agent keeps its responsibilities. See [11](11-worker-model-routing.md) for constraints, host gaps, references, and acceptance criteria.

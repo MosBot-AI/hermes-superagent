@@ -48,6 +48,8 @@ Hermes 原生 personal-agent 插件，目标是让一个主 agent 管理项目�
 
 [本地任务操作历史](docs/34-local-task-history-zh.md)通过 CLI、`/personal-tasks history` 和已激活的任务读取工具返回按版本排列的元数据。重启后仍可查询，不返回任务旧正文；不验证作者、执行工作或对账原生 worker。
 
+[离线 Worker 路由前置切片](docs/35-offline-worker-routing-zh.md)验证合成候选约束和合格基线，并覆盖部分固定版本原生契约。不调用 provider，不注册路由 backend，不启用在线 shadow 或自动切换。
+
 [有界召回指南](docs/36-bounded-memory-recall-zh.md)新增原生记忆命令和独立激活读取工具的显式多关键词字面检索，返回完整记录、当前 revision，并限制序列化结果大小。不启用自动提示注入或原生 provider 替换。
 
 ## 开发验证

@@ -46,6 +46,7 @@
 32. [会话范围记忆工具](32-session-scoped-memory-tools-zh.md)：独立30分钟读写激活、模型来源、v1→v2迁移与待完成的真实模型验收。
 33. [记忆适配器准入](33-memory-adapter-admission-zh.md)：严格的显式记录描述、能力/上限检查、仅元数据审查及可复用离线一致性门禁；不加载第三方代码。
 34. [本地任务操作历史](34-local-task-history-zh.md)：持久化版本元数据、有界分页及既有原生读取限制。
+35. [离线 Worker 路由](35-offline-worker-routing-zh.md)：严格合成候选过滤、基线检查和部分原生路由契约；没有在线 backend。
 36. [有界显式记忆召回](36-bounded-memory-recall-zh.md)：多关键词字面排序、完整记录的 JSON 预算、当前 revision 与同一读取快照；没有自动提示注入。
 37. [架构决策记录](adr/README-zh.md)：为什么选择这些约束。
 
@@ -71,4 +72,4 @@
 
 方案文档与项目规划已建立，E0 基础与显式本地任务收件箱已在临时测试 home 中运行。本地 CLI 持久化与显式启用的原生 LOCAL 会话命令已实现，另有明确激活的进程内模型任务工具；远程渠道/HTTP 个人数据访问尚未实现。没有生产部署、没有接入真实个人数据，也没有宣称权限、提醒或手机语音已经可用。GitHub Projects 是研发计划；Hermes 原生 Projects/Kanban 是未来产品运行时的工作对象，二者不能混淆。
 
-新增 E9 为原生 worker 模型路由插件设计：用户已审阅并选择插件方向，仍未实现。主 agent 保持原有职责；完整约束、宿主能力缺口、开源参考和验收见 [11](11-worker-model-routing-zh.md)。
+E9 已选定原生 worker 路由设计，并实现离线约束验证器和部分原生契约测试；在线路由 backend 尚未实现。主 agent 保持原有职责；完整约束、宿主能力缺口、开源参考和验收见 [11](11-worker-model-routing-zh.md)。

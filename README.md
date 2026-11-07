@@ -48,6 +48,8 @@ The first [explicit local memory slice](docs/31-explicit-local-memory.md) now su
 
 [Local task operation history](docs/34-local-task-history.md) adds revision-ordered metadata through the CLI, `/personal-tasks history` and activated task read tools. It survives restart and exposes no old task text. It does not verify authors, execute work or reconcile native workers.
 
+The [offline worker-routing precursor](docs/35-offline-worker-routing.md) checks synthetic candidate constraints and qualified baselines, with partial pinned native contracts. It makes no provider calls, registers no routing backend and does not enable live shadow or automatic switching.
+
 The [bounded recall guide](docs/36-bounded-memory-recall.md) adds explicit multi-keyword literal retrieval through native memory commands and activated read tools, with complete records, current revisions and a serialized-result budget. No automatic prompt injection or native provider replacement is enabled.
 
 ## Development checks
