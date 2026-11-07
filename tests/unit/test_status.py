@@ -96,6 +96,11 @@ def test_memory_tool_status_discloses_separate_unobserved_activation():
     assert result["local_memory"]["model_session_activation_observed"] is False
     assert result["local_model_tools"]["configured"] is False
     assert result["local_memory"]["native_provider_bridge"] is False
+    assert result["local_memory"]["automatic_recall"] is None
+    assert result["local_memory"]["session_recall_implemented"] is True
+    assert result["local_memory"]["session_recall_activation_observed"] is False
+    assert result["local_memory"]["session_recall_requires_explicit_command"] is True
+    assert result["local_memory"]["session_recall_max_context_chars"] == 6000
 
 
 @pytest.mark.parametrize("value", [True, 1, "true", None, {}])

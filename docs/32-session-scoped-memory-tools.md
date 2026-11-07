@@ -2,6 +2,8 @@
 
 English | [简体中文](32-session-scoped-memory-tools-zh.md)
 
+Follow-on: [49](49-session-memory-recall.md) adds separately enabled session automatic recall through the existing turn hook. Ordinary tool activation still does not enable it; no extraction or provider replacement is added.
+
 Follow-on: [45](45-explicit-memory-expiry.md) adds optional expires_at to remember/correct and explicit include_expired list/search inspection. Omission preserves expiry on correct; null clears it. Record expiry is separate from the tool activation TTL and does not grant access or erase prior model context.
 
 Status: implemented opt-in model-tool access to the [local records](31-explicit-local-memory.md), through the same pinned in-process native turn boundaries as [task tools](29-session-scoped-task-tools.md). Real-provider natural-language acceptance is pending. This does not implement the native MemoryProvider bridge, automatic extraction/prefetch, embeddings or third-party backend loading in [30](30-pluggable-memory-contracts.md).

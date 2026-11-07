@@ -598,8 +598,9 @@ def test_loading_help_and_status_preserve_native_configuration(host):
     assert source.read_text() == "Synthetic native provider memory remains separate"
     assert not memory.database(host.home).exists()
     loaded = host.manager._plugins[PLUGIN_ID]
-    # Task tools register an idle focus hook, not a memory extraction/recall hook.
-    assert loaded.hooks_registered == ["pre_llm_call"] and not loaded.middleware_registered
+    # Both hooks remain idle until their separate native session selections.
+    assert loaded.hooks_registered == ["pre_llm_call", "pre_llm_call"]
+    assert not loaded.middleware_registered
 
 
 def test_memory_activation_cannot_select_task_focus(host):

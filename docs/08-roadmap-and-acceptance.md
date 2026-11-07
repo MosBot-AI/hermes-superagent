@@ -92,6 +92,8 @@ Current local memory precursor: [31](31-explicit-local-memory.md) implements opt
 
 The [local task progress follow-on](42-local-task-progress.md) adds explicitly recorded working/waiting/blocker state, notes, revision-safe retries and active review filters. Task schema v4 preserves old receipts/events through an atomic upgrade. This is local state, not native worker liveness or E3.2/E3.5 completion.
 
+[Session-scoped automatic recall](49-session-memory-recall.md) now connects the production standalone plugin to the supported native turn hook after separate session selection. It performs fresh bounded read-only retrieval without replacing the native provider or adding a model call. This advances the read side of E2.8; automatic extraction, real-model usefulness and durable conversation checkpoints remain open.
+
 ### E3. Connect Native Projects and Tasks (P0/P1, M1–M2)
 
 Depends on E0.3, E1.1–E1.5, and E2.1.

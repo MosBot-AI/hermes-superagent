@@ -2,6 +2,8 @@
 
 [English](32-session-scoped-memory-tools.md) | 简体中文
 
+后续：[49](49-session-memory-recall-zh.md)通过已有轮次 hook 增加独立开启的会话自动召回。普通工具激活仍不会开启它，不新增提取或 provider 替换。
+
 后续：[45](45-explicit-memory-expiry-zh.md)为 remember/correct 增加可选 expires_at，为 list/search 增加显式 include_expired 检查。更正时省略保留原值，null 清除。记录到期与工具激活 TTL 不同，不授予访问权，也不擦除既有模型上下文。
 
 状态：已实现对[本地记录](31-explicit-local-memory-zh.md)的显式开启模型工具访问，复用[任务工具](29-session-scoped-task-tools-zh.md)所用固定版本的原生进程内 turn 边界。真实 provider 的自然语言验收仍待完成。这不实现 [30](30-pluggable-memory-contracts-zh.md) 中的原生 MemoryProvider 桥接、自动提取/prefetch、向量嵌入或第三方后端加载。

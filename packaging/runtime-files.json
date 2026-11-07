@@ -33,6 +33,7 @@
     "personal_agent/routing_cli.py",
     "personal_agent/routing_inspection.py",
     "personal_agent/routing_shadow.py",
+    "personal_agent/session_memory_recall.py",
     "personal_agent/session_memory_tools.py",
     "personal_agent/session_task_tools.py",
     "personal_agent/status.py",

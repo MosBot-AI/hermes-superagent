@@ -36,4 +36,4 @@ config_schema:
   memory_model_tools:
     type: bool
     default: false
-    description: Allow native in-process memory tools after separate explicit session activation; requires local_memory, preserves native providers and sends results to the configured model.
+    description: Allow native in-process memory tools after separate explicit session activation; optional recall-on supplies fresh bounded context each turn, preserves native providers and sends records to the configured model.

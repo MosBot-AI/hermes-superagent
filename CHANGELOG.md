@@ -8,6 +8,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Added separately opted-in automatic session memory recall through the supported native turn hook: fresh bounded current records, shared expiry/revocation boundaries, no provider replacement or extra model request. Correction/forgetting affect new recall, not historical host context. See [49](docs/49-session-memory-recall.md).
+
 - Added verified downloadable runtime artifacts for successful branch pushes: deterministic source-pinned archives, unchanged official static scanning and cold real-host task/reload acceptance. Findings and provenance accompany the package; no installer, host patch, model request or release is performed.
 
 - Added an operator-facing native workbench to the review-only worker consumer: scoped request pages, truthful status, saved-draft viewing and pre-submission stop, with readable text and explicit `--json`. These commands neither launch nor retry work; already-admitted cancellation remains unavailable.

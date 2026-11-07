@@ -283,15 +283,18 @@ def register(ctx: PluginContext) -> None:
 
     if memory_models_enabled:
         from .memory_tool_contract import PERSONAL_MEMORY_READ_SCHEMA, PERSONAL_MEMORY_WRITE_SCHEMA
-        from .session_memory_tools import SessionMemoryTools
+        from .session_memory_recall import RecallingSessionMemoryTools
 
-        memory_access = SessionMemoryTools(bound_home=bound_home, read_config=ctx.get_config)
+        memory_access = RecallingSessionMemoryTools(
+            bound_home=bound_home, read_config=ctx.get_config
+        )
         ctx.on_unload(memory_access.close)
+        ctx.register_hook("pre_llm_call", memory_access.turn_context)
         ctx.register_command(
             "personal-memory-tools",
             handler=memory_access.command,
             description="Separately activate memory model access in this trusted native session.",
-            args_hint="enable-read | enable-write | disable | status",
+            args_hint="enable-read | enable-write | recall-on | recall-off | disable | status",
         )
 
         def bind_memory_handler(name):

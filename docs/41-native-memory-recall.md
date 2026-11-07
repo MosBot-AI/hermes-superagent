@@ -2,6 +2,8 @@
 
 English | [简体中文](41-native-memory-recall-zh.md)
 
+Alternative supported route: [49](49-session-memory-recall.md) adds separately enabled automatic recall inside the standalone plugin, without installing/selecting this provider. Both routes can overlap if independently enabled; neither performs extraction or checkpoint-v2.
+
 Follow-on: [45](45-explicit-memory-expiry.md) requires schema v5 and excludes expired records from each fresh recall at its captured UTC wall-clock time. The read-only provider never migrates. A permitted store-opening command or already-activated model-tool operation can upgrade an owned old store before recall resumes; /personal-memory list is the recommended deliberate operator workflow. Evaluation time is sampled after actual SQLite snapshot acquisition, not before any lock wait. No provider selection/configuration changes are made. Expiry cannot retract a pack already in native history or model context.
 
 Status: an optional real Hermes `MemoryProvider` now connects the existing local memory store to native prefetch and session lifecycle. It is **read-only for canonical records**, has no ingestion, and still advertises checkpoint API v1. Required native checkpoint-v2 remains unsupported. This is a tested offline implementation, not a live-provider acceptance result or production activation.
