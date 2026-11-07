@@ -39,3 +39,40 @@ jobs:
           "$RUNNER_TEMP/hermes-test-venv/bin/python" scripts/check.py \
             --hermes "$RUNNER_TEMP/hermes" \
             --hermes-python "$RUNNER_TEMP/hermes-test-venv/bin/python"
+      - name: Build and verify the offline runtime delivery
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 022
+          source_sha="$(git --no-replace-objects rev-parse HEAD)"
+          test "$source_sha" = "$GITHUB_SHA"
+          python="$RUNNER_TEMP/hermes-test-venv/bin/python"
+          delivery="$RUNNER_TEMP/hermes-runtime-delivery"
+          mkdir "$delivery" "$RUNNER_TEMP/runtime-extracted"
+          for copy in one two; do
+            package="$RUNNER_TEMP/runtime-$copy"
+            "$python" scripts/build_runtime_distribution.py \
+              --source-commit "$source_sha" --output-dir "$package"
+            "$python" scripts/build_runtime_distribution.py \
+              --source-commit "$source_sha" --output-dir "$package" \
+              --archive-file "$RUNNER_TEMP/runtime-$copy.tar.gz"
+          done
+          cmp "$RUNNER_TEMP/runtime-one.tar.gz" "$RUNNER_TEMP/runtime-two.tar.gz"
+          cp "$RUNNER_TEMP/runtime-one.tar.gz" "$delivery/hermes-personal-agent.tar.gz"
+          tar -xzf "$delivery/hermes-personal-agent.tar.gz" -C "$RUNNER_TEMP/runtime-extracted"
+          "$python" scripts/check_runtime_distribution.py \
+            --repo "$GITHUB_WORKSPACE" --source-commit "$source_sha" \
+            --package "$RUNNER_TEMP/runtime-extracted/hermes-personal-agent" \
+            --hermes "$RUNNER_TEMP/hermes" --hermes-python "$python" \
+            --report "$delivery/VALIDATION.json"
+          cd "$delivery"
+          sha256sum hermes-personal-agent.tar.gz VALIDATION.json > SHA256SUMS
+      - name: Upload the verified runtime package, not an installation
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: hermes-personal-agent-runtime-${{ github.sha }}
+          path: ${{ runner.temp }}/hermes-runtime-delivery/
+          if-no-files-found: error
+          retention-days: 30

@@ -8,6 +8,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Added verified downloadable runtime artifacts for successful branch pushes: deterministic source-pinned archives, unchanged official static scanning and cold real-host task/reload acceptance. Findings and provenance accompany the package; no installer, host patch, model request or release is performed.
+
 - Added an operator-facing native workbench to the review-only worker consumer: scoped request pages, truthful status, saved-draft viewing and pre-submission stop, with readable text and explicit `--json`. These commands neither launch nor retry work; already-admitted cancellation remains unavailable.
 
 - Extended the review-only worker proposal with an isolated no-redirect HTTP client and durable single-claim/draft receipts. A restart never silently repeats a claimed request; completed observed drafts remain inspectable. No live system or production plugin is changed.

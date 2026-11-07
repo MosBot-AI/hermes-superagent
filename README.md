@@ -98,6 +98,8 @@ The checker forwards both source roots through pytest configuration after the ho
 
 `python scripts/check.py` alone runs repository unit tests, Ruff, ty, and bilingual document structure/link and JSON-example syntax checks, and explicitly reports Hermes compatibility **NOT RUN**. Test-tool versions come from the pinned Hermes dev group, not plugin runtime dependencies.
 
+Successful push builds now attach a [verified offline runtime package](docs/runtime-distribution.md#downloadable-push-build-package): deterministic archive, full official static-scan findings and cold actual-package CLI/reload acceptance. This is a downloadable development artifact, not a release or permission to retry installation.
+
 ## Try it in an isolated Hermes profile
 
 The latest official full-repository installation attempt stopped at the unchanged security scanner (CAUTION, 50 findings); the plugin was not installed or enabled. Do not override that refusal. The [offline runtime distribution builder](docs/runtime-distribution.md) produces a byte-preserving package with source provenance, but does not scan, install or authorize another attempt. The instructions below describe a future separately reviewed installation, not a passed acceptance test.

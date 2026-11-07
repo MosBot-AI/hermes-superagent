@@ -149,3 +149,58 @@ def test_git_replace_cannot_substitute_pinned_source(source, tmp_path):
     provenance = json.loads((output / "PROVENANCE.json").read_text())
     assert provenance["source_commit"] == original
     assert provenance["source_tree"] == original_tree
+
+
+def test_archive_is_reproducible_and_preserves_exact_runtime(source, tmp_path):
+    import tarfile
+
+    repo, sha = source
+    first, second = tmp_path / "one", tmp_path / "two"
+    builder.build(repo, sha, first)
+    builder.build(repo, sha, second)
+    for path in second.rglob("*"):
+        os.utime(path, (100, 100))
+    archives = [tmp_path / "one.tar.gz", tmp_path / "other-name.tar.gz"]
+    for package, archive in zip((first, second), archives, strict=True):
+        builder.archive(repo, sha, package, archive)
+    assert archives[0].read_bytes() == archives[1].read_bytes()
+    with tarfile.open(archives[0]) as tar:
+        expected = builder.payload(repo, sha)
+        files = {}
+        for member in tar.getmembers():
+            assert member.uid == member.gid == member.mtime == 0
+            assert member.uname == member.gname == ""
+            assert member.isfile() or member.isdir()
+            assert member.mode == (0o644 if member.isfile() else 0o755)
+            assert member.name.startswith("hermes-personal-agent")
+            if member.isfile():
+                files[member.name.removeprefix("hermes-personal-agent/")] = tar.extractfile(
+                    member
+                ).read()
+        assert files == expected
+        extracted = tmp_path / "extracted"
+        extracted.mkdir()
+        tar.extractall(extracted, filter="data")
+    builder.verify(repo, sha, extracted / "hermes-personal-agent")
+
+
+def test_archive_refuses_tampering_existing_output_and_package_destination(source, tmp_path):
+    repo, sha = source
+    package = tmp_path / "package"
+    builder.build(repo, sha, package)
+    with pytest.raises(ValueError, match="outside"):
+        builder.archive(repo, sha, package, package / "archive.tar.gz")
+    existing = tmp_path / "existing.tar.gz"
+    existing.write_bytes(b"existing")
+    with pytest.raises(FileExistsError):
+        builder.archive(repo, sha, package, existing)
+    assert existing.read_bytes() == b"existing"
+    link = tmp_path / "linked.tar.gz"
+    link.symlink_to(existing)
+    with pytest.raises(ValueError, match="symlink"):
+        builder.archive(repo, sha, package, link)
+    (package / "plugin.yaml").write_text("changed")
+    output = tmp_path / "uncreated.tar.gz"
+    with pytest.raises(ValueError, match="integrity"):
+        builder.archive(repo, sha, package, output)
+    assert not output.exists()

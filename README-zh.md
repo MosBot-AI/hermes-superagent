@@ -98,6 +98,8 @@ cd ../hermes-superagent
 
 只运行 `python scripts/check.py` 会做本仓库单元测试、Ruff、ty 和双语文档结构/链接及 JSON 示例语法检查，并明确打印 Hermes compatibility **NOT RUN**。测试工具版本随固定 Hermes dev group，不是插件运行依赖。
 
+成功的推送构建现附带[经过校验的离线运行包](docs/runtime-distribution-zh.md#下载推送构建的运行包)：确定性归档、完整官方静态扫描发现，以及冷进程实际运行包的 CLI/重载验收。这是可下载的开发产物，不是正式发行或重试安装的许可。
+
 ## 在隔离 Hermes 中试用
 
 最近一次官方完整仓库安装被未修改的安全扫描器阻断（CAUTION，50 条发现），插件未安装或启用。不要覆盖该拒绝。[离线运行时分发构建器](docs/runtime-distribution-zh.md)生成保留原始字节及来源证明的包，但不会扫描、安装或授权再次尝试。下文是后续单独审阅后的安装说明，不代表验收通过。

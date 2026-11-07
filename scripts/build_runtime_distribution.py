@@ -2,11 +2,15 @@
 """Export an auditable standalone plugin from a committed source, without installing it."""
 
 import argparse
+import gzip
 import hashlib
+import io
 import json
+import os
 import re
 import shutil
 import subprocess
+import tarfile
 import tomllib
 from pathlib import Path
 
@@ -25,9 +29,38 @@ ROOT_FILES = {
 }
 
 
-def git(repo, *args):
+def git(repo, *args, input=None):
+    """Read local objects without ambient Git overrides, helper hooks or fetching."""
+    executable = shutil.which("git")
+    if executable is None:
+        raise ValueError("existing Git executable required")
+    env = {
+        "PATH": os.defpath,
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_SYSTEM": os.devnull,
+        "GIT_CONFIG_GLOBAL": os.devnull,
+        "GIT_NO_LAZY_FETCH": "1",
+        "GIT_ALLOW_PROTOCOL": "",
+        "GIT_TERMINAL_PROMPT": "0",
+        "GIT_OPTIONAL_LOCKS": "0",
+    }
     return subprocess.check_output(
-        ["git", "--no-replace-objects", "-C", str(repo), *args], timeout=30
+        [
+            executable,
+            "--no-replace-objects",
+            "-c",
+            "core.fsmonitor=false",
+            "-c",
+            "protocol.allow=never",
+            "-C",
+            str(repo),
+            *args,
+        ],
+        input=input,
+        timeout=120,
+        env=env,
     )
 
 
@@ -146,14 +179,57 @@ def verify(repo, commit, destination):
         raise ValueError("distribution files missing")
 
 
+def archive(repo, commit, destination, output):
+    """Archive verified source bytes, with no machine metadata or package execution."""
+    verify(repo, commit, destination)
+    data = payload(repo, commit)
+    output = Path(output).absolute()
+    if any(p.is_symlink() for p in (output, *output.parents)):
+        raise ValueError("archive path must not traverse symlinks")
+    if output.is_relative_to(Path(destination).absolute()):
+        raise ValueError("archive must be outside the runtime directory")
+    # Read the verified committed payload, not concurrently changing local files.
+    # The archive format is deliberately independent of source/extraction mtimes.
+    with output.open("xb") as raw:
+        try:
+            with gzip.GzipFile(fileobj=raw, mode="wb", filename="", mtime=0) as compressed:
+                with tarfile.open(fileobj=compressed, mode="w", format=tarfile.USTAR_FORMAT) as tar:
+                    root = "hermes-personal-agent"
+                    directories = {root} | {
+                        f"{root}/{parent}"
+                        for name in data
+                        for parent in Path(name).parents
+                        if str(parent) != "."
+                    }
+                    for name in sorted(directories):
+                        item = tarfile.TarInfo(name)
+                        item.type = tarfile.DIRTYPE
+                        item.mode = 0o755
+                        tar.addfile(item)
+                    for name, content in sorted(data.items()):
+                        item = tarfile.TarInfo(f"{root}/{name}")
+                        item.mode = 0o644
+                        item.size = len(content)
+                        tar.addfile(item, io.BytesIO(content))
+            output.chmod(0o644)
+        except BaseException:
+            output.unlink()
+            raise
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo", type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument("--source-commit", required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
-    parser.add_argument("--verify", action="store_true")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--verify", action="store_true")
+    mode.add_argument("--archive-file", type=Path, help="Archive an existing verified runtime tree")
     args = parser.parse_args()
-    (verify if args.verify else build)(args.repo, args.source_commit, args.output_dir)
+    if args.archive_file:
+        archive(args.repo, args.source_commit, args.output_dir, args.archive_file)
+    else:
+        (verify if args.verify else build)(args.repo, args.source_commit, args.output_dir)
 
 
 if __name__ == "__main__":
