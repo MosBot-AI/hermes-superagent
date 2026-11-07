@@ -21,6 +21,25 @@ The [experimental consumer](consumer.py) connects real local tasks to the propos
 
 Request IDs are profile-wide and bound to the original session/route/task/revision. Each consumer instance has an owner epoch: a restarted or concurrent instance can inspect its matching saved receipt but cannot adopt a pending authorization, steal a claim or retry an uncertain request. A new key is a new authorization, not recovery of the old operation. Never use a new key to retry an uncertain outcome. Retention is indefinite and bounded to 64 entries; capacity refuses new grants, with no automatic cleanup or eviction. Deleting the ledger destroys duplicate protection. This is a deliberately bounded experiment, not ongoing unattended orchestration. An observed configuration revocation permanently revokes unstarted grants; an unobserved disable→enable change is not detected without monotonic host revision fencing.
 
+## Native request workbench
+
+These explicit commands let the operator find and inspect requests without asking a model to call the preview tool. They use the same authenticated LOCAL session-control admission, profile and exact session/route scope as `allow`:
+
+| Command suffix | Result |
+|---|---|
+| `list [--after KEY]` | Up to ten request-ID-ordered metadata records and a continuation key; no task text, draft, owner token or route fingerprint |
+| `status KEY` | Authorization/receipt state with a truthful next step; a consumed request is not proof that a worker is still running |
+| `draft KEY` | Already saved terminal receipt, untrusted draft and current task revision/staleness; no live polling or new model request |
+| `stop KEY` | Revoke an unstarted grant; report cancellation unavailable for an admitted/unknown request without changing it |
+
+For example, `/personal-plan-worker list` finds retained request IDs and `/personal-plan-worker draft plan-1` displays the saved draft. Native output defaults to readable text; `/personal-plan-worker --json status plan-1` returns structured data. Untrusted draft text is delimited and control characters are escaped. The model tool remains JSON-only and retains its exact approved-route gate.
+
+`receipt_saved` does **not** mean the task was performed. After restart, a consumed request without a saved receipt remains `launch_outcome_unknown`; a pending grant owned by an earlier instance is not silently adopted. `stop` never turns an unknown remote outcome into “cancelled.” No workbench command launches, retries, harvests a live result, deletes a retained key or mutates a task. Lists expose only the count in this session/route, not other sessions' occupancy of the shared 64-entry ledger.
+
+An explicit native draft view is a separate operator-read contract, not a model-route bypass. At the pinned host, `gateway/session_commands.py` returns plugin output as `exec`, and the reviewed CLI/TUI/Desktop handling displays that output instead of taking the model-send branch. This slice exercises the server command path; client branches were source-audited, not exercised in a live UI. Clients may retain display/cache data, and a user can copy it elsewhere. LOCAL controllers may be programmatic; this is not proof of a physical human or a guarantee that arbitrary future clients will not record output.
+
+The native callback does not bind a current model parent. Therefore admitted-request cancellation is unavailable here: the workbench does not copy an old context or impersonate a parent to bypass that boundary. The existing model-tool preview path and host lifecycle API remain unchanged.
+
 ## Host restriction rather than a prompt promise
 
 The existing unrestricted agent launch remains unchanged. The new text path is default-off, separately configured for a trusted plugin and an exact provider/model/base URL. It accepts only the current ordinary OpenAI-SDK chat-completions route. No saved delegation route, fallback chain or credential resolver is consulted. HTTPS endpoints must have no userinfo/query/fragment. SDK provider adapters, dynamic authentication and query overrides are rejected.
@@ -29,7 +48,7 @@ The host now owns a **dedicated no-redirect HTTPX client** with environment prox
 
 The text path does not construct or run a full `AIAgent` child. It uses the real host transport and middleware with an immutable request and a guarded one-attempt callback. It sends only fixed planning instructions and the supplied task snapshot. It does not inherit parent history, prefills, tool schemas, request overrides, MCP permissions, recursive delegation, workspace creation, memory ingestion, compression or auxiliary model work. Tool-bearing replies are not dispatched. Arbitrary middleware request changes or extra attempts are refused.
 
-The route gate prevents a **new** draft return under a changed route. It does not delete previous messages or stop the host from reusing existing parent history after a model switch. Do not treat this as conversation-wide cross-provider isolation.
+The route gate prevents a **new model-tool** draft return under a changed route. It does not delete previous messages or stop the host from reusing existing parent history after a model switch. Do not treat this as conversation-wide cross-provider isolation.
 
 This is not an OS/Python sandbox or protection from malicious same-process plugins, provider implementations or operators. Configured plugin trust is not proof that a physical human authored each call. Native LOCAL admission relies on the host's existing registered source/session controller checks; all authorized controllers share that session's authority. Provider internals and actual billed/served model behavior remain outside client-side proof. Timeout/cancel is cooperative and cannot undo a request already sent.
 

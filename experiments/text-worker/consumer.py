@@ -18,6 +18,7 @@ from personal_agent.task_focus import task_context
 from personal_agent.tasks import TaskError
 
 from .worker_ledger import Ledger
+from .worker_presentation import render_worker_reply
 
 PROVIDER = "opencode-go"
 MODEL = "deepseek-v4.1-flash"
@@ -30,6 +31,12 @@ GOAL = (
     "State missing information rather than inventing it. Return a draft for human review."
 )
 HELP = (
+    "Native commands default to readable text; prefix --json for structured output. "
+    "list [--after KEY]: show 10 request records in this exact session/route; "
+    "status KEY: inspect request metadata; draft KEY: view only a saved terminal draft "
+    "directly in the native client, which may display or cache it, without model submission; "
+    "stop KEY: revoke an unstarted "
+    "request (in-flight cancellation is unavailable here). No command launches or retries. "
     "allow TASK_UUID REVISION REQUEST_ID: authorize one planning request within 120 seconds "
     "using this task snapshot, OpenCode Go deepseek-v4.1-flash, up to 1024 output tokens "
     "and a 30-second request timeout. This sends selected task data to that model and may "
@@ -41,7 +48,8 @@ HELP = (
     "characters; oversized or unobserved results may be lost. Retention is "
     "indefinite, limited to 64 entries with no cleanup or eviction; capacity requires "
     "trusted manual review, not ledger deletion. No automatic retry or grant recovery "
-    "after restart. Never use a new key to retry an uncertain request. Draft reads require "
+    "after restart. Never use a new key to retry an uncertain request. "
+    "Model-tool draft reads require "
     "the same approved model route; previously returned conversation content is not retracted."
 )
 
@@ -93,7 +101,139 @@ class TaskPlanningWorker(SessionTaskTools):
         with open_task_store(self.bound_home) as store:
             return store.run("get", {"task_id": task_id})["data"]
 
+    def _workbench_reply(self, data):
+        reply = self._reply(data=data)
+        if len(reply) > 40000:
+            raise TaskError("worker_view_too_large")
+        return reply
+
+    def _workbench_item(self, row, session_id, session_key):
+        state = self._state(row)
+        if state == "completed":
+            state = "receipt_saved"
+        local = self.grants.get((session_id, session_key, row["request_id"]))
+        if row["state"] == "authorized" and local is not None:
+            if local.state != "authorized":
+                state = local.state
+            elif time.monotonic() >= local.expires_at:
+                state = "expired"
+        return {
+            "request_id": row["request_id"],
+            "task_id": row["task_id"],
+            "snapshot_revision": row["revision"],
+            "state": state,
+        }
+
+    @staticmethod
+    def _workbench_notice(state):
+        return {
+            "authorized": "Unstarted authorization. Expires after 120 seconds; stop revokes it.",
+            "authorization_owner_unavailable": (
+                "Original authorization owner unavailable. This key cannot be rearmed."
+            ),
+            "expired": (
+                "Authorization expired without submission by this grant. This key remains reserved."
+            ),
+            "revoked": "Unstarted authorization revoked. This key remains reserved.",
+            "stale": "Task changed before submission. This key remains reserved.",
+            "receipt_saved": ("Worker receipt saved; not task completion. Use draft to view it."),
+            "launch_outcome_unknown": (
+                "Request consumed. It may be running, finished, or have an unknown outcome. "
+                "Never retry with a new key."
+            ),
+        }.get(state, "No execution or task completion is implied by this record.")
+
+    def _workbench(self, parts, session_id, session_key):
+        verb = parts[0]
+        if verb == "list":
+            if parts != ["list"] and not (
+                len(parts) == 3 and parts[1] == "--after" and KEY.fullmatch(parts[2])
+            ):
+                raise TaskError("invalid_request")
+            page = self.ledger.listing(
+                session_id, session_key, parts[2] if len(parts) == 3 else None
+            )
+            page["items"] = [
+                self._workbench_item(row, session_id, session_key) for row in page["items"]
+            ]
+            page.update(
+                retention_limit=64,
+                notice=(
+                    "This session/route only; request-ID order. Unknown is not proof of running. "
+                    "Saved receipts are not completed tasks. "
+                    "Retained keys are never evicted or rearmed."
+                ),
+            )
+            return self._workbench_reply(page)
+        if len(parts) != 2 or not KEY.fullmatch(parts[1]):
+            raise TaskError("invalid_request")
+        key = (session_id, session_key, parts[1])
+        row = self.ledger.metadata(key)
+        if row is None:
+            raise TaskError("unknown_grant")
+        if verb == "draft":
+            if row["state"] != "completed":
+                data = self._workbench_item(row, session_id, session_key)
+                data["notice"] = (
+                    "No saved terminal draft. This command does not poll, launch, "
+                    "retry or recover lost results."
+                )
+                return self._workbench_reply(data)
+            # This is an explicit native-human read, never the model-tool path.
+            # The audited host returns command output to the client without adding
+            # it to model history. Preserve model run() route checks separately.
+            receipt = self.ledger.get(key)
+            data = json.loads(receipt["result"])
+            data.pop("result_hash")
+            task = self._task(receipt["task_id"])
+            data.update(
+                request_id=parts[1],
+                current_revision=task["revision"],
+                stale=task["revision"] != receipt["revision"],
+                # Native delivery contract, not physical-human identity or no logging.
+                native_client_view=True,
+                delivery_notice=(
+                    "Native-client view; clients may display or cache this text. "
+                    "No model submission."
+                ),
+            )
+            return self._workbench_reply(data)
+        if verb == "stop" and row["state"] == "authorized":
+            local = self.grants.get(key)
+            if local is not None and local.state == "authorized":
+                local.state = "revoked"
+            row = self.ledger.revoke(key)
+        data = self._workbench_item(row, session_id, session_key)
+        data["notice"] = self._workbench_notice(data["state"])
+        if verb == "stop":
+            data["cancellation_available"] = False
+            if row["state"] == "claimed":
+                data["notice"] = (
+                    "Cannot cancel an admitted request from this command. Outcome remains unknown; "
+                    "charges may already apply. No retry or state reset was performed."
+                )
+        return self._workbench_reply(data)
+
     def command(self, raw_args, *, platform="", source=None, session_id="", session_key=""):
+        machine = False
+        if type(raw_args) is str:
+            parts = raw_args.split(maxsplit=1)
+            machine = bool(parts and parts[0] == "--json")
+            if len(raw_args) > 256:
+                raw_args = None
+            elif machine:
+                raw_args = parts[1] if len(parts) > 1 else ""
+        raw = self._command(
+            raw_args,
+            platform=platform,
+            source=source,
+            session_id=session_id,
+            session_key=session_key,
+        )
+        return raw if machine else render_worker_reply(raw)
+
+    def _command(self, raw_args, *, platform="", source=None, session_id="", session_key=""):
+
         try:
             if (
                 platform != "local"
@@ -108,6 +248,8 @@ class TaskPlanningWorker(SessionTaskTools):
                 parts = raw_args.split()
                 if parts in ([], ["help"]):
                     return self._reply(data={"help": HELP})
+                if parts[0] in ("list", "status", "draft", "stop"):
+                    return self._workbench(parts, session_id, session_key)
                 if len(parts) == 2 and parts[0] == "revoke":
                     if not KEY.fullmatch(parts[1]):
                         raise TaskError("invalid_request")

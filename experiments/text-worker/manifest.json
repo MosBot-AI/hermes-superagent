@@ -14,9 +14,10 @@
     "tests/agent/test_text_subagent.py"
   ],
   "source_hashes": {
-    "consumer.py": "de315d6e1cf29344fe8c58a691bc590789108fe4d88866d2664c643689088964",
-    "worker_ledger.py": "ba72af06bba4343d64af4babe7ac14c7cbd01369469ba7da5a1eef39d850f754",
-    "test_task_worker.py": "09ec9ec8dff11810930d3f682335dcd82c031888e0e49811d35b310b754cbaf9"
+    "consumer.py": "05c549380f909a298db54d74034bf24fa3a0b0fd791c84e9e9c0654a704ac0ed",
+    "worker_ledger.py": "c6db8898b82148e2b1232b5ee6ee703b9ba976f37f296764cbff3d207dcf2445",
+    "worker_presentation.py": "c9c019d017bf2a0a41352c165e6ef97d46c6b0c0a517eebd97562c4e39e532c8",
+    "test_task_worker.py": "3b33b7eed230440031e264803971f8d0fb949dfd11e0f0d09091684df35e72d0"
   },
   "artifact_files": [
     "LICENSE.hermes-agent",
@@ -27,7 +28,8 @@
     "run_tests.py",
     "test_task_worker.py",
     "text-worker-prototype.patch",
-    "worker_ledger.py"
+    "worker_ledger.py",
+    "worker_presentation.py"
   ],
   "portable_test_files": [
     "tests/agent/test_text_subagent.py",
@@ -36,8 +38,8 @@
   ],
   "selected_suite": {
     "host_passed": 115,
-    "consumer_passed": 41,
-    "passed": 156,
+    "consumer_passed": 64,
+    "passed": 179,
     "failed": 0,
     "skipped": 0,
     "retries": 0,
@@ -75,7 +77,9 @@
     "Observed config revocation is terminal; unobserved config ABA is not revision-fenced",
     "Task revision checks, claim ledger and provider submission are separate operations; admitted snapshot may become stale",
     "No task state mutation, full orchestration, Gateway end-to-end or automatic memory acceptance",
-    "Exact route fingerprints gate fresh live/cached draft returns; previously returned parent history is not retracted or isolated from later model switches"
+    "Exact route fingerprints gate fresh live/cached draft returns; previously returned parent history is not retracted or isolated from later model switches",
+    "Native workbench reads persisted receipts via explicit scoped LOCAL commands; it neither polls a live worker nor cancels admitted work",
+    "Native exec output uses audited client display paths, not model submission; clients may cache it and live UI acceptance remains untested"
   ],
   "clean_base_apply_check": true
 }

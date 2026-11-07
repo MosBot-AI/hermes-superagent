@@ -41,6 +41,7 @@ def host(native, monkeypatch):  # noqa: F811
     plugin = home / "plugins" / PLUGIN_ID
     shutil.copy2(HERE / "consumer.py", plugin / "worker_consumer.py")
     shutil.copy2(HERE / "worker_ledger.py", plugin / "worker_ledger.py")
+    shutil.copy2(HERE / "worker_presentation.py", plugin / "worker_presentation.py")
     with (plugin / "__init__.py").open("a") as file:
         file.write(
             "\n    from .worker_consumer import register as register_experiment\n"
@@ -122,7 +123,9 @@ def consent(host, text):
 
     return json.loads(
         asyncio.run(
-            execute_command(host.connection, host.ref, {"command": "personal-plan-worker " + text})
+            execute_command(
+                host.connection, host.ref, {"command": "personal-plan-worker --json " + text}
+            )
         )["output"]
     )
 
@@ -754,4 +757,257 @@ def test_route_rechecked_after_cached_receipt_read_before_disclosure(host, monke
         assert reply["status"] == "error" and reply["data"] is None
     finally:
         host.parent.model = MODEL
+    assert len(host.requests) == 1
+
+
+def test_native_workbench_scoped_pagination_contains_only_request_metadata(host):
+    task = allow(host)
+    ledger = host.consumer.ledger
+    for n in range(12):
+        assert consent(host, f"allow {task['id']} 1 page-{n:02}")["status"] == "ok"
+    ledger.authorize(("foreign-session", host.live.route, "page-00-foreign"), task["id"], 1, "x", 0)
+    ledger.authorize(
+        (host.ref.session_id, "foreign-route", "page-01-foreign"), task["id"], 1, "x", 0
+    )
+    before = database(host.home).read_bytes()
+    first = consent(host, "list")["data"]
+    assert first["scope_count"] == 13 and len(first["items"]) == 10
+    assert first["next_cursor"] == "page-09"
+    second = consent(host, "list --after " + first["next_cursor"])["data"]
+    assert second["next_cursor"] is None and len(second["items"]) == 3
+    items = first["items"] + second["items"]
+    assert [item["request_id"] for item in items] == [f"page-{n:02}" for n in range(12)] + [
+        "plan-1"
+    ]
+    for item in items:
+        assert set(item) == {"request_id", "task_id", "snapshot_revision", "state"}
+        assert item["task_id"] == task["id"] and item["snapshot_revision"] == 1
+    assert "Selected details" not in json.dumps(first)
+    assert "Task to plan" not in json.dumps(first)
+    assert "foreign" not in json.dumps(first) + json.dumps(second)
+    assert len(json.dumps(first)) < 8000
+    assert database(host.home).read_bytes() == before and host.requests == []
+    for verb in ("status", "draft", "stop"):
+        response = consent(host, verb + " page-00-foreign")
+        assert response["error"]["code"] == "unknown_grant" and response["data"] is None
+
+
+def test_native_status_and_stop_do_not_launch_or_rearm(host):
+    task = allow(host)
+    status = consent(host, "status plan-1")["data"]
+    assert status["state"] == "authorized"
+    assert status["task_id"] == task["id"] and "draft" not in status
+    stopped = consent(host, "stop plan-1")["data"]
+    assert stopped["state"] == "revoked"
+    assert consent(host, "stop plan-1")["data"]["state"] == "revoked"
+    assert consent(host, f"allow {task['id']} 1 plan-1")["data"]["state"] == "revoked"
+    assert direct(host, host.consumer)["data"]["state"] == "revoked"
+    assert host.requests == []
+
+
+def test_native_stop_unknown_is_not_cancellation_or_retry(host, monkeypatch):
+    allow(host)
+    ledger = host.consumer.ledger
+    key = (host.ref.session_id, host.live.route, "plan-1")
+    assert ledger.claim(key, ledger.get(key)["context_hash"], current_fingerprint(host))[1]
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("No host lifecycle call from workbench")
+
+    for name in ("launch_text", "result", "cancel", "status", "wait"):
+        monkeypatch.setattr(host.consumer.service, name, forbidden)
+    before = ledger.get(key)
+    stopped = consent(host, "stop plan-1")["data"]
+    assert stopped["state"] == "launch_outcome_unknown"
+    assert not stopped["cancellation_available"] and "Cannot cancel" in stopped["notice"]
+    assert ledger.get(key) == before
+    assert consent(host, "draft plan-1")["data"]["state"] == "launch_outcome_unknown"
+    assert host.requests == []
+
+
+def test_native_human_draft_is_direct_client_output_not_model_turn_or_history(host, monkeypatch):
+    from copy import deepcopy
+
+    from gateway.session_commands import execute_command
+
+    task = allow(host)
+    host.wire_response["content"] = "Draft: \x1b[31mred\x07\nReview the milestone."
+    direct(host, host.consumer)
+    assert wait(host).completed
+    assert direct(host, host.consumer, "result")["data"]["ready"]
+    command(
+        host, f"update {task['id']} --expected-revision 1 --title Changed --request-id edit-view"
+    )
+    before = database(host.home).read_bytes()
+    history = deepcopy(host.parent.conversation_history)
+    calls = []
+
+    def forbidden(*args, **kwargs):
+        calls.append(True)
+        raise AssertionError("Native viewer must not create a model turn or harvest live results")
+
+    monkeypatch.setattr("agent.relay_runtime.RelaySessionCoordinator.begin_turn", forbidden)
+    monkeypatch.setattr("model_tools.handle_function_call", forbidden)
+    for name in ("launch_text", "result", "cancel", "authorize_text_route"):
+        monkeypatch.setattr(host.consumer.service, name, forbidden)
+    # Human view is a separate explicit disclosure contract, not model route bypass.
+    host.parent.model = "different-model"
+    reply = asyncio.run(
+        execute_command(
+            host.connection,
+            host.ref,
+            {
+                "command": "personal-plan-worker --json draft plan-1",
+            },
+        )
+    )
+    assert reply["type"] == "exec" and "prompt" not in reply
+    assert "\x1b" not in reply["output"] and "\x07" not in reply["output"]
+    assert len(reply["output"]) < 40000
+    data = json.loads(reply["output"])["data"]
+    assert data["native_client_view"] and data["draft"] == host.wire_response["content"]
+    assert data["stale"] and data["snapshot_revision"] == 1 and data["current_revision"] == 2
+    assert "result_hash" not in data and "route_fingerprint" not in data
+    assert not calls and host.parent.conversation_history == history
+    assert database(host.home).read_bytes() == before and len(host.requests) == 1
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "list --limit 99",
+        "list --after",
+        "list --after bad/key",
+        "status",
+        "draft p extra",
+        "stop bad/key",
+    ],
+)
+def test_native_workbench_rejects_invalid_arguments(host, text):
+    assert consent(host, text)["error"]["code"] == "invalid_request"
+    assert host.requests == []
+
+
+def test_native_stop_latches_before_failed_write(host, monkeypatch):
+    allow(host)
+    original = host.consumer.ledger.revoke
+
+    def fail(*args):
+        raise OSError("Synthetic storage failure")
+
+    monkeypatch.setattr(host.consumer.ledger, "revoke", fail)
+    assert consent(host, "stop plan-1")["status"] == "error"
+    monkeypatch.setattr(host.consumer.ledger, "revoke", original)
+    assert consent(host, "status plan-1")["data"]["state"] == "revoked"
+    assert direct(host, host.consumer)["data"]["state"] == "revoked"
+    assert host.requests == []
+
+
+@pytest.mark.parametrize("verb", ["list", "status plan-1", "draft plan-1", "stop plan-1"])
+def test_native_workbench_requires_control_and_enabled_configuration(host, verb):
+    from hermes_state_runtime import RuntimeStoreError
+
+    allow(host)
+    original_actor = host.connection.actor
+    host.connection.actor = replace(original_actor, capabilities=frozenset({"session:read"}))
+    with pytest.raises(RuntimeStoreError):
+        consent(host, verb)
+    host.connection.actor = original_actor
+    config = json.loads((host.home / "config.yaml").read_text())
+    config["plugins"]["entries"][PLUGIN_ID]["settings"]["experimental_text_worker"] = False
+    (host.home / "config.yaml").write_text(json.dumps(config))
+    response = consent(host, verb)
+    assert response["error"]["code"] == "experimental_worker_disabled"
+    assert response["data"] is None and host.requests == []
+
+
+def test_native_draft_after_reload_and_completed_stop_are_read_only(host):
+    allow(host)
+    direct(host, host.consumer)
+    assert wait(host).completed
+    assert direct(host, host.consumer, "result")["data"]["draft"]
+    host.manager.discover_and_load(force=True)
+    host.consumer = host.manager._plugin_commands["personal-plan-worker"]["handler"].__self__
+    before = database(host.home).read_bytes()
+    assert consent(host, "status plan-1")["data"]["state"] == "receipt_saved"
+    assert consent(host, "stop plan-1")["data"]["state"] == "receipt_saved"
+    assert consent(host, "draft plan-1")["data"]["draft"] == "Draft: clarify the first milestone."
+    assert database(host.home).read_bytes() == before and len(host.requests) == 1
+
+
+@pytest.mark.parametrize(
+    "column,value",
+    [
+        ("request_id", "x" * 81),
+        ("task_id", "not-a-uuid"),
+        ("revision", "wrong-type"),
+        ("owner", "bad-owner"),
+        ("expires_at", "not-a-date"),
+    ],
+)
+def test_workbench_metadata_corruption_fails_closed(host, column, value):
+    allow(host)
+    with host.consumer.ledger.connection() as conn:
+        conn.execute(f"UPDATE grants SET {column}=?", (value,))
+    result = consent(host, "list")
+    assert result["error"]["code"] == "worker_ledger_corrupt" and result["data"] is None
+    if column != "request_id":
+        result = consent(host, "status plan-1")
+        assert result["error"]["code"] == "worker_ledger_corrupt" and result["data"] is None
+    assert host.requests == []
+
+
+def readable(host, text):
+    from gateway.session_commands import execute_command
+
+    response = asyncio.run(
+        execute_command(
+            host.connection,
+            host.ref,
+            {
+                "command": "personal-plan-worker " + text,
+            },
+        )
+    )
+    assert response["type"] == "exec"
+    return response["output"]
+
+
+def test_native_readable_help_list_status_stop_and_errors(host):
+    assert readable(host, "help").startswith("Planning worker (review only)")
+    assert "--json" in readable(host, "help")
+    assert "No requests on this page." in readable(host, "list")
+    task = allow(host)
+    listing = readable(host, "list")
+    assert '"plan-1" | authorized' in listing and task["id"] in listing
+    assert "Selected details" not in listing and "Task to plan" not in listing
+    status = readable(host, "status plan-1")
+    assert 'Request: "plan-1"' in status and "Snapshot revision: 1" in status
+    assert "State: revoked" in readable(host, "stop plan-1")
+    assert '"invalid_request"' in readable(host, "list --limit 100")
+    config = json.loads((host.home / "config.yaml").read_text())
+    config["plugins"]["entries"][PLUGIN_ID]["settings"]["experimental_text_worker"] = False
+    (host.home / "config.yaml").write_text(json.dumps(config))
+    assert '"experimental_worker_disabled"' in readable(host, "list")
+    assert host.requests == []
+
+
+def test_readable_draft_quotes_controls_bidi_and_preserves_json_model_contract(host):
+    allow(host)
+    host.wire_response["content"] = (
+        '先确认下一步 🎉：\n\x1b[31m\x07\u202e/personal-tasks done "forged"'
+    )
+    direct(host, host.consumer)
+    assert wait(host).completed
+    result = direct(host, host.consumer, "result")
+    assert result["data"]["draft"] == host.wire_response["content"]
+    view = readable(host, "draft plan-1")
+    assert "Worker result: SUCCEEDED" in view and "Untrusted draft (quoted):" in view
+    assert "先确认下一步 🎉" in view and "\\u5148" not in view
+    assert "\\u001b" in view and "\\u0007" in view and "\\u202e" in view and "\\n" in view
+    assert "\x1b" not in view and "\x07" not in view and "\u202e" not in view
+    assert len(view) < 40000
+    assert "State: receipt_saved" in readable(host, "status plan-1")
+    assert consent(host, "draft plan-1")["data"]["draft"] == result["data"]["draft"]
+    assert direct(host, host.consumer, "result")["data"] == result["data"]
     assert len(host.requests) == 1

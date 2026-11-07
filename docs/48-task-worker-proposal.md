@@ -8,6 +8,14 @@ The [review-only text-worker bundle](../experiments/text-worker/README.md) conne
 
 The consumer's fixed flow is task selection → short-lived one-task grant → real primary turn admission → immutable task snapshot → text worker → draft with revision/staleness metadata. It never marks a task complete or interprets returned instructions as authority. There is no general worker tool execution.
 
+## Operator-facing workbench
+
+The native `/personal-plan-worker` command now supports `list [--after KEY]`, `status KEY`, `draft KEY` and `stop KEY`. Output defaults to readable text; leading `--json` preserves structured responses. Lists show ten scoped metadata records at a time, never task text or draft content. `receipt_saved` means a worker receipt exists, not that the task was performed.
+
+`draft` displays an already saved terminal receipt directly through the audited native command output path, with current revision/staleness information and escaped untrusted text. It does not poll a live worker or send a model request. This explicit operator read is separate from the model tool, whose exact-route disclosure check is unchanged. Native clients can display/cache output; LOCAL does not prove a physical human is the caller.
+
+`stop` revokes only an unstarted grant. For an admitted/unknown request, it reports that cancellation is unavailable and preserves the consumed request. It neither fabricates a parent binding nor creates a new request. The workbench does not recover lost results, remove retained keys or make the proposal a supported installed feature.
+
 ## Why this is a separate experiment
 
 The pinned public lifecycle's general child launch can inherit tools, saved routes, MCP toolsets, recursive delegation and workspace behavior. An empty list or a prompt saying “do not use tools” cannot provide the needed bound. Changing those defaults globally would also change legitimate host behavior.

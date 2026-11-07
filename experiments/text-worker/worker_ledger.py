@@ -8,6 +8,7 @@ cannot make a consumed request eligible again. Retention is indefinite, at most
 
 import hashlib
 import json
+import math
 import re
 import sqlite3
 import time
@@ -19,7 +20,7 @@ from personal_agent.task_cli import (
     _private_storage_directory,
     current_profile_home,
 )
-from personal_agent.tasks import TaskError
+from personal_agent.tasks import TaskError, validate_request
 
 MAX_GRANTS = 64
 MAX_RESULT_CHARS = 32000
@@ -150,6 +151,56 @@ class Ledger:
     def get(self, key):
         with self.connection() as conn:
             return self._find(conn, key)
+
+    @staticmethod
+    def _checked_metadata(row):
+        row = dict(row)
+        try:
+            if (
+                type(row["request_id"]) is not str
+                or re.fullmatch(r"[A-Za-z0-9._-]{1,80}", row["request_id"]) is None
+                or type(row["revision"]) is not int
+                or not 1 <= row["revision"] <= 2**63 - 1
+                or row["state"]
+                not in ("authorized", "claimed", "revoked", "expired", "stale", "completed")
+                or type(row["expires_at"]) not in (int, float)
+                or not math.isfinite(row["expires_at"])
+                or row["expires_at"] < 0
+            ):
+                raise ValueError("invalid metadata")
+            validate_request("get", {"task_id": row["task_id"]})
+            validate_request("get", {"task_id": row["owner"]})
+        except ValueError, TypeError, KeyError, TaskError:
+            raise TaskError("worker_ledger_corrupt") from None
+        return row
+
+    def metadata(self, key):
+        # Metadata queries deliberately never select task context or draft bytes.
+        with self.connection() as conn:
+            row = conn.execute(
+                "SELECT request_id,task_id,revision,state,owner,expires_at FROM grants "
+                "WHERE session_id=? AND route=? AND request_id=?",
+                key,
+            ).fetchone()
+            return self._checked_metadata(row) if row else None
+
+    def listing(self, session_id, route, after=None):
+        with self.connection() as conn:
+            rows = conn.execute(
+                "SELECT request_id,task_id,revision,state,owner,expires_at FROM grants "
+                "WHERE session_id=? AND route=? AND request_id>? "
+                "ORDER BY request_id COLLATE BINARY LIMIT 11",
+                (session_id, route, after or ""),
+            ).fetchall()
+            count = conn.execute(
+                "SELECT count(*) FROM grants WHERE session_id=? AND route=?",
+                (session_id, route),
+            ).fetchone()[0]
+            return {
+                "items": [self._checked_metadata(row) for row in rows[:10]],
+                "next_cursor": rows[9]["request_id"] if len(rows) > 10 else None,
+                "scope_count": count,
+            }
 
     def authorize(self, key, task_id, revision, context_hash, expires_at):
         with self.connection() as conn:

@@ -37,7 +37,12 @@ def test_exact_patch_and_source_inventory():
     assert sorted(data["artifact_files"]) == sorted(
         p.name for p in ARTIFACT.iterdir() if p.is_file()
     )
-    assert set(data["source_hashes"]) == {"consumer.py", "worker_ledger.py", "test_task_worker.py"}
+    assert set(data["source_hashes"]) == {
+        "consumer.py",
+        "worker_ledger.py",
+        "worker_presentation.py",
+        "test_task_worker.py",
+    }
     for name, digest in data["source_hashes"].items():
         assert hashlib.sha256((ARTIFACT / name).read_bytes()).hexdigest() == digest
 
