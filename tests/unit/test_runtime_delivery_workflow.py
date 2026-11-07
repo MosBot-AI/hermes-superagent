@@ -5,21 +5,28 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_runtime_delivery_follows_checks_and_is_push_only():
+def test_runtime_acceptance_covers_pr_head_and_publication_is_push_only():
     workflow = (ROOT / ".github/workflows/check.yml").read_text()
     assert "permissions:\n  contents: read\n" in workflow
     assert "pull_request_target" not in workflow
+    assert "  pull_request:\n" in workflow
+    assert "    runs-on: ubuntu-latest\n" in workflow
+    assert "          persist-credentials: false\n" in workflow
+    expected = "${{ github.event.pull_request.head.sha || github.sha }}"
+    assert f"          ref: {expected}\n" in workflow
+    assert f"          EXPECTED_SOURCE_SHA: {expected}\n" in workflow
     check, proposal, build, upload = workflow.split("      - name: ")[-4:]
     assert "scripts/check.py" in check
     assert "worktree add --detach" in proposal
     assert "apply --check" in proposal and "apply --index" in proposal
     assert "--clean-checkout" in proposal and "--disposable-copy" in proposal
     assert "if: " not in proposal
+    assert "if: " not in build
+    assert "        if: github.event_name == 'push'\n" in upload
     for step in (build, upload):
-        assert "        if: github.event_name == 'push'\n" in step
         assert "continue-on-error" not in step and "always()" not in step
     assert "set -euo pipefail" in build
-    assert 'test "$source_sha" = "$GITHUB_SHA"' in build
+    assert 'test "$source_sha" = "$EXPECTED_SOURCE_SHA"' in build
     assert "git --no-replace-objects rev-parse HEAD" in build
     assert "for copy in one two" in build
     assert 'cmp "$RUNNER_TEMP/runtime-one.tar.gz" "$RUNNER_TEMP/runtime-two.tar.gz"' in build

@@ -6,6 +6,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ## Unreleased
 
+- Run runtime artifact acceptance on exact pull-request heads with read-only credentials; keep downloadable artifact publication push-only.
+
 - Added explicit [advisory native progress sync](docs/53-native-progress-observation.md): anchored identity checks, one latest metadata snapshot and durable retry receipts. Native state never changes local completion or dispatches work.
 
 - Fix parked Kanban creation under the host’s safe DELETE-journal fallback; keep pre-existing journal refusal and test both native-default and DELETE modes.
@@ -13,6 +15,8 @@ This file distinguishes design work, development changes, and released capabilit
 - Added default-off [parked native Kanban handoff](docs/52-parked-kanban-handoff.md): explicit board, preview/digest commit, durable single-use claim and bounded read-only reconciliation. No worker dispatch, storage initialization or live acceptance.
 
 ### Added
+
+- Add cold runtime-package acceptance through native LOCAL conversation dispatch, with replay and denied-capability checks; deployed acceptance remains open.
 
 - [Project task dependencies](docs/51-project-task-dependencies.md) now enforce explicit same-project prerequisites before starting or completing work, with a ready queue and fresh dependency snapshots in review/focus. Cancelled prerequisites remain blockers; no worker is launched and no native Kanban state is modified.
 
