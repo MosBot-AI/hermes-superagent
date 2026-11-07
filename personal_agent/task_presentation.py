@@ -122,6 +122,9 @@ def _help(prefix: str) -> str:
             ),
             "",
             "Capture: " + prefix + ' add "Title" --project "Demo" --request-id capture-1',
+            "Plan: "
+            + prefix
+            + ' plan --project "Demo" --task "First" --task "Second" --request-id plan-1',
             "Review: " + prefix + " review --on YYYY-MM-DD",
             "Blocked: " + prefix + " list --work-status blocked",
             "Projects: " + prefix + " projects",
@@ -252,6 +255,19 @@ def _render(result: dict, *, operation: str, payload: dict, prefix: str) -> str:
         return _help(prefix)
     if operation in ("list", "search", "agenda"):
         lines = _page(data, operation, payload, prefix)
+    elif operation == "capture_plan":
+        lines = [
+            f"Plan saved: {len(data['items'])} task(s).",
+            "Project: " + _quoted(data["project"]),
+        ]
+        if result.get("replayed"):
+            lines.insert(0, "Replayed saved plan receipt. Use show for each task's current state.")
+        for task in data["items"]:
+            lines.extend(_task_lines(task))
+        lines.append(
+            "All tasks saved together. No work, dependency ordering or reminder was executed."
+        )
+        lines.append("Browse: " + _command(prefix, "list", {"project": data["project"]}))
     elif operation == "review":
         lines = _review(data, prefix)
     elif operation == "projects":

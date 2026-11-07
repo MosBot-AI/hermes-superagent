@@ -241,7 +241,7 @@ def test_schemas_are_flat_closed_json_objects():
         (
             PERSONAL_TASKS_WRITE_SCHEMA,
             WRITE,
-            ["capture", "update", "complete", "cancel", "progress"],
+            ["capture", "capture_plan", "update", "complete", "cancel", "progress"],
             ["action", "request_id"],
         ),
     ]:

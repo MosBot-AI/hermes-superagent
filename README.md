@@ -72,6 +72,8 @@ The [readable task workbench](docs/44-readable-task-workbench.md) makes existing
 
 [Native task focus](docs/46-native-task-focus.md) connects one explicitly selected task to subsequent main-agent turns. After task-tool activation, `/personal-tools focus <task-id>` supplies a fresh bounded snapshot each turn; `clear-focus`, disable, expiry and restart stop future snapshots. This does not dispatch work or erase prior model/history context.
 
+[Atomic project plans](docs/47-atomic-project-plans.md) save 1–20 explicitly requested tasks under one label with one all-or-none transaction and durable retry key. Native commands, CLI and activated model tools share the same receipt; the tasks then work with project review, progress and focus. This does not dispatch workers.
+
 ## Development checks
 
 `compatibility.json` records the Hermes baseline commit. The current runtime target is Python 3.14. A single tested SHA does not justify a broad `requires_hermes` version range.

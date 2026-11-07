@@ -231,3 +231,43 @@ def test_internal_route_bypasses_provider(routing):
     result = route_for_config({"model": "internal-fixture-model"}, routing.parent)
     assert result.creds["model"] == "internal-fixture-model"
     assert routing.provider.calls == []
+
+
+def test_public_lifecycle_empty_allowlist_does_not_mean_no_tools(monkeypatch):
+    from agent.subagent_lifecycle import SubagentLifecycleError, SubagentLifecycleService
+    from tools import delegate_tool
+
+    parent = SimpleNamespace(session_id="synthetic-parent", enabled_toolsets=["terminal"])
+    service = SubagentLifecycleService(lambda: parent)
+    observed = []
+
+    def stop_before_construction(**kwargs):
+        observed.append(kwargs)
+        raise RuntimeError("synthetic construction boundary")
+
+    monkeypatch.setattr(delegate_tool, "_load_config", lambda: {})
+    monkeypatch.setattr(
+        delegate_tool, "_resolve_delegation_credentials", lambda *args: {"model": "synthetic"}
+    )
+    monkeypatch.setattr(delegate_tool, "_credential_overrides", lambda *args: {})
+    monkeypatch.setattr(
+        delegate_tool, "_build_child_preserving_parent_tools", stop_before_construction
+    )
+    with pytest.raises(RuntimeError, match="synthetic construction boundary"):
+        service.launch({"goal": "Synthetic", "allowed_toolsets": []})
+    assert observed[0]["toolsets"] is None
+    with pytest.raises(SubagentLifecycleError, match="timeout is not supported"):
+        service.launch({"goal": "Synthetic", "timeout_seconds": 1})
+    assert len(observed) == 1
+
+
+def test_native_child_narrowing_can_still_inherit_mcp_and_orchestrator_tools(monkeypatch):
+    from tools import delegate_tool_toolsets
+
+    parent = SimpleNamespace(enabled_toolsets=["terminal", "mcp-synthetic"], disabled_toolsets=[])
+    monkeypatch.setattr(delegate_tool_toolsets, "_get_inherit_mcp_toolsets", lambda: True)
+    tools, _ = delegate_tool_toolsets._resolve_child_toolsets(parent, ["terminal"], "leaf")
+    assert "mcp-synthetic" in tools
+    monkeypatch.setattr(delegate_tool_toolsets, "_get_inherit_mcp_toolsets", lambda: False)
+    tools, _ = delegate_tool_toolsets._resolve_child_toolsets(parent, ["terminal"], "orchestrator")
+    assert "delegation" in tools and "mcp-synthetic" not in tools

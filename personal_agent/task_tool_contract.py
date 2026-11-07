@@ -9,7 +9,7 @@ owns action-specific requirements, bounds, normalization and rejection.
 from .tasks import TaskError, validate_request
 
 _READ_ACTIONS = ("list", "show", "search", "projects", "agenda", "history", "review")
-_WRITE_ACTIONS = ("capture", "update", "complete", "cancel", "progress")
+_WRITE_ACTIONS = ("capture", "capture_plan", "update", "complete", "cancel", "progress")
 
 PERSONAL_TASKS_READ_SCHEMA = {
     "name": "personal_tasks_read",
@@ -128,7 +128,14 @@ PERSONAL_TASKS_WRITE_SCHEMA = {
         "No external action, scheduling or reminders; completing a record does not perform "
         "the task. Results become visible to the configured model. Every write requires a "
         "stable request_id: reuse it with identical arguments on retry, never generate a "
-        "fresh key after an uncertain outcome. capture requires title. update requires "
+        "fresh key after an uncertain outcome. capture requires title. "
+        "capture_plan requires project and 1-20 task objects in tasks; "
+        "it saves all tasks and one replay receipt atomically, or saves none. Do not call "
+        "capture separately after an uncertain capture_plan. Preserve the same task order "
+        "and retry key. A plan records only explicitly requested tasks, not execution, "
+        "dependency ordering or a native Project. The normalized request must fit 32000 "
+        "ASCII-serialized characters. Each plan task has title and optional details/due_date. "
+        "update requires "
         "at least one of title/details/due_date/project. update/complete/cancel/progress require "
         "task_id and expected_revision from a prior read for compare-and-swap (CAS); "
         "never invent IDs or revisions. On revision conflict, read and reconcile first. "
@@ -162,6 +169,24 @@ PERSONAL_TASKS_WRITE_SCHEMA = {
                 "description": "update/complete/cancel/progress: revision from a prior read.",
             },
             "title": {"type": "string", "minLength": 1, "maxLength": 240},
+            "tasks": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 20,
+                "description": (
+                    "capture_plan only: ordered tasks sharing the top-level project label."
+                ),
+                "items": {
+                    "type": "object",
+                    "required": ["title"],
+                    "additionalProperties": False,
+                    "properties": {
+                        "title": {"type": "string", "minLength": 1, "maxLength": 240},
+                        "details": {"type": "string", "maxLength": 5000},
+                        "due_date": {"type": "string", "format": "date"},
+                    },
+                },
+            },
             "details": {"type": "string", "maxLength": 5000},
             "due_date": {
                 "type": ["string", "null"],
@@ -173,7 +198,8 @@ PERSONAL_TASKS_WRITE_SCHEMA = {
                 "minLength": 1,
                 "maxLength": 80,
                 "description": (
-                    "capture/update: exact case-sensitive label, no outer whitespace. "
+                    "capture/capture_plan/update: exact case-sensitive label, no outer whitespace. "
+                    "capture_plan requires a non-null label. "
                     "Null means unassigned (clears the label on update)."
                 ),
             },

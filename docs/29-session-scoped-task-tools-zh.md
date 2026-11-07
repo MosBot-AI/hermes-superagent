@@ -91,3 +91,5 @@ Hermes `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`：
 - [原生 turn façade](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/agent/turn_facade.py) 与[turn/lease runtime](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/agent/relay_runtime.py)：真实上下文 turn、profile/session 绑定及 finalization。
 - [模型工具分发](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/model_tools.py) 与[会话上下文](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/gateway/session_context.py)：dispatcher ID 和不回退环境变量的 route getter。
 - [Managed execution 选择](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/gateway/session_managed_worker.py)：普通默认值与显式/safe/worker 模式。
+
+写工具还通过 `capture_plan` 支持[原子化项目计划](47-atomic-project-plans-zh.md)：同一标签下 1–20 条任务，共用一个必需重试键，不会部分录入。复用已有写激活，不执行任务，也不启动第二个模型。

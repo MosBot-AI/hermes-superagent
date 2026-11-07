@@ -58,7 +58,8 @@ Extend Hermes into a long-lived personal agent for one user: one main agent unde
 44. [Readable task workbench](44-readable-task-workbench.md): native human views, explicit JSON compatibility, safe pagination and accurate retry/error messages.
 45. [Explicit memory expiry](45-explicit-memory-expiry.md): adds explicit UTC deadlines, default expiry filtering, deliberate inspection and schema-v5 migration. Expiry affects fresh recall eligibility, not stored status or deletion; native read-only recall never migrates storage.
 46. [Native task focus](46-native-task-focus.md): explicitly select one task for fresh bounded main-turn context, with session activation, whole-field budgets and retained-history boundaries.
-47. [Architecture decision records](adr/README.md): reasons for the constraints.
+47. [Atomic project plans](47-atomic-project-plans.md): all-or-none multi-task capture, durable shared receipts, native/model/CLI flows and verified worker-dispatch limits.
+48. [Architecture decision records](adr/README.md): reasons for the constraints.
 
 ## Keep three kinds of statements separate
 

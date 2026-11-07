@@ -245,3 +245,5 @@ The [bounded recall follow-on](36-bounded-memory-recall.md) adds explicit multi-
 [Explicit expiry](45-explicit-memory-expiry.md) adds UTC-bounded fresh recall eligibility and schema-v5 migration, not deletion or automatic ingestion. E2.7 remains In Progress; strict native checkpoint-v2, source reconciliation and native worker orchestration remain open. Time passage alone does not change revisions/events or certify checkpoint recall validity.
 
 [Native task focus](46-native-task-focus.md) extends E6.9 with explicit session selection, fresh bounded context at turn start and actual host hook/API-message contracts. E6.9 remains In Progress: real-model natural-language acceptance, worker dispatch and complete MVP/release gates are not completed by this slice.
+
+[Atomic project-plan capture](47-atomic-project-plans.md) advances the local E2.1/E6.9 workflow from one planned batch to durable tasks, project review and per-task focus. Pinned lifecycle/toolset contracts explain why the plugin still does not claim contained worker dispatch. E3.3/E3.5 and real-model acceptance remain incomplete.

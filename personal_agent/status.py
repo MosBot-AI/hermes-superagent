@@ -43,6 +43,7 @@ def build_status(
             "diagnostics": True,
             "personal_data_storage": local_tasks,
             "local_task_inbox_cli": local_tasks,
+            "atomic_project_plan_capture": local_tasks,
             "local_task_agenda_cli": local_tasks,
             "identity_binding": False,
             "action_authorization": False,

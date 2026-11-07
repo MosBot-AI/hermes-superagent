@@ -31,6 +31,8 @@ HELP = (
     'Use POSIX quotes: add "Title" [--details "Text"] [--project "Project"] '
     "[--due-date YYYY-MM-DD]; list [--state all] [--project LABEL | --unassigned]; "
     'search "Text"; show TASK_ID; projects; agenda --on YYYY-MM-DD; '
+    'plan --project "Project" --task "First" --task "Second" --request-id KEY '
+    "(1-20 tasks, one atomic write; a stable request ID is required); "
     "review --on YYYY-MM-DD [--lookahead-days N] [--per-bucket-limit N] [--max-chars N]; "
     "history TASK_ID [--limit N] [--after-revision N] (operation metadata only). "
     "Readers support --limit and --after where applicable. "
@@ -44,7 +46,8 @@ HELP = (
     "add is an alias for capture; done is an alias for complete. "
     "Projects are task label groups, not native Project entities. "
     "Writes accept --request-id KEY. "
-    "If omitted a fresh key is returned. For an uncertain outcome, reuse that exact "
+    "For single-task writes, if omitted a fresh key is returned. "
+    "For an uncertain outcome, reuse that exact "
     "key and identical command manually; a fresh key may duplicate capture. "
     "No automatic retries. Dates are explicit, not inferred. Local storage only. "
     "Native conversation output defaults to readable text; "

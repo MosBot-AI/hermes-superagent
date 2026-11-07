@@ -8,6 +8,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Added [atomic project-plan capture](docs/47-atomic-project-plans.md) through native commands, CLI and existing activated write tools: 1–20 tasks share one transaction/retry receipt, with whole-batch validation, crash rollback and restart-safe replay. Worker containment limitations remain explicit.
+
 - Added [native task focus](docs/46-native-task-focus.md): an explicit session selection supplies fresh bounded task context through the real host turn hook. It shares task-tool admission, expires with activation and preserves historical prompt bytes; no worker dispatch or extra model call.
 
 - [Explicit memory expiry](docs/45-explicit-memory-expiry.md) adds explicit UTC deadlines, default expiry filtering, deliberate inspection and schema-v5 migration. Expiry affects fresh recall eligibility, not stored status or deletion; native read-only recall never migrates storage.

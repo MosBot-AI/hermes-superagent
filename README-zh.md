@@ -72,6 +72,8 @@ Hermes 原生 personal-agent 插件，目标是让一个主 agent 管理项目�
 
 [原生任务聚焦](docs/46-native-task-focus-zh.md)把一条明确选定的任务接入后续主代理对话轮次。任务工具激活后，`/personal-tools focus <task-id>` 每轮提供新的有界快照；`clear-focus`、禁用、到期和重启停止未来快照。不派发任务，也不清除此前模型/历史上下文。
 
+[原子化项目计划](docs/47-atomic-project-plans-zh.md)通过一笔全部成功或全部回滚的事务和持久重试键，保存同一标签下明确要求的 1–20 条任务。原生命令、CLI 和已激活模型工具共享回执；这些任务可继续用于项目回顾、进度和聚焦。不派发 worker。
+
 ## 开发验证
 
 基线为 `compatibility.json` 内的 Hermes commit；当前实际运行目标是 Python 3.14。没有根据单一 SHA 宣称宽泛的 `requires_hermes` 版本范围。

@@ -50,6 +50,8 @@ _SCHEMA_V1 = {
 _SCHEMA_V2 = {**_SCHEMA_V1, "tasks": _SCHEMA_V1["tasks"][:-1] + ", due_date TEXT)"}
 _SCHEMA_V3 = {**_SCHEMA_V2, "tasks": _SCHEMA_V2["tasks"][:-1] + ", project TEXT)"}
 _WORK_STATUSES = ("ready", "in_progress", "waiting", "blocked")
+MAX_PLAN_TASKS = 20
+MAX_PLAN_CHARS = 32000
 _PROGRESS_COLUMNS = (
     "work_status TEXT NOT NULL DEFAULT 'ready' "
     "CHECK(work_status IN ('ready','in_progress','waiting','blocked'))",
@@ -128,6 +130,7 @@ def validate_request(operation: str, payload: dict) -> dict:
     """Validate without touching storage; return an independent normalized mapping."""
     fields = {
         "capture": ({"title", "request_id"}, {"details", "due_date", "project"}),
+        "capture_plan": ({"project", "tasks", "request_id"}, set()),
         "update": (
             {"task_id", "expected_revision", "request_id"},
             {"title", "details", "due_date", "project"},
@@ -195,6 +198,21 @@ def validate_request(operation: str, payload: dict) -> dict:
     if "expected_revision" in result:
         value = result["expected_revision"]
         if type(value) is not int or not 1 <= value < 2**63 - 1:
+            raise TaskError("invalid_request")
+    if operation == "capture_plan":
+        items = result["tasks"]
+        if type(items) is not list or not 1 <= len(items) <= MAX_PLAN_TASKS:
+            raise TaskError("invalid_request")
+        normalized = []
+        for item in items:
+            if not isinstance(item, dict) or item.keys() - {"title", "details", "due_date"}:
+                raise TaskError("invalid_request")
+            task = validate_request("capture", {**item, "request_id": result["request_id"]})
+            task.pop("request_id")
+            normalized.append(task)
+        result["tasks"] = normalized
+        # Bound the normalized request, including escaping and envelope fields.
+        if len(json.dumps(result, ensure_ascii=True, sort_keys=True)) > MAX_PLAN_CHARS:
             raise TaskError("invalid_request")
     if operation == "review":
         result = {"lookahead_days": 7, "per_bucket_limit": 5, "max_chars": 16000, **result}
@@ -321,6 +339,30 @@ class TaskStore:
         if row is None:
             raise TaskError("not_found")
         return dict(zip(_COLUMNS, row, strict=True))
+
+    def _capture(self, request: dict, now: str) -> dict:
+        task_id = str(uuid4())
+        self._connection.execute(
+            "INSERT INTO tasks (id,title,details,state,revision,"
+            "created_at,updated_at,source,due_date,project)"
+            " VALUES (?,?,?,'captured',1,?,?,'local_cli',?,?)",
+            (
+                task_id,
+                request["title"],
+                request["details"],
+                now,
+                now,
+                request.get("due_date"),
+                request.get("project"),
+            ),
+        )
+        return self._get(task_id)
+
+    def _record_event(self, task: dict, operation: str, now: str) -> None:
+        self._connection.execute(
+            "INSERT INTO events (task_id,revision,operation,timestamp) VALUES (?,?,?,?)",
+            (task["id"], task["revision"], operation, now),
+        )
 
     def _list(self, request: dict) -> dict:
         clauses, arguments = [], []
@@ -498,22 +540,15 @@ class TaskStore:
                 self._connection.execute("COMMIT")
                 return {"data": data, "replayed": True}
             now = datetime.now(UTC).isoformat(timespec="microseconds")
-            if operation == "capture":
-                task_id = str(uuid4())
-                self._connection.execute(
-                    "INSERT INTO tasks (id,title,details,state,revision,"
-                    "created_at,updated_at,source,due_date,project)"
-                    " VALUES (?,?,?,'captured',1,?,?,'local_cli',?,?)",
-                    (
-                        task_id,
-                        request["title"],
-                        request["details"],
-                        now,
-                        now,
-                        request.get("due_date"),
-                        request.get("project"),
-                    ),
-                )
+            if operation == "capture_plan":
+                items = []
+                for item in request["tasks"]:
+                    task = self._capture({**item, "project": request["project"]}, now)
+                    self._record_event(task, operation, now)
+                    items.append(task)
+                data = {"project": request["project"], "items": items}
+            elif operation == "capture":
+                data = self._capture(request, now)
             else:
                 task_id = request["task_id"]
                 task = self._get(task_id)
@@ -544,11 +579,9 @@ class TaskStore:
                 )
                 if cursor.rowcount != 1:
                     raise TaskError("revision_conflict")
-            data = self._get(task_id)
-            self._connection.execute(
-                "INSERT INTO events (task_id,revision,operation,timestamp) VALUES (?,?,?,?)",
-                (task_id, data["revision"], operation, now),
-            )
+                data = self._get(task_id)
+            if operation != "capture_plan":
+                self._record_event(data, operation, now)
             self._connection.execute(
                 "INSERT INTO receipts (request_id,digest,receipt) VALUES (?,?,?)",
                 (request["request_id"], digest, json.dumps(data, ensure_ascii=True)),

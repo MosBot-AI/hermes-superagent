@@ -11,7 +11,7 @@ from pathlib import Path
 
 from . import PLUGIN_ID
 from .task_presentation import render_task_result
-from .tasks import TaskError, TaskStore, validate_request
+from .tasks import MAX_PLAN_CHARS, TaskError, TaskStore, validate_request
 
 
 def setup_tasks_cli(parent: argparse._SubParsersAction) -> None:
@@ -23,6 +23,12 @@ def setup_tasks_cli(parent: argparse._SubParsersAction) -> None:
     capture.add_argument("--request-id", required=True)
     capture.add_argument("--due-date", default=argparse.SUPPRESS, help="Explicit YYYY-MM-DD date")
     capture.add_argument("--project", default=argparse.SUPPRESS)
+    plan = commands.add_parser("plan", help="Atomically capture 1-20 tasks under one project label")
+    plan.add_argument("--project", required=True)
+    plan.add_argument("--request-id", required=True)
+    inputs = plan.add_mutually_exclusive_group(required=True)
+    inputs.add_argument("--task", action="append", help="Repeat for each task title in the plan")
+    inputs.add_argument("--tasks-json", help="JSON array of title/details/due_date objects")
     show = commands.add_parser("show", help="Read one local task")
     show.add_argument("task_id")
     history = commands.add_parser("history", help="Read bounded task operation metadata")
@@ -112,6 +118,15 @@ def setup_tasks_cli(parent: argparse._SubParsersAction) -> None:
 
 def command_request(args: argparse.Namespace) -> tuple[str, dict]:
     operation = "get" if args.task_operation == "show" else args.task_operation
+    if operation == "plan":
+        tasks = (
+            [{"title": title} for title in args.task]
+            if args.task is not None
+            else _parse_plan_json(args.tasks_json)
+        )
+        return "capture_plan", validate_request(
+            "capture_plan", {"project": args.project, "tasks": tasks, "request_id": args.request_id}
+        )
     fields = {
         "capture": ("title", "details", "request_id", "due_date", "project"),
         "get": ("task_id",),
@@ -146,6 +161,28 @@ def command_request(args: argparse.Namespace) -> tuple[str, dict]:
         raise TaskError("invalid_request")
     payload = {key: getattr(args, key) for key in fields[operation] if hasattr(args, key)}
     return operation, validate_request(operation, payload)
+
+
+def _parse_plan_json(raw: str):
+    """One bounded JSON value; duplicate keys/non-JSON constants are rejected."""
+    if type(raw) is not str or len(raw) > MAX_PLAN_CHARS:
+        raise TaskError("invalid_request")
+
+    def unique(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise TaskError("invalid_request")
+            result[key] = value
+        return result
+
+    def reject_constant(_value):
+        raise TaskError("invalid_request")
+
+    try:
+        return json.loads(raw, object_pairs_hook=unique, parse_constant=reject_constant)
+    except ValueError, TypeError, RecursionError:
+        raise TaskError("invalid_request") from None
 
 
 def current_profile_home() -> Path:
