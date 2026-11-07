@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "status": "Review-only host proposal and experimental task consumer; not enabled",
+  "base": "90d6b98fd86d20981ee06ddd5b7d93e4320f26a4",
+  "staged_tree": "17d2cc2e5c82f70f32ea3b35082a8d74939e988a",
+  "patch_file": "text-worker-prototype.patch",
+  "patch_sha256": "e6a0e0a78450a2fb5385e5943e60541f6bd6fd04f71717378a40e39c709cfa5f",
+  "changed_files": 5,
+  "patch_files": [
+    "agent/subagent_lifecycle.py",
+    "agent/text_subagent.py",
+    "hermes_cli/middleware.py",
+    "hermes_cli/plugins.py",
+    "tests/agent/test_text_subagent.py"
+  ],
+  "source_hashes": {
+    "consumer.py": "b5851ef4edc807b43a18773c37570579fdd169955db5764b45468bcf5a7ca388",
+    "test_task_worker.py": "047ea55bbc85734316ac2523d6c7e2f37b056e742294548227a0e1d02f221015"
+  },
+  "artifact_files": [
+    "LICENSE.hermes-agent",
+    "README-zh.md",
+    "README.md",
+    "consumer.py",
+    "manifest.json",
+    "run_tests.py",
+    "test_task_worker.py",
+    "text-worker-prototype.patch"
+  ],
+  "portable_test_files": [
+    "tests/agent/test_text_subagent.py",
+    "tests/agent/test_subagent_lifecycle.py",
+    "tests/hermes_cli/test_plugins_middleware_chain.py"
+  ],
+  "selected_suite": {
+    "host_passed": 90,
+    "consumer_passed": 18,
+    "passed": 108,
+    "failed": 0,
+    "skipped": 0,
+    "retries": 0,
+    "full_upstream_suite": false
+  },
+  "static_checks": {
+    "passed": 14,
+    "failed": 0
+  },
+  "installed_or_runtime_integrated": false,
+  "submitted_upstream": false,
+  "real_provider_or_model_tested": false,
+  "restricted_gateway_sockets_retried": false,
+  "keys_used": false,
+  "sockets_opened": false,
+  "environment": {
+    "python": "3.14.9",
+    "installed_package_count": 89,
+    "installed_packages_sha256": "a7f231e19ab48389c43700b8bbfd489b3ddde43f11ad98d800103e0cd04ab0b9",
+    "hermes_uv_lock_sha256": "5057a8a3cbc6d2b1f2059d66e27ffa43f447021f89779599dca416056574c064",
+    "environment_origin": "Existing caller-supplied PM test environment; no packages installed or modified",
+    "lock_environment_equivalence_attested": false
+  },
+  "limits": [
+    "Only trusted in-process text planning; not a Python/OS sandbox or tool-using worker",
+    "No production import, upstream adoption, installed-host modification or live model acceptance",
+    "Default OpenAI SDK follows redirects and is refused; dedicated supported no-redirect client remains required",
+    "SDK provider adapters, dynamic auth, query overrides and HTTP auth/event hooks are unsupported",
+    "Custom HTTP transports and same-process plugins remain trusted code, not an adversarial sandbox",
+    "Timeout/cancel discards late results but cannot guarantee request termination or undo billing",
+    "Provider model mismatch is detected after the response, not a guarantee of the actual served model",
+    "Consumer grants and results are process-local, no durable restart-safe execution ledger or automatic retry",
+    "Observed config revocation is terminal; unobserved config ABA is not revision-fenced",
+    "No task state mutation, full orchestration, Gateway end-to-end or automatic memory acceptance"
+  ],
+  "clean_base_apply_check": true
+}

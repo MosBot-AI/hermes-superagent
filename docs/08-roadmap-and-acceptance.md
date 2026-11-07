@@ -247,3 +247,5 @@ The [bounded recall follow-on](36-bounded-memory-recall.md) adds explicit multi-
 [Native task focus](46-native-task-focus.md) extends E6.9 with explicit session selection, fresh bounded context at turn start and actual host hook/API-message contracts. E6.9 remains In Progress: real-model natural-language acceptance, worker dispatch and complete MVP/release gates are not completed by this slice.
 
 [Atomic project-plan capture](47-atomic-project-plans.md) advances the local E2.1/E6.9 workflow from one planned batch to durable tasks, project review and per-task focus. Pinned lifecycle/toolset contracts explain why the plugin still does not claim contained worker dispatch. E3.3/E3.5 and real-model acceptance remain incomplete.
+
+[The task-to-worker proposal](48-task-worker-proposal.md) advances E3.3 feasibility through a review-only no-tool planning path and real host/consumer offline integration. It does not satisfy live provider acceptance, durable execution/reconciliation or general tool containment; E3.3/E3.5 stay incomplete.

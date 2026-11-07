@@ -9,6 +9,7 @@ import asyncio
 import json
 from contextlib import contextmanager
 from dataclasses import replace
+from datetime import datetime
 
 import pytest
 import test_local_conversation_tasks as local
@@ -670,7 +671,11 @@ def test_native_bounded_recall_obeys_separate_activation_and_current_revisions(h
         assert current["watermark"] == 2
     activate(host, "enable-read")
     with turn(host):
-        assert call(host, args)["data"] == current
+        refreshed = call(host, args)["data"]
+        # Fresh read admission may cross a wall-clock second. The evaluation
+        # timestamp is request metadata, not part of the durable recall state.
+        assert datetime.fromisoformat(refreshed["evaluated_at"]).tzinfo is not None
+        assert {**refreshed, "evaluated_at": current["evaluated_at"]} == current
         assert (
             call(host, {"action": "recall", "queries": ["早餐"], "after": rid})["error"]["code"]
             == "invalid_request"

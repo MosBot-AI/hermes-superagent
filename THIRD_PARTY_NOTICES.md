@@ -17,3 +17,5 @@ The [command-context experiment](experiments/command-context/README.md) likewise
 Development and CI environments resolve the pinned Hermes `uv.lock`, including its `dev` and `test` groups. Those dependencies retain their own licenses and are not bundled into the plugin. The workflow uses SHA-pinned official `actions/checkout` and `actions/setup-python`.
 
 DSH Superagent, Switchyard, LiteLLM and vLLM Semantic Router are research references in `docs/`. Their implementation code is not included or executed by this foundation slice.
+
+The [text-worker experiment](experiments/text-worker/README.md) packages an uninstalled host proposal with upstream-derived code/context under the preserved [Hermes MIT notice](experiments/text-worker/LICENSE.hermes-agent). The concrete experimental consumer is project code; neither artifact is imported by the production plugin.

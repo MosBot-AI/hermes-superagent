@@ -17,3 +17,5 @@
 开发及 CI 环境解析固定 Hermes `uv.lock`，包含其 `dev` 和 `test` 分组。相关依赖保留各自许可，不打包进插件。工作流使用 SHA 固定的官方 `actions/checkout` 和 `actions/setup-python`。
 
 DSH Superagent、Switchyard、LiteLLM 和 vLLM Semantic Router 是 `docs/` 中的研究参考。本基础切片不包含或执行它们的实现代码。
+
+[文本 worker 实验](experiments/text-worker/README-zh.md)打包未安装的宿主提案，含上游衍生代码/上下文并保留 [Hermes MIT 声明](experiments/text-worker/LICENSE.hermes-agent)。具体实验消费者属于本项目代码，生产插件不会导入任何一项工件。

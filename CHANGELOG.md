@@ -8,6 +8,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Added a [review-only task-to-worker proposal](docs/48-task-worker-proposal.md): exact-route single text inference, explicit task-revision grants, no-tool lifecycle drafts and separate offline integration evidence. The production plugin and clean host compatibility pin remain unchanged.
+
 - Added [atomic project-plan capture](docs/47-atomic-project-plans.md) through native commands, CLI and existing activated write tools: 1–20 tasks share one transaction/retry receipt, with whole-batch validation, crash rollback and restart-safe replay. Worker containment limitations remain explicit.
 
 - Added [native task focus](docs/46-native-task-focus.md): an explicit session selection supplies fresh bounded task context through the real host turn hook. It shares task-tool admission, expires with activation and preserves historical prompt bytes; no worker dispatch or extra model call.

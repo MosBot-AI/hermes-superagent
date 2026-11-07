@@ -1,0 +1,869 @@
+diff --git a/agent/subagent_lifecycle.py b/agent/subagent_lifecycle.py
+index 65865471..0598fa6a 100644
+--- a/agent/subagent_lifecycle.py
++++ b/agent/subagent_lifecycle.py
+@@ -144,6 +144,9 @@ class _Record:
+     started_at: Optional[float] = None
+     completed_at: Optional[float] = None
+     result: Optional[SubagentResult] = None
++    text_owner: Optional[tuple[str, str]] = None
++    text_cancel: Any = None
++    correlation_key: Any = None
+ 
+ 
+ @dataclasses.dataclass
+@@ -152,7 +155,7 @@ class _Registry:
+ 
+     lock: threading.RLock = dataclasses.field(default_factory=threading.RLock)
+     records: dict[str, _Record] = dataclasses.field(default_factory=dict)
+-    correlations: dict[tuple[Optional[str], str], str] = dataclasses.field(default_factory=dict)
++    correlations: dict[tuple[Any, ...], str] = dataclasses.field(default_factory=dict)
+ 
+ 
+ _REGISTRY = _Registry()
+@@ -271,8 +274,18 @@ class SubagentLifecycleService:
+     completed results stay until process exit; ``reconnect`` reports that a serialized handle cannot
+     reconnect after a restart instead of launching work again."""
+ 
+-    def __init__(self, parent_agent_resolver: Callable[[], Any]) -> None:
++    def __init__(self, parent_agent_resolver: Callable[[], Any], *, plugin_id: str = "") -> None:
+         self._parent_agent_resolver = parent_agent_resolver
++        self._plugin_id = plugin_id
++
++    def launch_text(self, request) -> SubagentHandle:
++        """Opt-in single text inference. No model tools or full agent loop.
++
++        Cancellation discards late results, not a guarantee of stopped billing.
++        This is a host capability boundary, not a Python or operating-system sandbox.
++        """
++        from agent.text_subagent import launch_text
++        return launch_text(self, request)
+ 
+     def launch(self, request: SubagentLaunchRequest | Mapping[str, Any]) -> SubagentHandle:
+         parent = self._parent_agent_resolver()
+@@ -350,6 +363,11 @@ class SubagentLifecycleService:
+         with _REGISTRY.lock:
+             if record.result is not None:
+                 return SubagentCancelResult(False, already_terminal=True, state=record.state)
++            if record.text_cancel is not None:
++                record.text_cancel.set()
++                record.state = SubagentState.CANCEL_REQUESTED
++                record.updated_at = time.time()
++                return SubagentCancelResult(True, state=record.state)
+             agent = record.agent
+             record.state = SubagentState.CANCEL_REQUESTED
+             record.updated_at = time.time()
+@@ -383,6 +401,8 @@ class SubagentLifecycleService:
+         with _REGISTRY.lock:
+             if record.result is not None:
+                 return False
++        if record.text_owner is not None:
++            return False
+         from tools.delegate_tool_registry import steer_subagent
+         return steer_subagent(record.handle.subagent_id, text.strip())
+ 
+@@ -397,7 +417,12 @@ class SubagentLifecycleService:
+         if _session_id_of(self._parent_agent_resolver()) != handle.parent_session_id:
+             return None
+         with _REGISTRY.lock:
+-            return _REGISTRY.records.get(handle.subagent_id)
++            record = _REGISTRY.records.get(handle.subagent_id)
++            if record is not None and record.text_owner is not None:
++                from hermes_constants import hermes_home_key
++                if record.text_owner != (str(hermes_home_key()), self._plugin_id) or record.handle != handle:
++                    return None
++            return record
+ 
+     @staticmethod
+     def _cleanup_locked() -> None:
+@@ -408,9 +433,10 @@ class SubagentLifecycleService:
+             if record.result is not None and record.completed_at is not None and record.completed_at < cutoff
+         ]
+         for subagent_id in expired:
+-            handle = _REGISTRY.records.pop(subagent_id).handle
++            record = _REGISTRY.records.pop(subagent_id)
++            handle = record.handle
+             if handle.correlation_id:
+-                _REGISTRY.correlations.pop((handle.parent_session_id, handle.correlation_id), None)
++                _REGISTRY.correlations.pop(record.correlation_key or (handle.parent_session_id, handle.correlation_id), None)
+ 
+     def _run(self, record: _Record, goal: str, parent: Any) -> None:
+         with _REGISTRY.lock:
+@@ -470,3 +496,6 @@ class SubagentLifecycleService:
+         enabled = getattr(parent, "enabled_toolsets", None)
+         if enabled is not None and not set(request.allowed_toolsets).issubset(set(enabled)):
+             raise SubagentLifecycleError("Requested toolsets would broaden parent permissions.")
++
++# Public request type; implementation imports the lifecycle lazily to avoid cycles.
++from agent.text_subagent import TextSubagentRequest
+diff --git a/agent/text_subagent.py b/agent/text_subagent.py
+new file mode 100644
+index 00000000..b2cb2090
+--- /dev/null
++++ b/agent/text_subagent.py
+@@ -0,0 +1,254 @@
++"""Opt-in bounded text workers. No credential resolver, agent loop, or tool executor.
++
++Trusted in-process plugins/middleware are not sandboxed. Cancellation and timeout
++suppress late results; an HTTP request already submitted may still incur cost.
++"""
++from __future__ import annotations
++
++import contextvars
++import copy
++import dataclasses
++import hashlib
++import json
++import math
++import threading
++import time
++import uuid
++from typing import Any, Mapping
++from urllib.parse import urlsplit
++
++
++@dataclasses.dataclass(frozen=True)
++class TextSubagentRequest:
++    goal: str
++    provider: str
++    model: str
++    context: str | None = None
++    parent_session_id: str | None = None
++    correlation_id: str | None = None
++    max_tokens: int = 2048
++    timeout_seconds: float = 30.0
++
++
++_SYSTEM = "Produce a text-only planning draft from the supplied task data. Do not claim to have performed actions."
++# Deliberately small direct Chat Completions surface for this prototype.
++_PROVIDERS = frozenset({"openai", "deepseek", "opencode-go"})
++
++
++def _refuse():
++    from agent.subagent_lifecycle import SubagentLifecycleError
++    raise SubagentLifecycleError("Text worker request refused.")
++
++
++def _request(value):
++    try:
++        if isinstance(value, Mapping):
++            value = TextSubagentRequest(**dict(value))
++        if not isinstance(value, TextSubagentRequest):
++            _refuse()
++        for name, limit, required in (
++            ("goal", 16000, True), ("context", 32000, False), ("provider", 64, True),
++            ("model", 256, True), ("parent_session_id", 256, False), ("correlation_id", 256, False),
++        ):
++            field = getattr(value, name)
++            if field is None and not required:
++                continue
++            if not isinstance(field, str) or not field.strip() or len(field) > limit:
++                _refuse()
++        if type(value.max_tokens) is not int or not 1 <= value.max_tokens <= 4096:
++            _refuse()
++        if (type(value.timeout_seconds) not in (int, float) or not math.isfinite(value.timeout_seconds)
++                or not 1 <= value.timeout_seconds <= 120):
++            _refuse()
++    except (TypeError, ValueError):
++        _refuse()
++    return value
++
++
++def _route(parent):
++    return tuple(getattr(parent, key, None) for key in ("provider", "model", "base_url", "api_mode", "client"))
++
++
++def _http_rewriters(client):
++    http = client._client
++    return (getattr(http, "follow_redirects", True) or http.auth is not None
++            or any(http.event_hooks.values()))
++
++
++def _authorize(service, parent, request, owner):
++    from hermes_cli.config import load_config_readonly
++    from hermes_constants import hermes_home_key
++    from openai import OpenAI
++
++    if parent is None or not service._plugin_id or str(hermes_home_key()) != owner[0]:
++        _refuse()
++    provider, model, base_url, mode, client = _route(parent)
++    if (provider not in _PROVIDERS or provider != request.provider or model != request.model
++            or mode != "chat_completions" or type(client) is not OpenAI
++            or getattr(client, "_provider", None) is not None or getattr(client, "_provider_runtime", None) is not None
++            or getattr(client, "_api_key_provider", None) is not None or getattr(client, "workload_identity", None) is not None
++            or getattr(parent, "acp_command", None) or getattr(parent, "request_overrides", None)
++            or not isinstance(base_url, str) or str(client.base_url).rstrip("/") != base_url.rstrip("/")):
++        _refuse()
++    parsed = urlsplit(base_url)
++    if (parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password
++            or parsed.query or parsed.fragment or client.default_query
++            or _http_rewriters(client)):
++        _refuse()
++    session = str(getattr(parent, "session_id", "") or "")
++    if not session or request.parent_session_id not in (None, session):
++        _refuse()
++    try:
++        cfg = load_config_readonly()["plugins"]["entries"][service._plugin_id]["text_workers"]
++        route = {"provider": provider, "model": model, "base_url": base_url}
++        if cfg.get("enabled") is not True or route not in cfg.get("routes", []):
++            _refuse()
++    except (KeyError, TypeError, AttributeError):
++        _refuse()
++    return session, _route(parent)
++
++
++def launch_text(service, raw):
++    from agent.subagent_lifecycle import (
++        PUBLIC_CONTRACT_VERSION, SubagentHandle, SubagentState, _Record, _REGISTRY, _EXECUTOR,
++    )
++    from hermes_constants import hermes_home_key
++
++    request = _request(raw)
++    parent = service._parent_agent_resolver()
++    owner = (str(hermes_home_key()), service._plugin_id)
++    session, route = _authorize(service, parent, request, owner)
++    created = time.time()
++    deadline = time.monotonic() + request.timeout_seconds
++    ident = "text-" + uuid.uuid4().hex
++    handle = SubagentHandle(PUBLIC_CONTRACT_VERSION, ident, session, request.correlation_id, created,
++                            request.provider, request.model, "text-only", 1,
++                            service._capability(ident, session, created))
++    key = (*owner, session, request.correlation_id) if request.correlation_id else None
++    record = _Record(handle, SubagentState.PENDING, created, text_owner=owner,
++                     text_cancel=threading.Event(), correlation_key=key)
++    # Reservation and scheduling are atomic with respect to duplicate launches.
++    with _REGISTRY.lock:
++        service._cleanup_locked()
++        if key is not None and key in _REGISTRY.correlations:
++            _refuse()
++        _REGISTRY.records[ident] = record
++        if key is not None:
++            _REGISTRY.correlations[key] = ident
++        try:
++            record.future = _EXECUTOR.submit(contextvars.copy_context().run, _run, service, record, parent, request, route, deadline)
++        except BaseException:
++            _REGISTRY.records.pop(ident, None)
++            if key is not None:
++                _REGISTRY.correlations.pop(key, None)
++            raise
++    return handle
++
++
++def _run(service, record, parent, request, route, deadline):
++    from agent.subagent_lifecycle import SubagentState, SubagentResult, _REGISTRY
++    from agent.transports.chat_completions import ChatCompletionsTransport
++    from hermes_cli.middleware import apply_llm_request_middleware, run_llm_execution_middleware
++
++    expired = threading.Event()
++    timer = threading.Timer(max(0.0, deadline - time.monotonic()), expired.set)
++    timer.daemon = True
++    timer.start()
++    attempted = 0
++    violated = False
++    response = None
++    error = None
++    summary = None
++    usage = {}
++    guard = threading.Lock()
++    closed = False
++    execution_thread = threading.get_ident()
++    with _REGISTRY.lock:
++        record.started_at = record.updated_at = time.time()
++        if not record.text_cancel.is_set():
++            record.state = SubagentState.RUNNING
++
++    def admissible():
++        if record.text_cancel.is_set() or expired.is_set() or time.monotonic() >= deadline:
++            _refuse()
++        session, current = _authorize(service, parent, request, record.text_owner)
++        if current != route or session != record.handle.parent_session_id:
++            _refuse()
++
++    try:
++        admissible()
++        transport = ChatCompletionsTransport()
++        data = json.dumps({"goal": request.goal, "context": request.context}, ensure_ascii=True)
++        messages = [{"role": "system", "content": _SYSTEM}, {"role": "user", "content": data}]
++        payload = transport.build_kwargs(request.model, messages, tools=[], max_tokens=request.max_tokens,
++                                         max_tokens_param_fn=lambda value: {"max_tokens": value})
++        # Fail closed if future transport defaults expand the wire surface.
++        if (set(payload) != {"model", "messages", "max_tokens"} or payload["model"] != request.model
++                or payload["messages"] != messages or payload["max_tokens"] != request.max_tokens):
++            _refuse()
++        frozen = json.dumps(payload, sort_keys=True, allow_nan=False)
++        client = route[4].copy(max_retries=0, timeout=float(request.timeout_seconds))
++        if (str(client.base_url).rstrip("/") != route[2].rstrip("/")
++                or getattr(client, "_provider", None) is not None
++                or getattr(client, "_provider_runtime", None) is not None
++                or getattr(client, "_api_key_provider", None) is not None
++                or getattr(client, "workload_identity", None) is not None or client.default_query
++                or _http_rewriters(client)):
++            _refuse()
++        context = {"session_id": record.handle.parent_session_id, "task_id": record.handle.subagent_id,
++                   "plugin_id": service._plugin_id, "origin": "text_worker"}
++        prepared = apply_llm_request_middleware(copy.deepcopy(payload), **context)
++
++        def send(next_payload):
++            nonlocal attempted, violated, response
++            with guard:
++                try:
++                    if closed or threading.get_ident() != execution_thread:
++                        _refuse()
++                    admissible()
++                    if attempted or json.dumps(next_payload, sort_keys=True, allow_nan=False) != frozen:
++                        _refuse()
++                except Exception:
++                    violated = True
++                    raise
++                attempted = 1  # charge attempt before SDK submission, even if it fails
++            response = client.chat.completions.create(**copy.deepcopy(next_payload))
++            return response
++
++        observed = run_llm_execution_middleware(prepared.payload, send, original_request=copy.deepcopy(payload), strict_single_use=True, **context)
++        admissible()
++        if violated or attempted != 1 or response is None or observed is not response:
++            _refuse()
++        if response.model != request.model:
++            _refuse()
++        normalized = transport.normalize_response(response)
++        if (normalized.tool_calls or normalized.finish_reason != "stop"
++                or type(normalized.content) is not str or not normalized.content.strip()
++                or len(normalized.content) > 32000):
++            _refuse()
++        summary = normalized.content
++        if normalized.usage:
++            usage = dataclasses.asdict(normalized.usage)
++            if any(type(value) is not int or not 0 <= value <= 2**63 - 1 for value in usage.values()):
++                usage = {}
++                _refuse()
++    except Exception:  # health: allow BLE001 -- result boundary redacts provider/middleware exceptions that may contain credentials
++        error = "TEXT_WORKER_FAILED"
++    finally:
++        with guard:
++            closed = True
++        timer.cancel()
++    with _REGISTRY.lock:
++        cancelled = record.text_cancel.is_set()
++        timed_out = expired.is_set() or time.monotonic() >= deadline
++        state = (SubagentState.CANCELLED if cancelled else SubagentState.FAILED if error or timed_out
++                 else SubagentState.SUCCEEDED)
++        if state != SubagentState.SUCCEEDED:
++            summary = None
++        result = SubagentResult(record.handle, state, True, summary=summary, started_at=record.started_at,
++                                completed_at=time.time(), error_classification=("CANCELLED" if cancelled else
++                                "TIMEOUT" if timed_out else error), usage_metadata={"api_calls": attempted, **usage},
++                                tool_execution_summary={"tool_calls": 0})
++        digest = hashlib.sha256(json.dumps(dataclasses.asdict(result), sort_keys=True).encode()).hexdigest()
++        record.result = dataclasses.replace(result, result_hash=digest)
++        record.state, record.completed_at, record.updated_at = state, result.completed_at, result.completed_at
+diff --git a/hermes_cli/middleware.py b/hermes_cli/middleware.py
+index 6efd1a77..f40a776a 100644
+--- a/hermes_cli/middleware.py
++++ b/hermes_cli/middleware.py
+@@ -162,6 +162,8 @@ class _DownstreamExecutionError(Exception):
+ def _run_execution_chain(kind: str, terminal_call: Callable[[Any], Any], **kwargs: Any) -> Any:
+     from hermes_cli.plugins import _delivery_manager
+ 
++    strict_single_use = kwargs.pop("strict_single_use", False)
++    repeated_call = False
+     payload_key = "request" if "request" in kwargs else "args"
+     manager = _delivery_manager()
+     callbacks = list(manager._middleware.get(kind, []))
+@@ -178,10 +180,11 @@ def _run_execution_chain(kind: str, terminal_call: Callable[[Any], Any], **kwarg
+         next_result: Any = None
+ 
+         def next_call(next_payload: Any = None) -> Any:
+-            nonlocal next_called, next_succeeded, next_result
++            nonlocal next_called, next_succeeded, next_result, repeated_call
+             # Single-use per frame: a second call would re-run the downstream provider/tool, so it
+             # is a contract violation, not a retry.
+             if next_called:
++                repeated_call = True
+                 raise RuntimeError(
+                     f"Middleware '{kind}' callback "
+                     f"{getattr(callback, '__name__', repr(callback))} called "
+@@ -212,4 +215,7 @@ def _run_execution_chain(kind: str, terminal_call: Callable[[Any], Any], **kwarg
+                 raise
+             return call_at(index + 1, payload)
+ 
+-    return call_at(0, kwargs[payload_key])
++    result = call_at(0, kwargs[payload_key])
++    if strict_single_use and repeated_call:
++        raise RuntimeError("Repeated downstream execution refused.")
++    return result
+diff --git a/hermes_cli/plugins.py b/hermes_cli/plugins.py
+index 58aa4ba4..7eaedf6e 100644
+--- a/hermes_cli/plugins.py
++++ b/hermes_cli/plugins.py
+@@ -389,7 +389,7 @@ class PluginContext(PluginCapabilityCtxMixin):
+         """Plugin-safe subagent lifecycle service: serializable handles and immutable snapshots,
+         never a live agent or private registry."""
+         from agent.subagent_lifecycle import SubagentLifecycleService, get_active_subagent_parent
+-        return SubagentLifecycleService(get_active_subagent_parent)
++        return SubagentLifecycleService(get_active_subagent_parent, plugin_id=self.plugin_id)
+ 
+     @cached_property
+     def delegation_backends(self) -> Any:
+diff --git a/tests/agent/test_text_subagent.py b/tests/agent/test_text_subagent.py
+new file mode 100644
+index 00000000..0a3889bd
+--- /dev/null
++++ b/tests/agent/test_text_subagent.py
+@@ -0,0 +1,457 @@
++"""Text-worker proposal: real SDK/transport/middleware, in-memory HTTP only."""
++import dataclasses
++import json
++import threading
++from concurrent.futures import ThreadPoolExecutor
++from types import SimpleNamespace
++
++import httpx
++import pytest
++from openai import OpenAI
++
++from agent.subagent_lifecycle import (
++    SubagentLifecycleError, SubagentLifecycleService, SubagentState, TextSubagentRequest,
++    bind_subagent_parent,
++)
++from hermes_cli.plugins import PluginContext, PluginManager, PluginManifest
++
++
++@pytest.fixture
++def world(tmp_path, monkeypatch):
++    from hermes_cli import plugins
++    from hermes_constants import get_hermes_home
++    home = get_hermes_home()
++    home.mkdir(exist_ok=True, parents=True)
++    route = {"provider": "opencode-go", "model": "deepseek-v4.1-flash", "base_url": "https://text.test/v1"}
++    config = {"plugins": {"entries": {"planner": {"text_workers": {"enabled": True, "routes": [route]}}}}}
++    def save():
++        (home / "config.yaml").write_text(json.dumps(config))
++    save()
++    calls = []
++    def answer(request):
++        calls.append(json.loads(request.content))
++        return httpx.Response(200, json={"id": "fake", "object": "chat.completion", "created": 1,
++                                       "model": route["model"], "choices": [{"index": 0,
++                                       "message": {"role": "assistant", "content": "A planning draft"},
++                                       "finish_reason": "stop"}],
++                                       "usage": {"prompt_tokens": 12, "completion_tokens": 4, "total_tokens": 16}})
++    handler = [answer]
++    client = OpenAI(api_key="synthetic-not-a-credential", base_url=route["base_url"],
++                    http_client=httpx.Client(transport=httpx.MockTransport(lambda req: handler[0](req))))
++    parent = SimpleNamespace(**route, session_id="parent", api_mode="chat_completions", client=client,
++                             request_overrides={}, prefill_messages=[{"secret": "must-not-send"}], tools=["terminal"])
++    manager = PluginManager()
++    monkeypatch.setattr(plugins, "_delivery_manager", lambda: manager)
++    ctx = PluginContext(PluginManifest(name="planner"), manager)
++    with bind_subagent_parent(parent):
++        yield SimpleNamespace(service=ctx.subagent_lifecycle, ctx=ctx, manager=manager, parent=parent, route=route,
++                              calls=calls, config=config, save=save, handler=handler, answer=answer, home=home)
++    client.close()
++
++
++def request(**overrides):
++    return TextSubagentRequest("Draft next steps", "opencode-go", "deepseek-v4.1-flash", **overrides)
++
++
++def finish(w, req=None):
++    handle = w.service.launch_text(req or request())
++    assert w.service.wait(handle, timeout_seconds=5).completed
++    return handle, w.service.result(handle)
++
++
++def test_native_context_real_transport_is_task_only(world):
++    handle, result = finish(world, request(context="one selected task", correlation_id="task-1"))
++    assert result.terminal_state == SubagentState.SUCCEEDED
++    assert result.summary == "A planning draft" and result.usage_metadata["api_calls"] == 1
++    assert result.tool_execution_summary == {"tool_calls": 0} and len(result.result_hash) == 64
++    wire = world.calls[0]
++    assert set(wire) == {"model", "messages", "max_tokens"}
++    assert json.loads(wire["messages"][1]["content"]) == {"goal": "Draft next steps", "context": "one selected task"}
++    assert "must-not-send" not in json.dumps(wire) and "terminal" not in json.dumps(wire)
++    assert not world.service.steer(handle, "run terminal")
++    assert world.service.reconnect(handle).connected
++
++
++@pytest.mark.parametrize("mutation", [
++    {"enabled": False}, {"enabled": "true"}, {"routes": []}, {"routes": [{"provider": "opencode-go"}]},
++])
++def test_config_default_and_exact_route(world, mutation):
++    world.config["plugins"]["entries"]["planner"]["text_workers"].update(mutation)
++    world.save()
++    with pytest.raises(SubagentLifecycleError):
++        world.service.launch_text(request())
++    assert not world.calls
++
++
++def test_missing_grant(world):
++    world.config.clear(); world.save()
++    with pytest.raises(SubagentLifecycleError):
++        world.service.launch_text(request())
++
++
++@pytest.mark.parametrize("changes", [
++    {"goal": ""}, {"goal": "x" * 16001}, {"context": "x" * 32001}, {"goal": 1},
++    {"max_tokens": True}, {"max_tokens": 4097}, {"timeout_seconds": float("nan")},
++    {"timeout_seconds": 0}, {"timeout_seconds": True}, {"allowed_toolsets": []},
++    {"provider": "custom"}, {"model": "other"}, {"parent_session_id": "other"},
++])
++def test_invalid_inputs(world, changes):
++    data = dataclasses.asdict(request()); data.update(changes)
++    with pytest.raises(SubagentLifecycleError):
++        world.service.launch_text(data)
++    assert not world.calls
++
++
++@pytest.mark.parametrize("name,value", [
++    ("request_overrides", {"tools": []}), ("api_mode", "codex_app_server"),
++    ("acp_command", "agent-cli"), ("provider", "moa"), ("client", object()),
++    ("base_url", "https://other.test"),
++])
++def test_unsupported_parent_refuses(world, name, value):
++    setattr(world.parent, name, value)
++    with pytest.raises(SubagentLifecycleError):
++        world.service.launch_text(request())
++    assert not world.calls
++
++
++@pytest.mark.parametrize("injection", [{"model": "other"}, {"extra_body": {"tools": [{"type": "web_search"}]}},
++                                      {"tools": []}, {"messages": []}, {"stream": True}])
++def test_execution_middleware_cannot_change_wire(world, injection):
++    def middleware(request, next_call, **kwargs):
++        request.update(injection)
++        try:
++            return next_call(request)
++        except Exception:
++            return object()  # swallowing refusal must not manufacture success
++    world.manager._middleware["llm_execution"] = [middleware]
++    _, result = finish(world)
++    assert result.terminal_state == SubagentState.FAILED and not world.calls
++
++
++def test_repeat_callback_even_when_swallowed_fails(world):
++    def middleware(request, next_call, **kwargs):
++        response = next_call(request)
++        try:
++            next_call(request)
++        except Exception:
++            pass
++        return response
++    world.manager._middleware["llm_execution"] = [middleware]
++    _, result = finish(world)
++    assert result.terminal_state == SubagentState.FAILED and len(world.calls) == 1
++
++
++def test_http_failure_never_retries_or_falls_back(world):
++    def fail(req):
++        world.calls.append(json.loads(req.content))
++        return httpx.Response(429, json={"error": {"message": "private server detail"}})
++    world.handler[0] = fail
++    world.parent._fallback_chain = [{"provider": "other", "model": "other"}]
++    _, result = finish(world)
++    assert len(world.calls) == 1 and result.error_classification == "TEXT_WORKER_FAILED"
++    assert "private" not in json.dumps(dataclasses.asdict(result))
++
++
++def test_returned_tools_never_execute(world):
++    def tools(req):
++        world.calls.append(json.loads(req.content))
++        return httpx.Response(200, json={"id": "fake", "object": "chat.completion", "created": 1,
++            "model": world.route["model"], "choices": [{"index": 0, "finish_reason": "tool_calls",
++            "message": {"role": "assistant", "content": "I ran it", "tool_calls": [{"id": "t", "type": "function",
++            "function": {"name": "terminal", "arguments": "{}"}}]}}]})
++    world.handler[0] = tools
++    _, result = finish(world)
++    assert result.summary is None and result.terminal_state == SubagentState.FAILED
++    assert result.tool_execution_summary["tool_calls"] == 0
++
++
++def test_cancel_in_flight_discards_late_result(world):
++    entered, release = threading.Event(), threading.Event()
++    def block(req):
++        entered.set(); assert release.wait(5)
++        return world.answer(req)
++    world.handler[0] = block
++    handle = world.service.launch_text(request())
++    try:
++        assert entered.wait(5)
++        assert world.service.cancel(handle, reason="stop").accepted
++    finally:
++        release.set()
++    assert world.service.wait(handle, timeout_seconds=5).completed
++    result = world.service.result(handle)
++    assert result.terminal_state == SubagentState.CANCELLED and result.summary is None
++
++
++def test_plugin_session_profile_and_handle_fields_are_scoped(world, monkeypatch, tmp_path):
++    handle, _ = finish(world)
++    other = SubagentLifecycleService(lambda: world.parent, plugin_id="foreign")
++    assert not other.result(handle).ready and not other.cancel(handle, reason="stop").accepted
++    assert not world.service.result(dataclasses.replace(handle, model="forged")).ready
++    world.parent.session_id = "foreign"
++    assert not world.service.result(handle).ready
++    world.parent.session_id = "parent"
++    monkeypatch.setenv("HERMES_HOME", str(tmp_path / "foreign"))
++    assert not world.service.result(handle).ready
++
++
++def test_atomic_duplicate_reservation(world):
++    service = SubagentLifecycleService(lambda: world.parent, plugin_id="planner")
++    def launch(_):
++        try:
++            return service.launch_text(request(correlation_id="same"))
++        except SubagentLifecycleError:
++            return None
++    with ThreadPoolExecutor(max_workers=8) as pool:
++        handles = [h for h in pool.map(launch, range(8)) if h]
++    assert len(handles) == 1
++    assert service.wait(handles[0], timeout_seconds=5).completed
++    assert len(world.calls) == 1
++
++
++def test_route_change_before_callback_refuses(world):
++    def middleware(request, next_call, **kwargs):
++        world.parent.model = "other"
++        return next_call(request)
++    world.manager._middleware["llm_execution"] = [middleware]
++    _, result = finish(world)
++    assert result.terminal_state == SubagentState.FAILED and not world.calls
++
++
++def test_request_middleware_cannot_inject_tools(world):
++    def middleware(request, **kwargs):
++        return {"request": {**request, "tools": [{"type": "web_search"}]}}
++    world.manager._middleware["llm_request"] = [middleware]
++    _, result = finish(world)
++    assert not world.calls and result.terminal_state == SubagentState.FAILED
++
++
++def test_grant_revoked_before_send(world):
++    def middleware(request, next_call, **kwargs):
++        world.config["plugins"]["entries"]["planner"]["text_workers"]["enabled"] = False
++        world.save()
++        return next_call(request)
++    world.manager._middleware["llm_execution"] = [middleware]
++    _, result = finish(world)
++    assert not world.calls and result.terminal_state == SubagentState.FAILED
++
++
++def test_timeout_discards_response_without_retry(world, monkeypatch):
++    from agent import text_subagent
++    expired = threading.Event()
++    class Timer:
++        daemon = False
++        def __init__(self, seconds, callback):
++            self.callback = callback
++        def start(self):
++            pass
++        def cancel(self):
++            pass
++    timers = []
++    def timer(seconds, callback):
++        value = Timer(seconds, callback); timers.append(value); return value
++    monkeypatch.setattr(text_subagent.threading, "Timer", timer)
++    def answer(req):
++        timers[0].callback()
++        expired.set()
++        return world.answer(req)
++    world.handler[0] = answer
++    _, result = finish(world)
++    assert expired.is_set() and len(world.calls) == 1
++    assert result.error_classification == "TIMEOUT" and result.summary is None
++
++
++def test_two_tasks_have_distinct_inputs_and_handles(world):
++    a, ar = finish(world, request(context="task A", correlation_id="a"))
++    b, br = finish(world, request(context="task B", correlation_id="b"))
++    assert a.subagent_id != b.subagent_id and ar.result_hash != br.result_hash
++    assert [json.loads(call["messages"][1]["content"])["context"] for call in world.calls] == ["task A", "task B"]
++
++
++def test_queued_request_rechecks_config_without_call(world, monkeypatch):
++    from agent import subagent_lifecycle as lifecycle
++    from concurrent.futures import Future
++    jobs = []
++    def submit(*args):
++        future = Future(); jobs.append((args, future)); return future
++    monkeypatch.setattr(lifecycle._EXECUTOR, "submit", submit)
++    handle = world.service.launch_text(request(correlation_id="queued"))
++    with pytest.raises(SubagentLifecycleError):
++        world.service.launch_text(request(correlation_id="queued"))
++    world.config["plugins"]["entries"]["planner"]["text_workers"]["enabled"] = False
++    world.save()
++    args, future = jobs[0]
++    future.set_result(args[0](*args[1:]))
++    assert world.service.result(handle).terminal_state == SubagentState.FAILED
++    assert not world.calls
++
++
++def test_retained_callback_is_closed_after_middleware_returns(world):
++    saved = []
++    def middleware(request, next_call, **kwargs):
++        saved.append((request, next_call))
++        return object()
++    world.manager._middleware["llm_execution"] = [middleware]
++    _, result = finish(world)
++    assert result.terminal_state == SubagentState.FAILED
++    with pytest.raises(Exception):
++        saved[0][1](saved[0][0])
++    assert not world.calls
++
++
++def test_off_thread_callback_cannot_race_finalization(world):
++    def middleware(request, next_call, **kwargs):
++        with ThreadPoolExecutor(max_workers=1) as pool:
++            future = pool.submit(next_call, request)
++            try:
++                return future.result()
++            except Exception:
++                return object()
++    world.manager._middleware["llm_execution"] = [middleware]
++    _, result = finish(world)
++    assert result.terminal_state == SubagentState.FAILED and not world.calls
++
++
++def test_client_query_overrides_refused(world):
++    world.parent.client = world.parent.client.copy(default_query={"model": "other"})
++    with pytest.raises(SubagentLifecycleError):
++        world.service.launch_text(request())
++    assert not world.calls
++
++
++@pytest.mark.parametrize("endpoint", ["https://text.test/v1?x=y", "https://text.test/v1#x", "https://user@text.test/v1"])
++def test_ambiguous_endpoint_refused(world, endpoint):
++    world.parent.base_url = endpoint
++    world.parent.client = world.parent.client.copy(base_url=endpoint)
++    world.config["plugins"]["entries"]["planner"]["text_workers"]["routes"][0]["base_url"] = endpoint
++    world.save()
++    with pytest.raises(SubagentLifecycleError):
++        world.service.launch_text(request())
++    assert not world.calls
++
++
++@pytest.mark.parametrize("attribute", ["_provider", "_provider_runtime"])
++def test_sdk_provider_transformers_refused(world, attribute):
++    class Provider:
++        def transform_request(self, *args, **kwargs):
++            pytest.fail("SDK transformer must never run")
++    setattr(world.parent.client, attribute, Provider())
++    with pytest.raises(SubagentLifecycleError):
++        world.service.launch_text(request())
++    assert not world.calls
++
++
++def test_copy_cannot_change_endpoint(world, monkeypatch):
++    original = world.parent.client.copy
++    def changed(**kwargs):
++        return original(base_url="https://other.test/v1", **kwargs)
++    monkeypatch.setattr(world.parent.client, "copy", changed)
++    _, result = finish(world)
++    assert not world.calls and result.terminal_state == SubagentState.FAILED
++
++
++def test_different_reported_model_discards_draft(world):
++    def wrong_model(req):
++        response = world.answer(req)
++        body = response.json()
++        body["model"] = "different-model"
++        return httpx.Response(200, json=body)
++    world.handler[0] = wrong_model
++    _, result = finish(world)
++    assert len(world.calls) == 1
++    assert result.summary is None and result.terminal_state == SubagentState.FAILED
++
++
++@pytest.mark.parametrize("attribute", ["_api_key_provider", "workload_identity"])
++def test_dynamic_sdk_auth_is_not_resolved(world, attribute):
++    def forbidden():
++        pytest.fail("Dynamic authentication must not run")
++    setattr(world.parent.client, attribute, forbidden)
++    with pytest.raises(SubagentLifecycleError):
++        world.service.launch_text(request())
++    assert not world.calls
++
++
++def test_worker_does_not_close_parent_http_client(world):
++    _, result = finish(world)
++    assert result.terminal_state == SubagentState.SUCCEEDED
++    assert not world.parent.client.is_closed()
++    reply = world.parent.client.chat.completions.create(model=world.route["model"], messages=[{"role": "user", "content": "synthetic"}])
++    assert reply.choices[0].message.content == "A planning draft"
++
++
++def test_redirect_following_parent_refused_without_changing_it(world):
++    world.parent.client._client.follow_redirects = True
++    with pytest.raises(SubagentLifecycleError):
++        world.service.launch_text(request())
++    assert world.parent.client._client.follow_redirects is True and not world.calls
++
++
++@pytest.mark.parametrize("status", [307, 308])
++def test_redirect_never_forwards_task_to_second_host(world, status):
++    def redirect(req):
++        world.calls.append(str(req.url))
++        return httpx.Response(status, headers={"location": "https://foreign.test/collect"})
++    world.handler[0] = redirect
++    _, result = finish(world)
++    assert world.calls == ["https://text.test/v1/chat/completions"]
++    assert result.terminal_state == SubagentState.FAILED and result.summary is None
++
++
++def test_default_sdk_redirect_policy_is_not_supported(world):
++    client = OpenAI(api_key="synthetic-not-a-credential", base_url=world.route["base_url"])
++    try:
++        world.parent.client = client
++        assert client._client.follow_redirects is True
++        with pytest.raises(SubagentLifecycleError):
++            world.service.launch_text(request())
++        assert not world.calls
++    finally:
++        client.close()
++
++
++@pytest.mark.parametrize("feature", ["auth", "request_hook", "response_hook"])
++def test_http_rewriters_are_refused(world, feature):
++    def forbidden(*args, **kwargs):
++        pytest.fail("HTTP rewrite hooks must not run")
++    http = world.parent.client._client
++    if feature == "auth":
++        http.auth = httpx.BasicAuth("synthetic", "synthetic")
++    else:
++        http.event_hooks[feature.split("_")[0]].append(forbidden)
++    with pytest.raises(SubagentLifecycleError):
++        world.service.launch_text(request())
++    assert not world.calls
++
++
++@pytest.mark.parametrize("content", [["not text"], {"text": "not text"}, " ", "x" * 32001])
++def test_invalid_response_content_is_not_published(world, content):
++    def malformed(req):
++        body = world.answer(req).json()
++        body["choices"][0]["message"]["content"] = content
++        return httpx.Response(200, json=body)
++    world.handler[0] = malformed
++    _, result = finish(world)
++    assert result.terminal_state == SubagentState.FAILED and result.summary is None
++
++
++@pytest.mark.parametrize("usage", [-1, "invalid", 2**64])
++def test_invalid_usage_cannot_escape_result_contract(world, usage):
++    def malformed(req):
++        body = world.answer(req).json()
++        body["usage"]["prompt_tokens"] = usage
++        return httpx.Response(200, json=body)
++    world.handler[0] = malformed
++    _, result = finish(world)
++    assert result.terminal_state == SubagentState.FAILED and result.summary is None
++    assert result.usage_metadata == {"api_calls": 1}
++
++
++def test_sdk_normalized_usage_remains_bounded_integer(world):
++    def normalized(req):
++        body = world.answer(req).json()
++        body["usage"]["prompt_tokens"] = True
++        return httpx.Response(200, json=body)
++    world.handler[0] = normalized
++    _, result = finish(world)
++    # The official SDK coerces this wire value to int before host normalization.
++    assert all(type(value) is int and 0 <= value <= 2**63 - 1 for value in result.usage_metadata.values())
