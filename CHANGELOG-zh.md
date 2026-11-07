@@ -14,7 +14,7 @@
 
 ### 新增
 
-- 新增显式启用的 [Gateway 启动诊断](docs/gateway-boot-diagnostics-zh.md)，保留上游监听器失败堆栈，提供只读规划与离线回归覆盖。原生传输权限与验收仍是独立关卡。
+- 新增显式启用的 [Gateway 启动诊断](docs/gateway-boot-diagnostics-zh.md)，保留上游监听器失败堆栈，提供只读规划与离线回归覆盖。准备仅手动触发、固定上游版本、无凭据的原生生命周期 CI 关卡，覆盖真实控制通道/WebSocket 连接、排队恢复和托管 worker 执行。已批准 provider 与插件的验收仍是独立关卡。
 
 - [项目任务依赖](docs/51-project-task-dependencies-zh.md)现可在开始/完成前执行明确的同项目先后约束，并在 ready 队列、review 和 focus 中提供新鲜依赖快照。取消前置仍会阻塞，不启动 worker 或修改原生 Kanban。
 

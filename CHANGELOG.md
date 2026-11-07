@@ -14,7 +14,7 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
-- Added opt-in [Gateway bootstrap diagnostics](docs/gateway-boot-diagnostics.md) that preserve the upstream listener failure traceback, with read-only planning and offline regression coverage. Native transport permission and acceptance remain separate gates.
+- Added opt-in [Gateway bootstrap diagnostics](docs/gateway-boot-diagnostics.md) that preserve the upstream listener failure traceback, with read-only planning and offline regression coverage. Prepared a manual-only pinned upstream, credential-free native lifecycle CI gate for actual control/WebSocket attach, queued recovery and managed-worker execution. Approved-provider/plugin acceptance remains a separate gate.
 
 - [Project task dependencies](docs/51-project-task-dependencies.md) now enforce explicit same-project prerequisites before starting or completing work, with a ready queue and fresh dependency snapshots in review/focus. Cancelled prerequisites remain blockers; no worker is launched and no native Kanban state is modified.
 

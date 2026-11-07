@@ -31,4 +31,10 @@ python scripts/diagnose_gateway_boot.py \
 
 产物包括 `PLAN.json`、`BOOT.json`、`BOOT.log` 及诊断启动器。审阅前保持原始日志私有；路径和堆栈可能识别执行环境。上游描述符判定成功仅证明启动就绪，不证明已认证客户端连接、模型任务执行、实际 Gateway 重启后的持久化，也不代表 #40/#50 完成。执行失败后，应先保留堆栈和准确源码版本，再提出修复方案。
 
-此次诊断准备没有重试原生操作，也没有运行或启用新的 CI 传输任务。历史环境阻塞仍然开放。
+## 新证据与受支持的 CI 关卡
+
+通过执行工具受支持的提升权限审核路径，一次无凭据诊断获准执行。保留的堆栈证明此次失败发生在 Python 的 `socket.socket(AF_UNIX, SOCK_STREAM)` 创建内部，尚未到达 `bind`、`listen` 或路径检查。因此修改目录权限、缩短路径或调整最终 socket 模式不能修复这一次失败。具体内核策略规则仍未证明；不宣称本地执行环境已经修复。
+
+已准备独立、仅手动触发的 GitHub 托管 `ubuntu-latest` 工作流，用于运行固定上游的 `tests/gateway/test_unified_gateway_native_live.py` 测试集。[GitHub 将该 runner 记录为全新虚拟机](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)。未修改的官方测试使用私有临时配置和回环合成模型，不使用供应商凭据或外部备用模型。它覆盖真实控制票据、WebSocket 连接、提交/回执、多客户端顺序、owner 进程死亡后的排队恢复、安全模式托管 worker 和计划停止清理。这是常规原生集成回归关卡，不是更改受限本地执行器或其策略。
+
+工作流不随 PR 或推送运行，需要单独明确触发。用户已推迟真实测试，目前尚未执行。触发后该关卡串行运行，步骤上限八分钟，发布合成 JUnit 回执，其中可能包含失败输出或堆栈片段。不单独上传原始 Gateway 日志文件。通过仅证明该 runner 的宿主生命周期，不证明本地云环境可用，也不证明 OpenCode Go 的插件任务验收。#40/#50 在真实 provider/插件及重启条件验证前继续开放。
