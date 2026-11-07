@@ -60,7 +60,9 @@ Extend Hermes into a long-lived personal agent for one user: one main agent unde
 46. [Native task focus](46-native-task-focus.md): explicitly select one task for fresh bounded main-turn context, with session activation, whole-field budgets and retained-history boundaries.
 47. [Atomic project plans](47-atomic-project-plans.md): all-or-none multi-task capture, durable shared receipts, native/model/CLI flows and verified worker-dispatch limits.
 48. [Task-to-worker proposal](48-task-worker-proposal.md): isolated opt-in text-only host patch and concrete task consumer; not production worker dispatch.
-49. [Architecture decision records](adr/README.md): reasons for the constraints.
+49. [Session automatic recall](49-session-memory-recall.md): separately selected bounded fresh reads through supported native hooks.
+50. [Reviewed memory candidates](50-reviewed-memory-candidates.md): live-input drafts, separate local review, atomic acceptance and explicit retention limits.
+51. [Architecture decision records](adr/README.md): reasons for the constraints.
 
 ## Keep three kinds of statements separate
 

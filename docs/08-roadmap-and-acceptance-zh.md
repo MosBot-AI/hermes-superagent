@@ -73,7 +73,7 @@ E0.6 是独立的可选客户端契约路线，不阻塞 profile-first local M0/
 - E2.5：可选 memory provider 适配评估；兼容用户现有单 provider，不强制替换。 分别评估可替换项目 MemoryBackend 适配器与可选原生 MemoryProvider 桥接；用户可提供合规适配器，并显式选择/迁移。
 - E2.6：Define Pluggable Memory Contracts（M1，In Progress；狭窄本地先导）：依赖 E0.9、E1.5 本地审计/数据分类/secret 引用合同及适用本地 E2.1/E2.2 合同。定义版本化 service/backend SDK、record/event/receipt、删除语义与符合性 fixture。
 - E2.7：Build Local Memory Backend（M2，In Progress；显式记录先导）：依赖 E2.6、本地 E2.1/E2.2 及适用 E8.1/E8.2 harness。实现权威 SQLite record/event/FTS、生成 Markdown、有界检索、纠错/遗忘与显式本地命令。
-- E2.8：Integrate Native Memory Lifecycle（M2，In Progress：只读召回）：依赖 E0.9/E2.6/E2.7 及适用 E6.8/E6.9 入口合同。增加可选单槽桥接、经同意的来源绑定候选/召回，以及带预算的持久生命周期/checkpoint 处理。显式本地记忆工具不要求启用桥接。
+- E2.8：Integrate Native Memory Lifecycle（M2，In Progress：召回与审核候选）：依赖 E0.9/E2.6/E2.7 及适用 E6.8/E6.9 入口合同。增加可选单槽桥接、经同意的来源绑定候选/召回，以及带预算的持久生命周期/checkpoint 处理。显式本地记忆工具不要求启用桥接。
 - E2.9：Validate Memory Migration and Recall（M3，Backlog）：依赖 E2.7/E2.8 及 E8.1/E8.2/E8.3 harness。验证适配器符合性、带栅栏的导出/切换/恢复/删除竞态及中文/长期召回。
 
 [43](43-native-checkpoint-boundary-zh.md) 增加固定宿主证据门禁与未接入运行时的候选准备；完整检查点仍需与原生提交绑定的来源覆盖交接，不能仅靠 UID 或返回成功。
@@ -253,3 +253,5 @@ Project 链接、Issue 号与最终字段以实际创建结果为准。若 API/�
 [原子化项目计划录入](47-atomic-project-plans-zh.md)推进本地 E2.1/E6.9 流程，把一个计划批次接入持久任务、项目回顾和单任务聚焦。固定生命周期/工具集契约解释了插件仍不声称具备受控 worker 派发的原因。E3.3/E3.5 和真实模型验收仍未完成。
 
 [任务到 worker 的提案](48-task-worker-proposal-zh.md)通过仅供审阅的无工具规划路径及真实宿主/消费者离线集成推进 E3.3 可行性。专用 no-redirect 客户端、持久单次领取/草稿回执及范围内原生操作者工作台推进了可行性，但未完成真实提供商验收、结果不明核对、预算控制或一般工具约束，E3.3/E3.5 仍未完成。
+
+[候选审核流程](50-reviewed-memory-candidates-zh.md)现已通过受支持 hook 实现 E2.8 的当前输入→草稿→操作员审核路径。仅明确接受才创建正式记忆；真实模型实用性、持久会话覆盖与 checkpoint-v2 仍待完成。Schema-v6 迁移和延迟执行的七天候选到期不意味着后台删除。

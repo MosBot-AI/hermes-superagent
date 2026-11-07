@@ -85,3 +85,5 @@ Real natural-language acceptance still requires an eligible session, an explicit
 [36](36-bounded-memory-recall.md) adds multi-keyword literal ranking, whole-record budgets and current-snapshot rules for `recall`; it retains separate memory activation and does not enable automatic recall.
 
 Storage follow-on: [37](37-durable-memory-progress.md) advances current stores from v1/v2 to v3 with atomic consumer-progress tables. The v1→v2 provenance migration above remains part of that transaction; earlier builds reject v3. No new model actions or native checkpoint guarantee are added.
+
+Follow-on: [reviewed candidates](50-reviewed-memory-candidates.md) add an independently selected draft workflow, not automatic canonical ingestion. Current writable storage upgrades to schema v6; read-only recall never migrates v1–v5 stores and remains unavailable until an authorized normal store opening.

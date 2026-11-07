@@ -12,6 +12,7 @@ provides_tools:
   - personal_tasks_write
   - personal_memory_read
   - personal_memory_write
+  - personal_memory_candidate
 config_schema:
   mode:
     type: str
@@ -37,3 +38,7 @@ config_schema:
     type: bool
     default: false
     description: Allow native in-process memory tools after separate explicit session activation; optional recall-on supplies fresh bounded context each turn, preserves native providers and sends records to the configured model.
+  memory_candidates:
+    type: bool
+    default: false
+    description: Allow separately activated candidate-on drafting from current native turn input; requires memory_model_tools. Drafts require native review before becoming memory, with seven-day lazy payload expiry; no extra model or provider replacement.

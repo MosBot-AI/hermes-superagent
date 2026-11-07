@@ -68,3 +68,5 @@ Prefetch 必须提供完全一致的当前会话 ID。原生 `on_session_switch`
 没有使用真实 LLM、个人数据、Gateway 监听器、凭据、生产配置或远程写入。自动摄取、会话证据检查点、提供方设置界面、隔离／受管理兼容、中文语义召回评测及经过授权的在线验收仍待完成。所有真实提供方验收都必须保留用户已选模型／提供方，不能静默替换。
 
 固定版本源码证据：[提供方 ABC](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/agent/memory_provider.py)、[加载器](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/plugins/memory/__init__.py)、[manager 与检查点门禁](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/agent/memory_manager.py)、[prefetch 持久化及重放](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/agent/turn_context.py#L1030-L1072)。
+
+后续：[经审核候选](50-reviewed-memory-candidates-zh.md)新增独立选择的草稿流程，并非自动正式摄取。当前可写存储升级到 schema v6；只读召回从不迁移 v1–v5 store，在经授权的普通打开完成升级前不可用。

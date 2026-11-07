@@ -85,3 +85,5 @@ plugins:
 [36](36-bounded-memory-recall-zh.md)补充 `recall` 的多关键词字面排序、完整记录预算和当前快照规则；它沿用独立记忆激活，不启用自动召回。
 
 存储扩展：[37](37-durable-memory-progress-zh.md)通过原子增加消费者进度表，将当前存储从 v1/v2 升至 v3。上述 v1→v2 来源迁移仍是同一事务的一部分，旧构建会拒绝 v3。不新增模型操作或原生 checkpoint 保证。
+
+后续：[经审核候选](50-reviewed-memory-candidates-zh.md)新增独立选择的草稿流程，并非自动正式摄取。当前可写存储升级到 schema v6；只读召回从不迁移 v1–v5 store，在经授权的普通打开完成升级前不可用。

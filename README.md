@@ -76,6 +76,8 @@ The [readable task workbench](docs/44-readable-task-workbench.md) makes existing
 
 [Session automatic memory recall](docs/49-session-memory-recall.md) now brings fresh relevant records into supported primary turns after a separate `/personal-memory-tools recall-on` opt-in. It keeps the selected native provider, adds no model request or memory writes, and stops with activation expiry/reload. Historical model context is not erased.
 
+[Reviewed memory candidates](docs/50-reviewed-memory-candidates.md) add separately opted-in drafting from current native input, exact source quotes and native acceptance with an explicit retention choice. Candidates stay out of recall until accepted; expiry cleanup is lazy, and no extra model request or automatic canonical write is introduced.
+
 ## Development checks
 
 `compatibility.json` records the Hermes baseline commit. The current runtime target is Python 3.14. A single tested SHA does not justify a broad `requires_hermes` version range.

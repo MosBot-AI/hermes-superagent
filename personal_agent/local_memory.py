@@ -13,11 +13,13 @@ from uuid import uuid4
 
 from . import memory_expiry
 from .memory_backend import MemoryError, _text, validate_expiry, validate_request
+from .memory_candidate_store import SCHEMA as CANDIDATE_SCHEMA
+from .memory_candidate_store import execute as execute_candidate
 from .memory_checkpoints import CHECKPOINT_SCHEMA, checkpoint_status, create_checkpoint
 from .memory_progress import PROGRESS_SCHEMA, advance_consumer, get_changes, get_consumer
 
 _APPLICATION_ID = 0x50414D45
-_SCHEMA_VERSION = 5
+_SCHEMA_VERSION = 6
 _SCHEMA_V1 = {
     "namespace": "CREATE TABLE namespace (id TEXT PRIMARY KEY NOT NULL)",
     "records": """CREATE TABLE records (
@@ -49,13 +51,14 @@ _SCHEMA_V2 = {
 }
 _SCHEMA_V3 = {**_SCHEMA_V2, **PROGRESS_SCHEMA}
 _SCHEMA_V4 = {**_SCHEMA_V3, **CHECKPOINT_SCHEMA}
-_SCHEMA = {
+_SCHEMA_V5 = {
     **_SCHEMA_V4,
     "records": _SCHEMA_V4["records"].replace(
         "updated_at TEXT NOT NULL,", "updated_at TEXT NOT NULL, expires_at TEXT,"
     ),
 }
 
+_SCHEMA = {**_SCHEMA_V5, **CANDIDATE_SCHEMA}
 
 _COLUMNS = (
     "record_id",
@@ -98,6 +101,7 @@ class LocalMemoryBackend:
             "adapter_version": "0.1.0",
             "deployment": "trusted_profile_local",
             "capabilities": [
+                "review_candidates",
                 "record_expiry",
                 "explicit_records",
                 "durable_write",
@@ -137,7 +141,7 @@ class LocalMemoryBackend:
             result["capabilities"] = [
                 name
                 for name in result["capabilities"]
-                if name not in {"durable_write", "cas", "idempotency"}
+                if name not in {"durable_write", "cas", "idempotency", "review_candidates"}
             ]
         return result
 
@@ -214,6 +218,10 @@ class LocalMemoryBackend:
             if version in (1, 2, 3, 4):
                 connection.execute("ALTER TABLE records ADD COLUMN expires_at TEXT")
                 connection.execute(f"PRAGMA user_version={_SCHEMA_VERSION}")
+            if version in (1, 2, 3, 4, 5):
+                for sql in CANDIDATE_SCHEMA.values():
+                    connection.execute(sql)
+                connection.execute(f"PRAGMA user_version={_SCHEMA_VERSION}")
             if connection.execute("SELECT count(*) FROM records").fetchone()[0] > 1000:
                 raise MemoryError("record_limit")
             connection.execute("COMMIT")
@@ -228,9 +236,14 @@ class LocalMemoryBackend:
 
     @staticmethod
     def _valid_schema(version, rows):
-        expected = {1: _SCHEMA_V1, 2: _SCHEMA_V2, 3: _SCHEMA_V3, 4: _SCHEMA_V4, 5: _SCHEMA}.get(
-            version
-        )
+        expected = {
+            1: _SCHEMA_V1,
+            2: _SCHEMA_V2,
+            3: _SCHEMA_V3,
+            4: _SCHEMA_V4,
+            5: _SCHEMA_V5,
+            6: _SCHEMA,
+        }.get(version)
         return expected is not None and dict(rows) == expected and len(rows) == len(expected)
 
     @staticmethod
@@ -304,6 +317,8 @@ class LocalMemoryBackend:
 
     def execute(self, operation: str, payload: dict) -> dict:
         request = validate_request(operation, payload)
+        if self._read_only and operation.startswith("candidate_"):
+            raise MemoryError("read_only_backend")
         if self._read_only and operation in {
             "remember",
             "correct",
@@ -321,7 +336,8 @@ class LocalMemoryBackend:
         try:
             conn.execute(
                 "BEGIN IMMEDIATE"
-                if operation
+                if operation.startswith("candidate_")
+                or operation
                 in {"remember", "correct", "forget", "consumer_advance", "checkpoint_create"}
                 else "BEGIN"
             )
@@ -332,7 +348,9 @@ class LocalMemoryBackend:
             # sampling time so lock waits cannot admit an already expired row.
             conn.execute("SELECT id FROM namespace").fetchone()
             now = datetime.fromisoformat(memory_expiry.utc_now())
-            if operation in {"remember", "correct", "forget"}:
+            if operation.startswith("candidate_"):
+                result = execute_candidate(self, conn, operation, request, now)
+            elif operation in {"remember", "correct", "forget"}:
                 result = self._mutate(conn, operation, request, now)
             elif operation == "changes":
                 result = get_changes(conn, request)

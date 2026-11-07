@@ -120,3 +120,5 @@ model to voluntarily call a search tool. Real-model usefulness, Chinese semantic
 recall quality, automatic extraction/review candidates, durable conversation
 coverage and native checkpoint-v2 remain separate work. The original denied
 installation is not retried or waived by these tests.
+
+Follow-on: [reviewed candidates](50-reviewed-memory-candidates.md) add an independently selected draft workflow, not automatic canonical ingestion. Current writable storage upgrades to schema v6; read-only recall never migrates v1–v5 stores and remains unavailable until an authorized normal store opening.

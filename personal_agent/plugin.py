@@ -65,6 +65,7 @@ def _status_result(
     local_model_tools: bool = False,
     local_memory: bool = False,
     memory_model_tools: bool = False,
+    memory_candidates: bool = False,
 ) -> str:
     if not isinstance(args, dict) or args:
         return json.dumps(
@@ -81,6 +82,7 @@ def _status_result(
             local_model_tools=local_model_tools,
             local_memory=local_memory,
             memory_model_tools=memory_model_tools,
+            memory_candidates=memory_candidates,
         ),
         ensure_ascii=False,
         sort_keys=True,
@@ -138,6 +140,11 @@ def register(ctx: PluginContext) -> None:
         raise ValueError("memory_model_tools must be a boolean")
     if memory_models_enabled and not memory_enabled:
         raise ValueError("memory_model_tools requires local_memory and local_conversation")
+    candidates_enabled = ctx.get_config("memory_candidates", False)
+    if type(candidates_enabled) is not bool:
+        raise ValueError("memory_candidates must be a boolean")
+    if candidates_enabled and not memory_models_enabled:
+        raise ValueError("memory_candidates requires memory_model_tools and local_memory")
     bound_home = current_profile_home()
     routing_inspector = RoutingInspector(bound_home)
     ctx.on_unload(routing_inspector.close)
@@ -169,6 +176,11 @@ def register(ctx: PluginContext) -> None:
             memory_model_tools = ctx.get_config("memory_model_tools", False)
             if type(memory_model_tools) is not bool or (memory_model_tools and not local_memory):
                 raise ValueError("invalid memory model tools configuration")
+            memory_candidates = ctx.get_config("memory_candidates", False)
+            if type(memory_candidates) is not bool or (
+                memory_candidates and not memory_model_tools
+            ):
+                raise ValueError("invalid memory candidates configuration")
             return _status_result(
                 args,
                 mode,
@@ -176,6 +188,7 @@ def register(ctx: PluginContext) -> None:
                 local_model_tools=local_model_tools,
                 local_memory=local_memory,
                 memory_model_tools=memory_model_tools,
+                memory_candidates=memory_candidates,
             )
         except Exception:
             return json.dumps({"status": "blocked", "error": {"code": "invalid_configuration"}})
@@ -277,7 +290,8 @@ def register(ctx: PluginContext) -> None:
             description="Explicitly save, inspect, correct or forget local operator records.",
             args_hint=(
                 "remember | list | search | recall | changes | show | "
-                "correct | forget | export | help"
+                "correct | forget | export | candidate-list | candidate-show | "
+                "candidate-accept | candidate-discard | candidate-purge-expired | help"
             ),
         )
 
@@ -285,16 +299,30 @@ def register(ctx: PluginContext) -> None:
         from .memory_tool_contract import PERSONAL_MEMORY_READ_SCHEMA, PERSONAL_MEMORY_WRITE_SCHEMA
         from .session_memory_recall import RecallingSessionMemoryTools
 
-        memory_access = RecallingSessionMemoryTools(
-            bound_home=bound_home, read_config=ctx.get_config
-        )
+        schemas = [PERSONAL_MEMORY_READ_SCHEMA, PERSONAL_MEMORY_WRITE_SCHEMA]
+        if candidates_enabled:
+            from .memory_candidate_tool_contract import PERSONAL_MEMORY_CANDIDATE_SCHEMA
+            from .session_memory_candidates import CandidateSessionMemoryTools
+
+            memory_access = CandidateSessionMemoryTools(
+                bound_home=bound_home, read_config=ctx.get_config
+            )
+            ctx.register_hook("post_llm_call", memory_access.clear_turn_context)
+            schemas.append(PERSONAL_MEMORY_CANDIDATE_SCHEMA)
+        else:
+            memory_access = RecallingSessionMemoryTools(
+                bound_home=bound_home, read_config=ctx.get_config
+            )
         ctx.on_unload(memory_access.close)
         ctx.register_hook("pre_llm_call", memory_access.turn_context)
         ctx.register_command(
             "personal-memory-tools",
             handler=memory_access.command,
             description="Separately activate memory model access in this trusted native session.",
-            args_hint="enable-read | enable-write | recall-on | recall-off | disable | status",
+            args_hint=(
+                "enable-read | enable-write | recall-on | recall-off | "
+                "candidate-on | candidate-off | disable | status"
+            ),
         )
 
         def bind_memory_handler(name):
@@ -305,7 +333,7 @@ def register(ctx: PluginContext) -> None:
 
             return handler
 
-        for schema in (PERSONAL_MEMORY_READ_SCHEMA, PERSONAL_MEMORY_WRITE_SCHEMA):
+        for schema in schemas:
             ctx.register_tool(
                 name=schema["name"],
                 toolset="personal_agent",

@@ -15,6 +15,7 @@ from .memory_backend import MemoryError
 ENTRY_POINT_GROUP = "hermes_personal_agent.memory_backends"
 _CAPABILITIES = frozenset(
     {
+        "review_candidates",
         "record_expiry",
         "explicit_records",
         "durable_write",
@@ -80,6 +81,17 @@ _OPERATION_CAPABILITIES = {
         "idempotency",
     },
 }
+for _candidate_operation in (
+    "candidate_propose",
+    "candidate_list",
+    "candidate_get",
+    "candidate_discard",
+    "candidate_accept",
+    "candidate_purge_expired",
+):
+    _OPERATION_CAPABILITIES[_candidate_operation] = {"review_candidates", "durable_write"}
+
+
 _RESERVED_IDS = frozenset({"local_sqlite", "builtin", "built-in", "default", "none"})
 
 

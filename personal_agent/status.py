@@ -13,6 +13,7 @@ def build_status(
     local_model_tools: bool = False,
     local_memory: bool = False,
     memory_model_tools: bool = False,
+    memory_candidates: bool = False,
 ) -> dict[str, object]:
     """Return a fresh result without consulting credentials, files, or providers."""
     if mode not in ("read_only", "local_tasks"):
@@ -25,6 +26,8 @@ def build_status(
         raise ValueError("invalid local memory configuration")
     if type(memory_model_tools) is not bool or (memory_model_tools and not local_memory):
         raise ValueError("invalid memory model tools configuration")
+    if type(memory_candidates) is not bool or (memory_candidates and not memory_model_tools):
+        raise ValueError("invalid memory candidates configuration")
     platform_supported = os.name == "posix" and hasattr(os, "O_NOFOLLOW")
     local_tasks = mode == "local_tasks" and platform_supported
     return {
@@ -130,6 +133,16 @@ def build_status(
             "session_recall_max_records": 6,
             "session_recall_status_command": "/personal-memory-tools status",
             "automatic_extraction": False,
+            "candidate_workflow_implemented": True,
+            "candidate_capture_configured": memory_candidates,
+            "candidate_capture_requires_session_selection": True,
+            "candidate_capture_activation_observed": False,
+            "candidate_acceptance_requires_native_review": True,
+            "candidate_pending_expiry_days": 7,
+            "candidate_expiry_cleanup": (
+                "lazy_on_successful_candidate_operation_or_explicit_purge_not_background"
+            ),
+            "candidate_metadata_capacity": 1000,
             "native_provider_bridge": False,
             "native_provider_bridge_scope": "not_registered_by_standalone_plugin",
             "optional_native_provider": "personal-records",

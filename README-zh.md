@@ -76,6 +76,8 @@ Hermes 原生 personal-agent 插件，目标是让一个主 agent 管理项目�
 
 [会话自动记忆召回](docs/49-session-memory-recall-zh.md)现可在独立 `/personal-memory-tools recall-on` 授权后，把相关新鲜记录带入受支持主会话轮次。保留已有原生 provider，不新增模型请求或记忆写入，随激活过期/重载停止；不会擦除历史模型上下文。
 
+[经审核的记忆候选](docs/50-reviewed-memory-candidates-zh.md)新增独立启用的当前原生输入草稿、精确引文和明确保留期限的原生接受流程。接受前不参与召回；到期清理是延迟执行，不新增额外模型请求或自动正式写入。
+
 ## 开发验证
 
 基线为 `compatibility.json` 内的 Hermes commit；当前实际运行目标是 Python 3.14。没有根据单一 SHA 宣称宽泛的 `requires_hermes` 版本范围。

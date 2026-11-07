@@ -2,7 +2,8 @@
 
 This does not authenticate a human or create owner authority. The host owns
 session admission; every already admitted controller shares local access.
-There is no extraction, model tool, native memory bridge or automatic recall.
+Review commands can explicitly promote model-proposed drafts, never grant authority.
+No model call, native memory bridge or automatic canonical write occurs here.
 """
 
 import argparse
@@ -29,6 +30,17 @@ HELP = (
     "--expected-revision N "
     "[--request-id KEY]; forget ID --expected-revision N [--request-id KEY]; "
     "export [--limit N --after ID]. Use POSIX quotes. "
+    "candidate-list [--limit N --after ID]; candidate-show ID; "
+    "candidate-accept ID --expected-revision N (--keep | --expires-at UTC); "
+    "candidate-discard ID --expected-revision N; candidate-purge-expired. "
+    "Candidates are untrusted model drafts with source quotes, not verified facts or grants. "
+    "Review before accepting; --keep explicitly chooses no canonical expiry. "
+    "Acceptance and canonical memory creation are one transaction; identical retries return "
+    "historical metadata and never restore a subsequently forgotten record. "
+    "Draft/quote payload expires after seven days and is cleared on a later successful "
+    "candidate operation or explicit purge, "
+    "not by a background timer. Acceptance/discard also clear candidate payload; minimal "
+    "deduplication metadata remains, capped at 1000 retained candidates. "
     "Recall ranks 1-8 distinct literal keywords; defaults to 6 whole records and a 6000-character "
     "ASCII JSON items budget, not tokens. It reports omitted matches and is not semantic search. "
     "Checkpoints cover local record metadata only, not native conversations or backups. "
@@ -101,6 +113,20 @@ def parse_command(raw_args: str) -> tuple[str, dict]:
     checkpoint.add_argument("--request-id")
     checkpoint_status = commands.add_parser("checkpoint-status")
     checkpoint_status.add_argument("checkpoint_id")
+    candidates = commands.add_parser("candidate-list")
+    candidates.add_argument("--limit", type=int, default=20)
+    candidates.add_argument("--after", default=None)
+    candidate_show = commands.add_parser("candidate-show")
+    candidate_show.add_argument("candidate_id")
+    for operation in ("candidate-accept", "candidate-discard"):
+        review = commands.add_parser(operation)
+        review.add_argument("candidate_id")
+        review.add_argument("--expected-revision", type=int, required=True)
+        if operation == "candidate-accept":
+            retention = review.add_mutually_exclusive_group(required=True)
+            retention.add_argument("--keep", dest="expires_at", action="store_const", const=None)
+            retention.add_argument("--expires-at")
+    commands.add_parser("candidate-purge-expired")
     for operation in ("correct", "forget"):
         writer = commands.add_parser(operation)
         writer.add_argument("record_id")
@@ -125,6 +151,13 @@ def parse_command(raw_args: str) -> tuple[str, dict]:
     operation = {"checkpoint": "checkpoint_create", "checkpoint-status": "checkpoint_status"}.get(
         operation, operation
     )
+    operation = {
+        "candidate-list": "candidate_list",
+        "candidate-show": "candidate_get",
+        "candidate-accept": "candidate_accept",
+        "candidate-discard": "candidate_discard",
+        "candidate-purge-expired": "candidate_purge_expired",
+    }.get(operation, operation)
     if (
         operation in ("remember", "correct", "forget", "checkpoint_create")
         and payload["request_id"] is None
@@ -162,6 +195,7 @@ class LocalMemoryCommands:
         session_key: str = "",
     ) -> str:
         request_id = None
+        operation = None
         try:
             with self._lock:
                 if self._closed:
@@ -212,6 +246,9 @@ class LocalMemoryCommands:
                 "request_id": request_id,
                 **output,
             },
-            ensure_ascii=True,
+            # Review must show the proposed text and quote legibly, including
+            # Chinese. JSON still escapes controls and never evaluates content.
+            ensure_ascii=not (operation and operation.startswith("candidate_")),
+            indent=2 if operation and operation.startswith("candidate_") else None,
             sort_keys=True,
         )

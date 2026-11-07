@@ -57,6 +57,10 @@ def validate_expiry(value: object, *, error_code: str = "invalid_request") -> st
 
 
 def validate_request(operation: str, payload: dict) -> dict:
+    if isinstance(operation, str) and operation.startswith("candidate_"):
+        from .memory_candidate_store import validate
+
+        return validate(operation, payload)
     fields = {
         "remember": ({"content", "request_id"}, {"topic", "expires_at"}),
         "correct": (
@@ -178,6 +182,12 @@ class MemoryService:
         request = validate_request(operation, payload)
         self.descriptor.check_request(operation, request)
         result = self.backend.execute(operation, request)
-        if operation in {"remember", "correct", "forget", "consumer_advance", "checkpoint_create"}:
+        if operation.startswith("candidate_") or operation in {
+            "remember",
+            "correct",
+            "forget",
+            "consumer_advance",
+            "checkpoint_create",
+        }:
             return result
         return {"data": result, "replayed": False}

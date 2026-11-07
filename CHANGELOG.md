@@ -8,6 +8,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- [Reviewed memory candidates](docs/50-reviewed-memory-candidates.md) add separately opted-in drafting from current native input, exact source quotes and native acceptance with an explicit retention choice. Candidates stay out of recall until accepted; expiry cleanup is lazy, and no extra model request or automatic canonical write is introduced.
+
 - Added separately opted-in automatic session memory recall through the supported native turn hook: fresh bounded current records, shared expiry/revocation boundaries, no provider replacement or extra model request. Correction/forgetting affect new recall, not historical host context. See [49](docs/49-session-memory-recall.md).
 
 - Added verified downloadable runtime artifacts for successful branch pushes: deterministic source-pinned archives, unchanged official static scanning and cold real-host task/reload acceptance. Findings and provenance accompany the package; no installer, host patch, model request or release is performed.

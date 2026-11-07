@@ -219,7 +219,7 @@ def test_all_migrations_identical_and_atomic(version):
         == local_memory._SCHEMA
     )
     assert b.execute("get", {"record_id": rid})["expires_at"] is None
-    assert c.execute("PRAGMA user_version").fetchone() == (5,)
+    assert c.execute("PRAGMA user_version").fetchone() == (6,)
     b.close()
     c.close()
 
@@ -449,7 +449,7 @@ def test_v1_expiry_step_failure_rolls_back_prior_rebuild_and_tables():
     assert list(c.iterdump()) == before
     assert list(c.execute("SELECT name,sql FROM sqlite_master ORDER BY name")) == before_schema
     b.open(c, namespace_id="expiry", session_ref="new")
-    assert c.execute("PRAGMA user_version").fetchone() == (5,)
+    assert c.execute("PRAGMA user_version").fetchone() == (6,)
     assert b.execute("get", {"record_id": rid})["expires_at"] is None
     assert c.execute("SELECT seq FROM sqlite_sequence WHERE name='records'").fetchone() == (20,)
     b.close()
