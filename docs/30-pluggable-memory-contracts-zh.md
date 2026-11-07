@@ -6,6 +6,8 @@
 
 **状态：目标设计已有狭窄本地先导，完整契约尚未实现。** 本文规定可替换的个人记忆存储与检索、生命周期适配器和验收门槛。它不会安装 provider、摄取对话、启用提取、替换用户的记忆，也不证明召回质量。现有任务工具和策略基础是独立实现，不是本文所述记忆系统。
 
+[33](33-memory-adapter-admission-zh.md) 现新增现有显式记录 API 的严格协商、可复用离线行为门禁，以及仅元数据的已安装适配器审查。它不加载或激活第三方代码，不实现下文完整工厂/打开 ABI，也不代表 E2.6 完成。
+
 首个产品路径是[配置档案优先的可信本地使用](28-profile-first-local-conversations-zh.md)，[会话作用域任务工具](29-session-scoped-task-tools-zh.md)则单独启用。可选的已验证远程所有者、Primary Bot、HTTP 和语音路径仍保留各自的门槛。记忆不要求存在一个规范 Bot Chat。请结合 [04](04-domain-data-and-memory-zh.md)、[06](06-plugins-mcp-and-security-zh.md)、[10](10-interface-contracts-zh.md) 和 [19](19-unified-voice-provider-contracts-zh.md) 阅读本契约。
 
 ## 1. 决策与非目标

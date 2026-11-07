@@ -44,8 +44,9 @@
 30. [可插拔记忆契约](30-pluggable-memory-contracts-zh.md)：拟议的可替换后端/SDK、SQLite 权威与 Markdown 投影、可选原生桥接、有界召回、删除与迁移。
 31. [显式本地记忆](31-explicit-local-memory-zh.md)：用户控制的原生记住/搜索/更正/遗忘命令、有界记录与部分适配器边界；无自动召回或 provider 替换。
 32. [会话范围记忆工具](32-session-scoped-memory-tools-zh.md)：独立30分钟读写激活、模型来源、v1→v2迁移与待完成的真实模型验收。
-33. [本地任务操作历史](34-local-task-history-zh.md)：持久化版本元数据、有界分页及既有原生读取限制。
-34. [架构决策记录](adr/README-zh.md)：为什么选择这些约束。
+33. [记忆适配器准入](33-memory-adapter-admission-zh.md)：严格的显式记录描述、能力/上限检查、仅元数据审查及可复用离线一致性门禁；不加载第三方代码。
+34. [本地任务操作历史](34-local-task-history-zh.md)：持久化版本元数据、有界分页及既有原生读取限制。
+35. [架构决策记录](adr/README-zh.md)：为什么选择这些约束。
 
 ## 三类陈述必须分开
 

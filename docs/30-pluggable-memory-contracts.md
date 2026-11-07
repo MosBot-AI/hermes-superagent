@@ -6,6 +6,8 @@ Implementation update: [31](31-explicit-local-memory.md) now provides a narrow e
 
 **Status: target design with a narrow local precursor; full contract not implemented.** This document specifies replaceable personal-memory storage/retrieval, lifecycle adapters and acceptance gates. It does not install a provider, ingest conversations, enable extraction, replace a user's memory, or prove recall quality. Existing task tools and policy foundations are separate implementations, not this memory system.
 
+[33](33-memory-adapter-admission.md) now adds strict negotiation for the existing explicit-record API, reusable offline behavioral gates and metadata-only installed-adapter review. It does not load or activate third-party code, implement the full factory/open ABI below, or complete E2.6.
+
 The first product lane is [profile-first trusted local use](28-profile-first-local-conversations.md), with [session-scoped task tools](29-session-scoped-task-tools.md) separately enabled. Optional verified remote-owner, Primary Bot, HTTP and voice lanes retain their own gates. Memory does not require a canonical Bot Chat. Read [04](04-domain-data-and-memory.md), [06](06-plugins-mcp-and-security.md), [10](10-interface-contracts.md) and [19](19-unified-voice-provider-contracts.md) alongside this contract.
 
 ## 1. Decision and Non-Goals

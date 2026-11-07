@@ -95,15 +95,25 @@ class MemoryBackend(Protocol):
 
 
 class MemoryService:
-    """Use the same selected backend for all explicit operations."""
+    """Use one backend after negotiating the explicit-record API and its limits."""
 
     def __init__(self, backend: MemoryBackend):
-        if backend.describe().get("api_version") != 1:
-            raise MemoryError("unsupported_backend")
+        from .memory_adapters import validate_backend_descriptor
+
+        try:
+            if not isinstance(backend, MemoryBackend) or not all(
+                callable(getattr(backend, method)) for method in ("describe", "execute", "close")
+            ):
+                raise MemoryError("unsupported_backend")
+            self.descriptor = validate_backend_descriptor(backend.describe())
+        except Exception:
+            raise MemoryError("unsupported_backend") from None
         self.backend = backend
 
     def execute(self, operation: str, payload: dict) -> dict:
-        result = self.backend.execute(operation, validate_request(operation, payload))
+        request = validate_request(operation, payload)
+        self.descriptor.check_request(operation, request)
+        result = self.backend.execute(operation, request)
         if operation in {"remember", "correct", "forget"}:
             return result
         return {"data": result, "replayed": False}
