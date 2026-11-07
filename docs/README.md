@@ -19,8 +19,8 @@ Extend Hermes into a long-lived personal agent for one user: one main agent unde
 5. [Proactivity, scheduling, and delivery](05-automation-and-delivery.md): reliable reminders, recovery, idempotency, and messages.
 6. [Plugins, MCP, and security](06-plugins-mcp-and-security.md): open extensions, action authorization, identity, and revocation.
 7. [Mobile and voice](07-mobile-and-voice.md): reuse existing entry points while preserving one agent's continuity.
-8. [Roadmap and acceptance](08-roadmap-and-acceptance.md): dependency-ordered epics, work packages, and testable criteria.
-9. [Upstream evidence and verification boundaries](09-upstream-evidence.md): pinned sources, links, and contracts needing further tests.
+8. [Roadmap and acceptance](08-roadmap-and-acceptance.md): dependency-ordered epics, work packages, and testable criteria. Follow the [GitHub Project workflow](github-project-workflow.md) to claim, implement and verify work.
+9. [Upstream evidence and verification boundaries](09-upstream-evidence.md): pinned research sources. The [Hermes compatibility matrix](hermes-compatibility-matrix.md) maps the current E0.1 baseline to behavior tests and remaining gates.
 10. [Interfaces and end-to-end contracts](10-interface-contracts.md): proposed events, tools, adapters, and vertical flows.
 11. [Worker model routing plugin](11-worker-model-routing.md): select authorized provider/model/effort routes, starting in shadow mode.
 12. [First development slice](12-foundation-progress.md): the native read-only plugin, real contract tests, and remaining gates.
