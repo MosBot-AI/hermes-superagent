@@ -224,3 +224,89 @@ def test_focus_clear_waits_for_admitted_context_then_blocks_future(gate, monkeyp
         assert read.result(timeout=5)["context"].startswith(CONTEXT_PREFIX)
         assert clear_result.result(timeout=5)["status"] == "ok"
     assert context(instance) is None
+
+
+def test_dependency_snapshot_changes_without_changing_focused_revision(gate):  # noqa: F811
+    instance, command, call, *_ = gate
+    target = capture(command, call, project="Launch")
+    prerequisite = call(
+        {
+            "action": "capture",
+            "title": "PRIVATE PREREQUISITE TITLE",
+            "project": "Launch",
+            "request_id": "prerequisite",
+        },
+        "personal_tasks_write",
+    )["data"]
+    linked = call(
+        {
+            "action": "set_dependencies",
+            "task_id": target["id"],
+            "expected_revision": 1,
+            "dependency_ids": [prerequisite["id"]],
+            "request_id": "link",
+        },
+        "personal_tasks_write",
+    )
+    assert linked["status"] == "ok", linked
+    command("focus " + target["id"])
+    before = data(instance)["task"]
+    assert before["revision"] == 2
+    assert before["dependencies_satisfied"] is False
+    assert before["unsatisfied_dependency_count"] == 1
+    assert before["dependencies"] == [
+        {"task_id": prerequisite["id"], "revision": 1, "state": "captured"}
+    ]
+    assert "PRIVATE PREREQUISITE TITLE" not in json.dumps(before)
+    completed = call(
+        {
+            "action": "complete",
+            "task_id": prerequisite["id"],
+            "expected_revision": 1,
+            "note": "Explicit operator completion",
+            "request_id": "complete-prerequisite",
+        },
+        "personal_tasks_write",
+    )
+    assert completed["status"] == "ok", completed
+    after = data(instance)["task"]
+    assert after["revision"] == before["revision"] == 2
+    assert after["dependencies_satisfied"] is True
+    assert after["unsatisfied_dependency_count"] == 0
+    assert after["dependencies"][0]["revision"] == 2
+    assert after["dependencies"][0]["state"] == "done"
+    # An already returned pack remains historical and is not rewritten in place.
+    assert before["dependencies_satisfied"] is False
+
+
+def test_legacy_focus_fields_are_unknown_not_assumed_dependency_free(gate):  # noqa: F811
+    from personal_agent.task_focus import task_context
+
+    _, command, call, *_ = gate
+    task = capture(command, call)
+    for field in ("dependencies", "dependencies_satisfied", "unsatisfied_dependency_count"):
+        task.pop(field, None)
+    result = json.loads(task_context(task)[len(CONTEXT_PREFIX) :])["task"]
+    assert result["dependencies"] is None
+    assert result["dependencies_satisfied"] is None
+    assert result["unsatisfied_dependency_count"] is None
+
+
+def test_dependency_metadata_kept_whole_under_focus_budget(gate):  # noqa: F811
+    from personal_agent.task_focus import task_context
+
+    _, command, call, *_ = gate
+    task = capture(command, call, title="标" * 240, details="中" * 5000)
+    task.update(
+        dependencies=[
+            {"task_id": str(uuid4()), "revision": 2**63 - 2, "state": "cancelled"}
+            for _ in range(20)
+        ],
+        dependencies_satisfied=False,
+        unsatisfied_dependency_count=20,
+    )
+    result = task_context(task)
+    assert len(result) <= MAX_CONTEXT_CHARS
+    decoded = json.loads(result[len(CONTEXT_PREFIX) :])
+    assert decoded["task"]["dependencies"] == task["dependencies"]
+    assert "details" in decoded["omitted_fields"]

@@ -41,6 +41,7 @@
     "personal_agent/session_task_tools.py",
     "personal_agent/status.py",
     "personal_agent/task_cli.py",
+    "personal_agent/task_dependencies.py",
     "personal_agent/task_focus.py",
     "personal_agent/task_presentation.py",
     "personal_agent/task_review.py",

@@ -78,6 +78,8 @@ Hermes 原生 personal-agent 插件，目标是让一个主 agent 管理项目�
 
 [经审核的记忆候选](docs/50-reviewed-memory-candidates-zh.md)新增独立启用的当前原生输入草稿、精确引文和明确保留期限的原生接受流程。接受前不参与召回；到期清理是延迟执行，不新增额外模型请求或自动正式写入。
 
+[项目任务依赖](docs/51-project-task-dependencies-zh.md)现可在开始/完成前执行明确的同项目先后约束，并在 ready 队列、review 和 focus 中提供新鲜依赖快照。取消前置仍会阻塞，不启动 worker 或修改原生 Kanban。
+
 ## 开发验证
 
 基线为 `compatibility.json` 内的 Hermes commit；当前实际运行目标是 Python 3.14。没有根据单一 SHA 宣称宽泛的 `requires_hermes` 版本范围。

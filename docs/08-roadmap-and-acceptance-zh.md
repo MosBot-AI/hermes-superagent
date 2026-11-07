@@ -109,6 +109,8 @@ E0.9/E2.9 保持 Backlog。E2.8 现有 [41](41-native-memory-recall-zh.md) 的�
 
 验收：一条输入去重为一个任务；多个项目不串上下文；短子任务退出不虚报整个任务完成；长期任务跨重启可查且不会重复派工。
 
+[项目任务依赖](51-project-task-dependencies-zh.md)为 E3.2 的依赖/审核部分增加 profile-first E2/E6 先导：明确同项目边、原子开始/完成门控、ready 队列和一致 focus/review 快照。它不等于原生 Project/Kanban 映射、worker 派发或 E3.5 跨 store 核对；这些仍待完成，可选原生停放卡交接仍需独立持久不确定结果处理。
+
 ### E4. 实现提醒与可靠交付（P0/P1，M1–M2）
 
 依赖 E0.3、E1.1–E1.5、E2.1。

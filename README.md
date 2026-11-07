@@ -78,6 +78,8 @@ The [readable task workbench](docs/44-readable-task-workbench.md) makes existing
 
 [Reviewed memory candidates](docs/50-reviewed-memory-candidates.md) add separately opted-in drafting from current native input, exact source quotes and native acceptance with an explicit retention choice. Candidates stay out of recall until accepted; expiry cleanup is lazy, and no extra model request or automatic canonical write is introduced.
 
+[Project task dependencies](docs/51-project-task-dependencies.md) now enforce explicit same-project prerequisites before starting or completing work, with a ready queue and fresh dependency snapshots in review/focus. Cancelled prerequisites remain blockers; no worker is launched and no native Kanban state is modified.
+
 ## Development checks
 
 `compatibility.json` records the Hermes baseline commit. The current runtime target is Python 3.14. A single tested SHA does not justify a broad `requires_hermes` version range.

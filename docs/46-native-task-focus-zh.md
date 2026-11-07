@@ -48,3 +48,5 @@
 这是原生上下文集成，不是真实提供器语言质量验收或完整 GUI/传输验证。E6.9 的真实模型验收仍待完成。原生 worker 派发/对账、远程所有者认证以及完整 MVP/发布门禁仍未完成。
 
 固定 Hermes 源码：[轮次上下文](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/agent/turn_context.py)、[插件钩子](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/hermes_cli/plugins.py)以及[已有准入证据](29-session-scoped-task-tools-zh.md)。
+
+后续：[项目依赖](51-project-task-dependencies-zh.md)增加明确同项目前置集合和 ready 队列。当前任务存储为 schema v5，原子 v1–v4 迁移保留历史回执。计划捕获本身仍不推断或接受索引依赖，也不启用原生 Kanban 或 worker 集成。

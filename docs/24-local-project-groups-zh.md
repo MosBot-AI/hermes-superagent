@@ -78,3 +78,5 @@ hermes personal-agent tasks list --unassigned
 项目单元测试覆盖校验、精确筛选、未分组任务、分组/计数、分页、revision/幂等行为，以及保留历史回执的 v1/v2 迁移。固定宿主契约测试覆盖真实注册的 CLI、模式/profile/存储门禁及合成数据持久化。[仓库检查器](../README-zh.md#开发验证) 使用已有离线守卫与固定上游副本运行这些测试。
 
 测试不授权真实 owner，不使用生产账户，也不验证受限的身份 socket 用例。另行打包的 host 上下文补丁不会由安装过程或普通项目检查应用。
+
+后续：[项目依赖](51-project-task-dependencies-zh.md)增加明确同项目前置集合和 ready 队列。当前任务存储为 schema v5，原子 v1–v4 迁移保留历史回执。计划捕获本身仍不推断或接受索引依赖，也不启用原生 Kanban 或 worker 集成。

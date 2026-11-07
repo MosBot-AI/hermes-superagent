@@ -48,3 +48,5 @@ Unit tests cover fresh revisions, whole-field budgets, Unicode escaping, invalid
 This is a native context integration, not real-provider language-quality acceptance or full GUI/transport validation. Real-model acceptance remains pending under E6.9. Native worker dispatch/reconciliation, remote owner authentication and complete MVP/release gates remain open.
 
 Pinned Hermes source: [turn context](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/agent/turn_context.py), [plugin hooks](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/hermes_cli/plugins.py), and the [existing admission evidence](29-session-scoped-task-tools.md#6-pinned-host-evidence).
+
+Follow-on: [project dependencies](51-project-task-dependencies.md) add explicit same-project prerequisite sets and a ready queue. Current task storage is schema v5; atomic v1–v4 migration preserves historical receipts. Plan capture itself still does not infer or accept indexed dependencies, and no native Kanban or worker integration is enabled.

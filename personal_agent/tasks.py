@@ -9,10 +9,11 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
+from . import task_dependencies as dependencies
 from .task_review import task_review
 
 _APPLICATION_ID = 0x5041544B
-_SCHEMA_VERSION = 4
+_SCHEMA_VERSION = 5
 _COLUMNS = (
     "id",
     "title",
@@ -58,10 +59,12 @@ _PROGRESS_COLUMNS = (
     "progress_note TEXT NOT NULL DEFAULT ''",
     "progress_updated_at TEXT",
 )
-_SCHEMA = {
+_SCHEMA_V4 = {
     **_SCHEMA_V3,
     "tasks": _SCHEMA_V3["tasks"][:-1] + ", " + ", ".join(_PROGRESS_COLUMNS) + ")",
 }
+
+_SCHEMA = {**_SCHEMA_V4, **dependencies.SCHEMA}
 
 
 class TaskError(Exception):
@@ -129,6 +132,11 @@ def _date(value: Any) -> str:
 def validate_request(operation: str, payload: dict) -> dict:
     """Validate without touching storage; return an independent normalized mapping."""
     fields = {
+        "set_dependencies": (
+            {"task_id", "expected_revision", "dependency_ids", "request_id"},
+            set(),
+        ),
+        "ready": (set(), {"project", "unassigned", "limit", "after"}),
         "capture": ({"title", "request_id"}, {"details", "due_date", "project"}),
         "capture_plan": ({"project", "tasks", "request_id"}, set()),
         "update": (
@@ -199,6 +207,14 @@ def validate_request(operation: str, payload: dict) -> dict:
         value = result["expected_revision"]
         if type(value) is not int or not 1 <= value < 2**63 - 1:
             raise TaskError("invalid_request")
+    if operation == "set_dependencies":
+        ids = result["dependency_ids"]
+        if type(ids) is not list or len(ids) > 20:
+            raise TaskError("invalid_request")
+        ids = [_task_id(value) for value in ids]
+        if len(set(ids)) != len(ids):
+            raise TaskError("invalid_request")
+        result["dependency_ids"] = sorted(ids)
     if operation == "capture_plan":
         items = result["tasks"]
         if type(items) is not list or not 1 <= len(items) <= MAX_PLAN_TASKS:
@@ -234,7 +250,7 @@ def validate_request(operation: str, payload: dict) -> dict:
         value = result["after_revision"]
         if type(value) is not int or not 0 <= value < 2**63:
             raise TaskError("invalid_request")
-    if operation in ("list", "search", "agenda", "projects"):
+    if operation in ("list", "search", "agenda", "projects", "ready"):
         result = {"limit": 20, "after": None, **result}
         if operation in ("list", "search"):
             result.setdefault("state", "captured")
@@ -284,7 +300,7 @@ class TaskStore:
             pass
 
     def initialize(self) -> None:
-        """Create v4, atomically migrate exact owned v1/v2/v3, or verify v4."""
+        """Create v5, atomically migrate exact owned v1-v4, or verify v5."""
         self._initialized = False
         began = False
         try:
@@ -303,16 +319,19 @@ class TaskStore:
                 conn.execute(f"PRAGMA user_version = {_SCHEMA_VERSION}")
             elif app_id != _APPLICATION_ID:
                 raise TaskError("foreign_database")
-            elif version in (1, 2, 3):
-                legacy = {1: _SCHEMA_V1, 2: _SCHEMA_V2, 3: _SCHEMA_V3}[version]
+            elif version in (1, 2, 3, 4):
+                legacy = {1: _SCHEMA_V1, 2: _SCHEMA_V2, 3: _SCHEMA_V3, 4: _SCHEMA_V4}[version]
                 if dict(rows) != legacy or len(rows) != len(legacy):
                     raise TaskError("unsupported_schema")
                 if version == 1:
                     conn.execute("ALTER TABLE tasks ADD COLUMN due_date TEXT")
                 if version < 3:
                     conn.execute("ALTER TABLE tasks ADD COLUMN project TEXT")
-                for column in _PROGRESS_COLUMNS:
-                    conn.execute("ALTER TABLE tasks ADD COLUMN " + column)
+                if version < 4:
+                    for column in _PROGRESS_COLUMNS:
+                        conn.execute("ALTER TABLE tasks ADD COLUMN " + column)
+                for statement in dependencies.SCHEMA.values():
+                    conn.execute(statement)
                 conn.execute(f"PRAGMA user_version = {_SCHEMA_VERSION}")
             elif version != _SCHEMA_VERSION:
                 raise TaskError("unsupported_schema")
@@ -338,7 +357,7 @@ class TaskStore:
         ).fetchone()
         if row is None:
             raise TaskError("not_found")
-        return dict(zip(_COLUMNS, row, strict=True))
+        return dependencies.metadata(self._connection, dict(zip(_COLUMNS, row, strict=True)))
 
     def _capture(self, request: dict, now: str) -> dict:
         task_id = str(uuid4())
@@ -389,7 +408,10 @@ class TaskStore:
             arguments,
         ).fetchall()
         more = len(rows) > request["limit"]
-        items = [dict(zip(_COLUMNS, row, strict=True)) for row in rows[: request["limit"]]]
+        items = [
+            dependencies.metadata(self._connection, dict(zip(_COLUMNS, row, strict=True)))
+            for row in rows[: request["limit"]]
+        ]
         return {"items": items, "next_cursor": items[-1]["id"] if more else None, "has_more": more}
 
     def _agenda(self, request: dict) -> dict:
@@ -412,7 +434,10 @@ class TaskStore:
             arguments,
         ).fetchall()
         more = len(rows) > request["limit"]
-        items = [dict(zip(_COLUMNS, row, strict=True)) for row in rows[: request["limit"]]]
+        items = [
+            dependencies.metadata(self._connection, dict(zip(_COLUMNS, row, strict=True)))
+            for row in rows[: request["limit"]]
+        ]
         return {
             "on": request["on"],
             "items": items,
@@ -496,25 +521,33 @@ class TaskStore:
         try:
             if self._connection.in_transaction:
                 raise TaskError("connection_in_transaction")
-            if operation in ("get", "list", "search", "agenda", "projects", "history", "review"):
+            if operation in (
+                "get",
+                "list",
+                "search",
+                "agenda",
+                "projects",
+                "history",
+                "review",
+                "ready",
+            ):
+                self._connection.execute("BEGIN")
+                began = True
                 if operation == "get":
                     data = self._get(request["task_id"])
-                elif operation in ("projects", "history", "review"):
-                    # Related queries share one read snapshot. A deferred
-                    # transaction avoids acquiring an unnecessary write lock.
-                    self._connection.execute("BEGIN")
-                    began = True
-                    if operation == "review":
-                        data = task_review(self._connection, request)
-                    elif operation == "projects":
-                        data = self._projects(request)
-                    else:
-                        data = self._history(request)
-                    self._connection.execute("COMMIT")
+                elif operation == "review":
+                    data = task_review(self._connection, request)
+                elif operation == "ready":
+                    data = dependencies.ready(self._connection, request, self._get)
+                elif operation == "projects":
+                    data = self._projects(request)
+                elif operation == "history":
+                    data = self._history(request)
                 elif operation == "agenda":
                     data = self._agenda(request)
                 else:
                     data = self._list(request)
+                self._connection.execute("COMMIT")
                 return {"data": data, "replayed": False}
             self._begin()
             began = True
@@ -556,6 +589,15 @@ class TaskStore:
                     raise TaskError("revision_conflict")
                 if task["state"] != "captured":
                     raise TaskError("terminal_state")
+                if operation == "set_dependencies":
+                    dependencies.replace(self._connection, task, request["dependency_ids"])
+                if "project" in request:
+                    dependencies.check_project_change(self._connection, task, request["project"])
+                if operation == "complete" or (
+                    operation == "progress" and request["work_status"] == "in_progress"
+                ):
+                    if not task["dependencies_satisfied"]:
+                        raise TaskError("dependencies_unsatisfied")
                 state = {"complete": "done", "cancel": "cancelled"}.get(operation, "captured")
                 cursor = self._connection.execute(
                     "UPDATE tasks SET title=?, details=?, due_date=?, project=?, state=?,"

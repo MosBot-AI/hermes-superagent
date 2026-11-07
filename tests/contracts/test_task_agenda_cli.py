@@ -121,7 +121,7 @@ def test_date_only_lifecycle_order_pagination_and_reload(native, capsys):
         all_tasks = ok(command, capsys, "list", "--state", "all")["data"]["items"]
         assert len(all_tasks) == 5 and all("due_date" in row for row in all_tasks)
         with sqlite3.connect(home / "plugin-data" / PLUGIN_ID / "tasks.sqlite3") as db:
-            assert db.execute("PRAGMA user_version").fetchone()[0] == 4
+            assert db.execute("PRAGMA user_version").fetchone()[0] == 5
     finally:
         restarted.unload()
 

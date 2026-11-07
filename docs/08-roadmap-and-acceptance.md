@@ -107,6 +107,8 @@ Depends on E0.3, E1.1–E1.5, and E2.1.
 
 Acceptance: Deduplicate one input into one task; do not mix context across projects; a short subtask exiting must not falsely report the whole task complete; long-running tasks remain queryable across restarts without duplicate dispatch.
 
+[Project task dependencies](51-project-task-dependencies.md) add a profile-first E2/E6 precursor for the dependency/review part of E3.2: explicit same-project edges, atomic start/completion gates, a ready queue and coherent focus/review snapshots. This is not native Project/Kanban mapping, worker dispatch, or E3.5 cross-store reconciliation. Those remain open; the optional parked native-card handoff still needs its own durable uncertain-outcome handling.
+
 ### E4. Implement Reminders and Reliable Delivery (P0/P1, M1–M2)
 
 Depends on E0.3, E1.1–E1.5, and E2.1.

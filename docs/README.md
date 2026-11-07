@@ -62,7 +62,8 @@ Extend Hermes into a long-lived personal agent for one user: one main agent unde
 48. [Task-to-worker proposal](48-task-worker-proposal.md): isolated opt-in text-only host patch and concrete task consumer; not production worker dispatch.
 49. [Session automatic recall](49-session-memory-recall.md): separately selected bounded fresh reads through supported native hooks.
 50. [Reviewed memory candidates](50-reviewed-memory-candidates.md): live-input drafts, separate local review, atomic acceptance and explicit retention limits.
-51. [Architecture decision records](adr/README.md): reasons for the constraints.
+51. [Project task dependencies](51-project-task-dependencies.md): atomic same-project prerequisite gates, ready work, fresh snapshots and no dispatch.
+52. [Architecture decision records](adr/README.md): reasons for the constraints.
 
 ## Keep three kinds of statements separate
 

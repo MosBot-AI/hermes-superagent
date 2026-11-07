@@ -62,7 +62,8 @@
 48. [任务到 worker 的提案](48-task-worker-proposal-zh.md)：隔离的 opt-in 纯文本宿主补丁与具体任务消费者，尚未生产派发。
 49. [会话自动召回](49-session-memory-recall-zh.md)：通过受支持原生 hook 另行选择有界新鲜读取。
 50. [经审核的记忆候选](50-reviewed-memory-candidates-zh.md)：当前输入草稿、独立本地审核、原子接受和明确保留边界。
-51. [架构决策记录](adr/README-zh.md)：为什么选择这些约束。
+51. [项目任务依赖](51-project-task-dependencies-zh.md)：原子同项目前置约束、可推进工作、新鲜快照，不派发任务。
+52. [架构决策记录](adr/README-zh.md)：为什么选择这些约束。
 
 ## 三类陈述必须分开
 

@@ -4,6 +4,8 @@ import json
 import sqlite3
 from datetime import date, timedelta
 
+from .task_dependencies import metadata
+
 _SUMMARY_COLUMNS = ("id", "title", "project", "due_date", "revision", "work_status")
 
 
@@ -49,7 +51,15 @@ def task_review(connection: sqlite3.Connection, request: dict) -> dict:
         name: {"total": totals[name], "items": [], "omitted": totals[name]}
         for name in ("overdue", "due_today", "upcoming", "undated")
     }
+    active = connection.execute(
+        f"SELECT id,project FROM tasks WHERE {where}", parameters
+    ).fetchall()
+    blocked = sum(
+        not metadata(connection, {"id": row[0], "project": row[1]})["dependencies_satisfied"]
+        for row in active
+    )
     data = {
+        "dependency_counts": {"satisfied": len(active) - blocked, "blocked": blocked},
         "on": on,
         "through": through,
         "filters": filters,
@@ -75,7 +85,9 @@ def task_review(connection: sqlite3.Connection, request: dict) -> dict:
             (*parameters, *dates, request["per_bucket_limit"]),
         ).fetchall()
         for row in rows:
-            bucket["items"].append(dict(zip(_SUMMARY_COLUMNS, row, strict=True)))
+            item = metadata(connection, dict(zip(_SUMMARY_COLUMNS, row, strict=True)))
+            item.pop("dependencies")
+            bucket["items"].append(item)
             bucket["omitted"] -= 1
             if len(json.dumps(data, ensure_ascii=True, sort_keys=True)) > request["max_chars"]:
                 # Do not split a title, ID or revision, and do not claim an

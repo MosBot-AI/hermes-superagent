@@ -12,6 +12,16 @@ _STATUS = {
     "blocked": "blocked",
 }
 _ERRORS = {
+    "dependency_cycle": "These prerequisites would form a cycle. No dependency change was saved.",
+    "dependency_project_required": "Dependencies require a named project on the target task.",
+    "dependency_project_mismatch": "Every prerequisite must share the target's exact project.",
+    "dependencies_unsatisfied": (
+        "Starting or completing is blocked until every prerequisite is marked done. "
+        "Cancelled prerequisites also block; no work was dispatched."
+    ),
+    "dependency_project_locked": (
+        "This project label is locked by dependencies. Explicitly remove the related edges first."
+    ),
     "invalid_request": "Invalid task command. Check the required fields and bounds with help.",
     "not_found": "Task not found. List the inbox and use an ID returned by it.",
     ("revision_conflict"): (
@@ -99,6 +109,21 @@ def _task_lines(task: dict, *, full: bool = False) -> list[str]:
     if task.get("project") is not None:
         lines.append("  Project: " + _quoted(task["project"]))
     lines.append("  Due: " + (task.get("due_date") or "not set"))
+    if all(key in task for key in ("dependencies_satisfied", "unsatisfied_dependency_count")):
+        lines.append(
+            "  Prerequisites: "
+            + (f"{len(task['dependencies'])} | " if "dependencies" in task else "")
+            + f"unsatisfied: {task['unsatisfied_dependency_count']} | "
+            + ("satisfied" if task["dependencies_satisfied"] else "blocked")
+        )
+        if full:
+            for dependency in task.get("dependencies", []):
+                lines.append(
+                    f"    {dependency['task_id']} | revision: {dependency['revision']} | "
+                    f"state: {dependency['state']}"
+                )
+    else:
+        lines.append("  Prerequisites: unknown (not recorded in this receipt).")
     if full:
         if task.get("details"):
             lines.append("  Details: " + _quoted(task["details"]))
@@ -128,6 +153,19 @@ def _help(prefix: str) -> str:
             "Review: " + prefix + " review --on YYYY-MM-DD",
             "Blocked: " + prefix + " list --work-status blocked",
             "Projects: " + prefix + " projects",
+            "Available: " + prefix + " ready [--project LABEL | --unassigned]",
+            "Dependencies: "
+            + prefix
+            + (
+                " dependencies TASK_ID --expected-revision N "
+                "(--needs ID [--needs ID...] | --clear) --request-id dependencies-1"
+            ),
+            "Dependencies replace the whole set; same named project, at most 20, no cycles.",
+            "Starting/completing requires all prerequisites done; cancelled also blocks.",
+            (
+                "Ready pages are oldest first, not priority or dispatch. "
+                "Nothing advances automatically."
+            ),
             "Details: " + prefix + " show TASK_ID",
             "Progress: "
             + prefix
@@ -169,9 +207,16 @@ def _page(data: dict, operation: str, payload: dict, prefix: str) -> list[str]:
     labels = {
         "list": "Task inbox",
         "search": "Task search",
+        "ready": "Available local work (oldest first, not priority)",
         "agenda": "Tasks due on or before " + payload.get("on", ""),
     }
     lines = [labels[operation]]
+    if operation == "ready":
+        lines.append(f"Total eligible: {data['total_eligible']}")
+        lines.append(
+            "Captured tasks with recorded ready status and all prerequisites done. "
+            "No dispatch or execution evidence."
+        )
     if "project" in payload:
         lines.append("Project: " + _quoted(payload["project"]))
     elif payload.get("unassigned"):
@@ -213,6 +258,14 @@ def _review(data: dict, prefix: str) -> list[str]:
     lines.append(
         "Recorded progress: " + ", ".join(f"{_STATUS[key]} {progress[key]}" for key in _STATUS)
     )
+    dependency_counts = data.get("dependency_counts")
+    if dependency_counts is not None:
+        lines.append(
+            f"Prerequisites: satisfied {dependency_counts['satisfied']}, "
+            f"blocked {dependency_counts['blocked']} (not execution evidence)"
+        )
+    else:
+        lines.append("Prerequisite counts: unknown (not recorded in this receipt).")
     for name, label in (
         ("overdue", "Overdue"),
         ("due_today", "Due today"),
@@ -253,7 +306,7 @@ def _render(result: dict, *, operation: str, payload: dict, prefix: str) -> str:
     data = result["data"]
     if operation == "help":
         return _help(prefix)
-    if operation in ("list", "search", "agenda"):
+    if operation in ("list", "search", "agenda", "ready"):
         lines = _page(data, operation, payload, prefix)
     elif operation == "capture_plan":
         lines = [
@@ -324,6 +377,7 @@ def _render(result: dict, *, operation: str, payload: dict, prefix: str) -> str:
             "capture": "Task saved.",
             "update": "Task record updated.",
             "progress": "Local progress recorded.",
+            "set_dependencies": "Task prerequisites replaced.",
             "complete": "Task marked done in the local inbox.",
             "cancel": "Task marked cancelled in the local inbox.",
             "get": "Task details",

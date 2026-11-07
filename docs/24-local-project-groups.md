@@ -78,3 +78,5 @@ This is a narrow E2.1/E2.2 local precursor. E3.1 native project mapping and E1 o
 Project unit tests cover validation, exact filtering, unassigned tasks, grouping/counts, pagination, revision/idempotency behavior, and v1/v2 migration with historical receipt preservation. Pinned-host contracts exercise the actual registered CLI, its mode/profile/storage gates and synthetic persistence. The [repository checker](../README.md#development-checks) runs these with the existing offline guard and fixed upstream checkout.
 
 Tests do not authorize a real owner, exercise production accounts or validate the restricted identity socket cases. The separately packaged host-context patch is not applied by installation or by the ordinary project checks.
+
+Follow-on: [project dependencies](51-project-task-dependencies.md) add explicit same-project prerequisite sets and a ready queue. Current task storage is schema v5; atomic v1–v4 migration preserves historical receipts. Plan capture itself still does not infer or accept indexed dependencies, and no native Kanban or worker integration is enabled.

@@ -8,8 +8,16 @@ owns action-specific requirements, bounds, normalization and rejection.
 
 from .tasks import TaskError, validate_request
 
-_READ_ACTIONS = ("list", "show", "search", "projects", "agenda", "history", "review")
-_WRITE_ACTIONS = ("capture", "capture_plan", "update", "complete", "cancel", "progress")
+_READ_ACTIONS = ("list", "show", "search", "projects", "agenda", "history", "review", "ready")
+_WRITE_ACTIONS = (
+    "capture",
+    "capture_plan",
+    "update",
+    "complete",
+    "cancel",
+    "progress",
+    "set_dependencies",
+)
 
 PERSONAL_TASKS_READ_SCHEMA = {
     "name": "personal_tasks_read",
@@ -26,6 +34,10 @@ PERSONAL_TASKS_READ_SCHEMA = {
         "title summaries for overdue, due-today, upcoming and undated tasks in one snapshot. "
         "Its omitted counts include all unshown tasks; use show/list/agenda for details. "
         "review is not priority inference, task execution or a reminder. "
+        "ready returns only captured tasks with recorded ready status and all prerequisites done, "
+        "oldest first by creation sequence, not priority. It never dispatches work or proves "
+        "execution. Cancelled prerequisites block; missing dependency fields in old receipts "
+        "mean unknown, not clear. "
         "history returns operation metadata in revision order, not previous task text or "
         "proof the real-world task was performed. For history, pass returned next_cursor "
         "as after_revision; other pages use after. Pages are live, not frozen snapshots."
@@ -51,12 +63,12 @@ PERSONAL_TASKS_READ_SCHEMA = {
                 "type": "integer",
                 "minimum": 1,
                 "maximum": 100,
-                "description": "list/search/projects/agenda/history only; defaults to 20.",
+                "description": "list/search/projects/agenda/history/ready only; defaults to 20.",
             },
             "after": {
                 "type": ["string", "null"],
                 "description": (
-                    "list/search/projects/agenda only: returned next_cursor, or null. "
+                    "list/search/projects/agenda/ready only: returned next_cursor, or null. "
                     "projects uses an exact label (1-80 characters); others use a task UUIDv4."
                 ),
             },
@@ -74,14 +86,14 @@ PERSONAL_TASKS_READ_SCHEMA = {
                 "minLength": 1,
                 "maxLength": 80,
                 "description": (
-                    "list/search/agenda/review only: exact case-sensitive label, "
+                    "list/search/agenda/review/ready only: exact case-sensitive label, "
                     "no outer whitespace. "
                     "Mutually exclusive with unassigned."
                 ),
             },
             "unassigned": {
                 "type": "boolean",
-                "description": "list/search/agenda/review only: true selects unlabeled tasks.",
+                "description": "list/search/agenda/review/ready: true selects unlabeled tasks.",
             },
             "work_status": {
                 "type": "string",
@@ -136,13 +148,19 @@ PERSONAL_TASKS_WRITE_SCHEMA = {
         "dependency ordering or a native Project. The normalized request must fit 32000 "
         "ASCII-serialized characters. Each plan task has title and optional details/due_date. "
         "update requires "
-        "at least one of title/details/due_date/project. update/complete/cancel/progress require "
+        "at least one of title/details/due_date/project. "
+        "update/complete/cancel/progress/set_dependencies require "
         "task_id and expected_revision from a prior read for compare-and-swap (CAS); "
         "never invent IDs or revisions. On revision conflict, read and reconcile first. "
         "complete/cancel/progress require a nonblank note. progress also requires work_status "
         "and records a local working/waiting/blocker update, never starts a worker or verifies "
         "external progress. Only use fields relevant to the action. "
-        "Projects are labels, not native Project entities. Dates must be explicit."
+        "set_dependencies requires dependency_ids: replace the entire set with 0-20 unique "
+        "canonical UUIDs from prior reads; [] clears it. Only make explicitly requested changes. "
+        "Target and prerequisites must share one non-null exact project, without cycles. "
+        "Starting (in_progress) or completing requires all prerequisites done; cancelled blocks. "
+        "No automatic advancement or dispatch. Projects are labels, not native Project entities. "
+        "Dates must be explicit."
     ),
     "parameters": {
         "type": "object",
@@ -160,13 +178,26 @@ PERSONAL_TASKS_WRITE_SCHEMA = {
             "task_id": {
                 "type": "string",
                 "format": "uuid",
-                "description": ("update/complete/cancel/progress: canonical UUIDv4 from a result."),
+                "description": (
+                    "update/complete/cancel/progress/set_dependencies: "
+                    "canonical UUIDv4 from a result."
+                ),
             },
             "expected_revision": {
                 "type": "integer",
                 "minimum": 1,
                 "maximum": 2**63 - 2,
-                "description": "update/complete/cancel/progress: revision from a prior read.",
+                "description": (
+                    "update/complete/cancel/progress/set_dependencies: revision from a prior read."
+                ),
+            },
+            "dependency_ids": {
+                "type": "array",
+                "minItems": 0,
+                "maxItems": 20,
+                "uniqueItems": True,
+                "items": {"type": "string", "format": "uuid"},
+                "description": "set_dependencies only: complete replacement set; [] clears it.",
             },
             "title": {"type": "string", "minLength": 1, "maxLength": 240},
             "tasks": {

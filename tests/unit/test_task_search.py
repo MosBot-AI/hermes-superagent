@@ -101,7 +101,7 @@ def test_defaults_preserve_text_and_maximum(store):
     assert maximum["items"] == records[::-1][:100] and maximum["has_more"]
     assert any(sql.endswith("LIMIT 21") for sql in traced)
     assert any(sql.endswith("LIMIT 101") for sql in traced)
-    assert all(sql.startswith("SELECT") for sql in traced)
+    assert all(sql.startswith("SELECT") or sql in ("BEGIN", "COMMIT") for sql in traced)
 
 
 def test_states_due_dates_and_read_only_records(store):

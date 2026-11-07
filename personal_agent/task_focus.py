@@ -17,6 +17,8 @@ CONTEXT_PREFIX = (
     "Focus does not start work, grant external permissions, or prove completion. "
     "Use the latest user request to decide what to do. Re-read before changes; "
     "reuse write request IDs on uncertain retries and reconcile revision conflicts. "
+    "Dependency readiness is derived from this read snapshot and can change without this "
+    "task revision changing. Ready is not permission to act or proof of an outcome. "
     "For omitted fields use personal_tasks_read show.\n"
 )
 UNAVAILABLE_CONTEXT = (
@@ -47,6 +49,11 @@ def task_context(task: dict) -> str:
         },
         "omitted_fields": ["progress_note", "details", "resolution_note"],
     }
+
+    # Dependency IDs/states are bounded metadata, not prerequisite instructions.
+    # Missing fields (for example an older caller) remain unknown, never "clear".
+    for field in ("dependencies", "dependencies_satisfied", "unsatisfied_dependency_count"):
+        data["task"][field] = task.get(field)
 
     def render():
         return CONTEXT_PREFIX + json.dumps(data, ensure_ascii=True, sort_keys=True)

@@ -59,6 +59,21 @@ def setup_tasks_cli(parent: argparse._SubParsersAction) -> None:
     review.add_argument("--lookahead-days", type=int, default=7)
     review.add_argument("--per-bucket-limit", type=int, default=5)
     review.add_argument("--max-chars", type=int, default=16000)
+    ready = commands.add_parser(
+        "ready", help="Read eligible ready tasks, oldest first; never dispatch work"
+    )
+    ready.add_argument("--limit", type=int, default=20)
+    ready.add_argument("--after", default=None)
+    ready_filters = ready.add_mutually_exclusive_group()
+    ready_filters.add_argument("--project", default=argparse.SUPPRESS)
+    ready_filters.add_argument("--unassigned", action="store_true", default=argparse.SUPPRESS)
+    dependencies = commands.add_parser("dependencies", help="Explicitly replace all prerequisites")
+    dependencies.add_argument("task_id")
+    dependencies.add_argument("--expected-revision", type=int, required=True)
+    dependencies.add_argument("--request-id", required=True)
+    needs = dependencies.add_mutually_exclusive_group(required=True)
+    needs.add_argument("--needs", dest="dependency_ids", action="append")
+    needs.add_argument("--clear", dest="dependency_ids", action="store_const", const=[])
     for reader in (listing, search, agenda, review):
         reader.add_argument(
             "--work-status",
@@ -118,6 +133,8 @@ def setup_tasks_cli(parent: argparse._SubParsersAction) -> None:
 
 def command_request(args: argparse.Namespace) -> tuple[str, dict]:
     operation = "get" if args.task_operation == "show" else args.task_operation
+    if operation == "dependencies":
+        operation = "set_dependencies"
     if operation == "plan":
         tasks = (
             [{"title": title} for title in args.task]
@@ -130,6 +147,8 @@ def command_request(args: argparse.Namespace) -> tuple[str, dict]:
     fields = {
         "capture": ("title", "details", "request_id", "due_date", "project"),
         "get": ("task_id",),
+        "ready": ("limit", "after", "project", "unassigned"),
+        "set_dependencies": ("task_id", "expected_revision", "request_id", "dependency_ids"),
         "history": ("task_id", "limit", "after_revision"),
         "projects": ("limit", "after"),
         "review": (
