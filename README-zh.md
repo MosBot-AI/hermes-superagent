@@ -144,3 +144,5 @@ plugins:
 新增[已存原生观察关注复盘](docs/54-saved-native-attention-zh.md)：只读本地快照，重叠分类不重复计数，不读取实时看板或改变完成状态。
 
 [受门控的任务规划 worker](docs/55-gated-plan-worker-zh.md): 生产包接线默认关闭，要求准确已审阅宿主约定及当前同意，不代表安装或真实验收。
+
+[原子计划明确依赖](docs/56-atomic-plan-dependencies-zh.md): 显式一基批次引用，同事务保存任务与边，不自动执行。

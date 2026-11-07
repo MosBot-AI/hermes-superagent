@@ -229,11 +229,26 @@ def validate_request(operation: str, payload: dict) -> dict:
             raise TaskError("invalid_request")
         normalized = []
         for item in items:
-            if not isinstance(item, dict) or item.keys() - {"title", "details", "due_date"}:
+            if not isinstance(item, dict) or item.keys() - {
+                "title",
+                "details",
+                "due_date",
+                "depends_on",
+            }:
                 raise TaskError("invalid_request")
-            task = validate_request("capture", {**item, "request_id": result["request_id"]})
+            task = validate_request(
+                "capture",
+                {
+                    **{k: v for k, v in item.items() if k != "depends_on"},
+                    "request_id": result["request_id"],
+                },
+            )
             task.pop("request_id")
             normalized.append(task)
+        references = dependencies.normalize_plan_references(items)
+        for task, refs in zip(normalized, references, strict=True):
+            if refs:
+                task["depends_on"] = refs
         result["tasks"] = normalized
         # Bound the normalized request, including escaping and envelope fields.
         if len(json.dumps(result, ensure_ascii=True, sort_keys=True)) > MAX_PLAN_CHARS:
@@ -638,9 +653,26 @@ class TaskStore:
             if operation == "capture_plan":
                 items = []
                 for item in request["tasks"]:
-                    task = self._capture({**item, "project": request["project"]}, now)
-                    self._record_event(task, operation, now)
+                    task = self._capture(
+                        {
+                            **{k: v for k, v in item.items() if k != "depends_on"},
+                            "project": request["project"],
+                        },
+                        now,
+                    )
                     items.append(task)
+                for task, item in zip(items, request["tasks"], strict=True):
+                    self._connection.executemany(
+                        "INSERT INTO task_dependencies(task_id,dependency_id) VALUES (?,?)",
+                        [
+                            (task["id"], items[position - 1]["id"])
+                            for position in item.get("depends_on", [])
+                        ],
+                    )
+                # All referenced tasks/edges now exist, including forward refs.
+                items = [self._get(task["id"]) for task in items]
+                for task in items:
+                    self._record_event(task, operation, now)
                 data = {"project": request["project"], "items": items}
             elif operation == "capture":
                 data = self._capture(request, now)

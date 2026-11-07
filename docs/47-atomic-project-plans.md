@@ -6,7 +6,7 @@ English | [简体中文](47-atomic-project-plans-zh.md)
 
 Save an explicitly requested project plan as 1–20 ordinary local tasks in one operation. Either every task, its initial history event and one shared retry receipt commit together, or none do. This avoids a half-saved plan or duplicated tasks when a multi-task capture is interrupted and retried.
 
-Each item remains independently editable, reviewable, focusable and completable using the existing task tools. The shared project is an exact label, not a native Project. There is no separate mutable plan entity, dependency graph, priority ordering, worker dispatch or reminder. A plan can add to an existing label; it does not replace that label's tasks. Duplicate titles are allowed because equal text does not prove equal intent.
+Each item remains independently editable, reviewable, focusable and completable using the existing task tools. The shared project is an exact label, not a native Project. There is no separate mutable plan entity, implicit dependency graph, priority ordering, worker dispatch or reminder. Explicit batch dependencies are described in [the follow-on slice](56-atomic-plan-dependencies.md). A plan can add to an existing label; it does not replace that label's tasks. Duplicate titles are allowed because equal text does not prove equal intent.
 
 ## 2. Native command and CLI
 
@@ -26,7 +26,7 @@ For details or explicit dates, use `--tasks-json` instead of repeated `--task`. 
 /personal-tasks plan --project "Demo launch" --tasks-json '[{"title":"Prepare draft","details":"Use the approved outline"},{"title":"Review draft","due_date":"2030-01-02"}]' --request-id launch-plan-2
 ```
 
-Do not submit both forms. Unknown/nested identity, approval, project, dependency or retry-key fields are rejected. Duplicate JSON object keys, non-JSON constants, invalid dates, oversized input and a single invalid task reject the entire plan before storage is opened.
+Do not submit both forms. Unknown/nested identity, approval, project or retry-key fields are rejected. The explicit per-item `depends_on` list is supported as described in [atomic plan dependencies](56-atomic-plan-dependencies.md). Duplicate JSON object keys, non-JSON constants, invalid dates, oversized input and a single invalid task reject the entire plan before storage is opened.
 
 ## 3. Existing model tool
 
@@ -54,7 +54,7 @@ Reuse the same request ID, ordered tasks and project after an uncertain result. 
 
 Do not split an uncertain plan into individual `capture` calls or invent a new plan key just to retry. Those are new operations and can create duplicates. A new key is appropriate only for a distinct, intentionally new plan. Invalid input has no partial effect; a storage interruption may have an unknown response outcome, so inspect/retry the original request rather than assuming failure.
 
-Task schema remains v4. Existing stores and historical receipts need no new migration. Each created task receives a revision-1 `capture_plan` metadata event; no old task payload is added to history. The plan receipt contains task text, as ordinary capture receipts do, and is local plaintext rather than a secret store.
+At the original plan-capture slice, task schema remained v4. Existing stores and historical receipts need no new migration. Each created task receives a revision-1 `capture_plan` metadata event; no old task payload is added to history. The plan receipt contains task text, as ordinary capture receipts do, and is local plaintext rather than a secret store.
 
 ## 5. Why worker dispatch stays separate
 
@@ -70,4 +70,4 @@ Tests cover nested validation, escaped budgets, durable ordered receipts, concur
 
 Two pinned-host boundary tests demonstrate empty-allowlist inheritance and configuration-dependent MCP/orchestrator additions without constructing a real worker or resolving credentials. All tests use synthetic data and temporary profiles. No Gateway socket, provider request, real account, main-branch update or production deployment is part of this slice. The existing release gate remains blocked.
 
-Follow-on: [project dependencies](51-project-task-dependencies.md) add explicit same-project prerequisite sets and a ready queue. Current task storage is schema v5; atomic v1–v4 migration preserves historical receipts. Plan capture itself still does not infer or accept indexed dependencies, and no native Kanban or worker integration is enabled.
+Follow-on: [project dependencies](51-project-task-dependencies.md) add explicit same-project prerequisite sets and a ready queue. Current task storage is schema v6. [Explicit batch dependencies](56-atomic-plan-dependencies.md) now add one-based `depends_on` positions without another migration; no inferred ordering, native Kanban action or worker launch is added by plan capture.

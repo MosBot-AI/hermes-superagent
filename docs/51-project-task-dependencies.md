@@ -122,7 +122,7 @@ After write activation, `personal_tasks_write` can use `set_dependencies` with
 record explicitly requested relations using returned IDs, not infer execution
 permission from descriptions. Existing live-turn/profile/route, revocation,
 child/cron and unsupported-mode checks remain unchanged. No extra model is called.
-Plan capture itself still has no indexed/nested dependency syntax.
+Plan capture now supports explicit one-based batch `depends_on` positions; see [atomic plan dependencies](56-atomic-plan-dependencies.md). Nested task definitions and inferred ordering are not supported.
 
 This is a profile-first E2/E6 precursor for the dependency/readiness part of E3.2
 through supported native entry points, not task-to-Kanban mapping or E3.3 worker

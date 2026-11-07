@@ -33,6 +33,8 @@ HELP = (
     'search "Text"; show TASK_ID; projects; agenda --on YYYY-MM-DD; '
     'plan --project "Project" --task "First" --task "Second" --request-id KEY '
     "(1-20 tasks, one atomic write; a stable request ID is required); "
+    "--tasks-json accepts explicit depends_on one-based positions in the same batch; "
+    "array order alone creates no prerequisites. "
     "review --on YYYY-MM-DD [--lookahead-days N] [--per-bucket-limit N] [--max-chars N]; "
     "native-review --on YYYY-MM-DD [--stale-after-days N] [--per-bucket-limit N] "
     "[--max-chars N] [--project LABEL | --unassigned] reads saved observations only; "

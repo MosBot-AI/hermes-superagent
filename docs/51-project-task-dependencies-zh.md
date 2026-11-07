@@ -54,7 +54,7 @@ Schema v5 新增依赖关系，原子升级精确自有 v1–v4 schema，保留�
 
 ## 4. 模型工具与原生集成边界
 
-现有显式读取激活后，`personal_tasks_read` 可使用 `ready`。写入激活后，`personal_tasks_write` 可使用 `set_dependencies`，传入 `task_id`、`expected_revision`、`dependency_ids` 和 `request_id`。模型必须使用返回 ID 记录明确要求的关系，不从描述推断执行许可。原有活跃轮次/profile/路由、撤销、子代理/cron 和不支持模式检查保持不变，不调用额外模型。计划捕获本身仍没有索引或嵌套依赖语法。
+现有显式读取激活后，`personal_tasks_read` 可使用 `ready`。写入激活后，`personal_tasks_write` 可使用 `set_dependencies`，传入 `task_id`、`expected_revision`、`dependency_ids` 和 `request_id`。模型必须使用返回 ID 记录明确要求的关系，不从描述推断执行许可。原有活跃轮次/profile/路由、撤销、子代理/cron 和不支持模式检查保持不变，不调用额外模型。计划捕获现在支持明确的一基批次 `depends_on` 位置，参见[原子计划依赖](56-atomic-plan-dependencies-zh.md)。不支持嵌套任务定义或推断顺序。
 
 本切片是通过受支持原生入口推进 E3.2 依赖/可推进部分的 profile-first E2/E6 先导，不等于任务到 Kanban 映射或 E3.3 worker 编排。固定宿主公开 `kanban_list` 会执行 `recompute_ready`，普通 Kanban/Project 读取可能初始化或迁移存储，所以没有把它们暗中用作无副作用查看。模型侧 `kanban_create` 默认 running 且要求 assignee，还可能订阅通知、继承项目工作区上下文。
 

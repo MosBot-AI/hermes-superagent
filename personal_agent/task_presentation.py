@@ -396,12 +396,27 @@ def _render(result: dict, *, operation: str, payload: dict, prefix: str) -> str:
         ]
         if result.get("replayed"):
             lines.insert(0, "Replayed saved plan receipt. Use show for each task's current state.")
-        for task in data["items"]:
+        positions = {task["id"]: index for index, task in enumerate(data["items"], 1)}
+        for index, task in enumerate(data["items"], 1):
+            lines.append(f"Plan item {index}:")
             lines.extend(_task_lines(task))
+            prerequisites = task.get("dependencies", [])
+            if prerequisites:
+                if all(item["task_id"] in positions for item in prerequisites):
+                    needs = sorted(positions[item["task_id"]] for item in prerequisites)
+                    lines.append("  Needs plan item(s): " + ", ".join(map(str, needs)))
+                else:
+                    lines.append("  Some prerequisite IDs are outside this receipt; use show.")
+        if all(isinstance(task.get("dependencies"), list) for task in data["items"]):
+            links = sum(len(task["dependencies"]) for task in data["items"])
+            lines.append(f"Saved prerequisite links: {links}. Input order is not execution order.")
+        else:
+            lines.append("Prerequisite metadata unavailable in this historical receipt.")
         lines.append(
-            "All tasks saved together. No work, dependency ordering or reminder was executed."
+            "All tasks and explicit links saved together. No task started, completed or dispatched."
         )
         lines.append("Browse: " + _command(prefix, "list", {"project": data["project"]}))
+        lines.append("Ready: " + _command(prefix, "ready", {"project": data["project"]}))
     elif operation == "native_review":
         lines = _native_review(data)
     elif operation == "review":

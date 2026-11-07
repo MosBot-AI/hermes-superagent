@@ -92,3 +92,5 @@ E9 已选定原生 worker 路由设计，并实现离线约束验证器和部分
 - [已存原生观察关注复盘](54-saved-native-attention-zh.md)
 
 [受门控的任务规划 worker](55-gated-plan-worker-zh.md): 生产包接线默认关闭，要求准确已审阅宿主约定及当前同意，不代表安装或真实验收。
+
+[原子计划明确依赖](56-atomic-plan-dependencies-zh.md): 显式一基批次引用，同事务保存任务与边，不自动执行。

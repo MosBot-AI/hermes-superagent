@@ -169,11 +169,17 @@ PERSONAL_TASKS_WRITE_SCHEMA = {
         "stable request_id: reuse it with identical arguments on retry, never generate a "
         "fresh key after an uncertain outcome. capture requires title. "
         "capture_plan requires project and 1-20 task objects in tasks; "
-        "it saves all tasks and one replay receipt atomically, or saves none. Do not call "
+        "it saves all tasks, explicit prerequisite links and one replay receipt atomically, "
+        "or saves none. Do not call "
         "capture separately after an uncertain capture_plan. Preserve the same task order "
-        "and retry key. A plan records only explicitly requested tasks, not execution, "
-        "dependency ordering or a native Project. The normalized request must fit 32000 "
-        "ASCII-serialized characters. Each plan task has title and optional details/due_date. "
+        "and retry key. A plan records explicitly requested tasks and prerequisites, "
+        "not execution or a native Project. The normalized request must fit 32000 "
+        "ASCII-serialized characters. Each plan task has title and optional details/due_date "
+        "and depends_on: unique ONE-BASED positions in the same ordered tasks array. "
+        "Only record explicitly requested prerequisites; order alone creates none. "
+        "Forward references are allowed; cycles, self references and out-of-range positions "
+        "are rejected. Omitted/empty depends_on means no prerequisites. These local links "
+        "gate start/completion but never dispatch work. "
         "update requires "
         "at least one of title/details/due_date/project. "
         "update/complete/cancel/progress/set_dependencies require "
@@ -242,6 +248,17 @@ PERSONAL_TASKS_WRITE_SCHEMA = {
                         "title": {"type": "string", "minLength": 1, "maxLength": 240},
                         "details": {"type": "string", "maxLength": 5000},
                         "due_date": {"type": "string", "format": "date"},
+                        "depends_on": {
+                            "type": "array",
+                            "maxItems": 19,
+                            "uniqueItems": True,
+                            "items": {"type": "integer", "minimum": 1, "maximum": 20},
+                            "description": (
+                                "Explicit prerequisite positions, ONE-BASED in this tasks array. "
+                                "Forward references allowed; no self references or cycles. "
+                                "Omitted or [] means none, never infer from array order."
+                            ),
+                        },
                     },
                 },
             },

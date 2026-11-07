@@ -130,3 +130,39 @@ def ready(connection, request, get):
         "has_more": more,
         "total_eligible": len(eligible),
     }
+
+
+def normalize_plan_references(items):
+    """Validate batch-local one-based references and DAG before any transaction.
+
+    Return parallel sorted lists; callers omit empty lists from normalized intent
+    so earlier plans retain their historical request digest.
+    """
+    graph = []
+    for position, item in enumerate(items, 1):
+        references = item.get("depends_on", [])
+        if type(references) is not list or len(references) > len(items):
+            _fail("invalid_request")
+        if any(type(value) is not int or not 1 <= value <= len(items) for value in references):
+            _fail("invalid_request")
+        if len(set(references)) != len(references):
+            _fail("invalid_request")
+        if position in references:
+            _fail("dependency_cycle")
+        graph.append(sorted(references))
+    visiting, visited = set(), set()
+
+    def visit(position):
+        if position in visiting:
+            _fail("dependency_cycle")
+        if position in visited:
+            return
+        visiting.add(position)
+        for prerequisite in graph[position - 1]:
+            visit(prerequisite)
+        visiting.remove(position)
+        visited.add(position)
+
+    for position in range(1, len(items) + 1):
+        visit(position)
+    return graph

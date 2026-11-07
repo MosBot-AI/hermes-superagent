@@ -28,7 +28,10 @@ def setup_tasks_cli(parent: argparse._SubParsersAction) -> None:
     plan.add_argument("--request-id", required=True)
     inputs = plan.add_mutually_exclusive_group(required=True)
     inputs.add_argument("--task", action="append", help="Repeat for each task title in the plan")
-    inputs.add_argument("--tasks-json", help="JSON array of title/details/due_date objects")
+    inputs.add_argument(
+        "--tasks-json",
+        help="JSON task objects with optional depends_on (one-based positions in this array)",
+    )
     show = commands.add_parser("show", help="Read one local task")
     show.add_argument("task_id")
     history = commands.add_parser("history", help="Read bounded task operation metadata")

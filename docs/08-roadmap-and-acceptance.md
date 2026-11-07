@@ -263,3 +263,5 @@ The [bounded recall follow-on](36-bounded-memory-recall.md) adds explicit multi-
 Added [saved native attention review](54-saved-native-attention.md): local snapshots only, overlapping buckets with unique counts, no live-board read or completion change.
 
 [Gated task planning worker](55-gated-plan-worker.md): Production-package integration is default-off and requires the exact reviewed host contract plus current consent; not installed or live-accepted.
+
+[Explicit atomic plan dependencies](56-atomic-plan-dependencies.md): Explicit one-based batch references save tasks and edges together, without automatic execution.
