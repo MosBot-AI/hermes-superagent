@@ -597,7 +597,15 @@ def test_loading_help_and_status_preserve_native_configuration(host):
     assert source.read_text() == "Synthetic native provider memory remains separate"
     assert not memory.database(host.home).exists()
     loaded = host.manager._plugins[PLUGIN_ID]
-    assert not loaded.hooks_registered and not loaded.middleware_registered
+    # Task tools register an idle focus hook, not a memory extraction/recall hook.
+    assert loaded.hooks_registered == ["pre_llm_call"] and not loaded.middleware_registered
+
+
+def test_memory_activation_cannot_select_task_focus(host):
+    activate(host, "enable-read")
+    assert activate(host, "focus invalid")["error"]["code"] == "invalid_request"
+    assert activate(host, "clear-focus")["error"]["code"] == "invalid_request"
+    assert task_tools.activate(host, "status")["data"]["focus_task_id"] is None
 
 
 def test_unbound_activation_cannot_be_granted_by_copied_source(host):

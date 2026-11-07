@@ -36,6 +36,8 @@ In the existing native local session, use one of:
 
 **Privacy and costs:** returned titles/details/notes enter the activated session's configured model context and can therefore reach that model's provider and normal host history/logging. Only activate with data you permit that configured model to receive. This is not a new provider connection. Ordinary model usage can cost money under the user's existing configuration; these tools do not add a second LLM call or route to another provider.
 
+Optional [task focus](46-native-task-focus.md) uses `/personal-tools focus <task-id>` after activation to include one fresh task snapshot in each subsequent native turn. `clear-focus` stops future snapshots without revoking tools. No task is selected by default, and no model/provider is changed.
+
 ## 2. Natural-language workflow and tool contract
 
 After `enable-write`, example requests to the existing main model are “Add a task to prepare the demo in project Personal Agent,” “Show that project's tasks,” and “Mark the demo task complete.” The model must call the registered tools and use the returned IDs/revisions rather than merely promise to remember the task. Natural-language interpretation and tool selection depend on the configured model and still require live acceptance testing.

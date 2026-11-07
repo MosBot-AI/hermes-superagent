@@ -8,6 +8,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Added [native task focus](docs/46-native-task-focus.md): an explicit session selection supplies fresh bounded task context through the real host turn hook. It shares task-tool admission, expires with activation and preserves historical prompt bytes; no worker dispatch or extra model call.
+
 - [Explicit memory expiry](docs/45-explicit-memory-expiry.md) adds explicit UTC deadlines, default expiry filtering, deliberate inspection and schema-v5 migration. Expiry affects fresh recall eligibility, not stored status or deletion; native read-only recall never migrates storage.
 
 - [Native checkpoint evidence boundaries](docs/43-native-checkpoint-boundary.md) add bounded I/O-free candidate preparation and pinned-host contracts. Stable UIDs, pending input and revision limits are verified; automatic ingestion and checkpoint-v2 remain disabled.

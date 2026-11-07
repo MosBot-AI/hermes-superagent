@@ -57,7 +57,8 @@ Extend Hermes into a long-lived personal agent for one user: one main agent unde
 43. [Native checkpoint evidence boundaries](43-native-checkpoint-boundary.md) add bounded I/O-free candidate preparation and pinned-host contracts. Stable UIDs, pending input and revision limits are verified; automatic ingestion and checkpoint-v2 remain disabled.
 44. [Readable task workbench](44-readable-task-workbench.md): native human views, explicit JSON compatibility, safe pagination and accurate retry/error messages.
 45. [Explicit memory expiry](45-explicit-memory-expiry.md): adds explicit UTC deadlines, default expiry filtering, deliberate inspection and schema-v5 migration. Expiry affects fresh recall eligibility, not stored status or deletion; native read-only recall never migrates storage.
-46. [Architecture decision records](adr/README.md): reasons for the constraints.
+46. [Native task focus](46-native-task-focus.md): explicitly select one task for fresh bounded main-turn context, with session activation, whole-field budgets and retained-history boundaries.
+47. [Architecture decision records](adr/README.md): reasons for the constraints.
 
 ## Keep three kinds of statements separate
 

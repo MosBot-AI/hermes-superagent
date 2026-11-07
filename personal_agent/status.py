@@ -92,6 +92,10 @@ def build_status(
             "session_activation_observed": False,
             "supported_runtime": "native_in_process_only",
             "activation_lifetime_seconds": 1800,
+            "task_focus_implemented": True,
+            "task_focus_requires_explicit_selection": True,
+            "task_focus_max_context_chars": 12000,
+            "task_focus_persists_across_restart": False,
             "scope": (
                 "All model activity in an explicitly activated trusted local session; "
                 "not verified human-origin instructions or remote owner identity."

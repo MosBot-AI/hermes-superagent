@@ -245,3 +245,5 @@ Project 链接、Issue 号与最终字段以实际创建结果为准。若 API/�
 [37](37-durable-memory-progress-zh.md)新增本地事件元数据变更分页和持久化消费者进度，并进行原子 v3 迁移。E2.7 保持 In Progress；游标不等于原生对话 checkpoint 覆盖，也不代表完成 E2.8。
 
 [显式到期](45-explicit-memory-expiry-zh.md)增加按 UTC 判断的新召回资格及 schema-v5 迁移，不是删除或自动摄取。E2.7 仍为 In Progress；严格原生 checkpoint-v2、来源对账和原生 worker 编排仍未完成。仅时间流逝不会改变 revision/事件，也不证明检查点的召回有效性。
+
+[原生任务聚焦](46-native-task-focus-zh.md)为 E6.9 增加显式会话选择、轮次开始时的新有界上下文以及真实宿主钩子/API 消息契约。E6.9 保持 In Progress：本切片未完成真实模型自然语言验收、worker 派发或完整 MVP/发布门禁。

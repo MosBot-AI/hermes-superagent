@@ -57,7 +57,8 @@
 43. [原生检查点证据边界](43-native-checkpoint-boundary-zh.md)新增有界、无 I/O 的候选准备和固定宿主契约测试。验证稳定 UID、待存尾部与 revision 的实际边界；未启用自动摄取或 checkpoint-v2。
 44. [可读任务工作台](44-readable-task-workbench-zh.md)：原生文字视图、明确 JSON 兼容、安全分页和准确重试/错误提示。
 45. [显式记忆到期](45-explicit-memory-expiry-zh.md): 增加明确 UTC 截止时间、默认到期过滤、主动检查和 schema-v5 迁移。到期影响新的召回资格，不改变存储状态或删除正文；原生只读召回永远不迁移存储。
-46. [架构决策记录](adr/README-zh.md)：为什么选择这些约束。
+46. [原生任务聚焦](46-native-task-focus-zh.md)：显式选择一条任务，为主对话轮次提供新的有界上下文，复用会话激活，保留整字段预算和已有历史边界。
+47. [架构决策记录](adr/README-zh.md)：为什么选择这些约束。
 
 ## 三类陈述必须分开
 

@@ -70,6 +70,8 @@ Hermes 原生 personal-agent 插件，目标是让一个主 agent 管理项目�
 
 [显式记忆到期](docs/45-explicit-memory-expiry-zh.md) 增加明确 UTC 截止时间、默认到期过滤、主动检查和 schema-v5 迁移。到期影响新的召回资格，不改变存储状态或删除正文；原生只读召回永远不迁移存储。
 
+[原生任务聚焦](docs/46-native-task-focus-zh.md)把一条明确选定的任务接入后续主代理对话轮次。任务工具激活后，`/personal-tools focus <task-id>` 每轮提供新的有界快照；`clear-focus`、禁用、到期和重启停止未来快照。不派发任务，也不清除此前模型/历史上下文。
+
 ## 开发验证
 
 基线为 `compatibility.json` 内的 Hermes commit；当前实际运行目标是 Python 3.14。没有根据单一 SHA 宣称宽泛的 `requires_hermes` 版本范围。

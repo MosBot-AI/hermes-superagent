@@ -243,3 +243,5 @@ The [bounded recall follow-on](36-bounded-memory-recall.md) adds explicit multi-
 [37](37-durable-memory-progress.md) adds local event-metadata change pages and durable consumer progress with atomic v3 migration. E2.7 remains In Progress; the cursor is not native transcript checkpoint coverage and does not complete E2.8.
 
 [Explicit expiry](45-explicit-memory-expiry.md) adds UTC-bounded fresh recall eligibility and schema-v5 migration, not deletion or automatic ingestion. E2.7 remains In Progress; strict native checkpoint-v2, source reconciliation and native worker orchestration remain open. Time passage alone does not change revisions/events or certify checkpoint recall validity.
+
+[Native task focus](46-native-task-focus.md) extends E6.9 with explicit session selection, fresh bounded context at turn start and actual host hook/API-message contracts. E6.9 remains In Progress: real-model natural-language acceptance, worker dispatch and complete MVP/release gates are not completed by this slice.

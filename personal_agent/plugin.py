@@ -28,6 +28,8 @@ class PluginContext(Protocol):
 
     def register_command(self, name: str, handler: Any, **kwargs: Any) -> Any: ...
 
+    def register_hook(self, hook_name: str, callback: Any, **kwargs: Any) -> Any: ...
+
 
 def access_command(
     raw_args: str,
@@ -310,16 +312,19 @@ def register(ctx: PluginContext) -> None:
             )
 
     if model_tools_enabled:
-        from .session_task_tools import SessionTaskTools
+        from .task_focus import FocusedSessionTaskTools
         from .task_tool_contract import PERSONAL_TASKS_READ_SCHEMA, PERSONAL_TASKS_WRITE_SCHEMA
 
-        access = SessionTaskTools(bound_home=bound_home, read_config=ctx.get_config)
+        access = FocusedSessionTaskTools(bound_home=bound_home, read_config=ctx.get_config)
         ctx.on_unload(access.close)
+        ctx.register_hook("pre_llm_call", access.turn_context)
         ctx.register_command(
             "personal-tools",
             handler=access.command,
             description="Activate local task model access for this trusted native session.",
-            args_hint="enable-read | enable-write | disable | status",
+            args_hint=(
+                "enable-read | enable-write | focus <task-id> | clear-focus | disable | status"
+            ),
         )
 
         def bind_handler(name):
