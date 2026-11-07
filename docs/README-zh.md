@@ -49,7 +49,8 @@
 35. [离线 Worker 路由](35-offline-worker-routing-zh.md)：严格合成候选过滤、基线检查和部分原生路由契约；没有在线 backend。
 36. [有界显式记忆召回](36-bounded-memory-recall-zh.md)：多关键词字面排序、完整记录的 JSON 预算、当前 revision 与同一读取快照；没有自动提示注入。
 37. [持久化本地记忆进度](37-durable-memory-progress-zh.md)：元数据变更分页、内部 CAS/幂等消费者游标和原子 schema-v3 迁移；不等于原生压缩 checkpoint。
-38. [架构决策记录](adr/README-zh.md)：为什么选择这些约束。
+38. [已保存路由诊断](38-routing-readiness-inspection-zh.md)：原生本地声明诊断，不解析凭据/模型，也不启用路由。
+39. [架构决策记录](adr/README-zh.md)：为什么选择这些约束。
 
 ## 三类陈述必须分开
 

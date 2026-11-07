@@ -27,6 +27,9 @@ class Context:
         self.config = config
         self.calls = []
 
+    def on_unload(self, callback):
+        pass
+
     def get_config(self, key, default=None):
         return self.config.get(key, default)
 

@@ -8,6 +8,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Added native `personal-agent routing inspect`: profile-bound, identifier-free saved-config diagnostics with explicit effective-route unknowns, non-file/managed-worker refusal and unload guards. No backend activation, credential resolution, model calls or configuration writes.
+
 - Added metadata-only local memory change pages and durable internal consumer cursors with CAS, exact receipt replay and quota limits. Atomic schema v1/v2→v3 migration preserves canonical records and receipts. No new model actions, background worker, native provider or compression-checkpoint guarantee.
 
 - Added an offline worker-routing fixture evaluator and partial pinned native contracts: strict candidate constraints, exact pins, baseline qualification and minimized advisory reports. No live backend, provider calls, automatic switching or budget guarantees.

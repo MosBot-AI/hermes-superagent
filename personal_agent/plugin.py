@@ -6,6 +6,8 @@ from typing import Any, Protocol
 
 from .enforcement import build_enforcement_inventory
 from .identity import build_access_diagnostic
+from .routing_cli import RoutingInspector, setup_routing_cli
+from .routing_inspection import inspection_failure
 from .status import build_status
 from .task_cli import current_profile_home, run_tasks_cli, setup_tasks_cli
 from .voice_cli import run_voice_cli, setup_voice_cli
@@ -90,9 +92,13 @@ def setup_cli(parser: argparse.ArgumentParser) -> None:
     subparsers.add_parser("access", help="Explain the still-blocked owner/receiving-Bot boundary")
     setup_tasks_cli(subparsers)
     setup_voice_cli(subparsers)
+    setup_routing_cli(subparsers)
 
 
 def run_cli(args: argparse.Namespace) -> int | None:
+    if args.personal_command == "routing":
+        print(json.dumps(inspection_failure("host_inspection_unavailable"), sort_keys=True))
+        return 1
     if args.personal_command == "voice":
         return run_voice_cli(args)
     if args.personal_command == "coverage":
@@ -131,6 +137,8 @@ def register(ctx: PluginContext) -> None:
     if memory_models_enabled and not memory_enabled:
         raise ValueError("memory_model_tools requires local_memory and local_conversation")
     bound_home = current_profile_home()
+    routing_inspector = RoutingInspector(bound_home)
+    ctx.on_unload(routing_inspector.close)
 
     def registered_status(args: dict[str, object], **_context: object) -> str:
         if not isinstance(args, dict) or args:
@@ -171,6 +179,8 @@ def register(ctx: PluginContext) -> None:
             return json.dumps({"status": "blocked", "error": {"code": "invalid_configuration"}})
 
     def registered_cli(args: argparse.Namespace) -> int | None:
+        if args.personal_command == "routing":
+            return routing_inspector.run(args)
         if args.personal_command == "tasks":
             return run_tasks_cli(
                 args,

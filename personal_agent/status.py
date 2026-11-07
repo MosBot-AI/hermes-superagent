@@ -150,6 +150,15 @@ def build_status(
                 "Internal fenced snapshot coordination only; no live authority or task reader."
             ),
         },
+        "routing": {
+            "offline_fixture_evaluator_implemented": True,
+            "saved_config_inspection_cli_implemented": True,
+            "effective_session_observed": False,
+            "shadow_ready": False,
+            "automatic_routing_ready": False,
+            "plugin_live_routing_enabled": False,
+            "scope": "Saved local declarations and synthetic fixtures only; no routing authority.",
+        },
         "voice": {
             "synthetic_self_test_implemented": True,
             "live_voice_enabled": False,

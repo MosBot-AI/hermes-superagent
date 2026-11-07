@@ -50,3 +50,5 @@ python scripts/check_routing_fixture.py experiments/routing/synthetic-shadow.jso
 ## 验证
 
 按照 [README](../README-zh.md#开发验证) 的说明，以固定 Hermes checkout 和对应测试解释器运行仓库常规检查器。完整检查包含新增单元/原生契约测试、Ruff、格式检查、ty 和双语文档检查。合成负面样例覆盖硬约束、精确 pin、无效基线、错误输入、审计信息最小化和未实现的运行时保障。测试有网络阻断，不调用真实 provider/model。
+
+配套[原生已保存配置诊断](38-routing-readiness-inspection-zh.md)可通过显式本地 CLI 命令使用。它不会把样例声明转换为可信上下文，也不将本验证器启用为 backend。

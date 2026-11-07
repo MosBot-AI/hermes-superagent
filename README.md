@@ -52,6 +52,8 @@ The [offline worker-routing precursor](docs/35-offline-worker-routing.md) checks
 
 The [bounded recall guide](docs/36-bounded-memory-recall.md) adds explicit multi-keyword literal retrieval through native memory commands and activated read tools, with complete records, current revisions and a serialized-result budget. No automatic prompt injection or native provider replacement is enabled.
 
+The native [`personal-agent routing inspect`](docs/38-routing-readiness-inspection.md) command checks saved local delegation declarations without exposing route identifiers or secrets. It reports inheritance/fallback/effort caveats, never certifies effective session routing, and performs no model call or backend switch.
+
 The [durable progress guide](docs/37-durable-memory-progress.md) adds metadata-only memory change pages and internal restart-safe consumer cursors. It preserves existing record receipts during v1/v2→v3 migration and does not claim native compression checkpoint support.
 
 ## Development checks

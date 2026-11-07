@@ -50,3 +50,5 @@ Not covered: hosted-plugin IPC, actual worker construction/background delegation
 ## Verification
 
 Run the normal repository checker with the pinned Hermes checkout and its test interpreter, as documented in the [README](../README.md#development-checks). The aggregate includes the new unit and native contract files, Ruff, formatting, ty and bilingual document checks. Synthetic negative fixtures cover hard constraints, exact pins, invalid baselines, malformed input, audit minimization and unsupported runtime guarantees. Tests are network-guarded and use no actual provider/model.
+
+Companion [native saved-config inspection](38-routing-readiness-inspection.md) is available through an explicit local CLI command. It does not convert fixture assertions into trusted context or enable this evaluator as a backend.

@@ -52,6 +52,8 @@ Hermes 原生 personal-agent 插件，目标是让一个主 agent 管理项目�
 
 [有界召回指南](docs/36-bounded-memory-recall-zh.md)新增原生记忆命令和独立激活读取工具的显式多关键词字面检索，返回完整记录、当前 revision，并限制序列化结果大小。不启用自动提示注入或原生 provider 替换。
 
+原生 [`personal-agent routing inspect`](docs/38-routing-readiness-inspection-zh.md) 命令检查已保存本地 delegation 声明，不输出路由标识符或密钥。它提示继承/fallback/effort 的限制，不认证实际 session 路由，不调用模型或切换 backend。
+
 [持久化进度指南](docs/37-durable-memory-progress-zh.md)新增纯元数据记忆变更分页和可跨重启保留的内部消费者游标。v1/v2→v3 迁移保留原始记录回执，不宣称支持原生压缩 checkpoint。
 
 ## 开发验证

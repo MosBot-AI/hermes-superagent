@@ -183,7 +183,7 @@ E6.1–E6.7 保留适用的 E1.1/E3/E4 远程/手机依赖。E6.8/E6.9 是下述
 
 ### E9. 设计并验证 Worker 路由插件（P1，M0–M3）
 
-详细设计：[Worker 模型与思考强度路由插件](11-worker-model-routing-zh.md)。复用 Hermes delegation backend，按任务在用户配置且允许的 provider/model/effort 集合中选择，不改变主 agent 模型，不强制部署网关。E9.1 已进入 In progress，具备部分原生契约证据与[离线约束样例前置切片](35-offline-worker-routing-zh.md)。E9.2–E9.6 的运行工作仍为 Backlog；未启用在线 shadow 或自动 backend。
+详细设计：[Worker 模型与思考强度路由插件](11-worker-model-routing-zh.md)。复用 Hermes delegation backend，按任务在用户配置且允许的 provider/model/effort 集合中选择，不改变主 agent 模型，不强制部署网关。E9.1 已进入 In progress，具备部分原生契约证据与[离线约束样例前置切片](35-offline-worker-routing-zh.md)。[已保存配置 CLI 诊断](38-routing-readiness-inspection-zh.md)新增不输出原始标识符的原生检查，不认证实际 route。E9.2–E9.6 的运行工作仍为 Backlog；未启用在线 shadow 或自动 backend。
 
 | ID | 英文工作包标题 | 主里程碑 | 交付与依赖 |
 |---|---|---|---|

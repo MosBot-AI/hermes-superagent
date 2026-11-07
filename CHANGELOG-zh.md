@@ -8,6 +8,8 @@
 
 ### 新增
 
+- 新增原生 `personal-agent routing inspect`：绑定 profile、不输出原始标识符的已保存配置诊断，明确实际路由未知，拒绝非文件 backend/managed worker，并检查卸载状态。不启用 backend、不解析凭据、不调用模型、不修改配置。
+
 - 新增纯元数据本地记忆变更分页及持久化内部消费者游标，支持 CAS、精确回执重放和配额限制。原子 schema v1/v2→v3 迁移保留权威记录与回执。不新增模型操作、后台 worker、原生 provider 或压缩 checkpoint 保证。
 
 - 新增离线 Worker 路由样例验证器及部分固定版本原生契约：严格候选约束、精确 pin、基线检查和最小化建议报告。没有在线 backend、provider 调用、自动切换或预算保障。

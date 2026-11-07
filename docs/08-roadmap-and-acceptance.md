@@ -181,7 +181,7 @@ For enabled memory, extend E8.1 with redacted source coverage, lag, tokens/costs
 
 ### E9. Design and Validate the Worker Routing Plugin (P1, M0–M3)
 
-Detailed design: [Worker Model and Reasoning-Effort Routing Plugin](11-worker-model-routing.md). Reuse the Hermes delegation backend to choose per task from the provider/model/effort set configured and permitted by the user, without changing the main agent model or requiring a gateway deployment. E9.1 is in progress with partial native contract evidence and an [offline constraint fixture precursor](35-offline-worker-routing.md). E9.2–E9.6 runtime work remains Backlog; no live shadow or automatic backend is enabled.
+Detailed design: [Worker Model and Reasoning-Effort Routing Plugin](11-worker-model-routing.md). Reuse the Hermes delegation backend to choose per task from the provider/model/effort set configured and permitted by the user, without changing the main agent model or requiring a gateway deployment. E9.1 is in progress with partial native contract evidence and an [offline constraint fixture precursor](35-offline-worker-routing.md). The [saved-config CLI inspection](38-routing-readiness-inspection.md) adds identifier-free native diagnostics without effective-route qualification. E9.2–E9.6 runtime work remains Backlog; no live shadow or automatic backend is enabled.
 
 | ID | English work package title | Primary milestone | Deliverable and dependencies |
 |---|---|---|---|
