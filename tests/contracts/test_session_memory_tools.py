@@ -477,6 +477,18 @@ def test_disable_config_clears_activation_before_storage(host, read_args):
     "args,write",
     [
         ({"action": "export"}, False),
+        ({"action": "changes"}, False),
+        ({"action": "consumer_get", "consumer_id": "projection"}, False),
+        (
+            {
+                "action": "consumer_advance",
+                "consumer_id": "projection",
+                "through_sequence": 0,
+                "expected_revision": 0,
+                "request_id": "progress",
+            },
+            True,
+        ),
         ({"action": "get", "record_id": "synthetic"}, False),
         ({"action": "list", "owner": "synthetic"}, False),
         ({"action": "list", "limit": 51}, False),

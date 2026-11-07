@@ -60,6 +60,9 @@ def test_local_memory_status_is_explicit_without_provider_or_model_claims():
     default = build_status()
     assert not default["local_memory"]["enabled"]
     assert default["local_memory"]["bounded_literal_recall_implemented"] is True
+    assert default["local_memory"]["metadata_change_feed_implemented"] is True
+    assert default["local_memory"]["durable_consumer_cursors_implemented"] is True
+    assert default["local_memory"]["native_compression_checkpoint"] is False
     result = build_status(mode="local_tasks", local_conversation=True, local_memory=True)
     assert result["local_memory"]["configured"] is True
     for capability in (

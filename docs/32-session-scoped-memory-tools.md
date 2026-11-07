@@ -79,3 +79,5 @@ Tests use synthetic records and temporary profiles, real pinned slash/SessionAut
 Real natural-language acceptance still requires an eligible session, an explicitly selected provider/model and safe credential configuration if needed. No API Key, credential save, paid request or production deployment is implied by these tests. Verify “remember → query → correct → forget → denied after disable” with synthetic data before real personal records. This advances local E2.6/E2.7; E0.9's complete native-provider matrix and E2.8 automatic lifecycle integration remain separate gates.
 
 [36](36-bounded-memory-recall.md) adds multi-keyword literal ranking, whole-record budgets and current-snapshot rules for `recall`; it retains separate memory activation and does not enable automatic recall.
+
+Storage follow-on: [37](37-durable-memory-progress.md) advances current stores from v1/v2 to v3 with atomic consumer-progress tables. The v1→v2 provenance migration above remains part of that transaction; earlier builds reject v3. No new model actions or native checkpoint guarantee are added.

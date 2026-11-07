@@ -49,6 +49,12 @@ def validate_request(operation: str, payload: dict) -> dict:
         "search": ({"query"}, {"limit", "after"}),
         "recall": ({"queries"}, {"limit", "max_chars"}),
         "export": (set(), {"limit", "after"}),
+        "changes": (set(), {"limit", "after_sequence", "through_sequence"}),
+        "consumer_get": ({"consumer_id"}, set()),
+        "consumer_advance": (
+            {"consumer_id", "through_sequence", "expected_revision", "request_id"},
+            set(),
+        ),
     }
     if not isinstance(operation, str) or operation not in fields or not isinstance(payload, dict):
         raise MemoryError("invalid_request")
@@ -75,7 +81,8 @@ def validate_request(operation: str, payload: dict) -> dict:
             raise MemoryError("invalid_request")
     if "expected_revision" in result:
         value = result["expected_revision"]
-        if type(value) is not int or not 1 <= value < 2**63 - 1:
+        minimum = 0 if operation == "consumer_advance" else 1
+        if type(value) is not int or not minimum <= value < 2**63 - 1:
             raise MemoryError("invalid_request")
     if operation in {"list", "search", "export"}:
         result = {"limit": 20, "after": None, **result}
@@ -94,6 +101,21 @@ def validate_request(operation: str, payload: dict) -> dict:
         if type(result["limit"]) is not int or not 1 <= result["limit"] <= 20:
             raise MemoryError("invalid_request")
         if type(result["max_chars"]) is not int or not 1024 <= result["max_chars"] <= 12000:
+            raise MemoryError("invalid_request")
+    if operation == "changes":
+        result = {"limit": 20, "after_sequence": 0, "through_sequence": None, **result}
+        if type(result["limit"]) is not int or not 1 <= result["limit"] <= 50:
+            raise MemoryError("invalid_request")
+    for key in ("after_sequence", "through_sequence"):
+        if key in result:
+            value = result[key]
+            if key == "through_sequence" and value is None and operation == "changes":
+                continue
+            if type(value) is not int or not 0 <= value < 2**63 - 1:
+                raise MemoryError("invalid_request")
+    if "consumer_id" in result:
+        value = result["consumer_id"]
+        if type(value) is not str or re.fullmatch(r"[a-z][a-z0-9_.-]{0,63}", value) is None:
             raise MemoryError("invalid_request")
     return result
 
@@ -127,6 +149,6 @@ class MemoryService:
         request = validate_request(operation, payload)
         self.descriptor.check_request(operation, request)
         result = self.backend.execute(operation, request)
-        if operation in {"remember", "correct", "forget"}:
+        if operation in {"remember", "correct", "forget", "consumer_advance"}:
             return result
         return {"data": result, "replayed": False}

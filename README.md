@@ -44,13 +44,15 @@ The [pluggable memory design](docs/30-pluggable-memory-contracts.md) specifies a
 
 The first [explicit local memory slice](docs/31-explicit-local-memory.md) now supports `/personal-memory remember`, `search`, `show`, `correct`, `forget` and bounded `export` in an existing trusted native session after separate `local_memory: true` opt-in. It uses a dedicated SQLite store behind a small internal backend interface, preserves native providers, and performs no automatic recall/extraction. Commands/results may enter normal host history; forgetting does not erase that history or backups.
 
-[Session-scoped memory tools](docs/32-session-scoped-memory-tools.md) now add bounded model remember/query/correct/forget through a separate `memory_model_tools: true` option and `/personal-memory-tools enable-read` or `enable-write` activation. Task-tool activation does not grant memory access. Model edits are labeled `activated_session_model`, not verified human instructions; native providers remain unchanged. Existing memory DBs upgrade atomically to schema v2. Real-provider natural-language acceptance remains pending.
+[Session-scoped memory tools](docs/32-session-scoped-memory-tools.md) now add bounded model remember/query/correct/forget through a separate `memory_model_tools: true` option and `/personal-memory-tools enable-read` or `enable-write` activation. Task-tool activation does not grant memory access. Model edits are labeled `activated_session_model`, not verified human instructions; native providers remain unchanged. Existing memory DBs now upgrade atomically to schema v3; see the durable progress guide below. Real-provider natural-language acceptance remains pending.
 
 [Local task operation history](docs/34-local-task-history.md) adds revision-ordered metadata through the CLI, `/personal-tasks history` and activated task read tools. It survives restart and exposes no old task text. It does not verify authors, execute work or reconcile native workers.
 
 The [offline worker-routing precursor](docs/35-offline-worker-routing.md) checks synthetic candidate constraints and qualified baselines, with partial pinned native contracts. It makes no provider calls, registers no routing backend and does not enable live shadow or automatic switching.
 
 The [bounded recall guide](docs/36-bounded-memory-recall.md) adds explicit multi-keyword literal retrieval through native memory commands and activated read tools, with complete records, current revisions and a serialized-result budget. No automatic prompt injection or native provider replacement is enabled.
+
+The [durable progress guide](docs/37-durable-memory-progress.md) adds metadata-only memory change pages and internal restart-safe consumer cursors. It preserves existing record receipts during v1/v2→v3 migration and does not claim native compression checkpoint support.
 
 ## Development checks
 

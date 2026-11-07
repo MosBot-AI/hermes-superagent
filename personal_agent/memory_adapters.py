@@ -22,6 +22,8 @@ _CAPABILITIES = frozenset(
         "literal_search",
         "bounded_record_export",
         "bounded_recall",
+        "metadata_changes",
+        "durable_consumer_cursor",
     }
 )
 _LIMITS = {
@@ -57,6 +59,16 @@ _OPERATION_CAPABILITIES = {
     "search": {"explicit_records", "literal_search"},
     "recall": {"explicit_records", "literal_search", "bounded_recall"},
     "export": {"explicit_records", "bounded_record_export"},
+    "changes": {"explicit_records", "metadata_changes"},
+    "consumer_get": {"explicit_records", "durable_consumer_cursor"},
+    "consumer_advance": {
+        "explicit_records",
+        "metadata_changes",
+        "durable_consumer_cursor",
+        "durable_write",
+        "cas",
+        "idempotency",
+    },
 }
 _RESERVED_IDS = frozenset({"local_sqlite", "builtin", "built-in", "default", "none"})
 

@@ -8,6 +8,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Added metadata-only local memory change pages and durable internal consumer cursors with CAS, exact receipt replay and quota limits. Atomic schema v1/v2→v3 migration preserves canonical records and receipts. No new model actions, background worker, native provider or compression-checkpoint guarantee.
+
 - Added an offline worker-routing fixture evaluator and partial pinned native contracts: strict candidate constraints, exact pins, baseline qualification and minimized advisory reports. No live backend, provider calls, automatic switching or budget guarantees.
 
 - Added explicit bounded memory recall through native commands and separately activated read tools: multi-keyword literal ranking, whole-record JSON budgets and current-record snapshots. Includes capability negotiation, correction/forgetting and fresh-process contracts; no automatic prompt injection, provider replacement or new storage schema.

@@ -2,7 +2,7 @@
 
 English | [简体中文](31-explicit-local-memory-zh.md)
 
-Follow-on: [32](32-session-scoped-memory-tools.md) adds separately configured and activated model access, without changing the direct-command consent boundary below. Storage now uses schema v2 and distinguishes direct operator edits from activated model edits; source is the latest editing route. The original direct-command feature alone adds no model access.
+Follow-on: [32](32-session-scoped-memory-tools.md) adds separately configured and activated model access, without changing the direct-command consent boundary below. Storage now uses schema v3, with the durable progress follow-on in [37](37-durable-memory-progress.md), and distinguishes direct operator edits from activated model edits; source is the latest editing route. The original direct-command feature alone adds no model access.
 
 Status: an implemented, explicitly enabled local precursor of E2.6/E2.7, not completion of the [full memory design](30-pluggable-memory-contracts.md). Users can save, inspect, correct and forget short records inside an existing native Hermes session. This slice adds no memory model tool, automatic recall/extraction, native MemoryProvider bridge, package loader, Markdown projection, vector service or remote account.
 

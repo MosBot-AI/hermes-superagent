@@ -262,7 +262,10 @@ def register(ctx: PluginContext) -> None:
             "personal-memory",
             handler=memory.command,
             description="Explicitly save, inspect, correct or forget local operator records.",
-            args_hint="remember | list | search | show | correct | forget | export | help",
+            args_hint=(
+                "remember | list | search | recall | changes | show | "
+                "correct | forget | export | help"
+            ),
         )
 
     if memory_models_enabled:

@@ -143,6 +143,23 @@ def test_describe_exception_is_redacted():
         ("recall", {"queries": ["test"]}, "bounded_recall"),
         ("recall", {"queries": ["test"]}, "literal_search"),
         ("export", {}, "bounded_record_export"),
+        ("changes", {}, "metadata_changes"),
+        ("consumer_get", {"consumer_id": "x"}, "durable_consumer_cursor"),
+        (
+            "consumer_advance",
+            {"consumer_id": "x", "expected_revision": 0, "through_sequence": 0, "request_id": "x"},
+            "durable_consumer_cursor",
+        ),
+        (
+            "consumer_advance",
+            {"consumer_id": "x", "expected_revision": 0, "through_sequence": 0, "request_id": "x"},
+            "cas",
+        ),
+        (
+            "consumer_advance",
+            {"consumer_id": "x", "expected_revision": 0, "through_sequence": 0, "request_id": "x"},
+            "idempotency",
+        ),
     ],
 )
 def test_missing_capabilities_rejected_before_call(operation, payload, capability):
@@ -169,6 +186,7 @@ def test_missing_capabilities_rejected_before_call(operation, payload, capabilit
         ("recall", {"queries": ["a"], "limit": 3}, "max_page_records", 2),
         ("list", {}, "max_page_records", 10),
         ("export", {"limit": 3}, "max_page_records", 2),
+        ("changes", {"limit": 3}, "max_page_records", 2),
     ],
 )
 def test_smaller_declared_limits_not_silently_overridden(operation, payload, limit, ceiling):

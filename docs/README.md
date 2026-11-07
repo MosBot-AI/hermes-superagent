@@ -48,7 +48,8 @@ Extend Hermes into a long-lived personal agent for one user: one main agent unde
 34. [Local task operation history](34-local-task-history.md): persistent revision-ordered metadata, bounded pages and existing native read gates.
 35. [Offline worker routing](35-offline-worker-routing.md): strict synthetic candidate filtering, baseline gating and partial native routing contracts; no live backend.
 36. [Bounded explicit memory recall](36-bounded-memory-recall.md): multi-keyword literal ranking, whole-record JSON budgets, current revisions and one read snapshot; no automatic prompt injection.
-37. [Architecture decision records](adr/README.md): reasons for the constraints.
+37. [Durable local memory progress](37-durable-memory-progress.md): metadata change pages, internal CAS/idempotent consumer cursors and atomic schema-v3 migration; not native compression checkpointing.
+38. [Architecture decision records](adr/README.md): reasons for the constraints.
 
 ## Keep three kinds of statements separate
 

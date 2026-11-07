@@ -22,6 +22,7 @@ HELP = (
     'remember "Text" [--topic LABEL] [--request-id KEY]; list [--limit N --after ID]; '
     'search "Text" [--limit N --after ID]; show ID; '
     'recall "Keyword" ["Other keyword" ...] [--limit N --max-chars N]; '
+    "changes [--after-sequence N --through-sequence N --limit N]; "
     'correct ID --text "Replacement" [--topic LABEL] --expected-revision N '
     "[--request-id KEY]; forget ID --expected-revision N [--request-id KEY]; "
     "export [--limit N --after ID]. Use POSIX quotes. "
@@ -80,6 +81,10 @@ def parse_command(raw_args: str) -> tuple[str, dict]:
     recall.add_argument("queries", nargs="+")
     recall.add_argument("--limit", type=int, default=6)
     recall.add_argument("--max-chars", type=int, default=6000)
+    changes = commands.add_parser("changes")
+    changes.add_argument("--after-sequence", type=int, default=0)
+    changes.add_argument("--through-sequence", type=int, default=None)
+    changes.add_argument("--limit", type=int, default=20)
     for operation in ("correct", "forget"):
         writer = commands.add_parser(operation)
         writer.add_argument("record_id")

@@ -394,3 +394,29 @@ def test_native_recall_command_budget_and_provider_preservation(host):
     assert command(host, 'recall "summary" "Chinese"')["data"]["items"] == []
     assert (host.home / "config.yaml").read_bytes() == before
     assert not host.manager._plugins[PLUGIN_ID].hooks_registered
+
+
+def test_native_metadata_changes_are_bounded_and_respect_existing_admission(host):
+    from hermes_state_runtime import RuntimeStoreError
+
+    before = (host.home / "config.yaml").read_bytes()
+    assert command(host, "changes")["data"]["items"] == []
+    rid = command(host, 'remember "private text" --request-id r')["data"]["record_id"]
+    command(host, f'correct {rid} --text "private changed" --expected-revision 1 --request-id c')
+    first = command(host, "changes --limit 1")["data"]
+    assert first["has_more"] and first["through_sequence"] == 2
+    command(host, f"forget {rid} --expected-revision 2 --request-id f")
+    last = command(host, "changes --after-sequence 1 --through-sequence 2")["data"]
+    assert last["items"] == [
+        {"sequence": 2, "record_id": rid, "revision": 2, "operation": "correct"}
+    ]
+    assert last["current_watermark"] == 3 and not last["has_more"]
+    all_changes = command(host, "changes")["data"]
+    assert all_changes["items"][-1]["operation"] == "forget"
+    assert "private" not in json.dumps(all_changes)
+    assert command(host, "changes --through-sequence 4")["error"]["code"] == "future_watermark"
+    assert command(host, "consumer_get projection")["error"]["code"] == "invalid_request"
+    host.connection.actor = replace(host.connection.actor, capabilities=frozenset())
+    with pytest.raises(RuntimeStoreError):
+        command(host, "changes")
+    assert (host.home / "config.yaml").read_bytes() == before

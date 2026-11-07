@@ -110,6 +110,9 @@ def build_status(
         "local_memory": {
             "explicit_records_implemented": True,
             "bounded_literal_recall_implemented": True,
+            "metadata_change_feed_implemented": True,
+            "durable_consumer_cursors_implemented": True,
+            "native_compression_checkpoint": False,
             "configured": local_memory,
             "enabled": local_memory and local_tasks,
             "surface": "trusted_native_local_command",

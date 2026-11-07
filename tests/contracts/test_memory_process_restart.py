@@ -50,6 +50,19 @@ def _child_main():
             for step in json.load(sys.stdin):
                 if "activate" in step:
                     result = session.activate(host, step["activate"])
+                elif "command" in step:
+                    result = memory.command(host, step["command"])
+                elif "internal_progress" in step:
+                    # Test-only trusted local consumer: not a registered tool,
+                    # native hook or permission inherited from model activation.
+                    import importlib
+
+                    prefix = manager._plugins[PLUGIN_ID].module.__name__ + ".personal_agent."
+                    storage = importlib.import_module(prefix + "memory_storage")
+                    service = importlib.import_module(prefix + "memory_backend")
+                    operation, payload = step["internal_progress"]
+                    with storage.open_memory_backend(host.home, host.ref.session_id) as backend:
+                        result = service.MemoryService(backend).execute(operation, payload)
                 else:
                     with session.turn(host):
                         result = session.call(host, step["tool"], write=step.get("write", False))
@@ -213,6 +226,80 @@ def test_chinese_correction_and_terminal_forget_survive_fresh_processes(tmp_path
     for text in (original, corrected, "早餐", "饮食"):
         assert text not in serialized
     assert (home / "config.yaml").read_bytes() == original_config
+    assert not (home / "plugin-data" / PLUGIN_ID / "tasks.sqlite3").exists()
+
+
+def test_local_consumer_cursor_and_metadata_feed_survive_four_processes(tmp_path):
+    home = tmp_path / "profile"
+    install(home)
+    memory.configure(home, memory_model_tools=True)
+    (tmp_path / "bundled").mkdir()
+    before = (home / "config.yaml").read_bytes()
+
+    def progress(operation, **payload):
+        return {"internal_progress": [operation, payload]}
+
+    def advance(sequence, revision, key):
+        return progress(
+            "consumer_advance",
+            consumer_id="projection",
+            through_sequence=sequence,
+            expected_revision=revision,
+            request_id=key,
+        )
+
+    get = progress("consumer_get", consumer_id="projection")
+    first = restart(
+        home,
+        [
+            {"command": 'remember "中文私密原文" --topic "个人" --request-id save'},
+            {"command": "changes --limit 1"},
+            advance(1, 0, "one"),
+            get,
+        ],
+    )
+    rid = first[0]["data"]["record_id"]
+    assert first[1]["data"]["items"][0]["record_id"] == rid
+    assert first[3]["data"]["through_sequence"] == 1
+    second = restart(
+        home,
+        [
+            get,
+            {
+                "command": f'correct {rid} --text "中文私密更正" '
+                "--expected-revision 1 --request-id edit"
+            },
+            {"command": "changes --after-sequence 1"},
+            advance(2, 1, "two"),
+            {"activate": "enable-write"},
+            tool("consumer_get", consumer_id="projection"),
+        ],
+    )
+    assert second[0]["data"]["through_sequence"] == 1
+    assert second[2]["data"]["items"] == [
+        {"sequence": 2, "record_id": rid, "revision": 2, "operation": "correct"}
+    ]
+    assert second[-1]["error"]["code"] == "invalid_request"
+    third = restart(
+        home,
+        [
+            {"command": f"forget {rid} --expected-revision 2 --request-id forget"},
+            {"command": "changes --after-sequence 2"},
+            advance(3, 2, "three"),
+        ],
+    )
+    assert third[1]["data"]["items"][0]["operation"] == "forget"
+    final = restart(home, [advance(1, 0, "one"), get, {"command": "changes"}, {"command": "list"}])
+    assert final[0] == {"data": first[2]["data"], "replayed": True}
+    assert final[1]["data"]["through_sequence"] == final[1]["data"]["revision"] == 3
+    assert [event["operation"] for event in final[2]["data"]["items"]] == [
+        "remember",
+        "correct",
+        "forget",
+    ]
+    assert final[3]["data"]["items"] == []
+    assert "私密" not in json.dumps(final, ensure_ascii=False)
+    assert (home / "config.yaml").read_bytes() == before
     assert not (home / "plugin-data" / PLUGIN_ID / "tasks.sqlite3").exists()
 
 

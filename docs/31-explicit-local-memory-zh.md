@@ -2,7 +2,7 @@
 
 [English](31-explicit-local-memory.md) | 简体中文
 
-后续：[32](32-session-scoped-memory-tools-zh.md)增加需独立配置及激活的模型访问，不改变下述直接命令的同意边界。存储现为schema v2，区分直接操作员与已激活模型的编辑；source表示最近编辑入口。原来的直接命令功能本身不增加模型访问。
+后续：[32](32-session-scoped-memory-tools-zh.md)增加需独立配置及激活的模型访问，不改变下述直接命令的同意边界。存储现为 schema v3，详见[37](37-durable-memory-progress-zh.md)的持久化进度扩展；区分直接操作员与已激活模型的编辑；source表示最近编辑入口。原来的直接命令功能本身不增加模型访问。
 
 状态：已实现、需显式开启的 E2.6/E2.7 本地先导切片，不代表[完整记忆方案](30-pluggable-memory-contracts-zh.md)完成。用户可在已有 Hermes 原生会话中保存、查看、更正和遗忘短记录。本切片不增加记忆模型工具、自动召回/提取、原生 MemoryProvider 桥接、包加载器、Markdown 投影、向量服务或远程账号。
 

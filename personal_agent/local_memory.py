@@ -12,9 +12,10 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from .memory_backend import MemoryError, _text, validate_request
+from .memory_progress import PROGRESS_SCHEMA, advance_consumer, get_changes, get_consumer
 
 _APPLICATION_ID = 0x50414D45
-_SCHEMA_VERSION = 2
+_SCHEMA_VERSION = 3
 _SCHEMA_V1 = {
     "namespace": "CREATE TABLE namespace (id TEXT PRIMARY KEY NOT NULL)",
     "records": """CREATE TABLE records (
@@ -37,13 +38,14 @@ _SCHEMA_V1 = {
 # Source describes the latest editing route, not verified human intent, facts,
 # immutable authorship, or per-message user consent. Only trusted adapters bind it.
 _SOURCE_KINDS = ("explicit_local_operator", "activated_session_model")
-_SCHEMA = {
+_SCHEMA_V2 = {
     **_SCHEMA_V1,
     "records": _SCHEMA_V1["records"].replace(
         "source = 'explicit_local_operator'",
         "source IN ('explicit_local_operator','activated_session_model')",
     ),
 }
+_SCHEMA = {**_SCHEMA_V2, **PROGRESS_SCHEMA}
 
 
 _COLUMNS = (
@@ -92,6 +94,8 @@ class LocalMemoryBackend:
                 "literal_search",
                 "bounded_record_export",
                 "bounded_recall",
+                "metadata_changes",
+                "durable_consumer_cursor",
             ],
             "unsupported": [
                 "fts",
@@ -101,7 +105,6 @@ class LocalMemoryBackend:
                 "native_lifecycle",
                 "checkpoint",
                 "import_snapshot",
-                "changes",
             ],
             "max_content_chars": 2048,
             "max_topic_chars": 128,
@@ -181,6 +184,10 @@ class LocalMemoryBackend:
                 raise MemoryError("namespace_mismatch")
             if version == 1:
                 self._upgrade_v1(connection)
+            if version in (1, 2):
+                for sql in PROGRESS_SCHEMA.values():
+                    connection.execute(sql)
+                connection.execute(f"PRAGMA user_version={_SCHEMA_VERSION}")
             if connection.execute("SELECT count(*) FROM records").fetchone()[0] > 1000:
                 raise MemoryError("record_limit")
             connection.execute("COMMIT")
@@ -195,7 +202,7 @@ class LocalMemoryBackend:
 
     @staticmethod
     def _valid_schema(version, rows):
-        expected = {1: _SCHEMA_V1, 2: _SCHEMA}.get(version)
+        expected = {1: _SCHEMA_V1, 2: _SCHEMA_V2, 3: _SCHEMA}.get(version)
         return expected is not None and dict(rows) == expected and len(rows) == len(expected)
 
     @staticmethod
@@ -211,7 +218,7 @@ class LocalMemoryBackend:
         connection.execute("DROP TABLE records_v1")
         if sequence is not None:
             connection.execute("UPDATE sqlite_sequence SET seq=? WHERE name='records'", sequence)
-        connection.execute(f"PRAGMA user_version={_SCHEMA_VERSION}")
+        connection.execute("PRAGMA user_version=2")
 
     @staticmethod
     def _rollback(connection):
@@ -235,11 +242,21 @@ class LocalMemoryBackend:
         began = False
         try:
             conn.execute(
-                "BEGIN IMMEDIATE" if operation in {"remember", "correct", "forget"} else "BEGIN"
+                "BEGIN IMMEDIATE"
+                if operation in {"remember", "correct", "forget", "consumer_advance"}
+                else "BEGIN"
             )
             began = True
             if operation in {"remember", "correct", "forget"}:
                 result = self._mutate(conn, operation, request)
+            elif operation == "changes":
+                result = get_changes(conn, request)
+            elif operation == "consumer_get":
+                result = get_consumer(conn, request["consumer_id"])
+            elif operation == "consumer_advance":
+                if self._source_kind != "explicit_local_operator":
+                    raise MemoryError("consumer_scope_required")
+                result = advance_consumer(conn, request)
             elif operation == "get":
                 result = self._get(conn, request["record_id"])
             elif operation == "recall":
@@ -444,8 +461,8 @@ class LocalMemoryBackend:
         )
         return {"data": receipt, "replayed": False}
 
-    def changes(self, *args, **kwargs):
-        raise MemoryError("unsupported")
+    def changes(self, **request):
+        return self.execute("changes", request)
 
     def checkpoint(self, *args, **kwargs):
         raise MemoryError("unsupported")
