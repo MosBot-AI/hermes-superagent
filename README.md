@@ -100,6 +100,8 @@ The checker forwards both source roots through pytest configuration after the ho
 
 ## Try it in an isolated Hermes profile
 
+The latest official full-repository installation attempt stopped at the unchanged security scanner (CAUTION, 50 findings); the plugin was not installed or enabled. Do not override that refusal. The [offline runtime distribution builder](docs/runtime-distribution.md) produces a byte-preserving package with source provenance, but does not scan, install or authorize another attempt. The instructions below describe a future separately reviewed installation, not a passed acceptance test.
+
 This is not a production installation recommendation. Use the pinned, tested Hermes checkout and a temporary profile. Consult that version's `hermes plugins install --help` and install a reviewed **full 40-character commit SHA**. `--ref` does not accept branch names, and a GitHub tree URL is not a replacement for the pin. Explicitly enable the plugin afterward. Its ID is `hermes-personal-agent`.
 
 Current runtime contract tests cover the default `plugins.isolation: in_process`. Under `plugins.isolation: host`, Hermes skips `ctx.register_cli_command`, so this CLI is unavailable. Full isolated-host tool execution has not been tested. Do not disable an existing isolation setting just to expose this CLI.

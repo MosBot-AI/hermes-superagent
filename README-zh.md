@@ -100,6 +100,8 @@ cd ../hermes-superagent
 
 ## 在隔离 Hermes 中试用
 
+最近一次官方完整仓库安装被未修改的安全扫描器阻断（CAUTION，50 条发现），插件未安装或启用。不要覆盖该拒绝。[离线运行时分发构建器](docs/runtime-distribution-zh.md)生成保留原始字节及来源证明的包，但不会扫描、安装或授权再次尝试。下文是后续单独审阅后的安装说明，不代表验收通过。
+
 这不是生产安装建议。使用固定、已测试的 Hermes checkout 和临时 profile，按该版本 `hermes plugins install --help` 安装经审阅的**完整 40 字符 commit SHA**；`--ref` 不接受分支名，GitHub tree 分支 URL 也不能替代 pin。然后显式启用插件，插件标识为 `hermes-personal-agent`。
 
 当前实际合同测试覆盖默认 `plugins.isolation: in_process`。在 `plugins.isolation: host` 下，宿主会跳过 `ctx.register_cli_command`，因此这里的 CLI 不可用；隔离 host 模式的完整工具调用尚未运行验证，不要为了显示 CLI 而关闭已配置的隔离。
