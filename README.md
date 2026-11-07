@@ -123,4 +123,4 @@ To try the local inbox, explicitly change only this plugin’s mode to `local_ta
 
 [MIT](LICENSE). The review-only voice and command-context experiments include limited upstream-derived patches and their licenses; the Hermes host itself is not vendored or modified by plugin installation. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for attribution and licensing.
 
-The [task-to-worker proposal](docs/48-task-worker-proposal.md) adds a review-only host patch and concrete experimental consumer for an explicitly authorized one-task planning draft. It does not enable production dispatch, tool execution, persistent execution recovery or real-model acceptance.
+The [task-to-worker proposal](docs/48-task-worker-proposal.md) adds a review-only host patch and concrete experimental consumer for an explicitly authorized one-task planning draft. The isolated proposal now includes a dedicated no-redirect client and conservative durable draft/retry receipts. It does not enable production dispatch, tool execution, automatic recovery of uncertain provider outcomes or real-model acceptance.

@@ -2,9 +2,9 @@
   "schema_version": 1,
   "status": "Review-only host proposal and experimental task consumer; not enabled",
   "base": "90d6b98fd86d20981ee06ddd5b7d93e4320f26a4",
-  "staged_tree": "17d2cc2e5c82f70f32ea3b35082a8d74939e988a",
+  "staged_tree": "068404bfe98d6d00e28fce786efdd50f4e1c7ba2",
   "patch_file": "text-worker-prototype.patch",
-  "patch_sha256": "e6a0e0a78450a2fb5385e5943e60541f6bd6fd04f71717378a40e39c709cfa5f",
+  "patch_sha256": "35ef9ac9089437fc4e82ac5e3e52fe7150f0a5bb421e02b396c840855a07eec2",
   "changed_files": 5,
   "patch_files": [
     "agent/subagent_lifecycle.py",
@@ -14,8 +14,9 @@
     "tests/agent/test_text_subagent.py"
   ],
   "source_hashes": {
-    "consumer.py": "b5851ef4edc807b43a18773c37570579fdd169955db5764b45468bcf5a7ca388",
-    "test_task_worker.py": "047ea55bbc85734316ac2523d6c7e2f37b056e742294548227a0e1d02f221015"
+    "consumer.py": "de315d6e1cf29344fe8c58a691bc590789108fe4d88866d2664c643689088964",
+    "worker_ledger.py": "ba72af06bba4343d64af4babe7ac14c7cbd01369469ba7da5a1eef39d850f754",
+    "test_task_worker.py": "09ec9ec8dff11810930d3f682335dcd82c031888e0e49811d35b310b754cbaf9"
   },
   "artifact_files": [
     "LICENSE.hermes-agent",
@@ -25,7 +26,8 @@
     "manifest.json",
     "run_tests.py",
     "test_task_worker.py",
-    "text-worker-prototype.patch"
+    "text-worker-prototype.patch",
+    "worker_ledger.py"
   ],
   "portable_test_files": [
     "tests/agent/test_text_subagent.py",
@@ -33,9 +35,9 @@
     "tests/hermes_cli/test_plugins_middleware_chain.py"
   ],
   "selected_suite": {
-    "host_passed": 90,
-    "consumer_passed": 18,
-    "passed": 108,
+    "host_passed": 115,
+    "consumer_passed": 41,
+    "passed": 156,
     "failed": 0,
     "skipped": 0,
     "retries": 0,
@@ -62,14 +64,18 @@
   "limits": [
     "Only trusted in-process text planning; not a Python/OS sandbox or tool-using worker",
     "No production import, upstream adoption, installed-host modification or live model acceptance",
-    "Default OpenAI SDK follows redirects and is refused; dedicated supported no-redirect client remains required",
-    "SDK provider adapters, dynamic auth, query overrides and HTTP auth/event hooks are unsupported",
-    "Custom HTTP transports and same-process plugins remain trusted code, not an adversarial sandbox",
+    "Dedicated no-redirect/no-env HTTP client is implemented only in the isolated host proposal",
+    "SDK provider adapters, dynamic auth and query overrides are unsupported; parent transport/auth/hooks are not inherited",
+    "Same-process plugins and host code remain trusted, not an adversarial sandbox",
     "Timeout/cancel discards late results but cannot guarantee request termination or undo billing",
     "Provider model mismatch is detected after the response, not a guarantee of the actual served model",
-    "Consumer grants and results are process-local, no durable restart-safe execution ledger or automatic retry",
+    "Durable local claims prevent automatic resubmission; unobserved results remain unknown and pending authorization is not adopted",
+    "Local receipts are not a provider transaction or exactly-once remote execution proof; no provider reconciliation or budget accounting",
+    "Ledger retains up to 64 records indefinitely, refuses at capacity, and has no cleanup/eviction operation",
     "Observed config revocation is terminal; unobserved config ABA is not revision-fenced",
-    "No task state mutation, full orchestration, Gateway end-to-end or automatic memory acceptance"
+    "Task revision checks, claim ledger and provider submission are separate operations; admitted snapshot may become stale",
+    "No task state mutation, full orchestration, Gateway end-to-end or automatic memory acceptance",
+    "Exact route fingerprints gate fresh live/cached draft returns; previously returned parent history is not retracted or isolated from later model switches"
   ],
   "clean_base_apply_check": true
 }

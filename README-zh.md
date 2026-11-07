@@ -123,4 +123,4 @@ plugins:
 
 [MIT](LICENSE)。仅供审阅的语音与命令上下文实验包含部分上游衍生补丁及其许可；未打包整个 Hermes 宿主，插件安装也不会修改它。出处与许可说明见 [THIRD_PARTY_NOTICES-zh.md](THIRD_PARTY_NOTICES-zh.md)。
 
-[任务到 worker 的提案](docs/48-task-worker-proposal-zh.md)新增仅供审阅的宿主补丁与具体实验消费者，为明确授权的单任务生成规划草稿。未启用生产派发、工具执行、持久执行恢复或真实模型验收。
+[任务到 worker 的提案](docs/48-task-worker-proposal-zh.md)新增仅供审阅的宿主补丁与具体实验消费者，为明确授权的单任务生成规划草稿。隔离提案现包含专用 no-redirect 客户端及保守的持久草稿/重试回执。未启用生产派发、工具执行、提供商结果不明的自动恢复或真实模型验收。

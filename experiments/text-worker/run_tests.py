@@ -15,7 +15,7 @@ import tempfile
 from pathlib import Path
 
 ARTIFACT = Path(__file__).resolve().parent
-PATCH_SHA256 = "e6a0e0a78450a2fb5385e5943e60541f6bd6fd04f71717378a40e39c709cfa5f"
+PATCH_SHA256 = "35ef9ac9089437fc4e82ac5e3e52fe7150f0a5bb421e02b396c840855a07eec2"
 BASE = "90d6b98fd86d20981ee06ddd5b7d93e4320f26a4"
 
 

@@ -40,6 +40,7 @@ def host(native, monkeypatch):  # noqa: F811
     (home / "config.yaml").write_text(json.dumps(config))
     plugin = home / "plugins" / PLUGIN_ID
     shutil.copy2(HERE / "consumer.py", plugin / "worker_consumer.py")
+    shutil.copy2(HERE / "worker_ledger.py", plugin / "worker_ledger.py")
     with (plugin / "__init__.py").open("a") as file:
         file.write(
             "\n    from .worker_consumer import register as register_experiment\n"
@@ -75,6 +76,19 @@ def host(native, monkeypatch):  # noqa: F811
 
     for name in ("connect", "connect_ex", "bind", "listen"):
         monkeypatch.setattr(socket.socket, name, deny_network)
+    host.child_clients = []
+
+    def fresh_client(timeout):
+        client = httpx.Client(
+            transport=httpx.MockTransport(reply),
+            trust_env=False,
+            follow_redirects=False,
+            timeout=timeout,
+        )
+        host.child_clients.append(client)
+        return client
+
+    monkeypatch.setattr("agent.text_subagent._new_http_client", fresh_client)
     client = OpenAI(
         api_key="synthetic-fixture-only",
         base_url=BASE_URL,
@@ -144,9 +158,20 @@ def allow(host):
 
 
 def wait(host):
+    from agent.subagent_lifecycle import bind_subagent_parent
+
     handle = next(iter(host.consumer.grants.values())).handle
     assert handle is not None
-    return host.consumer.service.wait(handle, timeout_seconds=5)
+    # Some callers just exited native_turn(). Lifecycle wait requires the active
+    # parent: UNKNOWN_HANDLE also reports completed=True and is NOT completion.
+    # Bind only the parent, preserving an existing turn rather than nesting one.
+    with bind_subagent_parent(host.parent):
+        terminal = host.consumer.service.wait(handle, timeout_seconds=5)
+        assert terminal.state.value != "UNKNOWN", terminal
+        assert terminal.completed and not terminal.timed_out, terminal
+        result = host.consumer.service.result(handle)
+        assert result.ready and result.terminal_state.value != "UNKNOWN", result
+        return terminal
 
 
 def test_native_task_grant_to_real_host_worker_and_draft_without_task_mutation(host):
@@ -166,6 +191,8 @@ def test_native_task_grant_to_real_host_worker_and_draft_without_task_mutation(h
         assert not result["data"]["stale"]
         assert invoke(host)["data"] == result["data"]
     assert len(host.requests) == 1
+    assert host.child_clients and all(client.is_closed for client in host.child_clients)
+    assert not host.parent.client.is_closed()
     wire = host.requests[0]
     assert wire["model"] == MODEL
     assert not wire.get("tools")
@@ -249,14 +276,14 @@ def test_changed_task_rejects_launch_and_late_changes_label_draft_stale(host):
     assert len(host.requests) == 1
 
 
-def test_host_route_refusal_consumes_grant_without_automatic_retry(host):
+def test_host_route_refusal_before_claim_sends_no_data(host):
     allow(host)
     host.parent.model = "unauthorized-model"
     with native_turn(host):
         assert invoke(host)["error"]["code"] == "worker_unavailable"
     host.parent.model = MODEL
     with native_turn(host):
-        assert invoke(host)["data"]["state"] == "launch_outcome_unknown"
+        assert invoke(host, action="result")["data"]["state"] == "authorized"
     assert host.requests == []
 
 
@@ -348,3 +375,383 @@ def test_completed_task_cannot_be_authorized(host):
         == "task_revision_or_state_changed"
     )
     assert host.requests == []
+
+
+def fresh_consumer(host):
+    old = host.consumer
+    return type(old)(service=old.service, bound_home=old.bound_home, read_config=old.read_config)
+
+
+def direct(host, consumer, action="launch", key="plan-1"):
+    with native_turn(host):
+        return json.loads(
+            consumer.run(
+                {"action": action, "request_id": key},
+                session_id=host.ref.session_id,
+                task_id="native-task",
+            )
+        )
+
+
+def current_fingerprint(host):
+    with native_turn(host):
+        return host.consumer._authorize_route(host.ref.session_id)
+
+
+def test_fresh_instance_cannot_adopt_live_grant_but_original_owner_can_launch(host):
+    allow(host)
+    other = fresh_consumer(host)
+    assert direct(host, other)["data"]["state"] == "authorization_owner_unavailable"
+    assert host.requests == []
+    # Reading through a competing owner did not revoke or steal a live grant.
+    assert direct(host, host.consumer)["status"] == "ok"
+    assert wait(host).completed
+    assert direct(host, host.consumer, "result")["data"]["ready"]
+    assert direct(host, other, "result")["data"]["draft"] == "Draft: clarify the first milestone."
+    assert len(host.requests) == 1
+
+
+def test_lost_launch_reply_tombstone_survives_fresh_instance(host, monkeypatch):
+    task = allow(host)
+    launch = host.consumer.service.launch_text
+
+    def lose(request):
+        handle = launch(request)
+        assert host.consumer.service.wait(handle, timeout_seconds=5).completed
+        raise RuntimeError("lost reply")
+
+    monkeypatch.setattr(host.consumer.service, "launch_text", lose)
+    assert direct(host, host.consumer)["status"] == "error"
+    other = fresh_consumer(host)
+    assert direct(host, other)["data"]["state"] == "launch_outcome_unknown"
+    assert (
+        consent(host, f"allow {task['id']} 1 plan-1")["data"]["state"] == "launch_outcome_unknown"
+    )
+    assert len(host.requests) == 1
+
+
+def test_observed_draft_survives_plugin_reload(host):
+    allow(host)
+    direct(host, host.consumer)
+    assert wait(host).completed
+    expected = direct(host, host.consumer, "result")["data"]
+    host.manager.discover_and_load(force=True)
+    host.consumer = host.manager._plugin_commands["personal-plan-worker"]["handler"].__self__
+    assert direct(host, host.consumer, "result")["data"] == expected
+    assert direct(host, host.consumer)["data"] == expected
+    assert len(host.requests) == 1
+
+
+def test_revocation_latches_even_if_ledger_temporarily_fails(host, monkeypatch):
+    allow(host)
+    config = json.loads((host.home / "config.yaml").read_text())
+    settings = config["plugins"]["entries"][PLUGIN_ID]["settings"]
+    settings["experimental_text_worker"] = False
+    (host.home / "config.yaml").write_text(json.dumps(config))
+    original = host.consumer.ledger.revoke_owned
+
+    def fail():
+        raise OSError("synthetic ledger unavailable")
+
+    monkeypatch.setattr(host.consumer.ledger, "revoke_owned", fail)
+    assert direct(host, host.consumer)["status"] == "error"
+    monkeypatch.setattr(host.consumer.ledger, "revoke_owned", original)
+    settings["experimental_text_worker"] = True
+    (host.home / "config.yaml").write_text(json.dumps(config))
+    assert direct(host, host.consumer)["data"]["state"] == "revoked"
+    assert host.requests == []
+
+
+def test_concurrent_claims_commit_only_one_owner_transition(host):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    allow(host)
+    ledger = host.consumer.ledger
+    key = (host.ref.session_id, host.live.route, "plan-1")
+    context_hash = ledger.get(key)["context_hash"]
+    fingerprint = current_fingerprint(host)
+    barrier = Barrier(2)
+
+    def claim():
+        barrier.wait(timeout=5)
+        return ledger.claim(key, context_hash, fingerprint)[1]
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        assert sorted(pool.map(lambda _: claim(), range(2))) == [False, True]
+    assert direct(host, fresh_consumer(host))["data"]["state"] == "launch_outcome_unknown"
+    assert host.requests == []
+
+
+def test_crash_after_durable_claim_before_submission_never_rearms(host):
+    import os
+    import subprocess
+    import sys
+
+    allow(host)
+    ledger = host.consumer.ledger
+    key = (host.ref.session_id, host.live.route, "plan-1")
+    row = ledger.get(key)
+    code = """
+import importlib.util, os, sys
+spec=importlib.util.spec_from_file_location("isolated_ledger", sys.argv[1])
+module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+from pathlib import Path
+ledger=module.Ledger(Path(sys.argv[2]), sys.argv[3])
+assert ledger.claim(tuple(sys.argv[4:7]),sys.argv[7],sys.argv[8])[1]
+os._exit(23)
+"""
+    env = {**os.environ, "HERMES_HOME": str(host.home), "PYTHONPATH": os.pathsep.join(sys.path)}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            code,
+            str(HERE / "worker_ledger.py"),
+            str(host.home),
+            ledger.owner,
+            *key,
+            row["context_hash"],
+            current_fingerprint(host),
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 23, result.stderr
+    assert ledger.get(key)["state"] == "claimed"
+    assert direct(host, fresh_consumer(host))["data"]["state"] == "launch_outcome_unknown"
+    assert direct(host, host.consumer)["data"]["state"] == "launch_outcome_unknown"
+    assert host.requests == []
+
+
+def test_durable_capacity_refuses_without_evicting_after_new_owner(host):
+    allow(host)
+    ledger = host.consumer.ledger
+    key = (host.ref.session_id, host.live.route, "plan-1")
+    row = ledger.get(key)
+    for n in range(63):
+        ledger.authorize((key[0], key[1], f"extra-{n}"), row["task_id"], 1, row["context_hash"], 0)
+    from personal_agent.tasks import TaskError
+
+    other = fresh_consumer(host)
+    with pytest.raises(TaskError, match="grant_capacity_reached"):
+        other.ledger.authorize(
+            (key[0], key[1], "overflow"), row["task_id"], 1, row["context_hash"], 0
+        )
+    assert other.ledger.get(key)["owner"] == ledger.owner
+
+
+def test_corrupt_persisted_receipt_is_not_exposed_or_relaunched(host):
+    allow(host)
+    direct(host, host.consumer)
+    assert wait(host).completed
+    assert direct(host, host.consumer, "result")["data"]["ready"]
+    with host.consumer.ledger.connection() as conn:
+        conn.execute("UPDATE grants SET result=?", ('{"data":{"draft":"forged"}}',))
+    assert direct(host, fresh_consumer(host), "result")["error"]["code"] == "worker_ledger_corrupt"
+    assert direct(host, host.consumer)["status"] == "error"
+    assert len(host.requests) == 1
+
+
+def test_explicit_revoke_latches_before_failed_durable_write(host, monkeypatch):
+    allow(host)
+    original = host.consumer.ledger.revoke
+
+    def fail(*args):
+        raise OSError("synthetic write failure")
+
+    monkeypatch.setattr(host.consumer.ledger, "revoke", fail)
+    assert consent(host, "revoke plan-1")["status"] == "error"
+    monkeypatch.setattr(host.consumer.ledger, "revoke", original)
+    assert direct(host, host.consumer)["data"]["state"] == "revoked"
+    assert host.requests == []
+
+
+def test_expiry_while_claim_waits_never_submits(host, monkeypatch):
+    allow(host)
+    original = host.consumer.ledger.claim
+
+    def claim(*args):
+        result = original(*args)
+        next(iter(host.consumer.grants.values())).expires_at = 0
+        return result
+
+    monkeypatch.setattr(host.consumer.ledger, "claim", claim)
+    assert direct(host, host.consumer)["error"]["code"] == "grant_expired"
+    assert direct(host, fresh_consumer(host))["data"]["state"] == "launch_outcome_unknown"
+    assert host.requests == []
+
+
+def test_unsafe_ledger_permissions_are_refused_not_repaired(host):
+    import stat
+
+    allow(host)
+    path = host.home / "plugin-data" / PLUGIN_ID / "text-worker-ledger.sqlite3"
+    path.chmod(0o644)
+    try:
+        assert direct(host, host.consumer)["error"]["code"] == "unsafe_storage_file"
+        assert stat.S_IMODE(path.stat().st_mode) == 0o644
+        assert host.requests == []
+    finally:
+        path.chmod(0o600)
+
+
+@pytest.mark.parametrize("target", ["main", "journal"])
+def test_ledger_refuses_symlink_or_unsafe_sidecar_without_repair(host, tmp_path, target):
+    allow(host)
+    path = host.home / "plugin-data" / PLUGIN_ID / "text-worker-ledger.sqlite3"
+    if target == "main":
+        saved = path.with_suffix(".saved")
+        path.rename(saved)
+        path.symlink_to(saved)
+
+        def restore():
+            path.unlink()
+            saved.rename(path)
+    else:
+        saved = path.with_name(path.name + "-journal")
+        saved.write_text("synthetic sidecar")
+        saved.chmod(0o644)
+        restore = saved.unlink
+    try:
+        assert direct(host, host.consumer)["status"] == "error"
+        if target == "main":
+            assert path.is_symlink()
+        else:
+            assert saved.read_text() == "synthetic sidecar"
+        assert host.requests == []
+    finally:
+        restore()
+
+
+def test_foreign_ledger_schema_is_refused_without_adoption(host):
+    import sqlite3
+
+    allow(host)
+    path = host.home / "plugin-data" / PLUGIN_ID / "text-worker-ledger.sqlite3"
+    with sqlite3.connect(path) as conn:
+        conn.execute("CREATE TABLE foreign_data (value TEXT)")
+        conn.execute("INSERT INTO foreign_data VALUES ('keep')")
+    assert direct(host, host.consumer)["error"]["code"] == "worker_ledger_schema_mismatch"
+    with sqlite3.connect(path) as conn:
+        assert conn.execute("SELECT value FROM foreign_data").fetchone()[0] == "keep"
+    assert host.requests == []
+    # Cleanup only the synthetic added table so fixture unload can revoke normally.
+    with sqlite3.connect(path) as conn:
+        conn.execute("DROP TABLE foreign_data")
+
+
+def test_profile_global_key_cannot_cross_session_or_route(host):
+    from personal_agent.tasks import TaskError
+
+    allow(host)
+    ledger = host.consumer.ledger
+    for key in (
+        ("other-session", host.live.route, "plan-1"),
+        (host.ref.session_id, "other-route", "plan-1"),
+    ):
+        with pytest.raises(TaskError, match="request_id_scope_conflict"):
+            ledger.get(key)
+        with pytest.raises(TaskError, match="request_id_scope_conflict"):
+            ledger.claim(key, "forged", "0" * 64)
+    assert host.requests == []
+
+
+def test_invalid_terminal_receipt_rolls_back_to_consumed_claim(host):
+    from personal_agent.tasks import TaskError
+
+    allow(host)
+    ledger = host.consumer.ledger
+    key = (host.ref.session_id, host.live.route, "plan-1")
+    row = ledger.get(key)
+    assert ledger.claim(key, row["context_hash"], current_fingerprint(host))[1]
+    with pytest.raises(TaskError, match="worker_ledger_corrupt"):
+        ledger.complete(key, {"draft": "must not expose"})
+    assert ledger.get(key)["state"] == "claimed"
+    assert direct(host, fresh_consumer(host))["data"]["state"] == "launch_outcome_unknown"
+    assert host.requests == []
+
+
+@pytest.mark.parametrize("persisted", [False, True])
+@pytest.mark.parametrize("change", ["provider", "model", "endpoint"])
+def test_live_and_persisted_drafts_never_cross_changed_model_route(
+    host, monkeypatch, persisted, change
+):
+    allow(host)
+    original_result = host.consumer.service.result
+    monkeypatch.setattr(
+        host.consumer.service,
+        "result",
+        lambda _: SimpleNamespace(
+            terminal_state=SimpleNamespace(value="RUNNING"),
+            ready=False,
+            summary=None,
+            result_hash=None,
+        ),
+    )
+    assert direct(host, host.consumer)["status"] == "ok"
+    monkeypatch.setattr(host.consumer.service, "result", original_result)
+    assert wait(host).completed
+    if persisted:
+        assert direct(host, host.consumer, "result")["data"]["draft"]
+        reader = fresh_consumer(host)
+    else:
+        reader = host.consumer
+    config_bytes = (host.home / "config.yaml").read_bytes()
+    original = (
+        host.parent.provider,
+        host.parent.model,
+        host.parent.base_url,
+        host.parent.client.base_url,
+    )
+    if change == "provider":
+        host.parent.provider = "openai"
+    elif change == "model":
+        host.parent.model = "other-model"
+    else:
+        endpoint = "https://other-synthetic.invalid/v1"
+        host.parent.base_url = endpoint
+        host.parent.client.base_url = endpoint
+        config = json.loads(config_bytes)
+        config["plugins"]["entries"][PLUGIN_ID]["text_workers"]["routes"] = [
+            {"provider": PROVIDER, "model": MODEL, "base_url": endpoint}
+        ]
+        (host.home / "config.yaml").write_text(json.dumps(config))
+    try:
+        for action in ("result", "launch"):
+            reply = direct(host, reader, action)
+            assert reply["status"] == "error" and reply["data"] is None
+        assert len(host.requests) == 1
+    finally:
+        (
+            host.parent.provider,
+            host.parent.model,
+            host.parent.base_url,
+            host.parent.client.base_url,
+        ) = original
+        (host.home / "config.yaml").write_bytes(config_bytes)
+    result = direct(host, reader, "result")
+    assert result["data"]["draft"] == "Draft: clarify the first milestone.", result
+    assert len(host.requests) == 1
+
+
+def test_route_rechecked_after_cached_receipt_read_before_disclosure(host, monkeypatch):
+    allow(host)
+    direct(host, host.consumer)
+    assert wait(host).completed
+    assert direct(host, host.consumer, "result")["data"]["draft"]
+    original = host.consumer._task
+
+    def read_then_change(task_id):
+        task = original(task_id)
+        host.parent.model = "changed-during-read"
+        return task
+
+    monkeypatch.setattr(host.consumer, "_task", read_then_change)
+    try:
+        reply = direct(host, host.consumer, "result")
+        assert reply["status"] == "error" and reply["data"] is None
+    finally:
+        host.parent.model = MODEL
+    assert len(host.requests) == 1

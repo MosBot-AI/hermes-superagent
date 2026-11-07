@@ -12,7 +12,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 ARTIFACT = ROOT / "experiments/text-worker"
-SHA = "e6a0e0a78450a2fb5385e5943e60541f6bd6fd04f71717378a40e39c709cfa5f"
+SHA = "35ef9ac9089437fc4e82ac5e3e52fe7150f0a5bb421e02b396c840855a07eec2"
 BASE = "90d6b98fd86d20981ee06ddd5b7d93e4320f26a4"
 
 
@@ -37,7 +37,7 @@ def test_exact_patch_and_source_inventory():
     assert sorted(data["artifact_files"]) == sorted(
         p.name for p in ARTIFACT.iterdir() if p.is_file()
     )
-    assert set(data["source_hashes"]) == {"consumer.py", "test_task_worker.py"}
+    assert set(data["source_hashes"]) == {"consumer.py", "worker_ledger.py", "test_task_worker.py"}
     for name, digest in data["source_hashes"].items():
         assert hashlib.sha256((ARTIFACT / name).read_bytes()).hexdigest() == digest
 

@@ -1,18 +1,19 @@
 diff --git a/agent/subagent_lifecycle.py b/agent/subagent_lifecycle.py
-index 65865471..0598fa6a 100644
+index 65865471..c8ec509d 100644
 --- a/agent/subagent_lifecycle.py
 +++ b/agent/subagent_lifecycle.py
-@@ -144,6 +144,9 @@ class _Record:
+@@ -144,6 +144,10 @@ class _Record:
      started_at: Optional[float] = None
      completed_at: Optional[float] = None
      result: Optional[SubagentResult] = None
 +    text_owner: Optional[tuple[str, str]] = None
 +    text_cancel: Any = None
++    text_route_fingerprint: Optional[str] = None
 +    correlation_key: Any = None
  
  
  @dataclasses.dataclass
-@@ -152,7 +155,7 @@ class _Registry:
+@@ -152,7 +156,7 @@ class _Registry:
  
      lock: threading.RLock = dataclasses.field(default_factory=threading.RLock)
      records: dict[str, _Record] = dataclasses.field(default_factory=dict)
@@ -21,7 +22,7 @@ index 65865471..0598fa6a 100644
  
  
  _REGISTRY = _Registry()
-@@ -271,8 +274,18 @@ class SubagentLifecycleService:
+@@ -271,8 +275,23 @@ class SubagentLifecycleService:
      completed results stay until process exit; ``reconnect`` reports that a serialized handle cannot
      reconnect after a restart instead of launching work again."""
  
@@ -29,6 +30,11 @@ index 65865471..0598fa6a 100644
 +    def __init__(self, parent_agent_resolver: Callable[[], Any], *, plugin_id: str = "") -> None:
          self._parent_agent_resolver = parent_agent_resolver
 +        self._plugin_id = plugin_id
++
++    def authorize_text_route(self, provider: str, model: str, parent_session_id: str) -> str:
++        """Read-only current authorization; return an opaque route fingerprint, never credentials."""
++        from agent.text_subagent import authorize_text_route
++        return authorize_text_route(self, provider, model, parent_session_id)
 +
 +    def launch_text(self, request) -> SubagentHandle:
 +        """Opt-in single text inference. No model tools or full agent loop.
@@ -41,7 +47,7 @@ index 65865471..0598fa6a 100644
  
      def launch(self, request: SubagentLaunchRequest | Mapping[str, Any]) -> SubagentHandle:
          parent = self._parent_agent_resolver()
-@@ -350,6 +363,11 @@ class SubagentLifecycleService:
+@@ -350,6 +369,11 @@ class SubagentLifecycleService:
          with _REGISTRY.lock:
              if record.result is not None:
                  return SubagentCancelResult(False, already_terminal=True, state=record.state)
@@ -53,7 +59,21 @@ index 65865471..0598fa6a 100644
              agent = record.agent
              record.state = SubagentState.CANCEL_REQUESTED
              record.updated_at = time.time()
-@@ -383,6 +401,8 @@ class SubagentLifecycleService:
+@@ -365,6 +389,13 @@ class SubagentLifecycleService:
+         record = self._record(handle)
+         if record is None:
+             return SubagentResult(handle, SubagentState.UNKNOWN, False, error_classification="UNKNOWN_HANDLE")
++        if record.text_route_fingerprint is not None:
++            try:
++                current = self.authorize_text_route(record.handle.provider, record.handle.model, record.handle.parent_session_id)
++                if current != record.text_route_fingerprint:
++                    raise SubagentLifecycleError("Text worker route changed.")
++            except Exception:  # health: allow BLE001 -- fail-closed disclosure gate redacts configuration and authorization errors
++                return SubagentResult(record.handle, SubagentState.UNKNOWN, False, error_classification="TEXT_ROUTE_UNAVAILABLE")
+         with _REGISTRY.lock:
+             return record.result or SubagentResult(record.handle, record.state, False, error_classification="NOT_READY")
+ 
+@@ -383,6 +414,8 @@ class SubagentLifecycleService:
          with _REGISTRY.lock:
              if record.result is not None:
                  return False
@@ -62,7 +82,7 @@ index 65865471..0598fa6a 100644
          from tools.delegate_tool_registry import steer_subagent
          return steer_subagent(record.handle.subagent_id, text.strip())
  
-@@ -397,7 +417,12 @@ class SubagentLifecycleService:
+@@ -397,7 +430,12 @@ class SubagentLifecycleService:
          if _session_id_of(self._parent_agent_resolver()) != handle.parent_session_id:
              return None
          with _REGISTRY.lock:
@@ -76,7 +96,7 @@ index 65865471..0598fa6a 100644
  
      @staticmethod
      def _cleanup_locked() -> None:
-@@ -408,9 +433,10 @@ class SubagentLifecycleService:
+@@ -408,9 +446,10 @@ class SubagentLifecycleService:
              if record.result is not None and record.completed_at is not None and record.completed_at < cutoff
          ]
          for subagent_id in expired:
@@ -89,7 +109,7 @@ index 65865471..0598fa6a 100644
  
      def _run(self, record: _Record, goal: str, parent: Any) -> None:
          with _REGISTRY.lock:
-@@ -470,3 +496,6 @@ class SubagentLifecycleService:
+@@ -470,3 +509,6 @@ class SubagentLifecycleService:
          enabled = getattr(parent, "enabled_toolsets", None)
          if enabled is not None and not set(request.allowed_toolsets).issubset(set(enabled)):
              raise SubagentLifecycleError("Requested toolsets would broaden parent permissions.")
@@ -98,10 +118,10 @@ index 65865471..0598fa6a 100644
 +from agent.text_subagent import TextSubagentRequest
 diff --git a/agent/text_subagent.py b/agent/text_subagent.py
 new file mode 100644
-index 00000000..b2cb2090
+index 00000000..b513726c
 --- /dev/null
 +++ b/agent/text_subagent.py
-@@ -0,0 +1,254 @@
+@@ -0,0 +1,331 @@
 +"""Opt-in bounded text workers. No credential resolver, agent loop, or tool executor.
 +
 +Trusted in-process plugins/middleware are not sandboxed. Cancellation and timeout
@@ -132,6 +152,7 @@ index 00000000..b2cb2090
 +    correlation_id: str | None = None
 +    max_tokens: int = 2048
 +    timeout_seconds: float = 30.0
++    expected_route_fingerprint: str | None = None
 +
 +
 +_SYSTEM = "Produce a text-only planning draft from the supplied task data. Do not claim to have performed actions."
@@ -159,6 +180,10 @@ index 00000000..b2cb2090
 +                continue
 +            if not isinstance(field, str) or not field.strip() or len(field) > limit:
 +                _refuse()
++        stamp = value.expected_route_fingerprint
++        if stamp is not None and (type(stamp) is not str or len(stamp) != 64
++                                  or any(c not in "0123456789abcdef" for c in stamp)):
++            _refuse()
 +        if type(value.max_tokens) is not int or not 1 <= value.max_tokens <= 4096:
 +            _refuse()
 +        if (type(value.timeout_seconds) not in (int, float) or not math.isfinite(value.timeout_seconds)
@@ -170,13 +195,59 @@ index 00000000..b2cb2090
 +
 +
 +def _route(parent):
-+    return tuple(getattr(parent, key, None) for key in ("provider", "model", "base_url", "api_mode", "client"))
++    client = getattr(parent, "client", None)
++    identity = tuple(getattr(client, key, None) for key in ("api_key", "organization", "project"))
++    return (*tuple(getattr(parent, key, None) for key in ("provider", "model", "base_url", "api_mode", "client")), identity)
 +
 +
-+def _http_rewriters(client):
-+    http = client._client
-+    return (getattr(http, "follow_redirects", True) or http.auth is not None
-+            or any(http.event_hooks.values()))
++def _new_http_client(timeout):
++    """Private host factory; tests replace this with a fresh MockTransport client.
++
++    Never borrow parent sockets, auth, hooks, transports, proxy or env configuration.
++    """
++    import ssl
++    import certifi
++    import httpx
++    # create_default_context reads SSLKEYLOGFILE even when HTTPX trust_env=False.
++    tls = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
++    tls.load_verify_locations(cafile=certifi.where())
++    return httpx.Client(timeout=timeout, trust_env=False, follow_redirects=False,
++                        transport=httpx.HTTPTransport(retries=0, trust_env=False, verify=tls))
++
++
++def _post_text(client, route, payload, admissible):
++    """Fixed HTTPS destination and identity; redirects/retries cannot retransmit data."""
++    import httpx
++    from openai.types.chat import ChatCompletion
++
++    endpoint = httpx.URL(route[2].rstrip("/") + "/chat/completions")
++    key, organization, project = route[5]
++    headers = {"Authorization": "Bearer " + key, "Content-Type": "application/json", "Accept-Encoding": "identity"}
++    if organization:
++        headers["OpenAI-Organization"] = organization
++    if project:
++        headers["OpenAI-Project"] = project
++    request = client.build_request("POST", endpoint, json=payload)
++    if request.url != endpoint or request.method != "POST" or request.url.query:
++        _refuse()
++    admissible()
++    request.headers.update(headers)
++    # Auth/redirect overrides are per request; shared parent settings stay untouched.
++    response = client.send(request, auth=None, follow_redirects=False, stream=True)
++    try:
++        response.raise_for_status()
++        if response.headers.get("Content-Encoding", "").strip().lower() not in {"", "identity"}:
++            _refuse()
++        body = bytearray()
++        chunks = (response.content,) if response.is_stream_consumed else response.iter_raw()
++        for chunk in chunks:
++            admissible()
++            if len(body) + len(chunk) > 512_000:
++                _refuse()
++            body.extend(chunk)
++        return ChatCompletion.model_validate_json(body)
++    finally:
++        response.close()
 +
 +
 +def _authorize(service, parent, request, owner):
@@ -186,7 +257,7 @@ index 00000000..b2cb2090
 +
 +    if parent is None or not service._plugin_id or str(hermes_home_key()) != owner[0]:
 +        _refuse()
-+    provider, model, base_url, mode, client = _route(parent)
++    provider, model, base_url, mode, client, identity = _route(parent)
 +    if (provider not in _PROVIDERS or provider != request.provider or model != request.model
 +            or mode != "chat_completions" or type(client) is not OpenAI
 +            or getattr(client, "_provider", None) is not None or getattr(client, "_provider_runtime", None) is not None
@@ -196,8 +267,12 @@ index 00000000..b2cb2090
 +        _refuse()
 +    parsed = urlsplit(base_url)
 +    if (parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password
-+            or parsed.query or parsed.fragment or client.default_query
-+            or _http_rewriters(client)):
++            or parsed.query or parsed.fragment or client.default_query):
++        _refuse()
++    key, organization, project = identity
++    if (type(key) is not str or not key.strip() or any(c in key for c in "\r\n")
++            or any(value is not None and (type(value) is not str or any(c in value for c in "\r\n"))
++                   for value in (organization, project))):
 +        _refuse()
 +    session = str(getattr(parent, "session_id", "") or "")
 +    if not session or request.parent_session_id not in (None, session):
@@ -209,7 +284,28 @@ index 00000000..b2cb2090
 +            _refuse()
 +    except (KeyError, TypeError, AttributeError):
 +        _refuse()
-+    return session, _route(parent)
++    current = _route(parent)
++    if request.expected_route_fingerprint not in (None, _route_fingerprint(current)):
++        _refuse()
++    return session, current
++
++
++def _route_fingerprint(route):
++    return hashlib.sha256(json.dumps(route[:4], ensure_ascii=True, separators=(",", ":")).encode()).hexdigest()
++
++
++def authorize_text_route(service, provider, model, parent_session_id):
++    """Disclosure gate for persisted drafts; no client construction or request."""
++    from hermes_constants import hermes_home_key
++
++    request = _request(TextSubagentRequest(
++        goal="Validate text-worker route", provider=provider, model=model, parent_session_id=parent_session_id,
++    ))
++    if type(parent_session_id) is not str or not parent_session_id.strip():
++        _refuse()
++    _, route = _authorize(service, service._parent_agent_resolver(), request,
++                          (str(hermes_home_key()), service._plugin_id))
++    return _route_fingerprint(route)
 +
 +
 +def launch_text(service, raw):
@@ -230,7 +326,7 @@ index 00000000..b2cb2090
 +                            service._capability(ident, session, created))
 +    key = (*owner, session, request.correlation_id) if request.correlation_id else None
 +    record = _Record(handle, SubagentState.PENDING, created, text_owner=owner,
-+                     text_cancel=threading.Event(), correlation_key=key)
++                     text_cancel=threading.Event(), correlation_key=key, text_route_fingerprint=_route_fingerprint(route))
 +    # Reservation and scheduling are atomic with respect to duplicate launches.
 +    with _REGISTRY.lock:
 +        service._cleanup_locked()
@@ -261,6 +357,7 @@ index 00000000..b2cb2090
 +    attempted = 0
 +    violated = False
 +    response = None
++    client = None
 +    error = None
 +    summary = None
 +    usage = {}
@@ -291,14 +388,7 @@ index 00000000..b2cb2090
 +                or payload["messages"] != messages or payload["max_tokens"] != request.max_tokens):
 +            _refuse()
 +        frozen = json.dumps(payload, sort_keys=True, allow_nan=False)
-+        client = route[4].copy(max_retries=0, timeout=float(request.timeout_seconds))
-+        if (str(client.base_url).rstrip("/") != route[2].rstrip("/")
-+                or getattr(client, "_provider", None) is not None
-+                or getattr(client, "_provider_runtime", None) is not None
-+                or getattr(client, "_api_key_provider", None) is not None
-+                or getattr(client, "workload_identity", None) is not None or client.default_query
-+                or _http_rewriters(client)):
-+            _refuse()
++        client = _new_http_client(float(request.timeout_seconds))
 +        context = {"session_id": record.handle.parent_session_id, "task_id": record.handle.subagent_id,
 +                   "plugin_id": service._plugin_id, "origin": "text_worker"}
 +        prepared = apply_llm_request_middleware(copy.deepcopy(payload), **context)
@@ -315,8 +405,8 @@ index 00000000..b2cb2090
 +                except Exception:
 +                    violated = True
 +                    raise
-+                attempted = 1  # charge attempt before SDK submission, even if it fails
-+            response = client.chat.completions.create(**copy.deepcopy(next_payload))
++                attempted = 1  # record attempt before HTTP submission, even if it fails
++            response = _post_text(client, route, copy.deepcopy(next_payload), admissible)
 +            return response
 +
 +        observed = run_llm_execution_middleware(prepared.payload, send, original_request=copy.deepcopy(payload), strict_single_use=True, **context)
@@ -328,7 +418,7 @@ index 00000000..b2cb2090
 +        normalized = transport.normalize_response(response)
 +        if (normalized.tool_calls or normalized.finish_reason != "stop"
 +                or type(normalized.content) is not str or not normalized.content.strip()
-+                or len(normalized.content) > 32000):
++                or len(normalized.content) > 32000 or route[5][0] in normalized.content):
 +            _refuse()
 +        summary = normalized.content
 +        if normalized.usage:
@@ -342,6 +432,13 @@ index 00000000..b2cb2090
 +        with guard:
 +            closed = True
 +        timer.cancel()
++        if client is not None:
++            try:
++                client.close()
++            except Exception:  # health: allow BLE001 -- cleanup failure is redacted and cannot publish success
++                error = "TEXT_WORKER_FAILED"
++        client = None
++        route = None  # retained middleware callbacks cannot retain the credential snapshot
 +    with _REGISTRY.lock:
 +        cancelled = record.text_cancel.is_set()
 +        timed_out = expired.is_set() or time.monotonic() >= deadline
@@ -406,10 +503,10 @@ index 58aa4ba4..7eaedf6e 100644
      def delegation_backends(self) -> Any:
 diff --git a/tests/agent/test_text_subagent.py b/tests/agent/test_text_subagent.py
 new file mode 100644
-index 00000000..0a3889bd
+index 00000000..e756271d
 --- /dev/null
 +++ b/tests/agent/test_text_subagent.py
-@@ -0,0 +1,457 @@
+@@ -0,0 +1,667 @@
 +"""Text-worker proposal: real SDK/transport/middleware, in-memory HTTP only."""
 +import dataclasses
 +import json
@@ -448,6 +545,15 @@ index 00000000..0a3889bd
 +                                       "finish_reason": "stop"}],
 +                                       "usage": {"prompt_tokens": 12, "completion_tokens": 4, "total_tokens": 16}})
 +    handler = [answer]
++    from agent import text_subagent
++    children = []
++    real_factory = text_subagent._new_http_client
++    def make_client(timeout):
++        child = httpx.Client(timeout=timeout, trust_env=False, follow_redirects=False,
++                             transport=httpx.MockTransport(lambda req: handler[0](req)))
++        children.append(child)
++        return child
++    monkeypatch.setattr(text_subagent, "_new_http_client", make_client)
 +    client = OpenAI(api_key="synthetic-not-a-credential", base_url=route["base_url"],
 +                    http_client=httpx.Client(transport=httpx.MockTransport(lambda req: handler[0](req))))
 +    parent = SimpleNamespace(**route, session_id="parent", api_mode="chat_completions", client=client,
@@ -457,7 +563,8 @@ index 00000000..0a3889bd
 +    ctx = PluginContext(PluginManifest(name="planner"), manager)
 +    with bind_subagent_parent(parent):
 +        yield SimpleNamespace(service=ctx.subagent_lifecycle, ctx=ctx, manager=manager, parent=parent, route=route,
-+                              calls=calls, config=config, save=save, handler=handler, answer=answer, home=home)
++                              calls=calls, config=config, save=save, handler=handler, answer=answer, home=home, children=children, real_factory=real_factory)
++    assert all(child.is_closed for child in children)
 +    client.close()
 +
 +
@@ -626,7 +733,7 @@ index 00000000..0a3889bd
 +        return next_call(request)
 +    world.manager._middleware["llm_execution"] = [middleware]
 +    _, result = finish(world)
-+    assert result.terminal_state == SubagentState.FAILED and not world.calls
++    assert not result.ready and not world.calls
 +
 +
 +def test_request_middleware_cannot_inject_tools(world):
@@ -644,7 +751,7 @@ index 00000000..0a3889bd
 +        return next_call(request)
 +    world.manager._middleware["llm_execution"] = [middleware]
 +    _, result = finish(world)
-+    assert not world.calls and result.terminal_state == SubagentState.FAILED
++    assert not world.calls and not result.ready
 +
 +
 +def test_timeout_discards_response_without_retry(world, monkeypatch):
@@ -693,7 +800,7 @@ index 00000000..0a3889bd
 +    world.save()
 +    args, future = jobs[0]
 +    future.set_result(args[0](*args[1:]))
-+    assert world.service.result(handle).terminal_state == SubagentState.FAILED
++    assert not world.service.result(handle).ready
 +    assert not world.calls
 +
 +
@@ -752,13 +859,12 @@ index 00000000..0a3889bd
 +    assert not world.calls
 +
 +
-+def test_copy_cannot_change_endpoint(world, monkeypatch):
-+    original = world.parent.client.copy
-+    def changed(**kwargs):
-+        return original(base_url="https://other.test/v1", **kwargs)
-+    monkeypatch.setattr(world.parent.client, "copy", changed)
++def test_parent_copy_is_never_used(world, monkeypatch):
++    def forbidden(**kwargs):
++        pytest.fail("Parent SDK copy would read environment and reuse parent transport")
++    monkeypatch.setattr(world.parent.client, "copy", forbidden)
 +    _, result = finish(world)
-+    assert not world.calls and result.terminal_state == SubagentState.FAILED
++    assert result.terminal_state == SubagentState.SUCCEEDED
 +
 +
 +def test_different_reported_model_discards_draft(world):
@@ -791,11 +897,11 @@ index 00000000..0a3889bd
 +    assert reply.choices[0].message.content == "A planning draft"
 +
 +
-+def test_redirect_following_parent_refused_without_changing_it(world):
++def test_redirect_following_parent_supported_without_changing_it(world):
 +    world.parent.client._client.follow_redirects = True
-+    with pytest.raises(SubagentLifecycleError):
-+        world.service.launch_text(request())
-+    assert world.parent.client._client.follow_redirects is True and not world.calls
++    _, result = finish(world)
++    assert result.terminal_state == SubagentState.SUCCEEDED
++    assert world.parent.client._client.follow_redirects is True and len(world.calls) == 1
 +
 +
 +@pytest.mark.parametrize("status", [307, 308])
@@ -809,20 +915,20 @@ index 00000000..0a3889bd
 +    assert result.terminal_state == SubagentState.FAILED and result.summary is None
 +
 +
-+def test_default_sdk_redirect_policy_is_not_supported(world):
++def test_default_sdk_parent_is_supported(world):
 +    client = OpenAI(api_key="synthetic-not-a-credential", base_url=world.route["base_url"])
 +    try:
 +        world.parent.client = client
 +        assert client._client.follow_redirects is True
-+        with pytest.raises(SubagentLifecycleError):
-+            world.service.launch_text(request())
-+        assert not world.calls
++        _, result = finish(world)
++        assert result.terminal_state == SubagentState.SUCCEEDED and len(world.calls) == 1
++        assert client._client.follow_redirects is True and not client.is_closed()
 +    finally:
 +        client.close()
 +
 +
 +@pytest.mark.parametrize("feature", ["auth", "request_hook", "response_hook"])
-+def test_http_rewriters_are_refused(world, feature):
++def test_parent_http_rewriters_are_not_inherited(world, feature):
 +    def forbidden(*args, **kwargs):
 +        pytest.fail("HTTP rewrite hooks must not run")
 +    http = world.parent.client._client
@@ -830,9 +936,8 @@ index 00000000..0a3889bd
 +        http.auth = httpx.BasicAuth("synthetic", "synthetic")
 +    else:
 +        http.event_hooks[feature.split("_")[0]].append(forbidden)
-+    with pytest.raises(SubagentLifecycleError):
-+        world.service.launch_text(request())
-+    assert not world.calls
++    _, result = finish(world)
++    assert result.terminal_state == SubagentState.SUCCEEDED and len(world.calls) == 1
 +
 +
 +@pytest.mark.parametrize("content", [["not text"], {"text": "not text"}, " ", "x" * 32001])
@@ -867,3 +972,205 @@ index 00000000..0a3889bd
 +    _, result = finish(world)
 +    # The official SDK coerces this wire value to int before host normalization.
 +    assert all(type(value) is int and 0 <= value <= 2**63 - 1 for value in result.usage_metadata.values())
++
++
++def test_dedicated_factory_ignores_proxy_and_ssl_environment(world, monkeypatch):
++    monkeypatch.setenv("HTTPS_PROXY", "http://not-a-proxy.invalid:1")
++    monkeypatch.setenv("SSL_CERT_FILE", "/definitely-not-a-certificate")
++    keylog = world.home / "synthetic-tls-keylog"
++    monkeypatch.setenv("SSLKEYLOGFILE", str(keylog))
++    client = world.real_factory(5)
++    try:
++        assert client._trust_env is False and client.follow_redirects is False
++        assert client.auth is None and not any(client.event_hooks.values())
++        assert not client.cookies
++        assert client._transport._pool._ssl_context.keylog_filename is None
++        assert not keylog.exists()
++    finally:
++        client.close()
++
++
++def test_dedicated_wire_does_not_inherit_environment_or_parent_headers(world, monkeypatch):
++    for name in ("OPENAI_CUSTOM_HEADERS", "OPENAI_ADMIN_KEY", "OPENAI_WEBHOOK_SECRET", "OPENAI_ORG_ID", "OPENAI_PROJECT_ID"):
++        monkeypatch.setenv(name, "Authorization: environment-secret\nX-Environment: secret")
++    world.parent.client._custom_headers = {"Authorization": "parent-header-secret", "X-Parent": "secret"}
++    world.parent.client._client.cookies.set("private", "cookie-secret")
++    world.parent.client.organization = "approved-org"
++    world.parent.client.project = "approved-project"
++    seen = []
++    def answer(req):
++        seen.append(req)
++        return world.answer(req)
++    world.handler[0] = answer
++    def forbidden(*args, **kwargs):
++        pytest.fail("Must not construct another SDK or read its environment")
++    monkeypatch.setattr(OpenAI, "__init__", forbidden)
++    _, result = finish(world)
++    assert result.terminal_state == SubagentState.SUCCEEDED
++    headers = seen[0].headers
++    assert headers["Authorization"] == "Bearer synthetic-not-a-credential"
++    assert headers["OpenAI-Organization"] == "approved-org" and headers["OpenAI-Project"] == "approved-project"
++    assert "X-Parent" not in headers and "X-Environment" not in headers and "Cookie" not in headers
++    assert world.parent.client._client.cookies.get("private") == "cookie-secret"
++
++
++def test_identity_change_before_send_refuses(world):
++    def middleware(request, next_call, **kwargs):
++        world.parent.client.api_key = "changed-synthetic-key"
++        return next_call(request)
++    world.manager._middleware["llm_execution"] = [middleware]
++    _, result = finish(world)
++    assert result.terminal_state == SubagentState.FAILED and not world.calls
++
++
++def test_request_destination_checked_before_credentials_attached(world, monkeypatch):
++    from agent import text_subagent
++    original = text_subagent._new_http_client
++    built = []
++    def factory(timeout):
++        client = original(timeout)
++        build = client.build_request
++        def wrong(method, url, **kwargs):
++            value = build(method, "https://foreign.test/collect", **kwargs)
++            built.append(value)
++            return value
++        monkeypatch.setattr(client, "build_request", wrong)
++        return client
++    monkeypatch.setattr(text_subagent, "_new_http_client", factory)
++    _, result = finish(world)
++    assert result.terminal_state == SubagentState.FAILED and not world.calls
++    assert "Authorization" not in built[0].headers
++
++
++def test_reflected_credential_is_never_published(world):
++    def reflect(req):
++        body = world.answer(req).json()
++        body["choices"][0]["message"]["content"] = req.headers["Authorization"]
++        return httpx.Response(200, json=body)
++    world.handler[0] = reflect
++    _, result = finish(world)
++    assert result.terminal_state == SubagentState.FAILED and result.summary is None
++    assert "synthetic-not-a-credential" not in json.dumps(dataclasses.asdict(result))
++
++
++def test_response_body_limit_closes_resources(world):
++    class Huge(httpx.SyncByteStream):
++        closed = False
++        def __iter__(self):
++            yield b"x" * 512001
++        def close(self):
++            self.closed = True
++    stream = Huge()
++    world.handler[0] = lambda req: httpx.Response(200, stream=stream)
++    _, result = finish(world)
++    assert result.terminal_state == SubagentState.FAILED and stream.closed
++
++
++def test_stream_cancellation_stops_reading_and_closes(world):
++    entered, release = threading.Event(), threading.Event()
++    class Drip(httpx.SyncByteStream):
++        closed = False
++        advanced = False
++        def __iter__(self):
++            entered.set()
++            assert release.wait(5)
++            yield b"{"
++            self.advanced = True
++            yield b"}"
++        def close(self):
++            self.closed = True
++    stream = Drip()
++    world.handler[0] = lambda req: httpx.Response(200, stream=stream)
++    handle = world.service.launch_text(request())
++    try:
++        assert entered.wait(5)
++        assert world.service.cancel(handle, reason="stop").accepted
++    finally:
++        release.set()
++    assert world.service.wait(handle, timeout_seconds=5).completed
++    assert world.service.result(handle).terminal_state == SubagentState.CANCELLED
++    assert stream.closed and not stream.advanced
++
++
++def test_encoded_body_refused_without_decompression(world):
++    def encoded(req):
++        assert req.headers["Accept-Encoding"] == "identity"
++        return httpx.Response(200, headers={"Content-Encoding": "gzip"}, stream=httpx.ByteStream(b"not-gzip"))
++    world.handler[0] = encoded
++    _, result = finish(world)
++    assert result.terminal_state == SubagentState.FAILED and result.summary is None
++
++
++def test_public_route_check_is_read_only_and_returns_no_route_data(world, monkeypatch):
++    from agent import text_subagent
++    def forbidden(*args, **kwargs):
++        pytest.fail("Route check must not construct a client or launch work")
++    monkeypatch.setattr(text_subagent, "_new_http_client", forbidden)
++    assert len(world.service.authorize_text_route("opencode-go", "deepseek-v4.1-flash", "parent")) == 64
++    assert not world.calls and not world.children
++
++
++@pytest.mark.parametrize("change", ["no_parent", "model", "provider", "config", "session"])
++def test_public_route_check_refuses_changed_authority(world, change):
++    if change == "no_parent":
++        world.service._parent_agent_resolver = lambda: None
++    elif change in {"model", "provider"}:
++        setattr(world.parent, change, "different")
++    elif change == "session":
++        world.parent.session_id = "different"
++    else:
++        world.config["plugins"]["entries"]["planner"]["text_workers"]["enabled"] = False
++        world.save()
++    with pytest.raises(SubagentLifecycleError):
++        world.service.authorize_text_route("opencode-go", "deepseek-v4.1-flash", "parent")
++    assert not world.calls and not world.children
++
++
++@pytest.mark.parametrize("session", [None, "", 1])
++def test_public_route_check_requires_exact_session(world, session):
++    with pytest.raises(SubagentLifecycleError):
++        world.service.authorize_text_route("opencode-go", "deepseek-v4.1-flash", session)
++    assert not world.calls and not world.children
++
++
++def test_route_stamp_binds_launch_and_result_disclosure(world):
++    stamp = world.service.authorize_text_route(provider="opencode-go", model="deepseek-v4.1-flash", parent_session_id="parent")
++    handle, result = finish(world, request(expected_route_fingerprint=stamp))
++    assert result.ready and result.summary
++    world.parent.base_url = "https://other.test/v1"
++    world.parent.client.base_url = world.parent.base_url
++    world.config["plugins"]["entries"]["planner"]["text_workers"]["routes"].append(
++        {"provider": "opencode-go", "model": "deepseek-v4.1-flash", "base_url": world.parent.base_url})
++    world.save()
++    newer = world.service.authorize_text_route("opencode-go", "deepseek-v4.1-flash", "parent")
++    assert newer != stamp
++    assert not world.service.result(handle).ready and world.service.result(handle).summary is None
++    with pytest.raises(SubagentLifecycleError):
++        world.service.launch_text(request(expected_route_fingerprint=stamp))
++    assert len(world.calls) == 1
++
++
++@pytest.mark.parametrize("stamp", ["", "0" * 63, "G" * 64, 123, "0" * 64])
++def test_invalid_or_stale_route_stamp_refused(world, stamp):
++    with pytest.raises(SubagentLifecycleError):
++        world.service.launch_text(request(expected_route_fingerprint=stamp))
++    assert not world.calls
++
++
++def test_result_gate_redacts_unexpected_authorization_errors(world, monkeypatch):
++    handle, result = finish(world)
++    assert result.ready
++    def broken():
++        raise RuntimeError("private configuration detail")
++    monkeypatch.setattr("hermes_cli.config.load_config_readonly", broken)
++    denied = world.service.result(handle)
++    assert not denied.ready and denied.summary is None
++    assert "private" not in json.dumps(dataclasses.asdict(denied))
++
++
++def test_route_stamp_does_not_encode_credential_rotation(world):
++    stamp = world.service.authorize_text_route("opencode-go", "deepseek-v4.1-flash", "parent")
++    handle, result = finish(world, request(expected_route_fingerprint=stamp))
++    world.parent.client.api_key = "rotated-synthetic-key"
++    assert world.service.authorize_text_route("opencode-go", "deepseek-v4.1-flash", "parent") == stamp
++    assert world.service.result(handle).summary == result.summary

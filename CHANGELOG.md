@@ -8,6 +8,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Extended the review-only worker proposal with an isolated no-redirect HTTP client and durable single-claim/draft receipts. A restart never silently repeats a claimed request; completed observed drafts remain inspectable. No live system or production plugin is changed.
+
 - Added a [review-only task-to-worker proposal](docs/48-task-worker-proposal.md): exact-route single text inference, explicit task-revision grants, no-tool lifecycle drafts and separate offline integration evidence. The production plugin and clean host compatibility pin remain unchanged.
 
 - Added [atomic project-plan capture](docs/47-atomic-project-plans.md) through native commands, CLI and existing activated write tools: 1–20 tasks share one transaction/retry receipt, with whole-batch validation, crash rollback and restart-safe replay. Worker containment limitations remain explicit.
