@@ -4,7 +4,7 @@ English | [简体中文](README-zh.md)
 
 ## Status
 
-This is an isolated host proposal plus a concrete experimental task consumer. It is **not installed, enabled, imported by the production plugin, submitted upstream or deployed**. The supported host pin remains `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`. Do not apply this patch to an installed host or weaken plugin isolation to try it.
+This is an isolated host proposal plus a concrete experimental task consumer. It is **not installed, enabled, submitted upstream or deployed**; this experimental bundle itself is not imported by production registration. The supported host pin remains `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`. Do not apply this patch to an installed host or weaken plugin isolation to try it.
 
 The [manifest](manifest.json) records the exact patch, source hashes, selected verification and limitations. The [host patch](text-worker-prototype.patch) retains the upstream [MIT license](LICENSE.hermes-agent). Distribution on this project's feature branch is not an upstream release.
 
@@ -16,7 +16,7 @@ The proposal now registers a **consent-only `llm.text_worker` capability** in He
 
 The consumer and ledger now import their sibling `personal_agent` package relatively, rather than accidentally depending on the development repository's `PYTHONPATH`. A cold isolated `python -I` test blocks global `personal_agent` imports and exercises native package discovery, task capture, explicit grant, the proposed host request through a mock HTTP transport, saved draft and reload. Module origins and the shared package's error identity are checked. This fixes a real package-loading defect; it is still **offline installed-shaped testing, not official installation or live Gateway acceptance**.
 
-For a supported plugin, the adoption path is: review/release this host capability contract → package the experimental consumer with its production sibling modules and declare the capability → separately approve installation/host consent and exact route → grant one task → run real acceptance. The shipped production manifest and entrypoint still do not declare or load the worker. No package was installed, no upstream change was submitted, and no DNS/proxy/TLS workaround was added.
+The original adoption checklist was: review/release this host capability contract → package the experimental consumer with its production sibling modules and declare the capability → separately approve installation/host consent and exact route → grant one task → run real acceptance. The subsequent [gated production-package integration](../../docs/55-gated-plan-worker.md) declares the capability and wires a production copy behind default-off configuration, the exact host contract and current consent. Clean baseline hosts still register no worker. No package was installed, no upstream change was submitted, and no DNS/proxy/TLS workaround was added.
 
 ## The narrow useful flow
 
@@ -76,7 +76,7 @@ One explicitly authorized synthetic request used the official credential resolve
 
 A later local-only review found a concrete difference from the earlier successful SDK probes: those used HTTPX environment routing/CA defaults, while this dedicated client intentionally ignores environment proxies and uses certifi roots. The original exception cause and earlier environment snapshot were not retained, so a routing or CA mismatch is only a hypothesis, not a proven root cause. No request was repeated and no proxy/TLS policy was relaxed.
 
-A separate official installation attempt for the production repository, in a fresh credential-free offline profile, stopped at the unchanged scanner: CAUTION, 50 findings, exit 1. No override was accepted; official listing and filesystem checks confirmed the plugin was absent. The repository install source includes development docs/tests and these experiments even though production registration does not import the worker. A reviewed runtime distribution is a future packaging task, not permission to bypass that verdict. Installation, activation and supported-host worker availability are unverified.
+A separate official installation attempt for the production repository, in a fresh credential-free offline profile, stopped at the unchanged scanner: CAUTION, 50 findings, exit 1. No override was accepted; official listing and filesystem checks confirmed the plugin was absent. The repository install source includes development docs/tests and these experiments at the time when production registration did not import a worker. The offline runtime distribution builder and subsequent gated worker packaging are not permission to bypass that verdict. Installation, activation and supported-host worker availability are unverified.
 
 ## Reproduce the selected offline evidence
 
@@ -86,19 +86,25 @@ Use a fresh, trusted, credential-free disposable source copy at the exact host b
 set -eu
 ARTIFACT="/path/to/hermes-superagent/experiments/text-worker"
 COPY="/path/to/disposable-hermes"
+CLEAN="/path/to/unchanged-90d6-hermes"
 PYTHON="/path/to/existing-test-venv/bin/python"
 test "$(git -C "$COPY" rev-parse HEAD)" = 90d6b98fd86d20981ee06ddd5b7d93e4320f26a4
 test -z "$(git -C "$COPY" status --porcelain)"
 git -C "$COPY" apply --check "$ARTIFACT/text-worker-prototype.patch"
 git -C "$COPY" apply --index "$ARTIFACT/text-worker-prototype.patch"
-"$PYTHON" "$ARTIFACT/run_tests.py" --checkout "$COPY" --python "$PYTHON" --disposable-copy
+"$PYTHON" "$ARTIFACT/run_tests.py" --checkout "$COPY" --clean-checkout "$CLEAN" \
+  --python "$PYTHON" --disposable-copy
 ```
 
 The [runner](run_tests.py) verifies exact base, staged patch bytes and consumer/test hashes before invoking the host's canonical test runner. It does not apply patches, install packages, provision an environment or configure a personal profile. `--check-only` validates those guards without executing host Python. The test lane uses temporary homes and HTTP mock transports, with no listeners, real model/provider calls or credentials. The concrete consumer tests run the real native command authorization, turn admission, SQLite task store, host lifecycle, dedicated HTTP request serialization and official response parsing.
 
+Actual test execution additionally requires `--clean-checkout` pointing to a separate unchanged pinned host, alongside the isolated patched `--checkout` and `--disposable-copy`. `--check-only` remains unchanged and does not require the clean host. After the host/consumer lane, the runner invokes a separate cold production-entrypoint harness so the canonical runner does not scrub its explicit clean/patched host paths. Historical consumer files remain for comparative host regressions; canonical production modules retain their behavior with strict registration/operation gates and a frozen context projection.
+
+CI uses a separate step to apply the reviewed patch only to a newly created disposable worktree, then runs the selected host/consumer lane and cold clean/patched production-entrypoint checks. This is not installation or live acceptance.
+
 The ordinary project checker tests artifact integrity only and continues testing the **clean unmodified host**. Exact-commit project CI is not the proposed host's upstream CI, nor a live-model acceptance result. The isolated experiment suite is a separate selected lane, not the full upstream suite. No previously denied Gateway socket test is retried.
 
-The broader affected-host regression covered 14 files: **422 passed, 1 failed, 0 skipped**. The same database-path assertion fails on the untouched baseline because this environment aliases `/var/tmp` to `/tmp` while the canonical runner uses `/var/tmp`. No source/assertion was changed to suppress it. The reproducible selected bundle above passes 356 tests; neither lane is the full upstream suite, which also includes unavailable or prohibited live transport coverage.
+The broader affected-host regression covered 14 files: **422 passed, 1 failed, 0 skipped**. The same database-path assertion fails on the untouched baseline because this environment aliases `/var/tmp` to `/tmp` while the canonical runner uses `/var/tmp`. No source/assertion was changed to suppress it. An earlier selected bundle recorded 356 passing tests; that historical count is not a claim for the expanded production-entrypoint lane; neither lane is the full upstream suite, which also includes unavailable or prohibited live transport coverage.
 
 ## Remaining release gates
 

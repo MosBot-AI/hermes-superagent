@@ -130,3 +130,5 @@ This file distinguishes design work, development changes, and released capabilit
 - Those commits delivered designs and plans, not running product features.
 
 Added [saved native attention review](docs/54-saved-native-attention.md): local snapshots only, overlapping buckets with unique counts, no live-board read or completion change.
+
+[Gated task planning worker](docs/55-gated-plan-worker.md): Production-package integration is default-off and requires the exact reviewed host contract plus current consent; not installed or live-accepted.

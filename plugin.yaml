@@ -6,6 +6,8 @@ author: MosBot.AI
 license: MIT
 homepage: https://github.com/MosBot-AI/hermes-superagent
 kind: standalone
+capabilities:
+  - llm.text_worker
 provides_tools:
   - personal_agent_status
   - personal_tasks_read
@@ -13,6 +15,7 @@ provides_tools:
   - personal_memory_read
   - personal_memory_write
   - personal_memory_candidate
+  - personal_task_plan_preview
 config_schema:
   mode:
     type: str
@@ -30,6 +33,10 @@ config_schema:
     type: bool
     default: false
     description: Allow native in-process task tools after explicit session activation; requires local_conversation.
+  plan_worker:
+    type: bool
+    default: false
+    description: Opt in to one-task planning drafts only on an explicitly consenting host with hermes.text-worker.v1; requires local_model_tools. Each selected task needs a separate short-lived grant to OpenCode Go deepseek-v4.1-flash. No fallback, task completion or tool execution.
   local_memory:
     type: bool
     default: false

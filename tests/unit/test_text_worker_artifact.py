@@ -12,7 +12,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 ARTIFACT = ROOT / "experiments/text-worker"
-SHA = "786df9797425f189ef0f242f406a1a310faf866b7e0a14c658991a2b4fc02572"
+SHA = "97e4acd85091f64e693185a195c9141bd5faa43a3c23896ba635564966e372d8"
 BASE = "90d6b98fd86d20981ee06ddd5b7d93e4320f26a4"
 
 
@@ -42,6 +42,7 @@ def test_exact_patch_and_source_inventory():
         "worker_ledger.py",
         "worker_presentation.py",
         "test_task_worker.py",
+        "test_production_entrypoint.py",
     }
     for name, digest in data["source_hashes"].items():
         assert hashlib.sha256((ARTIFACT / name).read_bytes()).hexdigest() == digest
@@ -49,7 +50,7 @@ def test_exact_patch_and_source_inventory():
 
 def test_release_scope_and_license():
     data = manifest()
-    assert data["installed_or_runtime_integrated"] is False
+    assert data["installed_or_live_runtime_integrated"] is False
     assert data["submitted_upstream"] is False
     assert data["live_model_acceptance_passed"] is False
     assert data["restricted_gateway_sockets_retried"] is False
@@ -57,9 +58,12 @@ def test_release_scope_and_license():
     assert data["selected_suite"]["full_upstream_suite"] is False
     assert data["environment"]["lock_environment_equivalence_attested"] is False
     assert "Copyright (c) 2025 Nous Research" in (ARTIFACT / "LICENSE.hermes-agent").read_text()
-    for name in ("__init__.py", "plugin.yaml", "personal_agent/plugin.py"):
-        assert "launch_text" not in (ROOT / name).read_text()
-        assert "personal_task_plan_preview" not in (ROOT / name).read_text()
+    assert data["production_package_integration"] is True
+    assert data["contract_marker"] == "hermes.text-worker.v1"
+    for name, digest in data["production_source_hashes"].items():
+        assert hashlib.sha256((ROOT / name).read_bytes()).hexdigest() == digest
+    assert "plan_worker" in (ROOT / "plugin.yaml").read_text()
+    assert "plan_worker_host_status" in (ROOT / "personal_agent/plugin.py").read_text()
 
 
 def test_runner_requires_disposable_acknowledgement(tmp_path):

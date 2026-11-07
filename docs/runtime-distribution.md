@@ -32,8 +32,14 @@ tools disabled. Explicit local opt-ins require a trusted single-user profile;
 LOCAL is not proof of physical locality. Local task/memory text is plaintext and
 may enter host history or configured models after separate activation. This
 plugin does not secure other Hermes tools. Release gates and real-model acceptance
-remain incomplete. The worker experiment is excluded and unsupported by the
-pinned production host. The package registers no worker and changes no provider.
+remain incomplete. Experimental host patches and comparative consumers are excluded
+from the runtime export; the [gated production planning modules](55-gated-plan-worker.md)
+are distinct package sources. `plan_worker` defaults off. The unchanged pinned
+host registers no worker because it lacks the exact reviewed text-worker contract.
+On a compatible adopted host, registration additionally requires current
+`llm.text_worker` consent and the local task/conversation/model-tool prerequisites.
+Operations recheck those gates; there is no generic-launch or provider fallback.
+Packaging neither enables these options nor installs or upgrades the host.
 
 Official Git-subdirectory installation exists, but is not performed here. It
 still requires unchanged scanning, consent and PM admission; dependency-free does

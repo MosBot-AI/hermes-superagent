@@ -15,7 +15,7 @@ import tempfile
 from pathlib import Path
 
 ARTIFACT = Path(__file__).resolve().parent
-PATCH_SHA256 = "786df9797425f189ef0f242f406a1a310faf866b7e0a14c658991a2b4fc02572"
+PATCH_SHA256 = "97e4acd85091f64e693185a195c9141bd5faa43a3c23896ba635564966e372d8"
 BASE = "90d6b98fd86d20981ee06ddd5b7d93e4320f26a4"
 
 
@@ -62,12 +62,18 @@ def verify(checkout):
     for name, digest in manifest["source_hashes"].items():
         if hashlib.sha256((ARTIFACT / name).read_bytes()).hexdigest() != digest:
             raise ValueError("Experiment source checksum mismatch")
+    for name, digest in manifest["production_source_hashes"].items():
+        if hashlib.sha256((ARTIFACT.parents[1] / name).read_bytes()).hexdigest() != digest:
+            raise ValueError("Production worker source checksum mismatch")
     return manifest
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--checkout", required=True, type=Path)
+    parser.add_argument(
+        "--clean-checkout", type=Path, help="Unmodified pinned host for cold unsupported-host tests"
+    )
     parser.add_argument(
         "--python",
         required=True,
@@ -96,6 +102,13 @@ def main():
     if args.check_only:
         print("Exact base and staged reviewed patch verified; no tests run.")
         return 0
+    if args.clean_checkout is None:
+        parser.error("--clean-checkout is required for production-entrypoint tests")
+    clean = args.clean_checkout.resolve()
+    if git(clean, "rev-parse", "HEAD").decode().strip() != BASE or git(
+        clean, "diff", "HEAD", "--name-only"
+    ):
+        parser.error("--clean-checkout must be the unchanged pinned host")
     if not interpreter.is_file() or not os.access(interpreter, os.X_OK):
         parser.exit(2, "An existing executable interpreter is required; nothing installed.\n")
     with tempfile.TemporaryDirectory(prefix="text-worker-tests-") as home:
@@ -110,6 +123,8 @@ def main():
             "HERMES_PYTHON": str(interpreter),
             "HERMES_RUNTIME_DIR": str(Path(home) / "runtime"),
             "__HERMES_TESTS_REEXEC": "1",
+            "HERMES_CLEAN_TEST_HOST": str(clean),
+            "HERMES_PATCHED_TEST_HOST": str(checkout),
         }
         subprocess.run(
             [
@@ -125,7 +140,7 @@ def main():
         # The pinned canonical shell runner honors unactivated HERMES_PYTHON
         # when pytest imports. REEXEC makes a failed preflight exit rather
         # than provision; explicit runtime prevents account-store discovery.
-        return subprocess.run(
+        selected = subprocess.run(
             [
                 "bash",
                 "scripts/run_tests.sh",
@@ -148,6 +163,25 @@ def main():
                 "--tb=short",
             ],
             cwd=checkout,
+            env=env,
+            check=False,
+        ).returncode
+        if selected:
+            return selected
+        # The canonical host runner scrubs custom environment keys. Run the
+        # cold subprocess harness separately, still in this credential-free
+        # environment, so its two explicitly prepared host paths remain exact.
+        return subprocess.run(
+            [
+                str(interpreter),
+                "-I",
+                "-m",
+                "pytest",
+                str(ARTIFACT / "test_production_entrypoint.py"),
+                "-q",
+                "--tb=short",
+            ],
+            cwd=clean,
             env=env,
             check=False,
         ).returncode

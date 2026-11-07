@@ -142,3 +142,5 @@ plugins:
 [建议性原生进度同步](docs/53-native-progress-observation-zh.md)明确观察身份已绑定的停放卡片，并写入本地任务。原生 done 不等于本地完成，不自动同步或派发。
 
 新增[已存原生观察关注复盘](docs/54-saved-native-attention-zh.md)：只读本地快照，重叠分类不重复计数，不读取实时看板或改变完成状态。
+
+[受门控的任务规划 worker](docs/55-gated-plan-worker-zh.md): 生产包接线默认关闭，要求准确已审阅宿主约定及当前同意，不代表安装或真实验收。

@@ -90,3 +90,5 @@
 E9 已选定原生 worker 路由设计，并实现离线约束验证器和部分原生契约测试；在线路由 backend 尚未实现。主 agent 保持原有职责；完整约束、宿主能力缺口、开源参考和验收见 [11](11-worker-model-routing-zh.md)。
 
 - [已存原生观察关注复盘](54-saved-native-attention-zh.md)
+
+[受门控的任务规划 worker](55-gated-plan-worker-zh.md): 生产包接线默认关闭，要求准确已审阅宿主约定及当前同意，不代表安装或真实验收。

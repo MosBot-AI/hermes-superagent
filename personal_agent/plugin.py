@@ -1,6 +1,7 @@
 """Thin native registration layer using documented PluginContext methods only."""
 
 import argparse
+import inspect
 import json
 from typing import Any, Protocol
 
@@ -11,6 +12,31 @@ from .routing_inspection import inspection_failure
 from .status import build_status, validate_kanban_configuration
 from .task_cli import current_profile_home, run_tasks_cli, setup_tasks_cli
 from .voice_cli import run_voice_cli, setup_voice_cli
+
+
+def plan_worker_host_status(ctx):
+    """Inspect the narrow public contract, never resolve a route or create a client."""
+    try:
+        service = getattr(ctx, "subagent_lifecycle", None)
+        marker = inspect.getattr_static(type(service), "text_worker_contract", None)
+        if (
+            not isinstance(marker, property)
+            or marker.fset is not None
+            or marker.fdel is not None
+            or getattr(service, "text_worker_contract", None) != "hermes.text-worker.v1"
+        ):
+            return "unsupported_host"
+        if not all(
+            callable(getattr(service, name, None))
+            for name in ("launch_text", "authorize_text_route", "result")
+        ):
+            return "unsupported_host"
+        consent = getattr(ctx, "has_capability", None)
+        if not callable(consent) or consent("llm.text_worker") is not True:
+            return "consent_required"
+        return "available"
+    except Exception:
+        return "host_check_failed"
 
 
 class PluginContext(Protocol):
@@ -68,6 +94,9 @@ def _status_result(
     memory_candidates: bool = False,
     kanban_handoff: bool = False,
     kanban_handoff_board: str = "",
+    plan_worker: bool = False,
+    plan_worker_registered: bool = False,
+    plan_worker_host: str = "not_checked",
 ) -> str:
     if not isinstance(args, dict) or args:
         return json.dumps(
@@ -87,6 +116,9 @@ def _status_result(
             memory_candidates=memory_candidates,
             kanban_handoff=kanban_handoff,
             kanban_handoff_board=kanban_handoff_board,
+            plan_worker=plan_worker,
+            plan_worker_registered=plan_worker_registered,
+            plan_worker_host=plan_worker_host,
         ),
         ensure_ascii=False,
         sort_keys=True,
@@ -134,6 +166,11 @@ def register(ctx: PluginContext) -> None:
         raise ValueError("local_model_tools must be a boolean")
     if model_tools_enabled and not conversation_enabled:
         raise ValueError("local_model_tools requires local_conversation and local_tasks")
+    worker_enabled = ctx.get_config("plan_worker", False)
+    if type(worker_enabled) is not bool or (worker_enabled and not model_tools_enabled):
+        raise ValueError("plan_worker must be boolean and requires local_model_tools")
+    worker_registered = False
+    worker_host = plan_worker_host_status(ctx) if worker_enabled else "not_checked"
     memory_enabled = ctx.get_config("local_memory", False)
     if type(memory_enabled) is not bool:
         raise ValueError("local_memory must be a boolean")
@@ -193,6 +230,9 @@ def register(ctx: PluginContext) -> None:
             handoff = ctx.get_config("kanban_handoff", False)
             board = ctx.get_config("kanban_handoff_board", "")
             validate_kanban_configuration(mode, local_conversation, handoff, board)
+            worker = ctx.get_config("plan_worker", False)
+            if type(worker) is not bool or (worker and not local_model_tools):
+                raise ValueError("invalid plan worker configuration")
             return _status_result(
                 args,
                 mode,
@@ -203,6 +243,9 @@ def register(ctx: PluginContext) -> None:
                 memory_candidates=memory_candidates,
                 kanban_handoff=handoff,
                 kanban_handoff_board=board,
+                plan_worker=worker,
+                plan_worker_registered=worker_registered,
+                plan_worker_host=plan_worker_host_status(ctx) if worker else "not_checked",
             )
         except Exception:
             return json.dumps({"status": "blocked", "error": {"code": "invalid_configuration"}})
@@ -396,3 +439,9 @@ def register(ctx: PluginContext) -> None:
                 handler=bind_handler(schema["name"]),
                 description="Bounded task access after explicit native session activation.",
             )
+
+    if worker_enabled and worker_host == "available":
+        from .task_plan_worker import register as register_plan_worker
+
+        register_plan_worker(ctx)
+        worker_registered = True

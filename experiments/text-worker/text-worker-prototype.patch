@@ -1,5 +1,5 @@
 diff --git a/agent/subagent_lifecycle.py b/agent/subagent_lifecycle.py
-index 65865471..a3274960 100644
+index 65865471..0130a55a 100644
 --- a/agent/subagent_lifecycle.py
 +++ b/agent/subagent_lifecycle.py
 @@ -144,6 +144,10 @@ class _Record:
@@ -22,7 +22,7 @@ index 65865471..a3274960 100644
  
  
  _REGISTRY = _Registry()
-@@ -271,8 +275,25 @@ class SubagentLifecycleService:
+@@ -271,8 +275,34 @@ class SubagentLifecycleService:
      completed results stay until process exit; ``reconnect`` reports that a serialized handle cannot
      reconnect after a restart instead of launching work again."""
  
@@ -32,6 +32,15 @@ index 65865471..a3274960 100644
 +        self._plugin_id = plugin_id
 +        from hermes_constants import hermes_home_key
 +        self._text_profile_home = str(hermes_home_key(profile_home))
++
++    @property
++    def text_worker_contract(self) -> str:
++        """Text-only API semantics, not consent, route admission or runtime readiness.
++
++        Consumers must still use current capability and exact-route checks. This
++        marker does not authorize ordinary tool-using lifecycle.launch fallback.
++        """
++        return "hermes.text-worker.v1"
 +
 +    def authorize_text_route(self, provider: str, model: str, parent_session_id: str) -> str:
 +        """Read-only current authorization; return an opaque route fingerprint, never credentials."""
@@ -49,7 +58,7 @@ index 65865471..a3274960 100644
  
      def launch(self, request: SubagentLaunchRequest | Mapping[str, Any]) -> SubagentHandle:
          parent = self._parent_agent_resolver()
-@@ -350,6 +371,11 @@ class SubagentLifecycleService:
+@@ -350,6 +380,11 @@ class SubagentLifecycleService:
          with _REGISTRY.lock:
              if record.result is not None:
                  return SubagentCancelResult(False, already_terminal=True, state=record.state)
@@ -61,7 +70,7 @@ index 65865471..a3274960 100644
              agent = record.agent
              record.state = SubagentState.CANCEL_REQUESTED
              record.updated_at = time.time()
-@@ -365,6 +391,13 @@ class SubagentLifecycleService:
+@@ -365,6 +400,13 @@ class SubagentLifecycleService:
          record = self._record(handle)
          if record is None:
              return SubagentResult(handle, SubagentState.UNKNOWN, False, error_classification="UNKNOWN_HANDLE")
@@ -75,7 +84,7 @@ index 65865471..a3274960 100644
          with _REGISTRY.lock:
              return record.result or SubagentResult(record.handle, record.state, False, error_classification="NOT_READY")
  
-@@ -383,6 +416,8 @@ class SubagentLifecycleService:
+@@ -383,6 +425,8 @@ class SubagentLifecycleService:
          with _REGISTRY.lock:
              if record.result is not None:
                  return False
@@ -84,7 +93,7 @@ index 65865471..a3274960 100644
          from tools.delegate_tool_registry import steer_subagent
          return steer_subagent(record.handle.subagent_id, text.strip())
  
-@@ -397,7 +432,14 @@ class SubagentLifecycleService:
+@@ -397,7 +441,14 @@ class SubagentLifecycleService:
          if _session_id_of(self._parent_agent_resolver()) != handle.parent_session_id:
              return None
          with _REGISTRY.lock:
@@ -100,7 +109,7 @@ index 65865471..a3274960 100644
  
      @staticmethod
      def _cleanup_locked() -> None:
-@@ -408,9 +450,10 @@ class SubagentLifecycleService:
+@@ -408,9 +459,10 @@ class SubagentLifecycleService:
              if record.result is not None and record.completed_at is not None and record.completed_at < cutoff
          ]
          for subagent_id in expired:
@@ -113,7 +122,7 @@ index 65865471..a3274960 100644
  
      def _run(self, record: _Record, goal: str, parent: Any) -> None:
          with _REGISTRY.lock:
-@@ -470,3 +513,6 @@ class SubagentLifecycleService:
+@@ -470,3 +522,6 @@ class SubagentLifecycleService:
          enabled = getattr(parent, "enabled_toolsets", None)
          if enabled is not None and not set(request.allowed_toolsets).issubset(set(enabled)):
              raise SubagentLifecycleError("Requested toolsets would broaden parent permissions.")
@@ -635,10 +644,10 @@ index 8aa55ff3..5d45b30b 100644
      def side_question(self, token: str, prompt: str, *, timeout: float = 15.0) -> Optional[str]:
 diff --git a/tests/agent/test_text_subagent.py b/tests/agent/test_text_subagent.py
 new file mode 100644
-index 00000000..904f1f1c
+index 00000000..818e3266
 --- /dev/null
 +++ b/tests/agent/test_text_subagent.py
-@@ -0,0 +1,950 @@
+@@ -0,0 +1,977 @@
 +"""Text-worker proposal: real SDK/transport/middleware, in-memory HTTP only."""
 +import dataclasses
 +import json
@@ -1589,6 +1598,33 @@ index 00000000..904f1f1c
 +    monkeypatch.setenv("HERMES_HOME", str(original_home))
 +    with pytest.raises(SubagentLifecycleError):
 +        held.launch_text(request())  # A's consent is still revoked
++
++
++def test_text_worker_contract_is_readonly_metadata_not_authorization(world, monkeypatch):
++    service = world.ctx.subagent_lifecycle
++    assert service.text_worker_contract == "hermes.text-worker.v1"
++    with pytest.raises(AttributeError):
++        service.text_worker_contract = "other"
++    with pytest.raises(AttributeError):
++        del service.text_worker_contract
++    # The descriptor also cannot be shadowed by an instance dictionary entry.
++    service.__dict__["text_worker_contract"] = "other"
++    assert service.text_worker_contract == "hermes.text-worker.v1"
++
++    def forbidden(*args, **kwargs):
++        raise AssertionError("Text contract refusal must not use ordinary child launch")
++
++    monkeypatch.setattr(service, "launch", forbidden)
++    world.config["plugins"]["entries"]["planner"]["text_workers"]["enabled"] = False
++    world.save()
++    # Feature detection itself does not resolve a parent, create a client or
++    # obtain permission. Enforcement remains in the dedicated text methods.
++    monkeypatch.setattr(service, "_parent_agent_resolver", forbidden)
++    assert service.text_worker_contract == "hermes.text-worker.v1"
++    monkeypatch.setattr(service, "_parent_agent_resolver", lambda: world.parent)
++    with pytest.raises(SubagentLifecycleError):
++        service.launch_text(request())
++    assert world.calls == [] and world.children == []
 diff --git a/tests/hermes_cli/test_plugin_capabilities.py b/tests/hermes_cli/test_plugin_capabilities.py
 index cfee0a0d..55e12753 100644
 --- a/tests/hermes_cli/test_plugin_capabilities.py

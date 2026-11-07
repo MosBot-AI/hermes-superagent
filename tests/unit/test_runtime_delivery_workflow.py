@@ -9,8 +9,12 @@ def test_runtime_delivery_follows_checks_and_is_push_only():
     workflow = (ROOT / ".github/workflows/check.yml").read_text()
     assert "permissions:\n  contents: read\n" in workflow
     assert "pull_request_target" not in workflow
-    check, build, upload = workflow.split("      - name: ")[-3:]
+    check, proposal, build, upload = workflow.split("      - name: ")[-4:]
     assert "scripts/check.py" in check
+    assert "worktree add --detach" in proposal
+    assert "apply --check" in proposal and "apply --index" in proposal
+    assert "--clean-checkout" in proposal and "--disposable-copy" in proposal
+    assert "if: " not in proposal
     for step in (build, upload):
         assert "        if: github.event_name == 'push'\n" in step
         assert "continue-on-error" not in step and "always()" not in step

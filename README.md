@@ -142,3 +142,5 @@ The [task-to-worker proposal](docs/48-task-worker-proposal.md) adds a review-onl
 [Advisory native progress sync](docs/53-native-progress-observation.md) explicitly observes an identity-bound parked card into the local task. Native done is not local completion; no automatic sync or dispatch.
 
 Added [saved native attention review](docs/54-saved-native-attention.md): local snapshots only, overlapping buckets with unique counts, no live-board read or completion change.
+
+[Gated task planning worker](docs/55-gated-plan-worker.md): Production-package integration is default-off and requires the exact reviewed host contract plus current consent; not installed or live-accepted.

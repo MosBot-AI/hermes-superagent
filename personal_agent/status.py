@@ -31,6 +31,9 @@ def build_status(
     memory_candidates: bool = False,
     kanban_handoff: bool = False,
     kanban_handoff_board: str = "",
+    plan_worker: bool = False,
+    plan_worker_registered: bool = False,
+    plan_worker_host: str = "not_checked",
 ) -> dict[str, object]:
     """Return a fresh result without consulting credentials, files, or providers."""
     if mode not in ("read_only", "local_tasks"):
@@ -46,6 +49,16 @@ def build_status(
     if type(memory_candidates) is not bool or (memory_candidates and not memory_model_tools):
         raise ValueError("invalid memory candidates configuration")
     validate_kanban_configuration(mode, local_conversation, kanban_handoff, kanban_handoff_board)
+    if type(plan_worker) is not bool or (plan_worker and not local_model_tools):
+        raise ValueError("invalid plan worker configuration")
+    if type(plan_worker_registered) is not bool or plan_worker_host not in (
+        "not_checked",
+        "unsupported_host",
+        "consent_required",
+        "available",
+        "host_check_failed",
+    ):
+        raise ValueError("invalid plan worker host observation")
     platform_supported = os.name == "posix" and hasattr(os, "O_NOFOLLOW")
     local_tasks = mode == "local_tasks" and platform_supported
     return {
@@ -124,6 +137,30 @@ def build_status(
             "changes_completion": False,
             "live_verified": False,
             "model_read_requires_existing_session_activation": True,
+        },
+        "plan_worker": {
+            "implemented": True,
+            "configured": plan_worker,
+            "registered": plan_worker_registered,
+            "host": plan_worker_host,
+            "enabled": plan_worker
+            and plan_worker_registered
+            and plan_worker_host == "available"
+            and local_tasks,
+            "reload_required": plan_worker
+            and not plan_worker_registered
+            and plan_worker_host == "available",
+            "task_grant_required": True,
+            "route_verified": False,
+            "provider": "opencode-go",
+            "model": "deepseek-v4.1-flash",
+            "changes_task_state": False,
+            "tools_allowed": False,
+            "automatic": False,
+            "installed_or_live_verified": False,
+            "scope": (
+                "One explicitly granted planning draft; requires adopted text-worker host contract."
+            ),
         },
         "kanban_handoff": {
             "configured": kanban_handoff,

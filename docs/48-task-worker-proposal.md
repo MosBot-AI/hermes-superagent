@@ -4,7 +4,7 @@ English | [简体中文](48-task-worker-proposal-zh.md)
 
 ## What advanced
 
-The [review-only text-worker bundle](../experiments/text-worker/README.md) connects an explicitly approved local task revision to one native-host text request and a lifecycle result. It includes a proposed host API, exact-route opt-in, guarded one-attempt execution, a dedicated no-redirect client, durable single-claim/draft receipts, a concrete experimental command/model consumer and reproducible offline tests. It is not loaded by the production plugin.
+The [review-only text-worker bundle](../experiments/text-worker/README.md) connects an explicitly approved local task revision to one native-host text request and a lifecycle result. It includes a proposed host API, exact-route opt-in, guarded one-attempt execution, a dedicated no-redirect client, durable single-claim/draft receipts, a concrete experimental command/model consumer and reproducible offline tests. That original bundle was not loaded by the production plugin. The subsequent [gated package integration](55-gated-plan-worker.md) copies the consumer into production modules behind a default-off, exact-contract and consent gate; this does not deploy the host proposal.
 
 The consumer's fixed flow is task selection → short-lived one-task grant → real primary turn admission → immutable task snapshot → text worker → draft with revision/staleness metadata. It never marks a task complete or interprets returned instructions as authority. There is no general worker tool execution.
 

@@ -39,6 +39,17 @@ jobs:
           "$RUNNER_TEMP/hermes-test-venv/bin/python" scripts/check.py \
             --hermes "$RUNNER_TEMP/hermes" \
             --hermes-python "$RUNNER_TEMP/hermes-test-venv/bin/python"
+      - name: Verify gated worker on separate disposable proposed host
+        shell: bash
+        run: |
+          set -euo pipefail
+          proposed="$RUNNER_TEMP/hermes-text-worker"
+          git -C "$RUNNER_TEMP/hermes" worktree add --detach "$proposed" 90d6b98fd86d20981ee06ddd5b7d93e4320f26a4
+          git -C "$proposed" apply --check "$GITHUB_WORKSPACE/experiments/text-worker/text-worker-prototype.patch"
+          git -C "$proposed" apply --index "$GITHUB_WORKSPACE/experiments/text-worker/text-worker-prototype.patch"
+          "$RUNNER_TEMP/hermes-test-venv/bin/python" experiments/text-worker/run_tests.py \
+            --checkout "$proposed" --clean-checkout "$RUNNER_TEMP/hermes" \
+            --python "$RUNNER_TEMP/hermes-test-venv/bin/python" --disposable-copy
       - name: Build and verify the offline runtime delivery
         if: github.event_name == 'push'
         shell: bash

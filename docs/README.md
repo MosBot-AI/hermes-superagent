@@ -90,3 +90,5 @@ The design and project plan are established. The E0 foundation and opt-in local 
 E9 has a selected native worker-routing design, an offline constraint evaluator and partial native contract tests. The live routing backend is not implemented. The main agent keeps its responsibilities. See [11](11-worker-model-routing.md) for constraints, host gaps, references, and acceptance criteria.
 
 - [Saved native attention review](54-saved-native-attention.md)
+
+[Gated task planning worker](55-gated-plan-worker.md): Production-package integration is default-off and requires the exact reviewed host contract plus current consent; not installed or live-accepted.

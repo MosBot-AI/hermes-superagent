@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "status": "Review-only host proposal and experimental task consumer; not enabled",
+  "status": "Review-only host proposal with default-off production-package consumer; host adoption gated",
   "base": "90d6b98fd86d20981ee06ddd5b7d93e4320f26a4",
-  "staged_tree": "aaeb858f173d90fa60eab3726ca1bbd56d957451",
+  "staged_tree": "5c68618187f2a6d168ab8eeb11efe8cb259d8139",
   "patch_file": "text-worker-prototype.patch",
-  "patch_sha256": "786df9797425f189ef0f242f406a1a310faf866b7e0a14c658991a2b4fc02572",
+  "patch_sha256": "97e4acd85091f64e693185a195c9141bd5faa43a3c23896ba635564966e372d8",
   "changed_files": 8,
   "patch_files": [
     "agent/subagent_lifecycle.py",
@@ -20,7 +20,8 @@
     "consumer.py": "128deac4bbf39d0ce71cd4d07b77633a0617e168c3e66789f9f0f5759382cd2b",
     "worker_ledger.py": "bd40dfdc14fda232b160d0b558089603cab5dbb3e638cdf39f53cb191b400e79",
     "worker_presentation.py": "a3b3fb4e6e42739dfc03077d7aac26675f45dc4f405a10568702874526e395bd",
-    "test_task_worker.py": "9ec40a2a7bc959ff83845ff9cd8d02887efe556d35f5340ed337d038c4eb6070"
+    "test_task_worker.py": "1db866d4a7cb346c8bc5eb51497c15dfbf1c339a196d648bed3ee8d5d92d6d9c",
+    "test_production_entrypoint.py": "8fbe7112dcc13eb47d3291fae856d01ff0432e1d27ba39912cb8e9e8428104a0"
   },
   "artifact_files": [
     "LICENSE.hermes-agent",
@@ -29,6 +30,7 @@
     "consumer.py",
     "manifest.json",
     "run_tests.py",
+    "test_production_entrypoint.py",
     "test_task_worker.py",
     "text-worker-prototype.patch",
     "worker_ledger.py",
@@ -44,9 +46,9 @@
     "tests/hermes_cli/test_plugin_api_compat.py"
   ],
   "selected_suite": {
-    "host_passed": 247,
+    "host_passed": 248,
     "consumer_passed": 109,
-    "passed": 356,
+    "passed": 357,
     "failed": 0,
     "skipped": 0,
     "retries": 0,
@@ -56,7 +58,6 @@
     "passed": 14,
     "failed": 0
   },
-  "installed_or_runtime_integrated": false,
   "submitted_upstream": false,
   "restricted_gateway_sockets_retried": false,
   "environment": {
@@ -69,7 +70,7 @@
   },
   "limits": [
     "Only trusted in-process text planning; not a Python/OS sandbox or tool-using worker",
-    "No production import, upstream adoption, installed-host modification or live model acceptance",
+    "No upstream adoption, installed-host modification or live model acceptance; production consumer registration requires exact host contract and consent",
     "Dedicated no-redirect/no-env HTTP client is implemented only in the isolated host proposal",
     "SDK provider adapters, dynamic auth and query overrides are unsupported; parent transport/auth/hooks are not inherited",
     "Same-process plugins and host code remain trusted, not an adversarial sandbox",
@@ -127,6 +128,25 @@
     "failure": "tests/tools/test_delegate.py::test_child_dedicated_db_follows_parents_db_path",
     "failure_reproduced_on_clean_base": true,
     "reason": "Environment /var/tmp -> /tmp alias: parent/child database path strings differ; unmodified canonical runner uses /var/tmp",
-    "source_or_assertion_changed_to_pass": false
+    "source_or_assertion_changed_to_pass": false,
+    "historical": true
+  },
+  "production_source_hashes": {
+    "personal_agent/task_plan_worker.py": "13b28460126a455bda982780c9460beeec48b94b6522cd14236d39a0b4c79d0f",
+    "personal_agent/task_worker_ledger.py": "c3a3ff59aeff48bd3e4bf08277f69ad74677bdaa8c7650ca7a72cb946a7c49f0",
+    "personal_agent/task_worker_presentation.py": "97aa7c5367e61bba187e40edab4f4b62604c027a62ee4de21a7f20767f37dd3d"
+  },
+  "production_package_integration": true,
+  "installed_or_live_runtime_integrated": false,
+  "contract_marker": "hermes.text-worker.v1",
+  "production_entrypoint_suite": {
+    "clean_host_passed": 4,
+    "patched_host_passed": 23,
+    "outer_harness_passed": 2,
+    "failed": 0,
+    "skipped": 0,
+    "retries": 0,
+    "cold_isolated_shipped_package": true,
+    "live_calls": false
   }
 }

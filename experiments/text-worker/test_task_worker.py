@@ -40,8 +40,7 @@ def host(native, monkeypatch):  # noqa: F811
     }
     (home / "config.yaml").write_text(json.dumps(config))
     plugin = home / "plugins" / PLUGIN_ID
-    with (plugin / "plugin.yaml").open("a") as file:
-        file.write("\ncapabilities:\n  - llm.text_worker\n")
+    assert "  - llm.text_worker" in (plugin / "plugin.yaml").read_text()
     shutil.copy2(HERE / "consumer.py", plugin / "worker_consumer.py")
     shutil.copy2(HERE / "worker_ledger.py", plugin / "worker_ledger.py")
     shutil.copy2(HERE / "worker_presentation.py", plugin / "worker_presentation.py")
