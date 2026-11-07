@@ -106,3 +106,18 @@ changed runtime directory before any package import. Archive integrity checks ar
 repeated after acceptance. This covers only the synthetic in-process CLI flow;
 live installation, native clients/Gateway, model tools and worker adoption remain
 separate acceptance gates. Do not retry a denied installation with this artifact.
+
+## Packaged native conversation gate
+
+The same verified runtime also runs in a separate cold process through the pinned
+host's native LOCAL command dispatcher. A synthetic authenticated in-memory
+transport captures and reads a task, reloads the plugin, and manually repeats the
+same request without duplication. Missing read or control capability must be
+rejected before any task mutation. Imported plugin modules must come from the
+verified package, not the source checkout. Network, listeners, subprocesses,
+model tools and worker registration remain disabled.
+
+This additional gate tests the artifact's conversation entry point. It is not an
+installation, login, real transport, CLI/TUI or model-provider acceptance result;
+those #40 release gates remain open. The validation report records this separately
+as `conversation_acceptance`, and any failure prevents a passing package report.
