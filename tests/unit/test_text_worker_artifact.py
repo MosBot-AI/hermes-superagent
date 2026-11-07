@@ -12,7 +12,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 ARTIFACT = ROOT / "experiments/text-worker"
-SHA = "35ef9ac9089437fc4e82ac5e3e52fe7150f0a5bb421e02b396c840855a07eec2"
+SHA = "f7a222d67b92b2d85f7e5119bee5583dc43703388770807565acd67c4f4060a8"
 BASE = "90d6b98fd86d20981ee06ddd5b7d93e4320f26a4"
 
 
@@ -51,7 +51,7 @@ def test_release_scope_and_license():
     data = manifest()
     assert data["installed_or_runtime_integrated"] is False
     assert data["submitted_upstream"] is False
-    assert data["real_provider_or_model_tested"] is False
+    assert data["live_model_acceptance_passed"] is False
     assert data["restricted_gateway_sockets_retried"] is False
     assert data["selected_suite"]["failed"] == data["selected_suite"]["skipped"] == 0
     assert data["selected_suite"]["full_upstream_suite"] is False

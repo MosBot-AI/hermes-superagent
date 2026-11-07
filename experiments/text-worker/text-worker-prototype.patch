@@ -118,10 +118,10 @@ index 65865471..c8ec509d 100644
 +from agent.text_subagent import TextSubagentRequest
 diff --git a/agent/text_subagent.py b/agent/text_subagent.py
 new file mode 100644
-index 00000000..b513726c
+index 00000000..f5c102f2
 --- /dev/null
 +++ b/agent/text_subagent.py
-@@ -0,0 +1,331 @@
+@@ -0,0 +1,340 @@
 +"""Opt-in bounded text workers. No credential resolver, agent loop, or tool executor.
 +
 +Trusted in-process plugins/middleware are not sandboxed. Cancellation and timeout
@@ -230,6 +230,15 @@ index 00000000..b513726c
 +    request = client.build_request("POST", endpoint, json=payload)
 +    if request.url != endpoint or request.method != "POST" or request.url.query:
 +        _refuse()
++    if route[0] == "opencode-go" and (endpoint.scheme, endpoint.host, endpoint.port or 443) == ("https", "opencode.ai", 443):
++        from agent.opencode_affinity import opencode_session_headers
++        # Provider formatting, not authentication or native-session authority. Never
++        # inherit the parent's/ambient conversation identity (including cron scope).
++        affinity = "oneshot-" + uuid.uuid4().hex[:16]
++        approved = contextvars.Context().run(opencode_session_headers, route[0], route[2], affinity)
++        if approved != {"x-opencode-session": affinity}:
++            _refuse()
++        headers.update(approved)
 +    admissible()
 +    request.headers.update(headers)
 +    # Auth/redirect overrides are per request; shared parent settings stay untouched.
@@ -503,10 +512,10 @@ index 58aa4ba4..7eaedf6e 100644
      def delegation_backends(self) -> Any:
 diff --git a/tests/agent/test_text_subagent.py b/tests/agent/test_text_subagent.py
 new file mode 100644
-index 00000000..e756271d
+index 00000000..2d5e5e83
 --- /dev/null
 +++ b/tests/agent/test_text_subagent.py
-@@ -0,0 +1,667 @@
+@@ -0,0 +1,749 @@
 +"""Text-worker proposal: real SDK/transport/middleware, in-memory HTTP only."""
 +import dataclasses
 +import json
@@ -1174,3 +1183,85 @@ index 00000000..e756271d
 +    world.parent.client.api_key = "rotated-synthetic-key"
 +    assert world.service.authorize_text_route("opencode-go", "deepseek-v4.1-flash", "parent") == stamp
 +    assert world.service.result(handle).summary == result.summary
++
++
++@pytest.mark.parametrize("base_url", ["https://opencode.ai/inference/go/openai/v1", "https://opencode.ai/zen/go/v1"])
++def test_official_opencode_affinity_is_ephemeral_and_not_parent_scope(world, monkeypatch, base_url):
++    from agent import portal_tags
++    import re
++    world.parent.base_url = world.route["base_url"] = base_url
++    world.parent.client.base_url = base_url
++    world.save()
++    world.parent.client._custom_headers = {"x-opencode-session": "unrelated-parent"}
++    seen = []
++    def answer(req):
++        seen.append(req)
++        return world.answer(req)
++    world.handler[0] = answer
++    scope = portal_tags.set_affinity_scope("unrelated-ambient")
++    conversation = portal_tags.set_conversation_context("unrelated-root")
++    try:
++        for _ in range(2):
++            _, result = finish(world)
++            assert result.terminal_state == SubagentState.SUCCEEDED
++        assert portal_tags.get_affinity_scope() == "unrelated-ambient"
++        assert portal_tags.get_conversation_context() == "unrelated-root"
++    finally:
++        portal_tags.reset_conversation_context(conversation)
++        portal_tags.reset_affinity_scope(scope)
++    values = [req.headers["x-opencode-session"] for req in seen]
++    assert len(values) == 2 and len(set(values)) == 2
++    assert all(re.fullmatch(r"oneshot-[0-9a-f]{16}", value) for value in values)
++    assert all(str(req.url) == base_url + "/chat/completions" for req in seen)
++    assert all("unrelated" not in str(req.headers) for req in seen)
++
++
++@pytest.mark.parametrize("provider,base_url", [
++    ("opencode-go", "https://opencode.ai.attacker.test/v1"),
++    ("opencode-go", "https://sub.opencode.ai/v1"),
++    ("opencode-go", "https://opencode.ai:8443/v1"),
++    ("opencode-go", "https://text.test/v1"),
++    ("openai", "https://opencode.ai/v1"),
++    ("deepseek", "https://opencode.ai/v1"),
++])
++def test_affinity_never_added_for_other_origin_or_provider(world, provider, base_url):
++    world.parent.provider = world.route["provider"] = provider
++    world.parent.base_url = world.route["base_url"] = base_url
++    world.parent.client.base_url = base_url
++    world.save()
++    seen = []
++    def answer(req):
++        seen.append(req)
++        return world.answer(req)
++    world.handler[0] = answer
++    _, result = finish(world, dataclasses.replace(request(), provider=provider))
++    assert result.terminal_state == SubagentState.SUCCEEDED
++    assert len(seen) == 1 and "x-opencode-session" not in seen[0].headers
++
++
++def test_opencode_affinity_redirect_has_only_one_wire_attempt(world):
++    base_url = "https://opencode.ai/inference/go/openai/v1"
++    world.parent.base_url = world.route["base_url"] = base_url
++    world.parent.client.base_url = base_url
++    world.save()
++    seen = []
++    def answer(req):
++        seen.append(req)
++        return httpx.Response(307, headers={"location": "https://foreign.test/collect"})
++    world.handler[0] = answer
++    _, result = finish(world)
++    assert result.terminal_state == SubagentState.FAILED
++    assert len(seen) == 1 and seen[0].url.host == "opencode.ai"
++    assert seen[0].headers["x-opencode-session"].startswith("oneshot-")
++
++
++def test_unexpected_official_affinity_output_fails_before_http(world, monkeypatch):
++    from agent import opencode_affinity
++    base_url = "https://opencode.ai/inference/go/openai/v1"
++    world.parent.base_url = world.route["base_url"] = base_url
++    world.parent.client.base_url = base_url
++    world.save()
++    monkeypatch.setattr(opencode_affinity, "opencode_session_headers", lambda *args: {
++        "x-opencode-session": "ambient-identity", "X-Unapproved": "extra"})
++    _, result = finish(world)
++    assert result.terminal_state == SubagentState.FAILED and not world.calls

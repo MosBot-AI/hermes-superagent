@@ -2,9 +2,9 @@
   "schema_version": 1,
   "status": "Review-only host proposal and experimental task consumer; not enabled",
   "base": "90d6b98fd86d20981ee06ddd5b7d93e4320f26a4",
-  "staged_tree": "068404bfe98d6d00e28fce786efdd50f4e1c7ba2",
+  "staged_tree": "6b5cb4daebfcb161a58c9faca77f558c1ede17c6",
   "patch_file": "text-worker-prototype.patch",
-  "patch_sha256": "35ef9ac9089437fc4e82ac5e3e52fe7150f0a5bb421e02b396c840855a07eec2",
+  "patch_sha256": "f7a222d67b92b2d85f7e5119bee5583dc43703388770807565acd67c4f4060a8",
   "changed_files": 5,
   "patch_files": [
     "agent/subagent_lifecycle.py",
@@ -37,9 +37,9 @@
     "tests/hermes_cli/test_plugins_middleware_chain.py"
   ],
   "selected_suite": {
-    "host_passed": 115,
+    "host_passed": 125,
     "consumer_passed": 64,
-    "passed": 179,
+    "passed": 189,
     "failed": 0,
     "skipped": 0,
     "retries": 0,
@@ -51,10 +51,7 @@
   },
   "installed_or_runtime_integrated": false,
   "submitted_upstream": false,
-  "real_provider_or_model_tested": false,
   "restricted_gateway_sockets_retried": false,
-  "keys_used": false,
-  "sockets_opened": false,
   "environment": {
     "python": "3.14.9",
     "installed_package_count": 89,
@@ -81,5 +78,32 @@
     "Native workbench reads persisted receipts via explicit scoped LOCAL commands; it neither polls a live worker nor cancels admitted work",
     "Native exec output uses audited client display paths, not model submission; clients may cache it and live UI acceptance remains untested"
   ],
-  "clean_base_apply_check": true
+  "clean_base_apply_check": true,
+  "live_model_acceptance_passed": false,
+  "offline_selected_suite": {
+    "credentials_used": false,
+    "network_requests": false,
+    "sockets_opened": false
+  },
+  "live_transport_probe": {
+    "scope": "One explicitly authorized synthetic transport request, not native worker activation",
+    "status": "ConnectError; no HTTP status or model response; delivery unconfirmed",
+    "submission_attempted": true,
+    "official_credential_resolver_used": true,
+    "provider": "opencode-go",
+    "model": "deepseek-v4.1-flash",
+    "endpoint": "https://opencode.ai/inference/go/openai/v1",
+    "config_yaml_unchanged": true,
+    "whole_profile_unchanged_attested": false,
+    "retries": 0,
+    "gateway_used": false,
+    "acceptance_passed": false
+  },
+  "official_install_attempt": {
+    "scope": "Production repository at local d4581ce (same tree as published 7c6b11b), fresh credential-free profile",
+    "status": "Scanner CAUTION, exit 1; not installed or enabled",
+    "scanner_findings": 50,
+    "override_or_retry": false,
+    "plugin_absent_after_attempt": true
+  }
 }

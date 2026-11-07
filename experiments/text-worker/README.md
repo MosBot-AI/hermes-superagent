@@ -52,6 +52,14 @@ The route gate prevents a **new model-tool** draft return under a changed route.
 
 This is not an OS/Python sandbox or protection from malicious same-process plugins, provider implementations or operators. Configured plugin trust is not proof that a physical human authored each call. Native LOCAL admission relies on the host's existing registered source/session controller checks; all authorized controllers share that session's authority. Provider internals and actual billed/served model behavior remain outside client-side proof. Timeout/cancel is cooperative and cannot undo a request already sent.
 
+## Provider compatibility and actual acceptance attempt
+
+OpenCode Go requires a session-affinity header. For the exact `opencode-go` provider and HTTPS `opencode.ai:443` origin only, the dedicated client now calls the official host affinity helper with a fresh one-shot identifier in an empty context. It does not inherit the parent/root session identifier or arbitrary headers. Both the configured `/inference/go/openai/v1` path and metadata `/zen/go/v1` path retain exact-target checks. Foreign origins, lookalike hosts and other providers do not receive this header. The selected offline lane now has 125 host and 64 consumer tests.
+
+One explicitly authorized synthetic request used the official credential resolver and this transport at `https://opencode.ai/inference/go/openai/v1`, requesting only `deepseek-v4.1-flash`. It failed with `ConnectError` before an HTTP status or model response was available. Delivery is unconfirmed; no retry, fallback or alternative route was attempted. `config.yaml` remained unchanged; the official resolver can maintain credential metadata, so this is not a claim that the whole profile was unchanged. No native activation, worker launch or Gateway was involved. **Live worker/model acceptance is still open.**
+
+A separate official installation attempt for the production repository, in a fresh credential-free offline profile, stopped at the unchanged scanner: CAUTION, 50 findings, exit 1. No override was accepted; official listing and filesystem checks confirmed the plugin was absent. The repository install source includes development docs/tests and these experiments even though production registration does not import the worker. A reviewed runtime distribution is a future packaging task, not permission to bypass that verdict. Installation, activation and supported-host worker availability are unverified.
+
 ## Reproduce the selected offline evidence
 
 Use a fresh, trusted, credential-free disposable source copy at the exact host base, an already prepared Python 3.14 test interpreter, and the reviewed artifact. Review the patch before staging it. These are deliberate experiment steps, not a production installer:
