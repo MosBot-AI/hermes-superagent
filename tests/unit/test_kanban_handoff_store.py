@@ -382,3 +382,259 @@ def test_prepared_listing_never_discloses_payload_but_single_preview_does(store)
     assert listed["state"] == "prepared" and listed["payload"] is None
     assert "PRIVATE" not in json.dumps(listed)
     assert store.get(record["id"], 2)["payload"] == record["payload"]
+
+
+def anchor(**overrides):
+    return {"card_id": "t_1234abcd", "created_at": 123, "created_event_id": 1, **overrides}
+
+
+def test_anchor_is_immutable_and_observation_never_establishes_it(store):
+    record = store.prepare("key", intent(), 0)
+    with pytest.raises(HandoffError, match="terminal_state"):
+        store.remember_native_identity(record["id"], anchor(), 1)
+    store.claim(record["id"], record["intent_digest"], 2)
+    available = store.remember_native_identity(record["id"], anchor(), 3)
+    assert available["identity_state"] == "available" and available["native_identity"] == anchor()
+    assert available["state"] == "claimed" and available["payload"] is None
+    assert store.remember_native_identity(record["id"], anchor(), 4) == available
+    for field, value in [("card_id", "t_aaaaaaaa"), ("created_at", 124), ("created_event_id", 2)]:
+        with pytest.raises(HandoffError, match="native_identity_conflict"):
+            store.remember_native_identity(record["id"], anchor(**{field: value}), 5)
+    with pytest.raises(HandoffError, match="native_identity_conflict"):
+        store.record_observation(
+            record["id"], {"outcome": "parked", "card_id": "t_aaaaaaaa", "status": "blocked"}, 6
+        )
+    assert store.get(record["id"], 7)["state"] == "claimed"
+    confirmed = store.record_observation(
+        record["id"], {"outcome": "parked", "card_id": anchor()["card_id"], "status": "blocked"}, 8
+    )
+    assert store.remember_native_identity(record["id"], anchor(), 9) == confirmed
+    other = store.prepare("other", intent(), 10)
+    store.claim(other["id"], other["intent_digest"], 11)
+    observed = store.record_observation(
+        other["id"], {"outcome": "parked", "card_id": anchor()["card_id"], "status": "blocked"}, 12
+    )
+    assert observed["native_identity"] is None and observed["identity_state"] == "unbound"
+    with pytest.raises(HandoffError, match="terminal_state"):
+        store.remember_native_identity(other["id"], anchor(), 13)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        None,
+        [],
+        {"card_id": "t_1234abcd"},
+        anchor(extra="authority"),
+        anchor(card_id="t_1234ABCD"),
+        anchor(card_id="t_1234abcde"),
+        anchor(created_at=True),
+        anchor(created_at=-1),
+        anchor(created_at=1.0),
+        anchor(created_event_id=False),
+        anchor(created_event_id=0),
+        anchor(created_event_id="1"),
+    ],
+)
+def test_anchor_input_is_strict_and_cannot_inject_authority(store, value):
+    record = store.prepare("key", intent(), 0)
+    store.claim(record["id"], record["intent_digest"], 1)
+    with pytest.raises(HandoffError, match="invalid_request"):
+        store.remember_native_identity(record["id"], value, 2)
+    assert store.get(record["id"], 3)["identity_state"] == "unbound"
+
+
+def legacy_connection(factory=sqlite3.Connection):
+    connection = sqlite3.connect(":memory:", isolation_level=None, factory=factory)
+    connection.execute(module._SCHEMA_V1["handoffs"])
+    connection.execute(f"PRAGMA application_id={module.APPLICATION_ID}")
+    connection.execute("PRAGMA user_version=1")
+    return connection
+
+
+def seed_legacy(connection):
+    with sqlite3.connect(":memory:", isolation_level=None) as fresh:
+        source = HandoffStore(fresh)
+        source.initialize()
+        records = {}
+        for state in ("prepared", "claimed", "unknown", "confirmed", "cancelled", "expired"):
+            record = source.prepare(state, intent(), 0)
+            if state in ("claimed", "unknown", "confirmed"):
+                source.claim(record["id"], record["intent_digest"], 1)
+                if state != "claimed":
+                    observation = (
+                        {"outcome": "missing"}
+                        if state == "unknown"
+                        else {"outcome": "parked", "card_id": "t_1234abcd", "status": "blocked"}
+                    )
+                    source.record_observation(record["id"], observation, 2)
+            elif state == "cancelled":
+                source.cancel(record["id"], record["intent_digest"], 1)
+            elif state == "expired":
+                # Do not expire the separate prepared migration case.
+                fresh.execute(
+                    "UPDATE handoffs SET state='expired',payload=NULL,scope_digest=NULL WHERE id=?",
+                    (record["id"],),
+                )
+            records[state] = record
+        rows = fresh.execute("SELECT * FROM handoffs ORDER BY sequence").fetchall()
+        connection.executemany(
+            "INSERT INTO handoffs VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", [row[:12] for row in rows]
+        )
+        return records
+
+
+def test_exact_v1_migration_preserves_all_prior_bytes_and_never_adopts_legacy():
+    with legacy_connection() as connection:
+        records = seed_legacy(connection)
+        before = connection.execute("SELECT * FROM handoffs ORDER BY sequence").fetchall()
+        store = HandoffStore(connection)
+        store.initialize()
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 2
+        after = connection.execute("SELECT * FROM handoffs ORDER BY sequence").fetchall()
+        assert [row[:12] for row in after] == before
+        store.initialize()  # Exact migrated schema is also an accepted fresh-load schema.
+        for state, record in records.items():
+            result = store.get(record["id"], 3)
+            attempted = state in ("claimed", "unknown", "confirmed")
+            assert result["identity_state"] == ("legacy_unbound" if attempted else "unbound")
+            assert result["native_identity"] is None
+            if attempted:
+                with pytest.raises(HandoffError, match="native_identity_unavailable"):
+                    store.remember_native_identity(record["id"], anchor(), 4)
+                store.record_observation(
+                    record["id"],
+                    {"outcome": "parked", "card_id": anchor()["card_id"], "status": "blocked"},
+                    5,
+                )
+                assert store.get(record["id"], 6)["identity_state"] == "legacy_unbound"
+        prepared = records["prepared"]
+        assert store.claim(prepared["id"], prepared["intent_digest"], 7)[1]
+        assert (
+            store.remember_native_identity(prepared["id"], anchor(), 8)["identity_state"]
+            == "available"
+        )
+
+
+def test_partial_migration_failure_rolls_back_schema_and_rows():
+    class Failure(sqlite3.Connection):
+        def execute(self, sql, parameters=(), /):
+            if sql.startswith("UPDATE handoffs SET identity_state="):
+                raise sqlite3.OperationalError("synthetic migration interruption")
+            return super().execute(sql, parameters)
+
+    with legacy_connection(Failure) as connection:
+        seed_legacy(connection)
+        before = connection.execute("SELECT * FROM handoffs").fetchall()
+        with pytest.raises(HandoffError, match="storage_error"):
+            HandoffStore(connection).initialize()
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 1
+        assert connection.execute("SELECT * FROM handoffs").fetchall() == before
+        assert (
+            connection.execute("SELECT sql FROM sqlite_master WHERE name='handoffs'").fetchone()[0]
+            == module._SCHEMA_V1["handoffs"]
+        )
+
+
+def test_nonexact_v1_schema_refused_without_migration():
+    with legacy_connection() as connection:
+        connection.execute("CREATE INDEX extra ON handoffs(state)")
+        with pytest.raises(HandoffError, match="unsupported_schema"):
+            HandoffStore(connection).initialize()
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 1
+
+
+def test_anchor_failure_rolls_back_and_committed_anchor_survives_native_failure(tmp_path):
+    path = tmp_path / "identity.db"
+    with sqlite3.connect(path, isolation_level=None) as connection:
+        store = HandoffStore(connection)
+        store.initialize()
+        record = store.prepare("key", intent(), 0)
+        store.claim(record["id"], record["intent_digest"], 1)
+        connection.execute(
+            "CREATE TEMP TRIGGER fail BEFORE UPDATE ON handoffs "
+            "BEGIN SELECT RAISE(ABORT,'synthetic anchor failure'); END"
+        )
+        with pytest.raises(HandoffError, match="storage_error"):
+            store.remember_native_identity(record["id"], anchor(), 2)
+        assert store.get(record["id"], 3)["native_identity"] is None
+        connection.execute("DROP TRIGGER fail")
+        store.remember_native_identity(record["id"], anchor(), 4)
+    # This reopen represents a crash after anchor commit but before native commit.
+    with sqlite3.connect(path, isolation_level=None) as connection:
+        store = HandoffStore(connection)
+        store.initialize()
+        result = store.record_observation(record["id"], {"outcome": "missing"}, 5)
+        assert result["state"] == "unknown" and result["native_identity"] == anchor()
+        assert result["identity_state"] == "available"
+        assert not store.claim(record["id"], record["intent_digest"], 6)[1]
+
+
+@pytest.mark.parametrize(
+    "status",
+    ["triage", "todo", "scheduled", "ready", "running", "blocked", "review", "done", "archived"],
+)
+@pytest.mark.parametrize("state", ["claimed", "unknown"])
+def test_identity_confirmation_proves_creation_after_advancement_not_execution(
+    store, status, state
+):
+    record = store.prepare("key", intent(), 0)
+    store.claim(record["id"], record["intent_digest"], 1)
+    store.remember_native_identity(record["id"], anchor(), 2)
+    if state == "unknown":
+        store.record_observation(record["id"], {"outcome": "unavailable"}, 3)
+    observation = {
+        "outcome": "identity_confirmed",
+        "card_id": anchor()["card_id"],
+        "status": status,
+    }
+    result = store.record_observation(record["id"], observation, 4)
+    assert result["state"] == "confirmed" and result["observation"] == observation
+    assert result["native_identity"] == anchor() and result["payload"] is None
+    assert not store.claim(record["id"], record["intent_digest"], 5)[1]
+    changed = store.record_observation(record["id"], {"outcome": "changed"}, 6)
+    assert changed["state"] == "confirmed" and changed["native_identity"] == anchor()
+
+
+@pytest.mark.parametrize("kind", ["unbound", "legacy_unbound", "different_card"])
+def test_identity_confirmation_cannot_invent_or_replace_anchor(store, kind):
+    record = store.prepare("key", intent(), 0)
+    store.claim(record["id"], record["intent_digest"], 1)
+    if kind == "different_card":
+        store.remember_native_identity(record["id"], anchor(), 2)
+    elif kind == "legacy_unbound":
+        store.connection.execute("UPDATE handoffs SET identity_state='legacy_unbound'")
+    before = store.get(record["id"], 3)
+    observation = {"outcome": "identity_confirmed", "card_id": "t_aaaaaaaa", "status": "done"}
+    code = "native_identity_conflict" if kind == "different_card" else "native_identity_unavailable"
+    with pytest.raises(HandoffError, match=code):
+        store.record_observation(record["id"], observation, 4)
+    assert store.get(record["id"], 5) == before
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        {"card_id": "other"},
+        {"status": None},
+        {"status": "complete"},
+        {"match_count": 2},
+        {"authority": "operator"},
+    ],
+)
+def test_identity_confirmation_strict_metadata(store, extra):
+    record = store.prepare("key", intent(), 0)
+    store.claim(record["id"], record["intent_digest"], 1)
+    store.remember_native_identity(record["id"], anchor(), 2)
+    with pytest.raises(HandoffError, match="invalid_request"):
+        store.record_observation(
+            record["id"],
+            {
+                "outcome": "identity_confirmed",
+                "card_id": anchor()["card_id"],
+                "status": "running",
+                **extra,
+            },
+            3,
+        )
+    assert store.get(record["id"], 4)["state"] == "claimed"

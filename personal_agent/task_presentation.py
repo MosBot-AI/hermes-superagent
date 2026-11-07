@@ -98,6 +98,49 @@ def _command(prefix: str, operation: str, fields: dict) -> str:
     return shlex.join(parts)
 
 
+def _native_progress_lines(task: dict, *, full: bool) -> list[str]:
+    if "native_progress" not in task:
+        return ["  Native board: unknown (not recorded in this receipt)."]
+    observation = task["native_progress"]
+    if observation is None:
+        return ["  Native board: no observations recorded."]
+    outcome = observation["outcome"]
+    states = {
+        "triage",
+        "todo",
+        "scheduled",
+        "ready",
+        "running",
+        "blocked",
+        "review",
+        "done",
+        "archived",
+    }
+    unavailable = {
+        "missing",
+        "duplicate",
+        "identity_changed",
+        "key_changed",
+        "identity_unavailable",
+    }
+    if outcome == "current" and observation["status"] in states:
+        label = observation["status"]
+    elif outcome in unavailable and observation["status"] is None:
+        label = outcome + "; status unavailable"
+    else:
+        label = "unverified; status unavailable"
+    lines = [
+        f"  Native board observed {label} (not local completion)"
+        + f" | UTC epoch seconds: {observation['observed_at']}"
+    ]
+    if full:
+        lines.append(
+            f"  Handoff: {observation['handoff_id']} | native card: {observation['card_id']}"
+            + f" | exported revision: {observation['exported_revision']}"
+        )
+    return lines
+
+
 def _task_lines(task: dict, *, full: bool = False) -> list[str]:
     state = task["state"] if "state" in task else "captured"
     work = _STATUS.get(task.get("work_status"), "not recorded in this receipt")
@@ -124,6 +167,7 @@ def _task_lines(task: dict, *, full: bool = False) -> list[str]:
                 )
     else:
         lines.append("  Prerequisites: unknown (not recorded in this receipt).")
+    lines.extend(_native_progress_lines(task, full=full))
     if full:
         if task.get("details"):
             lines.append("  Details: " + _quoted(task["details"]))

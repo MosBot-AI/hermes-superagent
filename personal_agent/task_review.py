@@ -5,6 +5,7 @@ import sqlite3
 from datetime import date, timedelta
 
 from .task_dependencies import metadata
+from .task_native_sync import metadata as native_metadata
 
 _SUMMARY_COLUMNS = ("id", "title", "project", "due_date", "revision", "work_status")
 
@@ -85,7 +86,9 @@ def task_review(connection: sqlite3.Connection, request: dict) -> dict:
             (*parameters, *dates, request["per_bucket_limit"]),
         ).fetchall()
         for row in rows:
-            item = metadata(connection, dict(zip(_SUMMARY_COLUMNS, row, strict=True)))
+            item = native_metadata(
+                connection, metadata(connection, dict(zip(_SUMMARY_COLUMNS, row, strict=True)))
+            )
             item.pop("dependencies")
             bucket["items"].append(item)
             bucket["omitted"] -= 1

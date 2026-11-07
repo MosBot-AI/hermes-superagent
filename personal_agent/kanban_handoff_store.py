@@ -8,13 +8,13 @@ from contextlib import contextmanager
 from uuid import UUID, uuid4
 
 APPLICATION_ID = 0x5041484F
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 MAX_RECORDS = 1000
 PREPARED_SECONDS = 900
 # Source details are repeated in the native preview; astral characters escape
 # to 12 ASCII bytes each. Keep full valid task text without unbounding receipts.
 MAX_INTENT_CHARS = 160000
-_SCHEMA = {
+_SCHEMA_V1 = {
     "handoffs": """CREATE TABLE handoffs (
         sequence INTEGER PRIMARY KEY AUTOINCREMENT,
         id TEXT NOT NULL UNIQUE, request_id TEXT NOT NULL UNIQUE,
@@ -24,6 +24,24 @@ _SCHEMA = {
         metadata TEXT NOT NULL, payload TEXT, observation TEXT,
         created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)"""
 }
+_IDENTITY_COLUMNS = (
+    "native_identity TEXT",
+    "identity_state TEXT NOT NULL DEFAULT 'unbound' "
+    "CHECK(identity_state IN ('unbound','available','legacy_unbound'))",
+)
+_SCHEMA = {"handoffs": _SCHEMA_V1["handoffs"][:-1] + ", " + ", ".join(_IDENTITY_COLUMNS) + ")"}
+_CARD_ID = re.compile(r"t_[0-9a-f]{8}\Z")
+
+
+def _identity(value):
+    if type(value) is not dict or set(value) != {"card_id", "created_at", "created_event_id"}:
+        _fail()
+    _matching(value["card_id"], _CARD_ID)
+    _integer(value["created_at"])
+    _integer(value["created_event_id"], 1)
+    return json.loads(_json(value))
+
+
 _KEY = re.compile(r"[A-Za-z0-9._-]{1,128}\Z")
 _HASH = re.compile(r"[0-9a-f]{64}\Z")
 
@@ -138,6 +156,7 @@ def _observation(value):
         _fail()
     if type(value["outcome"]) is not str or value["outcome"] not in (
         "parked",
+        "identity_confirmed",
         "missing",
         "duplicate",
         "changed",
@@ -157,6 +176,24 @@ def _observation(value):
         or value.get("match_count", 1) != 1
     ):
         _fail()
+    if value["outcome"] == "identity_confirmed":
+        _matching(value.get("card_id"), _CARD_ID)
+        if (
+            value.get("status")
+            not in (
+                "triage",
+                "todo",
+                "scheduled",
+                "ready",
+                "running",
+                "blocked",
+                "review",
+                "done",
+                "archived",
+            )
+            or value.get("match_count", 1) != 1
+        ):
+            _fail()
     return json.loads(_json(value))
 
 
@@ -204,7 +241,22 @@ class HandoffStore:
                 self.connection.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
             elif app != APPLICATION_ID:
                 _fail("foreign_database")
+            elif version == 1:
+                if dict(rows) != _SCHEMA_V1 or len(rows) != len(_SCHEMA_V1):
+                    _fail("unsupported_schema")
+                for column in _IDENTITY_COLUMNS:
+                    self.connection.execute("ALTER TABLE handoffs ADD COLUMN " + column)
+                self.connection.execute(
+                    "UPDATE handoffs SET identity_state='legacy_unbound' "
+                    "WHERE state IN ('claimed','unknown','confirmed')"
+                )
+                self.connection.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
             elif version != SCHEMA_VERSION or dict(rows) != _SCHEMA or len(rows) != len(_SCHEMA):
+                _fail("unsupported_schema")
+            current = self.connection.execute(
+                "SELECT name,sql FROM sqlite_master WHERE name NOT GLOB 'sqlite_*'"
+            ).fetchall()
+            if dict(current) != _SCHEMA or len(current) != len(_SCHEMA):
                 _fail("unsupported_schema")
         self._initialized = True
 
@@ -218,7 +270,8 @@ class HandoffStore:
     def _get(self, id):
         row = self.connection.execute(
             "SELECT id,request_id,intent_digest,state,metadata,payload,observation,"
-            "created_at,expires_at,updated_at FROM handoffs WHERE id=?",
+            "created_at,expires_at,updated_at,native_identity,identity_state "
+            "FROM handoffs WHERE id=?",
             (id,),
         ).fetchone()
         if row is None:
@@ -259,6 +312,15 @@ class HandoffStore:
                 _fail()
             if observation is not None:
                 _observation(observation)
+            identity = json.loads(row[10]) if row[10] is not None else None
+            if row[11] == "available":
+                identity = _identity(identity)
+                if row[3] not in ("claimed", "unknown", "confirmed"):
+                    _fail()
+            elif row[11] not in ("unbound", "legacy_unbound") or identity is not None:
+                _fail()
+            if row[11] == "legacy_unbound" and row[3] not in ("claimed", "unknown", "confirmed"):
+                _fail()
             return dict(
                 id=row[0],
                 request_id=row[1],
@@ -270,6 +332,8 @@ class HandoffStore:
                 created_at=row[7],
                 expires_at=row[8],
                 updated_at=row[9],
+                native_identity=identity,
+                identity_state=row[11],
             )
         except ValueError, TypeError, KeyError, HandoffError:
             _fail("storage_corrupt")
@@ -398,6 +462,28 @@ class HandoffStore:
             result["payload"] = record["payload"]
             return result, True
 
+    def remember_native_identity(self, id, identity, now):
+        """Persist creation anchor before native commit; never infer one from observation."""
+        _id(id)
+        identity = _identity(identity)
+        _integer(now)
+        with self._transaction():
+            record = self._get(id)
+            if record["identity_state"] == "available":
+                if record["native_identity"] != identity:
+                    _fail("native_identity_conflict")
+                return record
+            if record["identity_state"] == "legacy_unbound":
+                _fail("native_identity_unavailable")
+            if record["state"] != "claimed":
+                _fail("terminal_state")
+            self.connection.execute(
+                "UPDATE handoffs SET native_identity=?,identity_state='available',updated_at=? "
+                "WHERE id=?",
+                (_json(identity), now, id),
+            )
+            return self._get(id)
+
     def record_observation(self, id, observation, now):
         _id(id)
         observation = _observation(observation)
@@ -407,9 +493,20 @@ class HandoffStore:
             record = self._get(id)
             if record["state"] not in ("claimed", "unknown", "confirmed"):
                 _fail("terminal_state")
+            if observation["outcome"] == "identity_confirmed" and (
+                record["identity_state"] != "available" or record["native_identity"] is None
+            ):
+                _fail("native_identity_unavailable")
+            if (
+                observation["outcome"] in ("parked", "identity_confirmed")
+                and record["native_identity"] is not None
+                and observation["card_id"] != record["native_identity"]["card_id"]
+            ):
+                _fail("native_identity_conflict")
             state = (
                 "confirmed"
-                if record["state"] == "confirmed" or observation["outcome"] == "parked"
+                if record["state"] == "confirmed"
+                or observation["outcome"] in ("parked", "identity_confirmed")
                 else "unknown"
             )
             self.connection.execute(

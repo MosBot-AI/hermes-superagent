@@ -257,3 +257,5 @@ The [bounded recall follow-on](36-bounded-memory-recall.md) adds explicit multi-
 [Reviewed candidate workflow](50-reviewed-memory-candidates.md) now implements a narrow E2.8 input-to-draft-to-operator-review path on supported hooks. Only explicit acceptance creates canonical memory; actual-model usefulness, durable transcript coverage and checkpoint-v2 remain open. Schema-v6 migration and lazy seven-day candidate expiry do not imply background deletion.
 
 [Parked Kanban handoff](52-parked-kanban-handoff.md) adds explicit preview, single-use commit and bounded reconciliation into a shared native board. It does not complete worker dispatch, universal task mapping or live Kanban acceptance; those gates remain open.
+
+[Native progress observation](53-native-progress-observation.md) closes a narrow explicit metadata readback loop for identity-bound parked cards. It does not close worker execution, universal task mapping or real-host live acceptance gates.

@@ -48,6 +48,7 @@
     "personal_agent/task_cli.py",
     "personal_agent/task_dependencies.py",
     "personal_agent/task_focus.py",
+    "personal_agent/task_native_sync.py",
     "personal_agent/task_presentation.py",
     "personal_agent/task_review.py",
     "personal_agent/task_tool_contract.py",

@@ -138,3 +138,5 @@ The [task-to-worker proposal](docs/48-task-worker-proposal.md) adds a review-onl
 ## Parked native Kanban handoff
 
 [Explicit preview/commit handoff](docs/52-parked-kanban-handoff.md) can park a local task on an explicitly named shared native board. It is default-off, creates no assignee or dispatch, and preserves uncertain outcomes without retry. Registration/status do not probe native storage; operation-time compatibility checks and live acceptance remain separate.
+
+[Advisory native progress sync](docs/53-native-progress-observation.md) explicitly observes an identity-bound parked card into the local task. Native done is not local completion; no automatic sync or dispatch.

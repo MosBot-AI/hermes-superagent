@@ -259,3 +259,5 @@ Project 链接、Issue 号与最终字段以实际创建结果为准。若 API/�
 [候选审核流程](50-reviewed-memory-candidates-zh.md)现已通过受支持 hook 实现 E2.8 的当前输入→草稿→操作员审核路径。仅明确接受才创建正式记忆；真实模型实用性、持久会话覆盖与 checkpoint-v2 仍待完成。Schema-v6 迁移和延迟执行的七天候选到期不意味着后台删除。
 
 [停放式 Kanban 交接](52-parked-kanban-handoff-zh.md)增加面向共享原生看板的明确预览、单次提交及有界核对，不完成 worker 派发、通用任务映射或真实 Kanban 验收；这些门槛仍保持未完成。
+
+[原生进度观察](53-native-progress-observation-zh.md)补齐身份绑定停放卡片的明确元数据回读流程，不完成 worker 执行、通用任务映射或真实宿主验收门槛。

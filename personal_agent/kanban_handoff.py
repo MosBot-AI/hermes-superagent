@@ -22,6 +22,7 @@ from .tasks import TaskError
 HELP = (
     "prepare TASK --expected-revision N --request-id KEY; "
     "commit ID --expected-digest SHA; reconcile ID; show ID; "
+    "sync ID --task TASK --expected-revision N --request-id KEY; "
     "list [--limit N --after ID]; cancel ID --expected-digest SHA. "
     "Opt-in native operator handoff only. Review the exact title/body and destination before "
     "commit. Native boards can be shared across profiles; no memory, conversation, project "
@@ -31,7 +32,13 @@ HELP = (
     "attempt, even when reconciliation finds no card. Unknown means inspect, not resubmit. "
     "Payload is cleared on claim/cancel/lazy expiry; minimal metadata remains (1000 records). "
     "Commands and results may enter native history; clearing does not erase that history. "
-    "No worker dispatch, reminders, native project/dependency synchronization or external calls."
+    "Sync explicitly saves one advisory native-status snapshot on the selected captured task, "
+    "with an atomic local revision/event/receipt; it never changes local completion or work "
+    "status. Stored snapshots are task data and may enter separately activated task model tools. "
+    "Exact retries return the original receipt without native access. Fresh sync needs "
+    "a confirmed immutable creation anchor; legacy attempted records cannot be silently adopted. "
+    "A native done status is not proof of completed work. No worker dispatch, reminders, "
+    "native project/dependency synchronization or external calls."
 )
 
 
@@ -71,6 +78,11 @@ def parse_command(raw):
         command.add_argument("id")
         if verb in ("commit", "cancel"):
             command.add_argument("--expected-digest", required=True)
+    sync = subs.add_parser("sync")
+    sync.add_argument("handoff_id")
+    sync.add_argument("--task", dest="task_id", required=True)
+    sync.add_argument("--expected-revision", type=int, required=True)
+    sync.add_argument("--request-id", required=True)
     listing = subs.add_parser("list")
     listing.add_argument("--limit", type=int, default=20)
     listing.add_argument("--after", default=None)
@@ -153,29 +165,82 @@ class LocalKanbanHandoff:
         _runtime()
         mode = self._config("mode", "read_only")
         conversation = self._config("local_conversation", False)
-        enabled = self._config("kanban_handoff", False)
-        board = self._config("kanban_handoff_board", "")
         if (
             mode not in ("read_only", "local_tasks")
             or type(conversation) is not bool
-            or type(enabled) is not bool
-            or type(board) is not str
             or (conversation and mode != "local_tasks")
-            or (enabled and not conversation)
-            or (enabled and re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,63}", board) is None)
         ):
             raise HandoffError("invalid_configuration")
         if mode != "local_tasks" or not conversation:
             raise HandoffError("handoff_disabled")
-        if native and not enabled:
+        if not native:
+            # A historical local sync receipt must not depend on creation config,
+            # ledger state or native availability. Current base admission still applies.
+            return ""
+        enabled = self._config("kanban_handoff", False)
+        board = self._config("kanban_handoff_board", "")
+        if (
+            type(enabled) is not bool
+            or type(board) is not str
+            or (enabled and re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,63}", board) is None)
+        ):
+            raise HandoffError("invalid_configuration")
+        if not enabled:
             raise HandoffError("handoff_disabled")
         return board
+
+    def _sync(self, request, context):
+        intent = {key: value for key, value in request.items() if key != "operation"}
+
+        def observe(task):
+            board = self._admit(context, native=True)
+            with open_handoff_store(self._home) as ledger:
+                record = ledger.get(request["handoff_id"], int(time.time()))
+            if record["source"]["task_id"] != task["id"]:
+                raise HandoffError("source_mismatch")
+            if (
+                record["profile_fingerprint"]
+                != hashlib.sha256(str(self._home).encode()).hexdigest()
+            ):
+                raise HandoffError("profile_context_changed")
+            if record["destination"]["board"] != board:
+                raise HandoffError("destination_changed")
+            if record["state"] != "confirmed":
+                raise HandoffError("handoff_not_confirmed")
+            if record["identity_state"] != "available" or record["native_identity"] is None:
+                raise HandoffError("native_identity_unavailable")
+            from . import native_kanban as native
+
+            def admit():
+                if self._admit(context, native=True) != board:
+                    raise HandoffError("destination_changed")
+
+            observation = native.observe_progress(
+                record["destination"],
+                key=record["key"],
+                identity=record["native_identity"],
+                admit=admit,
+            )
+            admit()
+            return {
+                "status": None,
+                **observation,
+                "handoff_id": record["id"],
+                "exported_revision": record["source"]["revision"],
+            }
+
+        with open_task_store(self._home) as tasks:
+            # The task transaction checks the durable receipt before invoking
+            # this callback. No ledger/native access occurs on exact replay.
+            return tasks.sync_native(intent, observe)
 
     def _execute(self, request, context):
         operation = request["operation"]
         board = self._admit(context, native=operation in ("prepare", "commit", "reconcile"))
         if operation == "help":
             return {"help": HELP}
+        if operation == "sync":
+            return self._sync(request, context)
         with open_handoff_store(self._home) as ledger:
             now = int(time.time())
             if operation == "list":
@@ -228,7 +293,18 @@ class LocalKanbanHandoff:
                     key=record["key"],
                     payload_digest=record["payload_digest"],
                     admit=admit,
+                    identity=record["native_identity"],
                 )
+                if observation["outcome"] in (
+                    "identity_changed",
+                    "key_changed",
+                    "identity_unavailable",
+                ):
+                    # Reconcile retains its older creation-observation contract;
+                    # the separate sync projection preserves precise identity outcomes.
+                    observation = {"outcome": "changed", "card_id": observation["card_id"]}
+                elif observation.get("status", "") is None:
+                    observation = {k: v for k, v in observation.items() if k != "status"}
                 return ledger.record_observation(record["id"], observation, int(time.time()))
             if record["intent_digest"] != request["expected_digest"]:
                 raise HandoffError("intent_conflict")
@@ -256,12 +332,17 @@ class LocalKanbanHandoff:
                             title=intent["native_title"],
                             body=intent["native_body"],
                             admit=admit,
+                            remember_identity=lambda identity: ledger.remember_native_identity(
+                                record["id"], identity, int(time.time())
+                            ),
                         )
                     except Exception:
                         observation = {"outcome": "unavailable"}
                     return ledger.record_observation(record["id"], observation, int(time.time()))
 
     def command(self, raw_args, *, platform="", source=None, session_id="", session_key=""):
+        operation = None
+        output: dict = {}
         try:
             with self._lock:
                 context = {
@@ -271,8 +352,12 @@ class LocalKanbanHandoff:
                     "session_key": session_key,
                 }
                 self._admit(context)
-                data = self._execute(parse_command(raw_args), context)
+                request = parse_command(raw_args)
+                operation = request["operation"]
+                data = self._execute(request, context)
                 output = {"status": "ok", "data": data, "error": None}
+                if operation == "sync":
+                    output = {"status": "ok", **data, "error": None}
         except Exception as error:
             if not isinstance(error, (HandoffError, TaskError)):
                 error = HandoffError("handoff_unavailable")
@@ -281,6 +366,8 @@ class LocalKanbanHandoff:
                 "data": None,
                 "error": {"code": error.code, "retryable": error.retryable},
             }
+        if operation == "sync" and output["status"] == "error":
+            output["replayed"] = False
         return json.dumps(
             {
                 "schema_version": "personal.kanban-handoff.v1",

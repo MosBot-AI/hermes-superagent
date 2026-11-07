@@ -272,7 +272,7 @@ def register(ctx: PluginContext) -> None:
             "personal-handoff",
             handler=handoff.command,
             description="Explicitly park a local task on a shared native board; no dispatch.",
-            args_hint="prepare | commit | reconcile | show | list | cancel",
+            args_hint="prepare | commit | reconcile | sync | show | list | cancel",
         )
 
         def local_tasks_command(

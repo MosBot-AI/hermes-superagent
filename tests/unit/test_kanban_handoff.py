@@ -23,6 +23,7 @@ def flow(monkeypatch, tmp_path):
     )
     clock = [100]
     calls = []
+    ledger_active = [0]
     binding = dict(
         root="/synthetic",
         board="scratch",
@@ -32,7 +33,7 @@ def flow(monkeypatch, tmp_path):
         schema="a" * 64,
         source="b" * 64,
     )
-    outcome = [{"outcome": "parked", "card_id": "card-1", "status": "blocked"}]
+    outcome = [{"outcome": "parked", "card_id": "t_1234abcd", "status": "blocked"}]
     monkeypatch.setattr(service, "current_profile_home", lambda: tmp_path)
     monkeypatch.setattr(service, "_bound_key", lambda: "route")
     monkeypatch.setattr(service, "_runtime", lambda: None)
@@ -52,14 +53,24 @@ def flow(monkeypatch, tmp_path):
         with sqlite3.connect(home / "ledger.db", isolation_level=None) as conn:
             store = HandoffStore(conn)
             store.initialize()
-            yield store
+            ledger_active[0] += 1
+            try:
+                yield store
+            finally:
+                ledger_active[0] -= 1
 
     def destination(board):
         calls.append("destination")
         return {**binding, "board": board}
 
-    def create(binding, *, admit, **kwargs):
+    def create(binding, *, admit, remember_identity=None, **kwargs):
         admit()
+        if remember_identity is not None:
+            remember_identity({"card_id": "t_1234abcd", "created_at": 100, "created_event_id": 1})
+            with ledger(tmp_path) as persisted:
+                anchor_record = persisted.list(100, None, clock[0])["items"][-1]
+                assert anchor_record["state"] == "claimed"
+                assert anchor_record["identity_state"] == "available"
         calls.append(("create", kwargs))
         if isinstance(outcome[0], Exception):
             raise outcome[0]
@@ -70,11 +81,25 @@ def flow(monkeypatch, tmp_path):
         calls.append("observe")
         return outcome[0]
 
+    progress = [
+        {"outcome": "current", "card_id": "t_1234abcd", "status": "running", "observed_at": 110}
+    ]
+
+    def observe_progress(binding, *, admit, identity, **kwargs):
+        assert ledger_active[0] == 0, "Ledger must close before native progress read"
+        admit()
+        calls.append("progress")
+        assert identity == {"card_id": "t_1234abcd", "created_at": 100, "created_event_id": 1}
+        if isinstance(progress[0], Exception):
+            raise progress[0]
+        return dict(progress[0])
+
     adapter = SimpleNamespace(
         destination=destination,
         payload_digest=lambda *args: "c" * 64,
         create_parked=create,
         observe=observe,
+        observe_progress=observe_progress,
     )
     monkeypatch.setitem(sys.modules, "personal_agent.native_kanban", adapter)
     import personal_agent
@@ -379,3 +404,185 @@ def test_full_length_unicode_task_preview_and_commit(flow, character):
     assert flow.invoke("list")["data"]["items"][0]["payload"] is None
     assert flow.invoke(f"show {record['id']}")["data"]["payload"] == record["payload"]
     assert commit(flow, record)["data"]["state"] == "confirmed"
+
+
+def sync(flow, record, *, revision=1, key="sync-1", task_id=None):
+    return flow.invoke(
+        f"sync {record['id']} --task {task_id or flow.task['id']} "
+        f"--expected-revision {revision} --request-id {key}"
+    )
+
+
+def confirmed(flow):
+    record = prepare(flow)
+    result = commit(flow, record)
+    assert result["data"]["state"] == "confirmed", result
+    assert result["data"]["identity_state"] == "available"
+    return record
+
+
+def test_sync_records_advisory_only_with_identity_saved_before_creation_confirmation(flow):
+    record = confirmed(flow)
+    result = sync(flow, record)
+    assert result["status"] == "ok", result
+    task = result["data"]
+    assert result["replayed"] is False
+    assert task["revision"] == 2 and task["state"] == "captured" and task["work_status"] == "ready"
+    assert task["native_progress"] == {
+        **flow.progress[0],
+        "handoff_id": record["id"],
+        "exported_revision": 1,
+    }
+    flow.progress[0]["status"] = "done"
+    refreshed = sync(flow, record, revision=2, key="sync-2")
+    assert refreshed["data"]["native_progress"]["status"] == "done"
+    assert refreshed["data"]["state"] == "captured"
+    assert refreshed["data"]["work_status"] == "ready"
+    assert sum(isinstance(call, tuple) for call in flow.calls) == 1
+
+
+@pytest.mark.parametrize("mode", ["disabled", "missing", "terminal", "invalid-config"])
+def test_sync_exact_replay_precedes_ledger_native_and_creation_config(flow, monkeypatch, mode):
+    record = confirmed(flow)
+    first = sync(flow, record)
+    assert first["status"] == "ok", first
+    if mode == "disabled":
+        flow.config["kanban_handoff"] = False
+    elif mode == "invalid-config":
+        flow.config["kanban_handoff"] = "invalid"
+        flow.config["kanban_handoff_board"] = []
+    elif mode == "missing":
+        (flow.tmp_path / "ledger.db").unlink()
+    else:
+        with flow.tasks(flow.tmp_path) as tasks:
+            tasks.run(
+                "complete",
+                dict(
+                    task_id=flow.task["id"],
+                    expected_revision=2,
+                    request_id="done",
+                    note="local decision",
+                ),
+            )
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("Exact replay must not access ledger/native")
+
+    monkeypatch.setattr(service, "open_handoff_store", forbidden)
+    flow.adapter.observe_progress = forbidden
+    replay = sync(flow, record)
+    assert replay["replayed"] is True and replay["data"] == first["data"]
+
+
+@pytest.mark.parametrize(
+    "mode,code",
+    [
+        ("prepared", "handoff_not_confirmed"),
+        ("legacy", "native_identity_unavailable"),
+        ("source", "source_mismatch"),
+    ],
+)
+def test_sync_refuses_unconfirmed_legacy_or_different_source(flow, mode, code):
+    record = prepare(flow)
+    other = None
+    if mode != "prepared":
+        assert commit(flow, record)["data"]["state"] == "confirmed"
+    if mode == "legacy":
+        with flow.ledger(flow.tmp_path) as ledger:
+            ledger.connection.execute(
+                "UPDATE handoffs SET native_identity=NULL,identity_state='legacy_unbound'"
+            )
+    if mode == "source":
+        with flow.tasks(flow.tmp_path) as tasks:
+            other = tasks.run("capture", dict(title="Other", request_id="other"))["data"]["id"]
+    assert sync(flow, record, task_id=other)["error"]["code"] == code
+    assert "progress" not in flow.calls
+
+
+def test_sync_key_collision_and_stale_revision_refused_before_native_callback(flow):
+    record = confirmed(flow)
+    assert sync(flow, record, key="capture")["error"]["code"] == "idempotency_conflict"
+    assert sync(flow, record, revision=2)["error"]["code"] == "revision_conflict"
+    assert "progress" not in flow.calls
+
+
+def test_ambiguous_native_response_preserves_anchor_then_reconcile_allows_sync(flow):
+    record = prepare(flow)
+    flow.outcome[0] = RuntimeError("Synthetic response lost after native commit")
+    result = commit(flow, record)
+    assert result["data"]["state"] == "unknown"
+    assert result["data"]["identity_state"] == "available"
+    assert sync(flow, record)["error"]["code"] == "handoff_not_confirmed"
+    flow.outcome[0] = {"outcome": "parked", "card_id": "t_1234abcd", "status": "blocked"}
+    assert flow.invoke(f"reconcile {record['id']}")["data"]["state"] == "confirmed"
+    assert sync(flow, record)["status"] == "ok"
+    assert sum(isinstance(call, tuple) for call in flow.calls) == 1
+
+
+def test_native_read_failure_preserves_prior_snapshot_and_local_revision(flow):
+    record = confirmed(flow)
+    before = sync(flow, record)["data"]
+    flow.progress[0] = RuntimeError("PRIVATE native error")
+    failed = sync(flow, record, revision=2, key="refresh")
+    assert failed["status"] == "error" and "PRIVATE" not in json.dumps(failed)
+    with flow.tasks(flow.tmp_path) as tasks:
+        assert tasks.run("get", {"task_id": flow.task["id"]})["data"] == before
+
+
+@pytest.mark.parametrize(
+    "outcome", ["missing", "duplicate", "identity_changed", "key_changed", "identity_unavailable"]
+)
+def test_negative_projection_is_advisory_and_never_copies_status(flow, outcome):
+    record = confirmed(flow)
+    flow.progress[0] = {
+        "outcome": outcome,
+        "status": None,
+        "card_id": "t_1234abcd",
+        "observed_at": 110,
+    }
+    result = sync(flow, record)
+    assert result["status"] == "ok", result
+    assert result["data"]["native_progress"]["status"] is None
+    assert result["data"]["native_progress"]["outcome"] == outcome
+    assert result["data"]["work_status"] == "ready" and result["data"]["state"] == "captured"
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "sync handoff --expected-revision 1 --request-id key",
+        "sync handoff --task task --request-id key",
+        "sync handoff --task task --expected-revision 1",
+    ],
+)
+def test_sync_parser_requires_task_revision_and_key(raw):
+    with pytest.raises(service.HandoffError, match="invalid_request"):
+        service.parse_command(raw)
+
+
+@pytest.mark.parametrize(
+    "outcome", ["identity_changed", "key_changed", "identity_unavailable", "missing", "duplicate"]
+)
+def test_anchored_reconcile_normalizes_progress_failure_without_losing_sync_detail(flow, outcome):
+    record = confirmed(flow)
+    identity = flow.invoke(f"show {record['id']}")["data"]["native_identity"]
+    failure = {"outcome": outcome, "card_id": "t_1234abcd", "status": None, "observed_at": 110}
+    flow.outcome[0] = dict(failure)
+    result = flow.invoke(f"reconcile {record['id']}")
+    assert result["status"] == "ok", result
+    persisted = flow.invoke(f"show {record['id']}")["data"]
+    assert persisted["state"] == "confirmed"
+    assert persisted["native_identity"] == identity
+    expected = (
+        "changed"
+        if outcome in ("identity_changed", "key_changed", "identity_unavailable")
+        else outcome
+    )
+    assert persisted["observation"]["outcome"] == expected
+    assert "status" not in persisted["observation"]
+    flow.progress[0] = failure
+    synced = sync(flow, record)
+    assert synced["status"] == "ok", synced
+    assert synced["data"]["native_progress"]["outcome"] == outcome
+    assert synced["data"]["native_progress"]["status"] is None
+    assert sum(isinstance(call, tuple) for call in flow.calls) == 1

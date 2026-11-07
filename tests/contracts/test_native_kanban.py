@@ -341,3 +341,229 @@ def test_owned_journal_check_rejects_real_attached_database(board):
         conn.execute("ROLLBACK")
     finally:
         conn.close()
+
+
+def anchored(board):
+    identities = []
+    result = adapter.create_parked(
+        board,
+        key="key",
+        title="中文 synthetic",
+        body="untrusted text",
+        admit=lambda: None,
+        remember_identity=identities.append,
+    )
+    assert len(identities) == 1 and identities[0]["card_id"] == result["card_id"]
+    return identities[0]
+
+
+def progress(board, identity):
+    return adapter.observe_progress(board, key="key", identity=identity, admit=lambda: None)
+
+
+@pytest.mark.parametrize(
+    "status",
+    ["triage", "todo", "scheduled", "ready", "running", "blocked", "review", "done", "archived"],
+)
+def test_progress_all_native_statuses_are_advisory_metadata_only(board, status):
+    identity = anchored(board)
+    fixture_sql(
+        board,
+        "UPDATE tasks SET status=?,title=?,body=?,result=?,assignee=? WHERE id=?",
+        (
+            status,
+            "PRIVATE TITLE",
+            "PRIVATE BODY",
+            "PRIVATE RESULT",
+            "PRIVATE PROFILE",
+            identity["card_id"],
+        ),
+    )
+    before = fixture_sql(board, "SELECT * FROM tasks")
+    result = progress(board, identity)
+    assert result == {
+        "outcome": "current",
+        "card_id": identity["card_id"],
+        "status": status,
+        "observed_at": result["observed_at"],
+    }
+    assert type(result["observed_at"]) is int
+    assert fixture_sql(board, "SELECT * FROM tasks") == before
+    assert "PRIVATE" not in repr(result)
+
+
+@pytest.mark.parametrize(
+    "change,outcome",
+    [
+        ("missing", "missing"),
+        ("key", "key_changed"),
+        ("created_at", "identity_changed"),
+        ("creator", "identity_changed"),
+        ("pruned", "identity_unavailable"),
+        ("event_kind", "identity_changed"),
+        ("event_task", "identity_changed"),
+        ("replacement", "identity_changed"),
+        ("duplicate_archived", "duplicate"),
+    ],
+)
+def test_progress_never_follows_identity_drift(board, change, outcome):
+    identity = anchored(board)
+    if change == "missing":
+        fixture_sql(board, "DELETE FROM tasks WHERE id=?", (identity["card_id"],))
+    elif change == "key":
+        fixture_sql(
+            board, "UPDATE tasks SET idempotency_key='other' WHERE id=?", (identity["card_id"],)
+        )
+    elif change == "created_at":
+        fixture_sql(
+            board, "UPDATE tasks SET created_at=created_at+1 WHERE id=?", (identity["card_id"],)
+        )
+    elif change == "creator":
+        fixture_sql(board, "UPDATE tasks SET created_by='other' WHERE id=?", (identity["card_id"],))
+    elif change == "pruned":
+        fixture_sql(board, "DELETE FROM task_events WHERE id=?", (identity["created_event_id"],))
+    elif change == "event_kind":
+        fixture_sql(
+            board,
+            "UPDATE task_events SET kind='updated' WHERE id=?",
+            (identity["created_event_id"],),
+        )
+    elif change == "event_task":
+        fixture_sql(
+            board,
+            "UPDATE task_events SET task_id='t_00000000' WHERE id=?",
+            (identity["created_event_id"],),
+        )
+    elif change == "replacement":
+        fixture_sql(board, "DELETE FROM tasks WHERE id=?", (identity["card_id"],))
+        create(board)
+    else:
+        other = create(board, "other")
+        fixture_sql(
+            board,
+            "UPDATE tasks SET idempotency_key='key',status='archived' WHERE id=?",
+            (other["card_id"],),
+        )
+    result = progress(board, identity)
+    assert result["outcome"] == outcome and result["card_id"] == identity["card_id"]
+    assert "status" not in result
+    observed = adapter.observe(
+        board,
+        key="key",
+        identity=identity,
+        payload_digest=adapter.payload_digest("中文 synthetic", "untrusted text"),
+        admit=lambda: None,
+    )
+    assert observed["outcome"] == outcome and "status" not in observed
+
+
+def test_identity_callback_precedes_commit_and_failure_rolls_back(board):
+    seen = []
+
+    def remember(identity):
+        seen.append(identity)
+        assert fixture_sql(board, "SELECT count(*) FROM tasks") == [(0,)]
+        raise RuntimeError("Synthetic ledger failure")
+
+    fail(
+        lambda: adapter.create_parked(
+            board,
+            key="key",
+            title="Synthetic",
+            body="",
+            admit=lambda: None,
+            remember_identity=remember,
+        )
+    )
+    assert len(seen) == 1
+    assert fixture_sql(board, "SELECT count(*) FROM tasks") == [(0,)]
+    assert progress(board, seen[0])["outcome"] == "missing"
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("card_id", "bad"),
+        ("created_at", True),
+        ("created_at", -1),
+        ("created_event_id", 0),
+        ("created_event_id", True),
+    ],
+)
+def test_invalid_identity_never_readmitted(board, field, value):
+    identity = anchored(board)
+    identity[field] = value
+    fail(lambda: progress(board, identity), "invalid_request")
+
+
+def test_progress_refuses_unknown_native_status(board):
+    identity = anchored(board)
+    fixture_sql(board, "UPDATE tasks SET status='unrecognized' WHERE id=?", (identity["card_id"],))
+    fail(lambda: progress(board, identity), "native_unsafe_storage")
+
+
+def test_reused_card_id_and_timestamp_do_not_replace_original_event_anchor(board):
+    identity = anchored(board)
+    fixture_sql(board, "DELETE FROM task_events WHERE task_id=?", (identity["card_id"],))
+    fixture_sql(board, "DELETE FROM tasks WHERE id=?", (identity["card_id"],))
+    replacement = create(board)
+    fixture_sql(
+        board,
+        "UPDATE tasks SET id=?,created_at=? WHERE id=?",
+        (identity["card_id"], identity["created_at"], replacement["card_id"]),
+    )
+    fixture_sql(
+        board,
+        "UPDATE task_events SET task_id=? WHERE task_id=?",
+        (identity["card_id"], replacement["card_id"]),
+    )
+    assert progress(board, identity)["outcome"] == "identity_unavailable"
+
+
+def test_progress_sql_reads_no_payload_or_identity_sensitive_columns(board, monkeypatch):
+    from contextlib import contextmanager
+
+    identity = anchored(board)
+    original = adapter._connection
+    reads = []
+
+    @contextmanager
+    def guarded(*args, **kwargs):
+        with original(*args, **kwargs) as (host, conn):
+            authorizer = adapter._authorizer(False)
+
+            def authorize(action, arg1, arg2, database, source):
+                if action == sqlite3.SQLITE_READ and arg1 in {"tasks", "task_events"}:
+                    reads.append((arg1, arg2))
+                    if arg2 in {"title", "body", "result", "assignee", "payload"}:
+                        return sqlite3.SQLITE_DENY
+                return authorizer(action, arg1, arg2, database, source)
+
+            conn.set_authorizer(authorize)
+            yield host, conn
+
+    monkeypatch.setattr(adapter, "_connection", guarded)
+    assert progress(board, identity)["outcome"] == "current"
+    assert reads and not any(
+        column in {"title", "body", "result", "assignee", "payload"} for _, column in reads
+    )
+
+
+@pytest.mark.parametrize("status", ["running", "review", "done", "archived"])
+def test_anchored_reconcile_confirms_identity_not_still_parked(board, status):
+    identity = anchored(board)
+    fixture_sql(board, "UPDATE tasks SET status=?", (status,))
+    result = adapter.observe(
+        board,
+        key="key",
+        identity=identity,
+        payload_digest=adapter.payload_digest("中文 synthetic", "untrusted text"),
+        admit=lambda: None,
+    )
+    assert result == {
+        "outcome": "identity_confirmed",
+        "card_id": identity["card_id"],
+        "status": status,
+    }
+    # Legacy unanchored receipts never gain creation identity from a changed card.
+    assert observe(board)["outcome"] != "identity_confirmed"

@@ -11,10 +11,11 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from . import task_dependencies as dependencies
+from . import task_native_sync as native_sync
 from .task_review import task_review
 
 _APPLICATION_ID = 0x5041544B
-_SCHEMA_VERSION = 5
+_SCHEMA_VERSION = 6
 _COLUMNS = (
     "id",
     "title",
@@ -65,7 +66,8 @@ _SCHEMA_V4 = {
     "tasks": _SCHEMA_V3["tasks"][:-1] + ", " + ", ".join(_PROGRESS_COLUMNS) + ")",
 }
 
-_SCHEMA = {**_SCHEMA_V4, **dependencies.SCHEMA}
+_SCHEMA_V5 = {**_SCHEMA_V4, **dependencies.SCHEMA}
+_SCHEMA = {**_SCHEMA_V5, **native_sync.SCHEMA}
 
 
 class TaskError(Exception):
@@ -301,7 +303,7 @@ class TaskStore:
             pass
 
     def initialize(self) -> None:
-        """Create v5, atomically migrate exact owned v1-v4, or verify v5."""
+        """Create v6, atomically migrate exact owned v1-v5, or verify v6."""
         self._initialized = False
         began = False
         try:
@@ -320,8 +322,14 @@ class TaskStore:
                 conn.execute(f"PRAGMA user_version = {_SCHEMA_VERSION}")
             elif app_id != _APPLICATION_ID:
                 raise TaskError("foreign_database")
-            elif version in (1, 2, 3, 4):
-                legacy = {1: _SCHEMA_V1, 2: _SCHEMA_V2, 3: _SCHEMA_V3, 4: _SCHEMA_V4}[version]
+            elif version in (1, 2, 3, 4, 5):
+                legacy = {
+                    1: _SCHEMA_V1,
+                    2: _SCHEMA_V2,
+                    3: _SCHEMA_V3,
+                    4: _SCHEMA_V4,
+                    5: _SCHEMA_V5,
+                }[version]
                 if dict(rows) != legacy or len(rows) != len(legacy):
                     raise TaskError("unsupported_schema")
                 if version == 1:
@@ -331,7 +339,10 @@ class TaskStore:
                 if version < 4:
                     for column in _PROGRESS_COLUMNS:
                         conn.execute("ALTER TABLE tasks ADD COLUMN " + column)
-                for statement in dependencies.SCHEMA.values():
+                if version < 5:
+                    for statement in dependencies.SCHEMA.values():
+                        conn.execute(statement)
+                for statement in native_sync.SCHEMA.values():
                     conn.execute(statement)
                 conn.execute(f"PRAGMA user_version = {_SCHEMA_VERSION}")
             elif version != _SCHEMA_VERSION:
@@ -358,7 +369,14 @@ class TaskStore:
         ).fetchone()
         if row is None:
             raise TaskError("not_found")
-        return dependencies.metadata(self._connection, dict(zip(_COLUMNS, row, strict=True)))
+        return self._metadata(dict(zip(_COLUMNS, row, strict=True)))
+
+    def _metadata(self, task):
+        return native_sync.metadata(self._connection, dependencies.metadata(self._connection, task))
+
+    def sync_native(self, request, observe_callback):
+        """Internal operator-service API; no model/run operation is registered."""
+        return native_sync.sync(self, request, observe_callback)
 
     @contextmanager
     def snapshot_task(self, task_id: str):
@@ -432,7 +450,7 @@ class TaskStore:
         ).fetchall()
         more = len(rows) > request["limit"]
         items = [
-            dependencies.metadata(self._connection, dict(zip(_COLUMNS, row, strict=True)))
+            self._metadata(dict(zip(_COLUMNS, row, strict=True)))
             for row in rows[: request["limit"]]
         ]
         return {"items": items, "next_cursor": items[-1]["id"] if more else None, "has_more": more}
@@ -458,7 +476,7 @@ class TaskStore:
         ).fetchall()
         more = len(rows) > request["limit"]
         items = [
-            dependencies.metadata(self._connection, dict(zip(_COLUMNS, row, strict=True)))
+            self._metadata(dict(zip(_COLUMNS, row, strict=True)))
             for row in rows[: request["limit"]]
         ]
         return {

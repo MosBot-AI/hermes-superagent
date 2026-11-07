@@ -243,7 +243,7 @@ def test_schema_refusal_and_reopen(tmp_path):
         store = TaskStore(conn)
         store.initialize()
         assert store.run("get", {"task_id": task["id"]})["data"] == task
-        conn.execute("PRAGMA user_version = 6")
+        conn.execute("PRAGMA user_version = 7")
         assert_error("unsupported_schema", store.initialize)
         conn.execute("PRAGMA user_version = 2")
         conn.execute("CREATE TABLE foreign_table (x)")
@@ -334,7 +334,7 @@ def test_rejected_schema_leaves_original_bytes_unchanged(tmp_path, kind):
             store.initialize()
             capture(store)
         if kind == "newer":
-            conn.execute("PRAGMA user_version = 6")
+            conn.execute("PRAGMA user_version = 7")
         elif kind == "extra_table":
             conn.execute("CREATE TABLE extra_table (synthetic TEXT)")
             conn.execute("INSERT INTO extra_table VALUES ('Synthetic private')")

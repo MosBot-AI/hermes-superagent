@@ -319,7 +319,17 @@ def _observation(conn, rows, digest):
     row = dict(rows[0])
     if type(row["id"]) is not str or re.fullmatch(r"t_[0-9a-f]{8}", row["id"]) is None:
         _fail("native_unsafe_storage")
-    if row["status"] not in {"triage", "todo", "ready", "running", "blocked", "done", "archived"}:
+    if row["status"] not in {
+        "triage",
+        "todo",
+        "scheduled",
+        "ready",
+        "running",
+        "blocked",
+        "review",
+        "done",
+        "archived",
+    }:
         _fail("native_unsafe_storage")
     result = {"card_id": row["id"], "status": row["status"]}
     if row["status"] == "archived":
@@ -405,15 +415,84 @@ def _observation(conn, rows, digest):
     return {**result, "outcome": "parked" if valid else "changed"}
 
 
-def observe(binding: dict, *, key: str, payload_digest: str, admit) -> dict:
+def _identity(value):
+    if (
+        type(value) is not dict
+        or set(value) != {"card_id", "created_at", "created_event_id"}
+        or type(value["card_id"]) is not str
+        or re.fullmatch(r"t_[0-9a-f]{8}", value["card_id"]) is None
+        or type(value["created_at"]) is not int
+        or not 0 <= value["created_at"] < 2**63
+        or type(value["created_event_id"]) is not int
+        or not 0 < value["created_event_id"] < 2**63
+    ):
+        _fail("invalid_request")
+    return dict(value)
+
+
+def _progress(conn, key, identity):
+    if type(key) is not str or re.fullmatch(r"[A-Za-z0-9._-]{1,128}", key) is None:
+        _fail("invalid_request")
+    # No source text, result, assignment or event payload is read by this path.
+    matches = conn.execute(
+        "SELECT id FROM tasks WHERE idempotency_key=? LIMIT 2", (key,)
+    ).fetchall()
+    row = conn.execute(
+        "SELECT id,status,idempotency_key,created_at,created_by FROM tasks WHERE id=?",
+        (identity["card_id"],),
+    ).fetchone()
+    outcome, status = "current", None
+    if len(matches) > 1:
+        outcome = "duplicate"
+    elif row is None:
+        outcome = "identity_changed" if matches else "missing"
+    elif row[2] != key:
+        outcome = "key_changed"
+    elif not matches or matches[0][0] != identity["card_id"]:
+        outcome = "identity_changed"
+    elif row[3] != identity["created_at"] or row[4] != "personal-agent":
+        outcome = "identity_changed"
+    else:
+        event = conn.execute(
+            "SELECT task_id,kind FROM task_events WHERE id=?", (identity["created_event_id"],)
+        ).fetchone()
+        if event is None:
+            outcome = "identity_unavailable"
+        elif event[0] != identity["card_id"] or event[1] != "created":
+            outcome = "identity_changed"
+        elif row[1] not in {
+            "triage",
+            "todo",
+            "scheduled",
+            "ready",
+            "running",
+            "blocked",
+            "review",
+            "done",
+            "archived",
+        }:
+            _fail("native_unsafe_storage")
+        else:
+            status = row[1]
+    result = {"outcome": outcome, "card_id": identity["card_id"], "observed_at": int(time.time())}
+    if outcome == "current":
+        result["status"] = status
+    return result
+
+
+def observe_progress(binding: dict, *, key: str, identity: dict, admit) -> dict:
+    """One advisory native snapshot, never a local revision or completion proof.
+
+    The retained creation event anchors identity; pruning it makes identity
+    unavailable. This is not tamper evidence against arbitrary database restore.
+    """
     try:
-        if type(payload_digest) is not str or re.fullmatch(r"[0-9a-f]{64}", payload_digest) is None:
-            _fail("invalid_request")
+        identity = _identity(identity)
         admit()
         with _connection(binding) as (kb, conn):
             conn.execute("BEGIN")
             _schema(conn)
-            result = _observation(conn, _matches(conn, key), payload_digest)
+            result = _progress(conn, key, identity)
             _host()
             _check(binding, kb)
             admit()
@@ -425,9 +504,46 @@ def observe(binding: dict, *, key: str, payload_digest: str, admit) -> dict:
         _fail()
 
 
-def create_parked(binding: dict, *, key: str, title: str, body: str, admit) -> dict:
+def observe(binding: dict, *, key: str, payload_digest: str, admit, identity=None) -> dict:
+    try:
+        if type(payload_digest) is not str or re.fullmatch(r"[0-9a-f]{64}", payload_digest) is None:
+            _fail("invalid_request")
+        identity = _identity(identity) if identity is not None else None
+        admit()
+        with _connection(binding) as (kb, conn):
+            conn.execute("BEGIN")
+            _schema(conn)
+            progress = _progress(conn, key, identity) if identity is not None else None
+            if progress is not None and progress["outcome"] != "current":
+                result = progress
+            else:
+                result = _observation(conn, _matches(conn, key), payload_digest)
+                if progress is not None and result["outcome"] != "parked":
+                    # This verifies the historical creation identity, NOT that
+                    # the card remains parked or its work has succeeded.
+                    result = {
+                        "outcome": "identity_confirmed",
+                        "card_id": progress["card_id"],
+                        "status": progress["status"],
+                    }
+            _host()
+            _check(binding, kb)
+            admit()
+            conn.execute("COMMIT")
+            return result
+    except TaskError:
+        raise
+    except Exception:
+        _fail()
+
+
+def create_parked(
+    binding: dict, *, key: str, title: str, body: str, admit, remember_identity=None
+) -> dict:
     try:
         digest = payload_digest(title, body)
+        if remember_identity is not None and not callable(remember_identity):
+            _fail("invalid_request")
         admit()
         with _connection(binding, write=True) as (kb, conn):
             with kb.write_txn(conn):
@@ -450,6 +566,22 @@ def create_parked(binding: dict, *, key: str, title: str, body: str, admit) -> d
                 result = _observation(conn, _matches(conn, key), digest)
                 if result != {"outcome": "parked", "card_id": card_id, "status": "blocked"}:
                     _fail("native_result_invalid")
+                if remember_identity is not None:
+                    row = conn.execute(
+                        "SELECT created_at FROM tasks WHERE id=?", (card_id,)
+                    ).fetchone()
+                    event = conn.execute(
+                        "SELECT id FROM task_events WHERE task_id=? AND kind='created' "
+                        "ORDER BY id LIMIT 1",
+                        (card_id,),
+                    ).fetchone()
+                    if row is None or event is None:
+                        _fail("native_result_invalid")
+                    remember_identity(
+                        _identity(
+                            {"card_id": card_id, "created_at": row[0], "created_event_id": event[0]}
+                        )
+                    )
                 _host()
                 # WAL has no rollback journal; DELETE needs the narrow owned
                 # journal allowance only while this write transaction is live.
