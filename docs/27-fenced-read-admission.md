@@ -6,7 +6,7 @@ English | [简体中文](27-fenced-read-admission-zh.md)
 
 This slice implements a default-denied **internal read coordinator** and a real SQLite policy/revocation transaction guard. Offline fixtures supply independent confirmations and resource snapshots to test that coordination. The repository does **not** supply a production identity authority, confirmation issuer, resource reader or enrollment activation flow. It does not authenticate the fixtures as real users.
 
-No command, tool, HTTP route, manifest setting or plugin callback constructs this service. Even an internal `enabled=True` is insufficient without both trusted adapters. Production status and `/personal-access` remain blocked. Pending records remain pending, the enrollment schema stays at v1, and `tasks.sqlite3` is neither opened nor adopted.
+No command, tool, HTTP route, manifest setting or plugin callback constructs this service. Even an internal `enabled=True` is insufficient without both trusted adapters. Production status and `/personal-access` remain blocked. Pending records remain pending, the enrollment schema is now v2 with explicit exact-v1 migration, and `tasks.sqlite3` is neither opened nor adopted.
 
 This advances the E1.3/E1.4 read-admission foundation, not the whole E1 or M1 gate. [26](26-pending-enrollment-policy.md) describes the prospective policy store; [23](23-host-command-context-experiment.md) records the still-unresolved host identity path. Python objects and types are not authentication or isolation against malicious code in the same interpreter.
 
@@ -62,7 +62,7 @@ Every participant must use the same lock order:
 3. Acquire the owner-scoped resource snapshot without reading private fields.
 4. Revalidate authority and trusted time after all waits. This successful check is the **read-admission point** while every fence is held.
 5. Materialize only the bounded summary projection. Recheck authority/time and validate the entire result; a failure discards it.
-6. Close the resource snapshot, commit the SQLite transaction, exit the host guard, then return the detached summary.
+6. Close the resource snapshot, revalidate authority/time, persist a minimal prepared-snapshot audit, commit the SQLite transaction, exit the host guard, then return the detached summary.
 
 The policy lock excludes revocation/policy edits throughout the read and until commit. A revoke committed first denies before resource access. An admitted read can finish before a waiting revoke commits. A revoke may commit after that read's transaction, even before the caller receives the detached result: this is already-admitted data, not a promise to retract it. The same applies to a host invalidation after the guard is released. No transport reply is sent here.
 
@@ -74,7 +74,7 @@ No prompt, network request, worker dispatch, transport send or long-running work
 
 ## 6. Audit, persistence and recovery limitations
 
-This slice intentionally adds **no durable read-admission audit**, admission receipt, replay cache or schema migration. The existing audit still records administrative create/policy/revoke changes only. The data-return operation has no external effect to reconcile, and retrying still requires fresh authority. The absence of a read audit remains a production release gate; do not interpret transaction success as a durable proof that a user received data.
+The [durable prepared-read audit](63-prepared-read-audit.md) now records minimal `snapshot_prepared` metadata in the same policy transaction. Audit failure prevents data return. A committed record may remain after host-exit failure or post-commit crash; it is not proof of return or delivery. There is no replay cache, reusable approval, or full denied-attempt log. Capacity is bounded without silent eviction; exact-v1 initialization upgrades to v2. Production authority/resource adapters remain absent.
 
 SQLite coordinates this database's current policy, not host identity, distributed ownership or restore/clone fencing. The source adapter guarantees only its own stable snapshot; after that snapshot closes, resources may change while the detached result remains a valid earlier snapshot. Restored copies of the database cannot prove freshness. Genuine cross-process/host invalidation, authenticated recovery and actual ingress are unimplemented.
 
@@ -90,6 +90,6 @@ This slice passed 754 unit tests and 304 pinned-host contracts (1,058 total), in
 
 ## 8. Next production gates
 
-Before a useful owner summary can be exposed, the project still needs a trusted bootstrap/enrollment decision, supported live host/IPC provenance and invalidation fences, real one-shot approval issuance/consumption, owner-scoped resource adoption, durable read audit, restore/clone handling and authorized real-ingress acceptance. The receiving transport Bot and native canonical Primary Bot remain separate concepts.
+Before a useful owner summary can be exposed, the project still needs a trusted bootstrap/enrollment decision, supported live host/IPC provenance and invalidation fences, real one-shot approval issuance/consumption, owner-scoped resource adoption, full audit/retention operations, restore/clone handling and authorized real-ingress acceptance. The receiving transport Bot and native canonical Primary Bot remain separate concepts.
 
 No API key or user decision is needed to test this internal coordinator. A real activation path will require explicit selection of the trust/bootstrap mechanism and exact account/Bot/profile/data scope, secure credential connection when applicable, and a permitted test environment. Supplying a model key does not solve the identity or environment gates.

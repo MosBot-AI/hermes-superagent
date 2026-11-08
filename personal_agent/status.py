@@ -281,9 +281,10 @@ def build_status(
             "coordinator_implemented": True,
             "production_adapters_available": False,
             "default_enabled": False,
-            "durable_read_audit_implemented": False,
+            "durable_read_audit_implemented": True,
             "scope": (
-                "Internal fenced snapshot coordination only; no live authority or task reader."
+                "Internal prepared-snapshot audit only; "
+                "no live authority, task reader or delivery proof."
             ),
         },
         "routing": {

@@ -103,6 +103,11 @@ def test_admitted_summary_finishes_before_waiting_policy_mutation(tmp_path, chan
         with pytest.raises(ReadAdmissionError, match="policy_denied"):
             service.read(KEY, REQUEST, live_handle=host.handle)
         assert "ownership" not in events and "read" not in events
+        history = store.read_admission_history(KEY)["items"]
+        assert len(history) == 1
+        assert history[0]["epoch"] == 0
+        assert history[0]["policy_revision"] == 1
+        assert history[0]["outcome"] == "snapshot_prepared"
 
 
 def test_confirmation_expires_while_waiting_for_sqlite_before_resource_access(tmp_path):
