@@ -271,6 +271,16 @@ else:
     manager = load()
     inspected = cli(manager, "task-backup", "inspect", "--name", "distribution", expected=0)
     assert inspected == backup
+    recovered = cli(manager, "task-backup", "tasks", "--name", "distribution",
+                    "--sha256", backup["data"]["sha256"], expected=0)
+    assert recovered["data"]["historical_tasks"]["items"][0]["id"] == task_id
+    recovered_task = cli(manager, "task-backup", "show", "--name", "distribution",
+                         "--sha256", backup["data"]["sha256"], "--task-id", task_id, expected=0)
+    assert recovered_task["data"]["historical_tasks"]["task"]["title"] == "Updated synthetic task"
+    assert recovered_task["data"]["automatic_restore"] is False
+    changed = cli(manager, "task-backup", "tasks", "--name", "distribution",
+                  "--sha256", "0" * 64, expected=1)
+    assert changed["error"]["code"] == "backup_changed" and changed["data"] is None
     duplicate = cli(manager, "task-backup", "create", "--name", "distribution", expected=1)
     assert duplicate["error"]["code"] == "backup_exists"
     shown = cli(manager, "tasks", "show", task_id, expected=0)
@@ -293,6 +303,7 @@ else:
         "global_personal_agent_import_blocked": True, "network_blocked": True,
         "python": sys.version.split()[0], "subprocesses_blocked": True,
         "synthetic_configuration_preserved": True, "task_backup_reload_no_overwrite": True,
+        "task_backup_historical_recovery_reads": True,
     }, sort_keys=True))
 """
 

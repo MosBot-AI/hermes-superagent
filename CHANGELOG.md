@@ -22,6 +22,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Add explicit digest-bound historical task browsing and inspection from private backups, without restoring or replaying live tasks.
+
 - [Add explicit local task snapshots with integrity checks, private no-overwrite publication and metadata inspection; no automatic restore or export to external services.](docs/61-local-task-backups.md)
 
 - Add cold runtime-package acceptance through native LOCAL conversation dispatch, with replay and denied-capability checks; deployed acceptance remains open.

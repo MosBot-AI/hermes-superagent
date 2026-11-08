@@ -17,21 +17,29 @@ from .task_cli import (
     _private_storage_directory,
     current_profile_home,
 )
-from .tasks import TaskError, inspect_task_snapshot
+from .tasks import _COLUMNS, TaskError, _task_id, inspect_task_snapshot
 
 MAX_BYTES = 512 * 1024 * 1024
 TIMEOUT_SECONDS = 30
+MAX_RESULT_CHARS = 80000
 _NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}")
 
 
 def setup_backup_cli(parent: argparse._SubParsersAction) -> None:
     parser = parent.add_parser(
-        "task-backup", help="Create or inspect private task snapshots locally"
+        "task-backup", help="Create, inspect or read historical tasks from private local snapshots"
     )
     commands = parser.add_subparsers(dest="backup_operation", required=True)
-    for operation in ("create", "inspect"):
+    for operation in ("create", "inspect", "tasks", "show"):
         command = commands.add_parser(operation)
         command.add_argument("--name", required=True, help="1-64 ASCII letters, digits, _ or -")
+        if operation in ("tasks", "show"):
+            command.add_argument("--sha256", required=True, help="Digest from create or inspect")
+        if operation == "tasks":
+            command.add_argument("--after", help="Task ID from the preceding page")
+            command.add_argument("--limit", type=int, default=10)
+        if operation == "show":
+            command.add_argument("--task-id", required=True)
 
 
 def _check_file(path: Path) -> None:
@@ -52,7 +60,7 @@ def _connection(path: Path, deadline: float) -> sqlite3.Connection:
     return connection
 
 
-def _metadata(path: Path, deadline: float) -> dict:
+def _metadata(path: Path, deadline: float, *, reader=None, expected_digest=None) -> dict:
     _check_file(path)
     # Published snapshots use DELETE journaling. Refuse sidecars rather than
     # silently inspecting a changed, concurrently written or incomplete backup.
@@ -62,24 +70,109 @@ def _metadata(path: Path, deadline: float) -> dict:
         for suffix in ("-wal", "-shm", "-journal")
     ):
         raise TaskError("backup_sidecar_present")
+    # Even mode=ro can create WAL/SHM files for a closed WAL-mode database.
+    # Published snapshots must be DELETE-journal files before SQLite opens them.
+    with path.open("rb") as stream:
+        header = stream.read(20)
+    if header[:16] != b"SQLite format 3\x00" or header[18:20] != b"\x01\x01":
+        raise TaskError("backup_not_standalone")
     connection = _connection(path, deadline)
     try:
         connection.execute("BEGIN")
         result = inspect_task_snapshot(connection)
+        # Keep the read lock while hashing and reading payload. Ordinary SQLite
+        # writers cannot commit a different DELETE-journal snapshot underneath us.
+        digest = hashlib.sha256()
+        with path.open("rb") as stream:
+            while block := stream.read(1024 * 1024):
+                if time.monotonic() >= deadline:
+                    raise TaskError("backup_timeout")
+                digest.update(block)
+        sha256 = digest.hexdigest()
+        if expected_digest is not None and sha256 != expected_digest:
+            raise TaskError("backup_changed")
+        if reader is not None:
+            result["historical_tasks"] = reader(connection)
+        return {**result, "bytes": path.stat().st_size, "sha256": sha256}
     finally:
         connection.close()
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        while block := stream.read(1024 * 1024):
-            if time.monotonic() >= deadline:
-                raise TaskError("backup_timeout")
-            digest.update(block)
-    return {**result, "bytes": path.stat().st_size, "sha256": digest.hexdigest()}
 
 
-def task_backup(bound_home: Path, operation: str, name: str) -> dict:
-    """Create without replacement or inspect a bounded current-schema snapshot."""
-    if operation not in ("create", "inspect") or type(name) is not str or not _NAME.fullmatch(name):
+def _read_tasks(connection, operation, *, after, limit, task_id):
+    # No receipts or native observations: historical task data is not execution
+    # authority. Bound values in SQL before materializing potentially altered data.
+    columns = (
+        ("id", "title", "state", "revision", "due_date", "project", "work_status")
+        if operation == "tasks"
+        else _COLUMNS
+    )
+    args = []
+    if operation == "show":
+        clause = " WHERE id = ?"
+        args.append(task_id)
+    elif after is not None:
+        cursor = connection.execute("SELECT sequence FROM tasks WHERE id = ?", (after,)).fetchone()
+        if cursor is None:
+            raise TaskError("invalid_cursor")
+        clause = " WHERE sequence < ?"
+        args.append(cursor[0])
+    else:
+        clause = ""
+    args.append(limit + 1 if operation == "tasks" else 1)
+    lengths = "+".join(f"coalesce(length(CAST({column} AS BLOB)),0)" for column in columns)
+    # Only bounded rows are loaded; an oversized row fails rather than silently
+    # disappearing from recovery results or being truncated into a different task.
+    rows = connection.execute(
+        f"SELECT sequence,({lengths}) FROM tasks{clause} ORDER BY sequence DESC LIMIT ?", args
+    ).fetchall()
+    if operation == "show" and not rows:
+        raise TaskError("not_found")
+    more = operation == "tasks" and len(rows) > limit
+    items = []
+    for sequence, size in rows[:limit]:
+        if size > 32000:
+            raise TaskError("backup_record_too_large")
+        row = connection.execute(
+            f"SELECT {','.join(columns)} FROM tasks WHERE sequence=?", (sequence,)
+        ).fetchone()
+        items.append(dict(zip(columns, row, strict=True)))
+    output = (
+        {"items": items, "has_more": more, "next_cursor": items[-1]["id"] if more else None}
+        if operation == "tasks"
+        else {"task": items[0]}
+    )
+    try:
+        if len(json.dumps(output, ensure_ascii=True)) > MAX_RESULT_CHARS:
+            raise TaskError("backup_result_too_large")
+    except TypeError, ValueError:
+        raise TaskError("storage_corrupt") from None
+    return output
+
+
+def task_backup(
+    bound_home: Path, operation: str, name: str, *, sha256=None, after=None, limit=10, task_id=None
+) -> dict:
+    """Create without replacement, inspect metadata or read historical task fields."""
+    if (
+        operation not in ("create", "inspect", "tasks", "show")
+        or type(name) is not str
+        or not _NAME.fullmatch(name)
+    ):
+        raise TaskError("invalid_request")
+    if operation in ("tasks", "show"):
+        if type(sha256) is not str or re.fullmatch(r"[0-9a-f]{64}", sha256) is None:
+            raise TaskError("invalid_request")
+        if type(limit) is not int or not 1 <= limit <= 20:
+            raise TaskError("invalid_request")
+        if after is not None:
+            _task_id(after)
+        if operation == "show":
+            _task_id(task_id)
+            if after is not None or limit != 10:
+                raise TaskError("invalid_request")
+        elif task_id is not None:
+            raise TaskError("invalid_request")
+    elif sha256 is not None or after is not None or task_id is not None or limit != 10:
         raise TaskError("invalid_request")
     if os.name != "posix" or not hasattr(os, "O_NOFOLLOW"):
         raise TaskError("unsupported_storage_platform")
@@ -99,8 +192,14 @@ def task_backup(bound_home: Path, operation: str, name: str) -> dict:
         raise TaskError("unsafe_storage_path")
     destination = backups / (name + ".sqlite3")
     deadline = time.monotonic() + TIMEOUT_SECONDS
-    if operation == "inspect":
-        metadata = _metadata(destination, deadline)
+    if operation in ("inspect", "tasks", "show"):
+        reader = None
+        if operation in ("tasks", "show"):
+
+            def reader(connection):
+                return _read_tasks(connection, operation, after=after, limit=limit, task_id=task_id)
+
+        metadata = _metadata(destination, deadline, reader=reader, expected_digest=sha256)
     else:
         if destination.exists() or destination.is_symlink():
             raise TaskError("backup_exists")
@@ -159,11 +258,18 @@ def task_backup(bound_home: Path, operation: str, name: str) -> dict:
                 temporary.unlink(missing_ok=True)
                 for suffix in ("-journal", "-wal", "-shm"):
                     temporary.with_name(temporary.name + suffix).unlink(missing_ok=True)
+    if operation in ("tasks", "show"):
+        metadata["notice"] = (
+            "Historical untrusted task data, not current state or permission to execute. "
+            "May include text changed or removed from the live store. "
+            "No task is restored or replayed. "
+            "Current terminal state is not established by this snapshot."
+        )
     return {"name": name, **metadata, "scope": "task_database_only", "automatic_restore": False}
 
 
 def run_backup_cli(args, *, read_mode, bound_home: Path) -> int:
-    """Recheck current profile/mode; no task payload, SQL or paths in output."""
+    """Recheck profile/mode; only explicit recovery reads return task payload."""
     try:
         if not bound_home.is_dir() or current_profile_home() != bound_home:
             raise TaskError("profile_context_changed")
@@ -172,7 +278,15 @@ def run_backup_cli(args, *, read_mode, bound_home: Path) -> int:
             raise TaskError("invalid_configuration")
         if mode != "local_tasks":
             raise TaskError("local_tasks_disabled")
-        data = task_backup(bound_home, args.backup_operation, args.name)
+        data = task_backup(
+            bound_home,
+            args.backup_operation,
+            args.name,
+            sha256=getattr(args, "sha256", None),
+            after=getattr(args, "after", None),
+            limit=getattr(args, "limit", 10),
+            task_id=getattr(args, "task_id", None),
+        )
         output = {"status": "ok", "data": data, "error": None}
         code = 0
     except Exception as error:
