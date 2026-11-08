@@ -21,6 +21,7 @@ This file distinguishes design work, development changes, and released capabilit
 - Added default-off [parked native Kanban handoff](docs/52-parked-kanban-handoff.md): explicit board, preview/digest commit, durable single-use claim and bounded read-only reconciliation. No worker dispatch, storage initialization or live acceptance.
 
 ### Added
+- Add bounded internal policy/revocation audit inspection with coherent epoch watermarks and fail-closed history validation; no production authority or external cancellation.
 - Add internal atomic ActionIntent replacement with exact binding, durable retry links and strict v1-to-v2 migration; no approval or execution is enabled.
 
 

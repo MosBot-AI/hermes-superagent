@@ -86,3 +86,11 @@ Before exposing an enrollment ceremony or any private read:
 6. Validate the real entry point in an authorized environment and securely connect the chosen Bot if needed. A deterministic summary need not use a model API key; credentials cannot fix missing identity contracts.
 
 This foundation intentionally stops before those gates. The production status continues to report `identity_binding: false`, `protected_reads_enabled: false` and `release_gate: blocked`.
+
+## Policy history inspection
+
+`EnrollmentStore.policy_history(key, after_epoch=-1, limit=50)` is an internal administrative reader, not a CLI, model tool, remote route or authentication API. Exact owner/profile/enrollment selectors are caller-owned labels. It returns only operation, epoch and resulting enrollment/policy revisions, plus the current record state/revision/epoch watermark. It never returns intended actor/receiver IDs, scope content, resource IDs, credentials or arbitrary event text.
+
+The initial cursor `-1` includes the epoch-zero creation event. Pages accept 1–100 items, return `next_after_epoch` and `has_more`, and remain readable after terminal revocation. A cursor beyond the current epoch is rejected. One transaction provides a coherent page and current watermark; separate calls are not a frozen snapshot and may observe later policy changes or revocation. A returned watermark is historical inspection, not an authorization fence or evidence that an external operation stopped.
+
+The reader validates the exact schema, current record/counter relationship, current tail event and selected contiguous range including one lookahead item. Missing or inconsistent selected events fail closed, including failures during SELECT or COMMIT. It does not scan or certify all earlier history outside that page. Indexed scope/epoch queries fetch at most `limit + 1` page rows and one tail row; the API performs no mutation, retention cleanup or schema migration. The local database remains neither tamper-evident nor a restore/clone freshness authority. A caller transaction is rejected without being rolled back.
