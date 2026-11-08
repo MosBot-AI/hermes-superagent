@@ -106,3 +106,5 @@ E9 已选定原生 worker 路由设计，并实现离线约束验证器和部分
 - [显式本地任务备份](61-local-task-backups-zh.md)
 
 - [原生时间规则预览](62-native-schedule-preview-zh.md)
+
+- [持久化读取快照准备审计](63-prepared-read-audit-zh.md)：内部已提交快照元数据，不是送达证明或生产身份。

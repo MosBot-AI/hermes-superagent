@@ -14,12 +14,15 @@ There are no replay receipts or cached authorization responses.
 import json
 import sqlite3
 from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 from .authorization import ReadRequest, _identifier, _scope
 
 _APPLICATION_ID = 0x5041454E
-_SCHEMA_VERSION = 1
+_SCHEMA_VERSION = 2
+MAX_READ_AUDITS = 10000
 _MAX = 2**63 - 1
 _COLUMNS = (
     "owner_id",
@@ -37,7 +40,7 @@ _COLUMNS = (
     "resource_ids",
     "data_scope",
 )
-_SCHEMA = {
+_SCHEMA_V1 = {
     "enrollments": """CREATE TABLE enrollments (
         owner_id TEXT NOT NULL, profile_id TEXT NOT NULL,
         enrollment_id TEXT NOT NULL, transport_id TEXT NOT NULL,
@@ -56,6 +59,37 @@ _SCHEMA = {
         enrollment_revision INTEGER NOT NULL, policy_revision INTEGER NOT NULL,
         PRIMARY KEY(owner_id, profile_id, enrollment_id, epoch))""",
 }
+_READ_AUDIT_SQL = """CREATE TABLE read_admissions (
+        sequence INTEGER PRIMARY KEY,
+        owner_id TEXT NOT NULL, profile_id TEXT NOT NULL, enrollment_id TEXT NOT NULL,
+        enrollment_revision INTEGER NOT NULL, policy_revision INTEGER NOT NULL,
+        epoch INTEGER NOT NULL, prepared_at TEXT NOT NULL,
+        resource_count INTEGER NOT NULL CHECK(resource_count BETWEEN 1 AND 32),
+        outcome TEXT NOT NULL CHECK(outcome = 'snapshot_prepared'))"""
+_SCHEMA = {**_SCHEMA_V1, "read_admissions": _READ_AUDIT_SQL}
+_READ_AUDIT_COLUMNS = (
+    "sequence",
+    "owner_id",
+    "profile_id",
+    "enrollment_id",
+    "enrollment_revision",
+    "policy_revision",
+    "epoch",
+    "prepared_at",
+    "resource_count",
+    "outcome",
+)
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedRead[T]:
+    """Trusted coordinator result, not a data-driven approval or delivery receipt."""
+
+    value: T
+    prepared_at: datetime
+    resource_count: int
+
+
 _KEYS = {"owner_id", "profile_id", "enrollment_id"}
 _IDENTITY = {"transport_id", "transport_receiver_id", "principal_id"}
 _SCOPE = {"operation", "target", "resource_ids", "data_scope"}
@@ -137,6 +171,12 @@ class EnrollmentStore:
             conn.execute(f"PRAGMA user_version = {_SCHEMA_VERSION}")
         elif app != _APPLICATION_ID:
             raise EnrollmentError("foreign_database")
+        elif create and version == 1 and len(rows) == len(_SCHEMA_V1) and dict(rows) == _SCHEMA_V1:
+            # Upgrade only the exact owned predecessor, atomically with initialize.
+            # Administrative rows remain byte-for-byte unchanged; no historical
+            # read events are fabricated and no pending identity is activated.
+            conn.execute(_READ_AUDIT_SQL)
+            conn.execute(f"PRAGMA user_version = {_SCHEMA_VERSION}")
         elif version != _SCHEMA_VERSION or len(rows) != len(_SCHEMA) or dict(rows) != _SCHEMA:
             raise EnrollmentError("unsupported_schema")
 
@@ -165,7 +205,7 @@ class EnrollmentStore:
             raise
 
     def initialize(self) -> None:
-        """Create only an empty database, or validate the exact owned v1 schema."""
+        """Create/validate v2 or atomically upgrade the exact owned v1 schema."""
         self._initialized = False
         self._transaction(lambda: self._schema(create=True))
         self._initialized = True
@@ -253,6 +293,136 @@ class EnrollmentStore:
             return operation(record)
 
         return self._transaction(apply)
+
+    def with_audited_read[T](
+        self,
+        key: dict,
+        *,
+        expected_revision: int,
+        expected_enrollment_revision: int,
+        expected_epoch: int,
+        operation: Callable[[dict], PreparedRead[T]],
+    ) -> T:
+        """Persist minimal prepared-snapshot metadata before returning any result.
+
+        Internal trusted-code API only. The coordinator supplies a trusted final
+        UTC sample, not request time. This event does not prove a return, transport
+        send, receipt by a user, or independently authenticated owner identity.
+        Fail closed at capacity before calling the resource operation; no eviction.
+        """
+        if not callable(operation):
+            raise EnrollmentError("invalid_request")
+
+        def apply(record: dict) -> T:
+            count = self._connection.execute(
+                "SELECT count(*) FROM (SELECT 1 FROM main.read_admissions LIMIT ?)",
+                (MAX_READ_AUDITS,),
+            ).fetchone()[0]
+            if count >= MAX_READ_AUDITS:
+                raise EnrollmentError("read_audit_full")
+            last_sequence = self._connection.execute(
+                "SELECT coalesce(max(sequence),0) FROM main.read_admissions"
+            ).fetchone()[0]
+            if not _revision(last_sequence, minimum=0) or last_sequence >= _MAX:
+                raise EnrollmentError("read_audit_exhausted")
+            prepared = operation(record)
+            if (
+                type(prepared) is not PreparedRead
+                or type(prepared.prepared_at) is not datetime
+                or prepared.prepared_at.tzinfo is not UTC
+                or prepared.prepared_at.fold != 0
+                or type(prepared.resource_count) is not int
+                or not 1 <= prepared.resource_count <= 32
+            ):
+                raise EnrollmentError("invalid_read_audit")
+            self._connection.execute(
+                "INSERT INTO main.read_admissions (sequence,owner_id,profile_id,enrollment_id,"
+                "enrollment_revision,policy_revision,epoch,prepared_at,resource_count,outcome) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (last_sequence + 1,)
+                + tuple(
+                    record[name]
+                    for name in (
+                        "owner_id",
+                        "profile_id",
+                        "enrollment_id",
+                        "enrollment_revision",
+                        "policy_revision",
+                        "epoch",
+                    )
+                )
+                + (prepared.prepared_at.isoformat(), prepared.resource_count, "snapshot_prepared"),
+            )
+            return prepared.value
+
+        return self.with_current_record(
+            key,
+            expected_revision=expected_revision,
+            expected_enrollment_revision=expected_enrollment_revision,
+            expected_epoch=expected_epoch,
+            operation=apply,
+        )
+
+    def read_admission_history(
+        self, key: dict, *, after_sequence: int = 0, limit: int = 50
+    ) -> dict:
+        """Bounded internal administrative read; selectors are not identity proof.
+
+        No transport/API exposes this method. Revoked records retain their history.
+        Entries are observations, never reusable authorization or replay receipts.
+        """
+        request = _request("get", key)
+        if (
+            not _revision(after_sequence, minimum=0)
+            or type(limit) is not int
+            or not 1 <= limit <= 100
+        ):
+            raise EnrollmentError("invalid_request")
+        if not self._initialized:
+            raise EnrollmentError("not_initialized")
+
+        def read() -> dict:
+            self._schema()
+            self._get(request)
+            rows = self._connection.execute(
+                f"SELECT {','.join(_READ_AUDIT_COLUMNS)} FROM main.read_admissions "
+                "WHERE owner_id=? AND profile_id=? AND enrollment_id=? AND sequence>? "
+                "ORDER BY sequence LIMIT ?",
+                tuple(request[name] for name in ("owner_id", "profile_id", "enrollment_id"))
+                + (after_sequence, limit + 1),
+            ).fetchall()
+            items = [dict(zip(_READ_AUDIT_COLUMNS, row, strict=True)) for row in rows[:limit]]
+            for item in items:
+                try:
+                    sample = datetime.fromisoformat(item["prepared_at"])
+                    valid_time = sample.tzinfo is UTC and sample.isoformat() == item["prepared_at"]
+                except TypeError, ValueError:
+                    valid_time = False
+                if (
+                    not valid_time
+                    or item["outcome"] != "snapshot_prepared"
+                    or not all(
+                        _revision(item[name])
+                        for name in (
+                            "sequence",
+                            "enrollment_revision",
+                            "policy_revision",
+                        )
+                    )
+                    or not _revision(item["epoch"], minimum=0)
+                    or type(item["resource_count"]) is not int
+                    or not 1 <= item["resource_count"] <= 32
+                ):
+                    raise EnrollmentError("invalid_read_audit")
+            return {
+                "items": items,
+                "has_more": len(rows) > limit,
+                "next_after_sequence": rows[min(len(rows), limit) - 1][0]
+                if rows
+                else after_sequence,
+            }
+
+        return self._transaction(read)
 
     def run(self, operation: str, payload: dict) -> dict:
         """Return current administrative snapshot, never a permission decision."""

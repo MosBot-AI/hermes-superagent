@@ -189,6 +189,7 @@ def test_success_fences_and_no_replay(setup):
         "read",
         "clock",
         "snapshot_exit",
+        "clock",
         "COMMIT",
         "host_exit",
     ]

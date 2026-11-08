@@ -106,3 +106,5 @@ E9 has a selected native worker-routing design, an offline constraint evaluator 
 - [Explicit local task backups](61-local-task-backups.md)
 
 - [Native schedule preview](62-native-schedule-preview.md)
+
+- [Durable prepared-read audit](63-prepared-read-audit.md): internal committed snapshot metadata, not delivery proof or production identity.

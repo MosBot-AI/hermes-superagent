@@ -2,7 +2,8 @@
 
 Only independently trusted adapters may implement these protocols. Python types
 and pending database labels are not authentication. No production adapter, route,
-TaskStore access, durable admission audit or reusable authorization token exists.
+TaskStore access or reusable authorization token exists. Successful snapshots
+commit minimal metadata, not proof of return or delivery.
 Lock order: host invalidation guard -> enrollment transaction -> resource fence.
 Never prompt, network, dispatch workers or perform long tasks inside these fences.
 """
@@ -22,7 +23,7 @@ from .authorization import (
     _scope,
     evaluate_read,
 )
-from .enrollment import EnrollmentError, EnrollmentStore
+from .enrollment import EnrollmentError, EnrollmentStore, PreparedRead
 
 MAX_TASKS = 32
 MAX_TITLE_LENGTH = 240
@@ -254,22 +255,24 @@ class ReadAdmissionService:
             ):
                 raise ReadAdmissionError("confirmation_mismatch")
 
-            def check(policy_revision: int, epoch: int) -> None:
+            def check(policy_revision: int, epoch: int) -> datetime:
+                now = guard.validate_and_now()
                 decision = evaluate_read(
                     context,
                     grant,
                     request,
                     current_policy_revision=policy_revision,
                     current_epoch=epoch,
-                    now=guard.validate_and_now(),
+                    now=now,
                 )
                 if not decision.allowed:
                     raise ReadAdmissionError("authorization_denied")
+                return now
 
             # Reject malformed authority before accessing storage at all.
             check(context.policy_revision, context.epoch)
 
-            def read_current(record: dict) -> tuple[TaskSummary, ...]:
+            def read_current(record: dict) -> PreparedRead[tuple[TaskSummary, ...]]:
                 if any(
                     record[name] != getattr(context, name)
                     for name in (
@@ -298,9 +301,12 @@ class ReadAdmissionService:
                     completed = True
                 if not completed:
                     raise ReadAdmissionError("snapshot_incomplete")
-                return summaries
+                # Snapshot exit may itself invalidate authority or consume time.
+                # Resample after it, while the host and policy fences remain held.
+                now = check(record["policy_revision"], record["epoch"])
+                return PreparedRead(summaries, now, len(summaries))
 
-            result = self._store.with_current_record(
+            result = self._store.with_audited_read(
                 key,
                 expected_revision=context.policy_revision,
                 expected_enrollment_revision=confirmation.enrollment_revision,
