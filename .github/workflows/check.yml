@@ -26,7 +26,7 @@ jobs:
           upstream="$RUNNER_TEMP/hermes"
           git init "$upstream"
           git -C "$upstream" remote add origin https://github.com/NousResearch/hermes-agent.git
-          git -C "$upstream" fetch --depth=1 origin 90d6b98fd86d20981ee06ddd5b7d93e4320f26a4
+          git -C "$upstream" fetch --depth=1 origin 2281116525106e3c109993ccb5dc74d02bfc1427
           git -C "$upstream" checkout --detach FETCH_HEAD
           export HERMES_HOME="$RUNNER_TEMP/hermes-build-home"
           export HERMES_RUNTIME_DIR="$RUNNER_TEMP/hermes-build-runtime"
@@ -43,13 +43,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Review-only patch remains tied to its original host; do not rebase it silently.
+          legacy="$RUNNER_TEMP/hermes-proposal-base"
+          git -C "$RUNNER_TEMP/hermes" fetch --depth=1 origin 90d6b98fd86d20981ee06ddd5b7d93e4320f26a4
+          git -C "$RUNNER_TEMP/hermes" worktree add --detach "$legacy" 90d6b98fd86d20981ee06ddd5b7d93e4320f26a4
+          (cd "$legacy" && HERMES_HOME="$RUNNER_TEMP/proposal-build-home" \
+          HERMES_RUNTIME_DIR="$RUNNER_TEMP/proposal-build-runtime" python -m pm.build_env --source "$legacy" --out "$RUNNER_TEMP/proposal-test-venv" \
+            --group dev --group test --python "$(command -v python)")
           proposed="$RUNNER_TEMP/hermes-text-worker"
           git -C "$RUNNER_TEMP/hermes" worktree add --detach "$proposed" 90d6b98fd86d20981ee06ddd5b7d93e4320f26a4
           git -C "$proposed" apply --check "$GITHUB_WORKSPACE/experiments/text-worker/text-worker-prototype.patch"
           git -C "$proposed" apply --index "$GITHUB_WORKSPACE/experiments/text-worker/text-worker-prototype.patch"
-          "$RUNNER_TEMP/hermes-test-venv/bin/python" experiments/text-worker/run_tests.py \
-            --checkout "$proposed" --clean-checkout "$RUNNER_TEMP/hermes" \
-            --python "$RUNNER_TEMP/hermes-test-venv/bin/python" --disposable-copy
+          "$RUNNER_TEMP/proposal-test-venv/bin/python" experiments/text-worker/run_tests.py \
+            --checkout "$proposed" --clean-checkout "$legacy" \
+            --python "$RUNNER_TEMP/proposal-test-venv/bin/python" --disposable-copy
       - name: Build and verify the offline runtime delivery
         if: github.event_name == 'push'
         shell: bash

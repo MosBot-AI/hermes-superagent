@@ -6,6 +6,11 @@ This file distinguishes design work, development changes, and released capabilit
 
 ## Unreleased
 
+### Changed
+
+- Advance the exact Hermes development target to `22811165`, preserving clean-source identity and Kanban hash guards. Keep historical host proposals on their original isolated baseline; this does not claim a broad support range or production installation.
+
+
 - Added explicit [advisory native progress sync](docs/53-native-progress-observation.md): anchored identity checks, one latest metadata snapshot and durable retry receipts. Native state never changes local completion or dispatches work.
 
 - Fix parked Kanban creation under the host’s safe DELETE-journal fallback; keep pre-existing journal refusal and test both native-default and DELETE modes.

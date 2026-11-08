@@ -2,9 +2,17 @@
 
 [English](hermes-compatibility-matrix.md) | 简体中文
 
-## E0.1 基线
+## 当前 E0.1 目标
 
-[兼容性记录](../compatibility.json)固定 Hermes `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`。已验证的环境为 Linux、Python 3.14.9，以及使用固定版本 Hermes 的 `dev` 和 `test` 组构建的 PM 环境。大多数插件契约测试在临时 profile 中使用原生 `in_process` 加载。取得带版本的兼容性证据之前，保持 `semver_support_range` 为 `null`，[清单](../plugin.yaml)继续省略 `requires_hermes`。开发目标以这个确切提交为准。
+当前[兼容性记录](../compatibility.json)以 Hermes `2281116525106e3c109993ccb5dc74d02bfc1427` 为目标，这是 2026-11-08 查询时上游 main 的最新提交。每次测试固定查询到的版本，不在运行中追逐移动的 `main`。仍强制要求准确且干净的 Git 身份；缺少 `.git` 的官方源码归档不能满足这些检查。不声明宽泛的版本范围。
+
+此前 MacBook 对该版本的探测通过了全部三项官方真实 Gateway 生命周期测试，以及合成插件 ticket/WebSocket 任务、重启与去重流程。归档形式的契约测试通过 1,037 项，两项 Git 身份守卫失败，并非行为断言失败。这不等于官方安装或真实模型服务商验收，也没有修复云执行器的 socket 限制。Kanban 守卫使用的最新版源码哈希未变化。
+
+仅供评审的宿主提案保留历史基线和隔离解释器，不静默变基，也不算作最新版宿主支持。新的干净检出结果记录在 [E0.1](https://github.com/MosBot-AI/hermes-superagent/issues/1) 关联 Issue/PR 中。
+
+## 历史 E0.1 证据（90d6b98）
+
+此前的兼容性基线固定 Hermes `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`。已验证的环境为 Linux、Python 3.14.9，以及使用固定版本 Hermes 的 `dev` 和 `test` 组构建的 PM 环境。大多数插件契约测试在临时 profile 中使用原生 `in_process` 加载。取得带版本的兼容性证据之前，保持 `semver_support_range` 为 `null`，[清单](../plugin.yaml)继续省略 `requires_hermes`。以下历史证据对应的开发目标是该确切提交。
 
 [插件提交 `eefa8845b1ed66b740d9e46de2b8aee77917db0a`](https://github.com/MosBot-AI/hermes-superagent/tree/eefa8845b1ed66b740d9e46de2b8aee77917db0a)的 [main 推送运行](https://github.com/MosBot-AI/hermes-superagent/actions/runs/42377180370)通过了 2,534 项单元测试、1,039 项固定宿主契约测试，以及 lint、格式、类型和双语文档检查。应用纯文本 worker 提案的独立临时宿主检出通过了 357 项测试和两套生产入口测试。推送运行还构建、扫描并冷加载了[离线运行包](https://github.com/MosBot-AI/hermes-superagent/actions/runs/42377180370/artifacts/13575019987)。这些 CI 结果对应确切提交。部署和真实模型服务商验收仍待完成。
 

@@ -1,6 +1,6 @@
 """Compatibility pins, not signatures; fresh isolated native schema at this commit."""
 
-HOST_COMMIT = "90d6b98fd86d20981ee06ddd5b7d93e4320f26a4"
+HOST_COMMIT = "2281116525106e3c109993ccb5dc74d02bfc1427"
 SCHEMA_SHA256 = "7b2348c7cddd2ea0ac2769783bae9450338aa69c09a7daa040629ce1b5b4f9d8"
 SOURCE_SHA256 = {
     "hermes_cli/kanban_db.py": ("fee49c5e11e86154d4946713b6c9e31b95b507d5394e8197784367d42739ca4e"),
