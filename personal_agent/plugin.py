@@ -10,6 +10,7 @@ from .identity import build_access_diagnostic
 from .routing_cli import RoutingInspector, setup_routing_cli
 from .routing_inspection import inspection_failure
 from .status import build_status, validate_kanban_configuration
+from .task_backup import run_backup_cli, setup_backup_cli
 from .task_cli import current_profile_home, run_tasks_cli, setup_tasks_cli
 from .voice_cli import run_voice_cli, setup_voice_cli
 
@@ -131,11 +132,15 @@ def setup_cli(parser: argparse.ArgumentParser) -> None:
     subparsers.add_parser("coverage", help="Show blocked write paths and baseline evidence as JSON")
     subparsers.add_parser("access", help="Explain the still-blocked owner/receiving-Bot boundary")
     setup_tasks_cli(subparsers)
+    setup_backup_cli(subparsers)
     setup_voice_cli(subparsers)
     setup_routing_cli(subparsers)
 
 
 def run_cli(args: argparse.Namespace) -> int | None:
+    if args.personal_command == "task-backup":
+        print(json.dumps({"status": "error", "error": {"code": "host_context_unavailable"}}))
+        return 1
     if args.personal_command == "routing":
         print(json.dumps(inspection_failure("host_inspection_unavailable"), sort_keys=True))
         return 1
@@ -253,6 +258,10 @@ def register(ctx: PluginContext) -> None:
     def registered_cli(args: argparse.Namespace) -> int | None:
         if args.personal_command == "routing":
             return routing_inspector.run(args)
+        if args.personal_command == "task-backup":
+            return run_backup_cli(
+                args, read_mode=lambda: ctx.get_config("mode", "read_only"), bound_home=bound_home
+            )
         if args.personal_command == "tasks":
             return run_tasks_cli(
                 args,

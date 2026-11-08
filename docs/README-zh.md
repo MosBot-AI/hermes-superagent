@@ -102,3 +102,5 @@ E9 已选定原生 worker 路由设计，并实现离线约束验证器和部分
 - [Gateway 启动诊断](gateway-boot-diagnostics-zh.md)：只读规划与显式启用的堆栈捕获，不代表传输验收。
 - [任务事务进程崩溃恢复证据](task-transaction-recovery-zh.md)：88 项隔离崩溃用例，不是完整 M1 验收。
 [原子项目标签重命名](60-project-label-rename-zh.md)：显式整组预览和版本安全改名，保留依赖和终态。
+
+- [显式本地任务备份](61-local-task-backups-zh.md)

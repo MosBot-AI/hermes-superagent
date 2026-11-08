@@ -264,8 +264,15 @@ else:
                    "--title", "Updated synthetic task", "--request-id", "distribution-update")
     updated = cli(manager, *update_args, expected=0)
     assert updated["data"]["revision"] == 2 and not updated["replayed"]
+    backup = cli(manager, "task-backup", "create", "--name", "distribution", expected=0)
+    assert backup["data"]["counts"]["tasks"] == 1
+    assert backup["data"]["integrity"] == "ok"
     manager.unload()
     manager = load()
+    inspected = cli(manager, "task-backup", "inspect", "--name", "distribution", expected=0)
+    assert inspected == backup
+    duplicate = cli(manager, "task-backup", "create", "--name", "distribution", expected=1)
+    assert duplicate["error"]["code"] == "backup_exists"
     shown = cli(manager, "tasks", "show", task_id, expected=0)
     assert shown["data"]["revision"] == 2
     assert shown["data"]["title"] == "Updated synthetic task"
@@ -285,7 +292,7 @@ else:
         "reload_and_idempotent_replay": True, "installed_module_origins": True,
         "global_personal_agent_import_blocked": True, "network_blocked": True,
         "python": sys.version.split()[0], "subprocesses_blocked": True,
-        "synthetic_configuration_preserved": True,
+        "synthetic_configuration_preserved": True, "task_backup_reload_no_overwrite": True,
     }, sort_keys=True))
 """
 

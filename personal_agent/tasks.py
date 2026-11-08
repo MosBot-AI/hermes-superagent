@@ -327,6 +327,39 @@ def _database_error(error: sqlite3.Error) -> TaskError:
     return TaskError("storage_error")
 
 
+def inspect_task_snapshot(connection: sqlite3.Connection) -> dict:
+    """Validate the current owned schema without initializing or migrating it.
+
+    Caller owns the read transaction. Returns counts only, never record payload.
+    This is structural/integrity validation, not authenticity or restore admission.
+    """
+    if not connection.in_transaction:
+        raise TaskError("connection_not_in_transaction")
+    if connection.execute("PRAGMA application_id").fetchone()[0] != _APPLICATION_ID:
+        raise TaskError("foreign_database")
+    rows = connection.execute(
+        "SELECT name, sql FROM sqlite_master WHERE name NOT GLOB 'sqlite_*'"
+    ).fetchall()
+    if (
+        connection.execute("PRAGMA user_version").fetchone()[0] != _SCHEMA_VERSION
+        or len(rows) != len(_SCHEMA)
+        or dict(rows) != _SCHEMA
+    ):
+        raise TaskError("unsupported_schema")
+    if connection.execute("PRAGMA integrity_check").fetchall() != [("ok",)]:
+        raise TaskError("storage_corrupt")
+    if connection.execute("PRAGMA foreign_key_check").fetchone() is not None:
+        raise TaskError("storage_corrupt")
+    return {
+        "database_version": _SCHEMA_VERSION,
+        "counts": {
+            name: connection.execute(f"SELECT count(*) FROM {name}").fetchone()[0]
+            for name in ("tasks", "receipts", "events", "task_dependencies")
+        },
+        "integrity": "ok",
+    }
+
+
 class TaskStore:
     """Own transactions on a dedicated supplied connection; never open or close it."""
 
