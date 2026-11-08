@@ -106,3 +106,40 @@ def test_loaded_internal_batch_cancellation_is_atomic_and_unexposed(native, caps
     _, status = invoke(command, capsys, "status")
     assert status["enrollment_policy"]["activation_supported"] is False
     assert not hasattr(module.ActionIntentStore, "execute")
+
+
+def test_internal_pending_review_recovers_scoped_metadata(native, capsys):
+    _, manager = native
+    command = entry(manager)
+    module = api(manager)
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    connection = sqlite3.connect(":memory:")
+    try:
+        store = module.ActionIntentStore(connection, clock=lambda: now)
+        store.initialize()
+        scope = {"owner_id": "synthetic-owner", "profile_id": "synthetic-profile"}
+        for request in ("first", "second"):
+            store.prepare(
+                {
+                    **scope,
+                    "request_id": request,
+                    "operation": "example.send",
+                    "policy_revision": 1,
+                    "epoch": 0,
+                    "resource_revision": 1,
+                    "expires_at": now + timedelta(minutes=5),
+                    "target": b"synthetic-target",
+                    "payload": b"synthetic-payload",
+                }
+            )
+        result = store.review_pending(scope, limit=1)
+        assert result["pending_count"] == 2 and result["truncated"] is True
+        assert result["items"][0]["request_id"] == "first"
+        store._clock = lambda: now + timedelta(minutes=5)
+        assert store.review_pending(scope)["pending_count"] == 0
+        assert connection.execute("SELECT count(*) FROM events").fetchone()[0] == 4
+    finally:
+        connection.close()
+    _, status = invoke(command, capsys, "access")
+    assert status["decision"] == "deny"
+    assert status["protected_reads_enabled"] is False
