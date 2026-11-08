@@ -34,3 +34,21 @@ Filesystem checks cover pre-existing symlinks, hardlinks, non-private files and 
 No command replaces a live store or imports an older snapshot. Restoring old task state could resurrect terminal tasks, old revisions or native references; full recovery requires a separate stop-before-start, authority-aware workflow. Do not copy a backup over a running profile or use it to trigger old external work. For now it is a verified recovery artifact for deliberate offline inspection, not automatic recovery.
 
 Synthetic tests cover DELETE/WAL snapshots, concurrent commits, preserved rows and receipt replay in an isolated test copy, safe publication, duplicate names, unsafe files, schema refusal without mutation, corruption/sidecars, size/deadline limits, late sync failure and redacted CLI errors. Pinned-host tests exercise native registration, creation, reload/inspection and live mode revocation. No personal data, real model, Gateway, provider call or MacBook is used in this slice. Exact counts and CI belong to the final commit; broader #17/E8 criteria remain open.
+
+## Historical recovery reads
+
+The explicit local CLI can now browse and retrieve historical task fields without replacing the live database:
+
+```bash
+hermes personal-agent task-backup tasks --name before-upgrade --sha256 DIGEST --limit 10
+hermes personal-agent task-backup tasks --name before-upgrade --sha256 DIGEST --after TASK_UUID
+hermes personal-agent task-backup show --name before-upgrade --sha256 DIGEST --task-id TASK_UUID
+```
+
+Use the exact lowercase SHA256 returned by `create` or `inspect`. Every page and single-task read rechecks that digest before returning content; changed snapshots fail with `backup_changed`. This binds pages to the selected bytes, not to an authenticated origin. There is no arbitrary path, model tool, native conversation command or network upload. The existing live profile/mode checks still apply. A missing live task database does not prevent reading a valid named snapshot and is never recreated by a read.
+
+`tasks` returns newest-first ID, title, saved state/revision, due date, project and work status, with an opaque task-ID cursor, default 10 and maximum 20 items. `show` returns the selected task's stored fields, including details and notes. Neither returns receipt bodies, dependency edges or native-observation metadata. Returned text is historical untrusted data, not instructions, current task state, owner authority or permission to replay an effect. Tasks completed or changed since the snapshot remain unchanged in the live store. Content previously edited out of the live store may still be present in the backup and in the terminal output; this is deliberate explicit recovery inspection, not forgetting or reactivation.
+
+All reads retain the private-path, exact-schema, integrity, sidecar and processing-budget gates. The SQLite read transaction stays open while hashing and selecting rows, preventing an ordinary DELETE-journal writer from committing a different snapshot between those steps. Filesystem isolation against malicious same-UID code is still not promised. A selected row exceeding 32,000 stored bytes, or a historical result exceeding 80,000 ASCII-serialized JSON characters, fails without returning a partial result. `invalid_cursor`, `not_found`, `backup_record_too_large` and `backup_result_too_large` are explicit read failures. SQLite/path errors are redacted. No initialization, migration, task mutation, receipt replay, import or restore is performed.
+
+Inspection and recovery reads now reject non-DELETE SQLite header modes before opening the file (`backup_not_standalone`). This prevents SQLite from creating WAL/SHM sidecars even when a modified WAL-mode snapshot was cleanly closed and had no sidecars initially.

@@ -232,7 +232,7 @@ def test_inspect_refuses_sidecars_and_corruption(home):
         backup.task_backup(home, "inspect", "before-upgrade")
     sidecar.unlink()
     path(home).write_bytes(b"not a database")
-    with pytest.raises(sqlite3.DatabaseError):
+    with pytest.raises(TaskError, match="backup_not_standalone"):
         backup.task_backup(home, "inspect", "before-upgrade")
     connection.close()
 

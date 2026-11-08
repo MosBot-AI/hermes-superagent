@@ -34,3 +34,21 @@ hermes personal-agent task-backup inspect --name before-upgrade
 没有命令替换实时存储或导入旧快照。恢复旧任务状态可能复活终态任务、旧修订或原生引用；完整恢复需要独立的先停止再启动且理解授权的流程。不要把备份覆盖到运行中的分区，也不要借此触发旧外部工作。目前它是供主动离线检查的已验证恢复材料，不是自动恢复功能。
 
 合成测试覆盖 DELETE/WAL 快照、并发提交、隔离测试副本中的完整数据与回执重放、安全发布、重复名称、不安全文件、不修改源库的结构拒绝、损坏/旁文件、大小/时间限制、发布后同步失败及 CLI 错误脱敏。固定宿主测试覆盖原生注册、创建、重载/检查和实时模式撤销。本切片不使用个人数据、真实模型、Gateway、提供方调用或 MacBook。准确数量和 CI 对应最终提交，#17/E8 的更广泛验收仍开放。
+
+## 历史恢复读取
+
+现在可通过显式本地 CLI 浏览并读取历史任务字段，而不替换运行中的数据库：
+
+```bash
+hermes personal-agent task-backup tasks --name before-upgrade --sha256 DIGEST --limit 10
+hermes personal-agent task-backup tasks --name before-upgrade --sha256 DIGEST --after TASK_UUID
+hermes personal-agent task-backup show --name before-upgrade --sha256 DIGEST --task-id TASK_UUID
+```
+
+使用 `create` 或 `inspect` 返回的完整小写 SHA256。每次分页或读取单个任务都会先复核摘要，再返回内容；备份变化时返回 `backup_changed`。这将分页绑定到选定的字节内容，但不证明来源可信。没有任意路径、模型工具、原生对话命令或网络上传。仍执行当前 profile 和模式检查。即使当前任务数据库丢失，也能读取有效的指定备份，读取不会重新创建当前数据库。
+
+`tasks` 按从新到旧顺序返回 ID、标题、保存时的状态/版本、到期日、项目和工作状态，使用不透明任务 ID 游标，默认 10 项、最多 20 项。`show` 返回选定任务保存的字段，包括详情和备注。两者均不返回回执正文、依赖边或原生观察元数据。返回文本是历史不可信数据，不是指令、当前任务状态、所有者权限或重放副作用的许可。备份之后已完成或修改的任务在当前库中保持不变。已从当前库编辑移除的内容仍可能存在于备份和终端输出中；这是明确请求的恢复检查，不是遗忘或重新激活。
+
+所有读取保留私有路径、精确 schema、完整性、附属文件和处理预算检查。计算摘要及读取记录时保持 SQLite 读事务，防止普通 DELETE 日志写入者在两个步骤之间提交不同快照。仍不承诺隔离恶意同 UID 代码的文件系统竞争。选定记录超过 32,000 存储字节，或历史结果超过 80,000 个 ASCII 序列化 JSON 字符时，整次失败，不返回部分结果。`invalid_cursor`、`not_found`、`backup_record_too_large`、`backup_result_too_large` 是明确的读取失败。SQLite 和路径错误会脱敏。不会初始化、迁移、修改任务、重放回执、导入或恢复。
+
+检查和恢复读取现在会在打开文件前拒绝非 DELETE 的 SQLite 文件头模式（`backup_not_standalone`）。即使修改为 WAL 模式的备份正常关闭且起初没有附属文件，也可避免 SQLite 创建 WAL/SHM 文件。

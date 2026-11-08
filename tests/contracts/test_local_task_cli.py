@@ -585,3 +585,68 @@ def test_local_backup_never_initializes_missing_task_store(native, capsys):
     code, output = invoke(entry(manager), capsys, "task-backup", "create", "--name", "empty")
     assert code == 1 and output["error"]["code"] == "backup_not_found"
     assert not (home / "plugin-data").exists()
+
+
+def test_backup_recovery_reads_exact_historical_task_after_reload(native, capsys):
+    home, manager = native
+    command = entry(manager)
+    task_id = capture(command, capsys)["data"]["id"]
+    code, created = invoke(command, capsys, "task-backup", "create", "--name", "recover")
+    assert code == 0
+    digest = created["data"]["sha256"]
+    manager.unload()
+    command = entry(manager)
+    code, page = invoke(
+        command,
+        capsys,
+        "task-backup",
+        "tasks",
+        "--name",
+        "recover",
+        "--sha256",
+        digest,
+        "--limit",
+        "1",
+    )
+    assert code == 0 and page["data"]["historical_tasks"]["items"][0]["id"] == task_id
+    code, shown = invoke(
+        command,
+        capsys,
+        "task-backup",
+        "show",
+        "--name",
+        "recover",
+        "--sha256",
+        digest,
+        "--task-id",
+        task_id,
+    )
+    assert code == 0 and shown["data"]["historical_tasks"]["task"]["id"] == task_id
+    assert shown["data"]["automatic_restore"] is False
+    assert "Historical untrusted" in shown["data"]["notice"]
+    configure(home, "read_only")
+    code, denied = invoke(
+        command,
+        capsys,
+        "task-backup",
+        "show",
+        "--name",
+        "recover",
+        "--sha256",
+        digest,
+        "--task-id",
+        task_id,
+    )
+    assert code == 1 and denied["error"]["code"] == "local_tasks_disabled"
+
+
+def test_backup_recovery_read_refuses_changed_digest(native, capsys):
+    home, manager = native
+    command = entry(manager)
+    capture(command, capsys)
+    assert invoke(command, capsys, "task-backup", "create", "--name", "recover")[0] == 0
+    code, denied = invoke(
+        command, capsys, "task-backup", "tasks", "--name", "recover", "--sha256", "0" * 64
+    )
+    assert code == 1 and denied["error"]["code"] == "backup_changed"
+    assert denied["data"] is None
