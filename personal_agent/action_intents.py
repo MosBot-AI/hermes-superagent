@@ -21,7 +21,7 @@ MAX_PAYLOAD_BYTES = 65536
 MAX_TARGET_BYTES = 4096
 MAX_LIFETIME = timedelta(hours=24)
 _APPLICATION_ID = 0x5041494E
-_VERSION = 1
+_VERSION = 2
 _MAX_REVISION = 2**63 - 1
 _KEYS = ("owner_id", "profile_id", "request_id")
 _FIELDS = _KEYS + (
@@ -53,6 +53,13 @@ _SCHEMA = {
         CHECK(outcome IN ('prepared','cancelled','expired')), recorded_at TEXT NOT NULL,
         PRIMARY KEY(owner_id, profile_id, request_id, revision))""",
 }
+_V1_SCHEMA = dict(_SCHEMA)
+_SCHEMA["replacements"] = """CREATE TABLE replacements (
+    owner_id TEXT NOT NULL, profile_id TEXT NOT NULL, old_request_id TEXT NOT NULL,
+    new_request_id TEXT NOT NULL, old_digest TEXT NOT NULL, new_digest TEXT NOT NULL,
+    recorded_at TEXT NOT NULL,
+    PRIMARY KEY(owner_id, profile_id, old_request_id),
+    UNIQUE(owner_id, profile_id, new_request_id))"""
 _SPEC_FIELDS = set(_KEYS) | {
     "operation",
     "policy_revision",
@@ -178,6 +185,9 @@ class ActionIntentStore:
             for sql in _SCHEMA.values():
                 conn.execute(sql)
             conn.execute(f"PRAGMA application_id={_APPLICATION_ID}")
+            conn.execute(f"PRAGMA user_version={_VERSION}")
+        elif create and app == _APPLICATION_ID and version == 1 and dict(rows) == _V1_SCHEMA:
+            conn.execute(_SCHEMA["replacements"])
             conn.execute(f"PRAGMA user_version={_VERSION}")
         elif app != _APPLICATION_ID:
             raise IntentError("foreign_database")
@@ -452,5 +462,91 @@ class ActionIntentStore:
                     record = self._terminal(record, "cancelled", now)
                 result.append(record)
             return result
+
+        return self._transaction(apply)
+
+    def replace(self, selected: dict, specification: dict) -> dict:
+        """Atomically cancel one exact live draft and prepare its replacement.
+
+        New request identity is mandatory. This metadata operation grants no
+        authority, cannot revive terminal drafts, and never executes an effect.
+        A durable link distinguishes retries from independently created records.
+        """
+        if type(selected) is not dict or selected.keys() != {*_KEYS, "binding_digest"}:
+            raise IntentError("invalid_request")
+        old_key = _key({name: selected[name] for name in _KEYS})
+        digest = selected["binding_digest"]
+        if type(digest) is not str or re.fullmatch(r"[0-9a-f]{64}", digest) is None:
+            raise IntentError("invalid_request")
+        request = _spec(specification)
+        if any(old_key[name] != request[name] for name in ("owner_id", "profile_id")):
+            raise IntentError("scope_mismatch")
+        if old_key["request_id"] == request["request_id"]:
+            raise IntentError("request_conflict")
+        new_key = {name: request[name] for name in _KEYS}
+
+        def apply():
+            now = self._now()
+            old = self._record(old_key)
+            if old is None:
+                raise IntentError("not_found")
+            if old["binding_digest"] != digest:
+                raise IntentError("request_conflict")
+            link = self._connection.execute(
+                "SELECT new_request_id,old_digest,new_digest,recorded_at FROM main.replacements "
+                "WHERE owner_id=? AND profile_id=? AND old_request_id=?",
+                tuple(old_key[name] for name in _KEYS),
+            ).fetchone()
+            new = self._record(new_key)
+            if link is not None:
+                if tuple(link[:3]) != (request["request_id"], digest, request["binding_digest"]):
+                    raise IntentError("request_conflict")
+                stamp = _parse_stamp(link[3])
+                if (
+                    old["state"] != "cancelled"
+                    or new is None
+                    or new["binding_digest"] != request["binding_digest"]
+                    or new["created_at"] != link[3]
+                    or not _parse_stamp(old["created_at"])
+                    <= stamp
+                    < _parse_stamp(old["expires_at"])
+                    or self._connection.execute(
+                        "SELECT recorded_at FROM main.events WHERE owner_id=? AND profile_id=? "
+                        "AND request_id=? AND revision=2",
+                        tuple(old_key[name] for name in _KEYS),
+                    ).fetchone()[0]
+                    != link[3]
+                ):
+                    raise IntentError("invalid_record")
+                return {"previous": self._expire(old, now), "replacement": self._expire(new, now)}
+            if old["state"] != "draft":
+                raise IntentError("not_pending")
+            if now < _parse_stamp(old["created_at"]):
+                raise IntentError("clock_regressed")
+            if now >= _parse_stamp(old["expires_at"]):
+                raise IntentError("not_pending")
+            if new is not None:
+                raise IntentError("request_conflict")
+            expires = _parse_stamp(request["expires_at"])
+            if not timedelta(0) < expires - now <= MAX_LIFETIME:
+                raise IntentError("invalid_expiry")
+            if (
+                self._connection.execute("SELECT count(*) FROM main.intents").fetchone()[0]
+                >= MAX_INTENTS
+            ):
+                raise IntentError("capacity_exhausted")
+            new = {**request, "created_at": _stamp(now), "state": "draft", "revision": 1}
+            old = self._terminal(old, "cancelled", now)
+            self._connection.execute(
+                f"INSERT INTO main.intents VALUES ({','.join('?' for _ in _FIELDS)})",
+                tuple(new[name] for name in _FIELDS),
+            )
+            self._event(new, "prepared", now)
+            self._connection.execute(
+                "INSERT INTO main.replacements VALUES (?,?,?,?,?,?,?)",
+                tuple(old_key[name] for name in _KEYS)
+                + (request["request_id"], digest, request["binding_digest"], _stamp(now)),
+            )
+            return {"previous": old, "replacement": new}
 
         return self._transaction(apply)
