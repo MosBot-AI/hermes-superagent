@@ -9,6 +9,7 @@
     "docs/runtime-distribution-zh.md",
     "docs/runtime-distribution.md",
     "personal_agent/__init__.py",
+    "personal_agent/action_intents.py",
     "personal_agent/authorization.py",
     "personal_agent/blueprints.py",
     "personal_agent/checkpoint_evidence.py",
