@@ -50,4 +50,6 @@
 
 离线测试使用真实固定宿主的命令准入、主轮次 hook、relay 和模型工具注册，以合成输入运行，不发模型请求。覆盖只读捕获、精确来源/Unicode 偏移、作用域拒绝、撤销、复用 turn ID、结束锁存、接受/遗忘/重载后重试、事务回滚、并发接受、损坏、配额和迁移。
 
+不依赖宿主的 `tests/unit/test_memory_crash_recovery.py` 矩阵在记录/事件/回执写入后、候选关闭后以及事务 COMMIT 前后，通过 `os._exit` 突然终止独立 Python 进程。11 个用例验证 COMMIT 前完整回滚、COMMIT 后持久重放、数据库完整性、只创建一条正式记忆，以及遗忘并重新打开后不会复活。测试使用合成数据和 DELETE 日志，验证 SQLite 进程崩溃恢复，不证明断电持久性、物理擦除、真实 Gateway、provider、文件系统/设备故障或完整 E8 发布认证。可在项目 Python 3.14 环境运行 `python -m pytest tests/unit/test_memory_crash_recovery.py -q` 复现。关联 #21。
+
 这是实用的可选草稿审核流程，不是自动正式记忆提取。真实已配置模型的实用性、来源覆盖 checkpoint、后台保留期限执行、语义/中文召回质量与远程 owner 身份仍待完成。既有 provider 不变。离线契约不需要安装器、被拒 Gateway、真实凭据或宿主补丁；先前安装限制继续有效。

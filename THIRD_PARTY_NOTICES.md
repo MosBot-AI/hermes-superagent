@@ -4,11 +4,11 @@ English | [简体中文](THIRD_PARTY_NOTICES-zh.md)
 
 This plugin is distributed under the repository's MIT license. It has no third-party Python runtime dependencies of its own. Hermes supplies the host APIs.
 
-Compatibility tests exercise **NousResearch/hermes-agent**, commit `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`, from a separate checkout. Hermes is MIT-licensed. The full host is not vendored into this repository. Preserve its license when redistributing Hermes itself:
+Compatibility tests exercise **NousResearch/hermes-agent**, commit `2281116525106e3c109993ccb5dc74d02bfc1427`, from a separate checkout. Hermes is MIT-licensed. The full host is not vendored into this repository. Preserve its license when redistributing Hermes itself:
 
-- Source: https://github.com/NousResearch/hermes-agent/tree/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4
-- License: https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/LICENSE
-- Behavior-contract reference: https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/tests/hermes_cli/test_plugin_api_compat.py
+- Source: https://github.com/NousResearch/hermes-agent/tree/2281116525106e3c109993ccb5dc74d02bfc1427
+- License: https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/LICENSE
+- Behavior-contract reference: https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/tests/hermes_cli/test_plugin_api_compat.py
 
 The [voice IPC experiment](experiments/voice-ipc/README.md) contains a review-only patch with selected upstream-derived code/context and new prototype code. The original Hermes MIT notice is preserved verbatim in [LICENSE.hermes-agent](experiments/voice-ipc/LICENSE.hermes-agent). The patch is not installed, imported or applied by this plugin, and has not been submitted upstream. It does not change the official compatibility pin.
 

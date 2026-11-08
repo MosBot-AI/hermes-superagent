@@ -88,7 +88,7 @@ Hermes 原生 personal-agent 插件，目标是让一个主 agent 管理项目�
 
 ```bash
 git clone https://github.com/NousResearch/hermes-agent.git ../hermes-agent
-git -C ../hermes-agent checkout --detach 90d6b98fd86d20981ee06ddd5b7d93e4320f26a4
+git -C ../hermes-agent checkout --detach 2281116525106e3c109993ccb5dc74d02bfc1427
 cd ../hermes-agent
 export HERMES_HOME="$(mktemp -d)"
 export HERMES_RUNTIME_DIR="$(mktemp -d)"
