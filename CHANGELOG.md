@@ -22,6 +22,9 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Add coherent bounded internal pending-intent review snapshots with transactional expiry reconciliation; no approval or execution capability.
+
+
 - Add exact-binding, same-scope atomic batch cancellation of internal ActionIntent drafts; no production approval or external cancellation is enabled.
 
 - Add an internal metadata-only ActionIntent draft ledger with exact byte binding, durable cancellation/expiry and scoped retry identity; no approvals or external execution.

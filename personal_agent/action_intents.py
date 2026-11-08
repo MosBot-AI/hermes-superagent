@@ -336,6 +336,55 @@ class ActionIntentStore:
 
         return self._transaction(apply)
 
+    def review_pending(self, scope: dict, *, limit: int = 100) -> dict:
+        """Return a bounded, coherent internal draft snapshot, never approval.
+
+        Scope selectors are not authentication. Reconcile all scoped expiry
+        before limiting output; this observation may commit terminal events.
+        Results are metadata only and must not substitute for reviewing the
+        actual action or rechecking authority immediately before execution.
+        """
+        if (
+            type(scope) is not dict
+            or scope.keys() != {"owner_id", "profile_id"}
+            or not all(_identifier(value) for value in scope.values())
+            or type(limit) is not int
+            or not 1 <= limit <= 100
+        ):
+            raise IntentError("invalid_request")
+        scope = dict(scope)
+
+        def apply():
+            now = self._now()
+            rows = self._connection.execute(
+                "SELECT request_id FROM main.intents WHERE owner_id=? AND profile_id=? "
+                "ORDER BY request_id LIMIT ?",
+                (scope["owner_id"], scope["profile_id"], MAX_INTENTS + 1),
+            ).fetchall()
+            if len(rows) > MAX_INTENTS:
+                raise IntentError("capacity_exhausted")
+            records = []
+            for (request_id,) in rows:
+                record = self._record({**scope, "request_id": request_id})
+                if record is None:
+                    raise IntentError("invalid_record")
+                records.append(record)
+            pending = []
+            for record in records:
+                record = self._expire(record, now)
+                if record["state"] == "draft":
+                    pending.append(record)
+            # Parsed instants, not variable-precision ISO text, determine order.
+            pending.sort(key=lambda item: (_parse_stamp(item["expires_at"]), item["request_id"]))
+            return {
+                "observed_at": _stamp(now),
+                "pending_count": len(pending),
+                "truncated": len(pending) > limit,
+                "items": pending[:limit],
+            }
+
+        return self._transaction(apply)
+
     def cancel(self, key: dict, *, expected_revision: int) -> dict:
         """Cancel a draft only, not a host job or external effect. Retry is stable."""
         key = _key(key)
