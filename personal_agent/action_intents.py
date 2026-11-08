@@ -355,3 +355,53 @@ class ActionIntentStore:
             return record
 
         return self._transaction(apply)
+
+    def cancel_many(self, requests: list[dict]) -> list[dict]:
+        """Atomically cancel an explicit same-scope set of exact draft bindings.
+
+        This is internal bookkeeping, not revocation of running actions. No
+        discovery/wildcard is accepted; callers supply previously inspected
+        immutable bindings. Exact terminal retries return their actual states.
+        """
+        if type(requests) is not list or not 1 <= len(requests) <= 100:
+            raise IntentError("invalid_request")
+        selected = []
+        seen = set()
+        scope = None
+        for item in requests:
+            if type(item) is not dict or item.keys() != {*_KEYS, "binding_digest"}:
+                raise IntentError("invalid_request")
+            key = _key({name: item[name] for name in _KEYS})
+            digest = item["binding_digest"]
+            if type(digest) is not str or re.fullmatch(r"[0-9a-f]{64}", digest) is None:
+                raise IntentError("invalid_request")
+            item_scope = (key["owner_id"], key["profile_id"])
+            if scope is not None and item_scope != scope:
+                raise IntentError("scope_mismatch")
+            scope = item_scope
+            if key["request_id"] in seen:
+                raise IntentError("invalid_request")
+            seen.add(key["request_id"])
+            selected.append((key, digest))
+
+        def apply():
+            now = self._now()
+            records = []
+            # Validate the entire selection before mutating any row. The write
+            # lock prevents preparation/cancellation racing between these steps.
+            for key, digest in selected:
+                record = self._record(key)
+                if record is None:
+                    raise IntentError("not_found")
+                if record["binding_digest"] != digest:
+                    raise IntentError("request_conflict")
+                records.append(record)
+            result = []
+            for record in records:
+                record = self._expire(record, now)
+                if record["state"] == "draft":
+                    record = self._terminal(record, "cancelled", now)
+                result.append(record)
+            return result
+
+        return self._transaction(apply)
