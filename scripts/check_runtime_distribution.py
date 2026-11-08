@@ -57,6 +57,156 @@ if stage == "scan":
     result = dataclasses.asdict(scan_plugin(plugin, source="verified-committed-runtime"))
     result["scanner_version"] = PLUGIN_SCANNER_VERSION
     output.write_text(json.dumps(result, sort_keys=True))
+elif stage == "conversation":
+
+    import asyncio
+    from dataclasses import replace
+    from datetime import UTC, datetime
+    from types import SimpleNamespace
+    from hermes_cli.plugins import get_plugin_manager, _reset_plugin_managers_for_tests
+    from hermes_state_runtime import RuntimeStoreError
+    home = Path(os.environ["HERMES_HOME"])
+    plugin_id = "hermes-personal-agent"
+    (home / "config.yaml").write_text(json.dumps({
+        "plugins": {"enabled": [plugin_id], "entries": {plugin_id: {"settings": {
+            "mode": "local_tasks", "local_conversation": True}}}},
+        "delegation": {"backend": "default"},
+    }))
+    config_bytes = (home / "config.yaml").read_bytes()
+    def make_host(home, manager):
+        from gateway.config import GatewayConfig, Platform
+        from gateway.run import GatewayRunner
+        from gateway.run_inbound_hooks import GatewayInboundHooksMixin
+        from gateway.session import SessionEntry
+        from gateway.session_authority import LiveSession, SessionAuthority
+        from gateway.session_contract import SessionActor, SessionRef
+        from gateway.session_local import LocalSessionAdapter
+        from gateway.session_local_recovery import local_source
+
+        now = datetime.now(UTC)
+        sid = "synthetic-native-session"
+        route = "agent:main:local:" + sid
+        entry = SessionEntry(route, sid, now, now)
+
+        class Runner(GatewayInboundHooksMixin):
+            # Real host binding; only executor and unstarted transport plumbing differ.
+            _set_session_env = GatewayRunner._set_session_env
+            _clear_session_env = GatewayRunner._clear_session_env
+            _session_env_scope = GatewayRunner._session_env_scope
+
+            def _adapters_for_profile(self, profile):
+                return self.adapters if profile in (None, "default") else {}
+
+            def _adapter_for_source(self, source):
+                return self._adapters_for_profile(source.profile).get(source.platform)
+
+            def _session_key_for_source(self, source):
+                return route
+
+            async def _run_in_executor_with_context(self, call):
+                return await asyncio.to_thread(call)
+
+        runner = Runner()
+        runner.config = GatewayConfig()
+        runner._draining = False
+        runner.session_store = SimpleNamespace(
+            lookup_by_session_key=lambda key: entry if key == route else None
+        )
+        authority = SessionAuthority(
+            runner, profile_id=str(home), instance_id="synthetic-runtime", db=None, epoch=1
+        )
+        runner.session_authority = authority
+        adapter = LocalSessionAdapter(authority)
+        runner.adapters = {Platform.LOCAL: adapter}
+        source = local_source(authority, sid, "synthetic-owner")
+        live = LiveSession(source=source, route=route)
+        authority.sessions[sid] = live
+        adapter.register_source(source)
+        adapter.policies[sid] = SimpleNamespace(cwd=str(home), terminal_json="{}")
+        actor = SessionActor(
+            "synthetic-owner",
+            str(home),
+            frozenset({"session:read", "session:control"}),
+            "synthetic-transport",
+        )
+        connection = SimpleNamespace(authority=authority, actor=actor, subscriptions={})
+        return SimpleNamespace(
+            home=home,
+            manager=manager,
+            runner=runner,
+            authority=authority,
+            adapter=adapter,
+            source=source,
+            live=live,
+            connection=connection,
+            ref=SessionRef(str(home), sid),
+        )
+
+
+    def command(host, text, **extra):
+        from gateway.session_commands import execute_command
+
+        result = asyncio.run(
+            execute_command(
+                host.connection, host.ref, {"command": "personal-tasks --json " + text, **extra}
+            )
+        )
+        assert result["type"] == "exec"
+        return json.loads(result["output"])
+
+
+    def load_conversation():
+        _reset_plugin_managers_for_tests()
+        manager = get_plugin_manager()
+        manager.discover_and_load()
+        loaded = manager._plugins[plugin_id]
+        assert loaded.enabled and loaded.error is None, loaded.error
+        assert loaded.tools_registered == ["personal_agent_status"]
+        assert "personal-tasks" in manager._plugin_commands
+        assert not loaded.hooks_registered and not loaded.middleware_registered
+        assert not manager._platform_handler_factories
+        prefix = loaded.module.__name__
+        for name, module in list(sys.modules.items()):
+            if name == prefix or name.startswith(prefix + "."):
+                filename = getattr(module, "__file__", None)
+                if filename:
+                    assert Path(filename).resolve().is_relative_to(plugin)
+        return make_host(home, manager)
+
+    native = load_conversation()
+    actor = native.connection.actor
+    for capabilities in (frozenset({"session:read"}), frozenset({"session:control"})):
+        native.connection.actor = replace(actor, capabilities=capabilities)
+        try:
+            command(native, 'add "Forbidden task" --request-id denied-conversation')
+        except RuntimeStoreError as error:
+            assert error.reason == "permission_denied"
+        else:
+            raise AssertionError("unprivileged native command admitted")
+    native.connection.actor = actor
+    before = command(native, "list")["data"]["items"]
+    assert all(item["title"] != "Forbidden task" for item in before)
+    args = 'add "Synthetic conversation task" --request-id artifact-conversation'
+    captured = command(native, args)
+    assert captured["status"] == "ok" and not captured["replayed"]
+    task_id = captured["data"]["id"]
+    assert command(native, f"show {task_id}")["data"] == captured["data"]
+    native = load_conversation()
+    replayed = command(native, args)
+    assert replayed["replayed"] and replayed["data"] == captured["data"]
+    items = command(native, "list")["data"]["items"]
+    assert len(items) == len(before) + 1
+    assert sum(item["id"] == task_id for item in items) == 1
+    assert (home / "config.yaml").read_bytes() == config_bytes
+    _reset_plugin_managers_for_tests()
+    assert "personal_agent" not in sys.modules
+    output.write_text(json.dumps({
+        "native_local_dispatch": True, "capture_read_reload_replay": True,
+        "missing_read_control_denied": True, "artifact_module_origins": True,
+        "network_and_subprocesses_blocked": True,
+        "transport": "authenticated_in_memory_fixture",
+        "installed_or_live_verified": False,
+    }, sort_keys=True))
 else:
     from hermes_cli.plugins import PluginManager
     home = Path(os.environ["HERMES_HOME"])
@@ -282,6 +432,10 @@ def check(repo, commit, distribution, host, interpreter, report):
         builder.verify(repo, commit, plugin)
         verify_host(host, report["hermes_commit"])
         report["acceptance"] = run_stage("runtime", snapshot, plugin, repo, interpreter, work)
+        builder.verify(repo, commit, plugin)
+        report["conversation_acceptance"] = run_stage(
+            "conversation", snapshot, plugin, repo, interpreter, work
+        )
         builder.verify(repo, commit, plugin)
     builder.verify(repo, commit, distribution)
     verify_host(host, report["hermes_commit"])

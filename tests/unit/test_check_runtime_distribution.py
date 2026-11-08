@@ -84,7 +84,7 @@ def test_safe_scan_preserves_medium_findings_and_runs_verified_copy(package, mon
     monkeypatch.setattr(checker, "run_stage", stage)
     report = {}
     checker.check(repo, sha, package, repo, Path(sys.executable), report)
-    assert calls == ["scan", "runtime"] and report["status"] == "passed"
+    assert calls == ["scan", "runtime", "conversation"] and report["status"] == "passed"
     assert report["plugin_guard"] == scan
     assert report["provenance_sha256"] == checker.builder.digest(
         (package / "PROVENANCE.json").read_bytes()
@@ -315,3 +315,27 @@ def test_git_wrapper_disables_fetch_protocols_and_scrubs_environment(monkeypatch
     assert seen["env"]["GIT_CONFIG_NOSYSTEM"] == "1"
     for key in ("GIT_SSH_COMMAND", "GIT_DIR", "SECRET_FIXTURE_VALUE"):
         assert key not in seen["env"]
+
+
+def test_conversation_failure_never_reports_passed(package, monkeypatch):
+    repo, sha, package = package
+    monkeypatch.setattr(checker, "verify_host", lambda host, expected: host)
+    monkeypatch.setattr(checker, "materialize_host", lambda *args: "synthetic-tree")
+    calls = []
+
+    def stage(name, *args):
+        calls.append(name)
+        if name == "scan":
+            return {"verdict": "safe", "findings": []}
+        if name == "runtime":
+            return {"synthetic_acceptance": True}
+        raise ValueError("conversation subprocess failed")
+
+    monkeypatch.setattr(checker, "run_stage", stage)
+    report = {}
+    with pytest.raises(ValueError, match="conversation subprocess failed"):
+        checker.check(repo, sha, package, repo, Path(sys.executable), report)
+    assert calls == ["scan", "runtime", "conversation"]
+    assert "acceptance" in report
+    assert "conversation_acceptance" not in report
+    assert report.get("status") != "passed"

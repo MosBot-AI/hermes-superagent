@@ -6,7 +6,10 @@ This file distinguishes design work, development changes, and released capabilit
 
 ## Unreleased
 
+- Run runtime artifact acceptance on exact pull-request heads with read-only credentials; keep downloadable artifact publication push-only.
 ### Changed
+
+- Reconcile the integrated acceptance workflows with the current Hermes compatibility target; runtime-package verification now exercises the combined changes on exact PR heads.
 
 - Advance the exact Hermes development target to `22811165`, preserving clean-source identity and Kanban hash guards. Keep historical host proposals on their original isolated baseline; this does not claim a broad support range or production installation.
 
@@ -18,6 +21,10 @@ This file distinguishes design work, development changes, and released capabilit
 - Added default-off [parked native Kanban handoff](docs/52-parked-kanban-handoff.md): explicit board, preview/digest commit, durable single-use claim and bounded read-only reconciliation. No worker dispatch, storage initialization or live acceptance.
 
 ### Added
+
+- Add cold runtime-package acceptance through native LOCAL conversation dispatch, with replay and denied-capability checks; deployed acceptance remains open.
+- Added opt-in [Gateway bootstrap diagnostics](docs/gateway-boot-diagnostics.md) that preserve the upstream listener failure traceback, with read-only planning and offline regression coverage. Prepared a manual-only pinned upstream, credential-free native lifecycle CI gate for actual control/WebSocket attach, queued recovery and managed-worker execution. Approved-provider/plugin acceptance remains a separate gate.
+- Add 11 host-free abrupt-process memory recovery tests for atomic candidate acceptance, forgetting and durable no-resurrection replay (refs #21); no live Gateway acceptance claim.
 
 - [Project task dependencies](docs/51-project-task-dependencies.md) now enforce explicit same-project prerequisites before starting or completing work, with a ready queue and fresh dependency snapshots in review/focus. Cancelled prerequisites remain blockers; no worker is launched and no native Kanban state is modified.
 
