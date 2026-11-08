@@ -19,3 +19,5 @@ At Hermes `2281116525106e3c109993ccb5dc74d02bfc1427`, `get_job`/`list_jobs` invo
 ## Evidence and limits
 
 Unit and pinned-host contracts cover explicit reference/timezone, invalid bounded inputs, recurring versus absolute semantics, DST gap/fold handling, unload/profile isolation and unchanged cron files. Native loading may initialize ordinary host directories before the command runs; preview itself is checked against the post-load snapshot. Tests use temporary profiles and synthetic schedules; they do not launch a Gateway, ticker or external model and are not reminder delivery acceptance.
+
+Cron forms need the host croniter dependency. Its initial platform probe may invoke the system `file` utility. Environments denying that probe return `native_preview_unavailable`; no restriction is bypassed. The no-subprocess cold-package test covers interval preview; cron/DST behavior is covered separately in the standard pinned-host contracts.
