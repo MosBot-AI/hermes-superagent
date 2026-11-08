@@ -146,3 +146,6 @@ contracts cover plan capture, dependencies, refused premature progress/completio
 prerequisite completion, ready selection, focus and process restart, plus existing
 admission refusals. No installer, live provider, Gateway listener, native dispatch
 or production user data is used. Prior installation/network restrictions remain.
+
+For a whole-group label change that preserves these edges, use the explicit
+[project-label rename](60-project-label-rename.md) preview and atomic command.
