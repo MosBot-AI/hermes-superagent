@@ -143,3 +143,39 @@ def test_internal_pending_review_recovers_scoped_metadata(native, capsys):
     _, status = invoke(command, capsys, "access")
     assert status["decision"] == "deny"
     assert status["protected_reads_enabled"] is False
+
+
+def test_internal_replacement_stays_metadata_only(native, capsys):
+    _, manager = native
+    command = entry(manager)
+    module = api(manager)
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    spec = {
+        "owner_id": "prospective-owner",
+        "profile_id": "synthetic-profile",
+        "request_id": "old-draft",
+        "operation": "synthetic.send",
+        "policy_revision": 1,
+        "epoch": 0,
+        "resource_revision": 1,
+        "expires_at": now + timedelta(minutes=10),
+        "target": b"synthetic-target",
+        "payload": b"synthetic-payload",
+    }
+    conn = sqlite3.connect(":memory:")
+    store = module.ActionIntentStore(conn, clock=lambda: now)
+    store.initialize()
+    old = store.prepare(spec)
+    selection = {
+        name: old[name] for name in ("owner_id", "profile_id", "request_id", "binding_digest")
+    }
+    new = {**spec, "request_id": "new-draft", "payload": b"changed-synthetic"}
+    result = store.replace(selection, new)
+    assert result["previous"]["state"] == "cancelled"
+    assert result["replacement"]["state"] == "draft"
+    assert store.replace(selection, new) == result
+    assert not hasattr(store, "approve") and not hasattr(store, "execute")
+    _, diagnostic = invoke(command, capsys, "access")
+    assert diagnostic["decision"] == "deny"
+    assert diagnostic["protected_reads_enabled"] is False
+    conn.close()
