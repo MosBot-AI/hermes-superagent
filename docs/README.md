@@ -98,3 +98,5 @@ E9 has a selected native worker-routing design, an offline constraint evaluator 
 [Explicit task breakdown](57-task-breakdown.md): Atomically captures steps, inherits prerequisites and makes the parent depend on every new step; no automatic execution or completion.
 
 [Native result review and explicit local acceptance](58-native-result-review.md): Review untrusted card text directly, then explicitly complete the local task with a rechecked digest and human note; no automatic completion or native mutation.
+
+- [Gateway bootstrap diagnostics](gateway-boot-diagnostics.md): read-only planning and opt-in traceback capture; not transport acceptance.

@@ -2,9 +2,17 @@
 
 English | [简体中文](hermes-compatibility-matrix-zh.md)
 
-## E0.1 baseline
+## Current E0.1 target
 
-The [compatibility record](../compatibility.json) pins Hermes `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`. The verified environment was Linux, Python 3.14.9 and the pinned Hermes PM environment with `dev` and `test` groups. Most plugin contracts exercise native `in_process` loading in temporary profiles. Keep `semver_support_range` at `null` and leave `requires_hermes` out of the [manifest](../plugin.yaml) until there is versioned compatibility evidence. The exact commit is the development target.
+The current [compatibility record](../compatibility.json) targets Hermes `2281116525106e3c109993ccb5dc74d02bfc1427`, the latest upstream main observed on 2026-11-08. We test a fixed observed revision rather than following moving `main` during a run. Exact clean-Git identity checks remain mandatory; official source archives lacking `.git` do not satisfy those checks. No broad version range is claimed.
+
+The earlier MacBook probe of this revision passed all three official real Gateway lifecycle tests and a synthetic plugin ticket/WebSocket task/restart/deduplication flow. Its archive-based contract run passed 1,037 tests and failed two Git identity guards, not behavior assertions. This is not official installation or real-provider acceptance, and does not repair the cloud executor's socket restriction. The latest source hashes used by the Kanban guard are unchanged.
+
+Review-only host proposals keep their historical base and isolated interpreter. They are not silently rebased or counted as latest-host support. New clean-checkout results are recorded in the linked Issue/PR for [E0.1](https://github.com/MosBot-AI/hermes-superagent/issues/1).
+
+## Historical E0.1 evidence (90d6b98)
+
+The previous compatibility baseline pinned Hermes `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`. The verified environment was Linux, Python 3.14.9 and the pinned Hermes PM environment with `dev` and `test` groups. Most plugin contracts exercise native `in_process` loading in temporary profiles. Keep `semver_support_range` at `null` and leave `requires_hermes` out of the [manifest](../plugin.yaml) until there is versioned compatibility evidence. That exact commit was the development target for the historical evidence below.
 
 The [main push run](https://github.com/MosBot-AI/hermes-superagent/actions/runs/42377180370) on [plugin commit `eefa8845b1ed66b740d9e46de2b8aee77917db0a`](https://github.com/MosBot-AI/hermes-superagent/tree/eefa8845b1ed66b740d9e46de2b8aee77917db0a) passed 2,534 unit tests, 1,039 pinned-host contract tests, lint, formatting, type and bilingual documentation checks. A separate disposable host checkout with the text worker proposal passed 357 tests and two production entry point harnesses. The push also built, scanned and cold loaded the [offline runtime artifact](https://github.com/MosBot-AI/hermes-superagent/actions/runs/42377180370/artifacts/13575019987). These are exact-commit CI results. The deployment and real-provider acceptance gates remain open.
 
