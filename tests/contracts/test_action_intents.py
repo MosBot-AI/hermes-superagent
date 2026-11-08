@@ -68,3 +68,41 @@ def test_internal_metadata_survives_reload_without_activating_host(native, tmp_p
     _, diagnostic = invoke(command, capsys, "access")
     assert diagnostic["decision"] == "deny"
     assert diagnostic["protected_reads_enabled"] is False
+
+
+def test_loaded_internal_batch_cancellation_is_atomic_and_unexposed(native, capsys):
+    _, manager = native
+    command = entry(manager)
+    module = api(manager)
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    with sqlite3.connect(":memory:") as conn:
+        store = module.ActionIntentStore(conn, clock=lambda: now)
+        store.initialize()
+        keys = ("owner_id", "profile_id", "request_id", "binding_digest")
+        records = [
+            store.prepare(
+                {
+                    "owner_id": "synthetic-owner",
+                    "profile_id": "synthetic-profile",
+                    "request_id": f"r{i}",
+                    "operation": "synthetic.send",
+                    "policy_revision": 1,
+                    "epoch": 0,
+                    "resource_revision": 1,
+                    "expires_at": now + timedelta(minutes=10),
+                    "target": b"synthetic-target",
+                    "payload": b"synthetic-payload",
+                }
+            )
+            for i in range(2)
+        ]
+        selected = [{k: r[k] for k in keys} for r in records]
+        with pytest.raises(module.IntentError, match="request_conflict"):
+            store.cancel_many([selected[0], {**selected[1], "binding_digest": "0" * 64}])
+        assert conn.execute("SELECT state FROM intents").fetchall() == [("draft",)] * 2
+        cancelled = store.cancel_many(selected)
+        assert all(r["state"] == "cancelled" for r in cancelled)
+        assert store.cancel_many(selected) == cancelled
+    _, status = invoke(command, capsys, "status")
+    assert status["enrollment_policy"]["activation_supported"] is False
+    assert not hasattr(module.ActionIntentStore, "execute")
