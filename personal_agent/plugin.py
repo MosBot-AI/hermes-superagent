@@ -9,6 +9,7 @@ from .enforcement import build_enforcement_inventory
 from .identity import build_access_diagnostic
 from .routing_cli import RoutingInspector, setup_routing_cli
 from .routing_inspection import inspection_failure
+from .schedule_preview import SchedulePreview, failure, setup_schedule_cli
 from .status import build_status, validate_kanban_configuration
 from .task_backup import run_backup_cli, setup_backup_cli
 from .task_cli import current_profile_home, run_tasks_cli, setup_tasks_cli
@@ -135,9 +136,13 @@ def setup_cli(parser: argparse.ArgumentParser) -> None:
     setup_backup_cli(subparsers)
     setup_voice_cli(subparsers)
     setup_routing_cli(subparsers)
+    setup_schedule_cli(subparsers)
 
 
 def run_cli(args: argparse.Namespace) -> int | None:
+    if args.personal_command == "schedule-preview":
+        print(json.dumps(failure("host_context_unavailable")))
+        return 1
     if args.personal_command == "task-backup":
         print(json.dumps({"status": "error", "error": {"code": "host_context_unavailable"}}))
         return 1
@@ -197,6 +202,8 @@ def register(ctx: PluginContext) -> None:
         ctx.get_config("mode", "read_only"), conversation_enabled, handoff_enabled, handoff_board
     )
     bound_home = current_profile_home()
+    schedule_preview = SchedulePreview(bound_home)
+    ctx.on_unload(schedule_preview.close)
     routing_inspector = RoutingInspector(bound_home)
     ctx.on_unload(routing_inspector.close)
 
@@ -256,6 +263,8 @@ def register(ctx: PluginContext) -> None:
             return json.dumps({"status": "blocked", "error": {"code": "invalid_configuration"}})
 
     def registered_cli(args: argparse.Namespace) -> int | None:
+        if args.personal_command == "schedule-preview":
+            return schedule_preview.run(args)
         if args.personal_command == "routing":
             return routing_inspector.run(args)
         if args.personal_command == "task-backup":

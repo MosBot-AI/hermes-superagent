@@ -22,6 +22,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Native schedule preview through explicit local CLI, with offset-aware reference/IANA timezone, bounded candidates and truthful DST-gap warnings; no scheduling or delivery.
+
 - Add explicit digest-bound historical task browsing and inspection from private backups, without restoring or replaying live tasks.
 
 - [Add explicit local task snapshots with integrity checks, private no-overwrite publication and metadata inspection; no automatic restore or export to external services.](docs/61-local-task-backups.md)

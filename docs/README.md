@@ -104,3 +104,5 @@ E9 has a selected native worker-routing design, an offline constraint evaluator 
 [Atomic project-label rename](60-project-label-rename.md): explicit whole-group preview and revision-safe relabeling, preserving dependencies and terminal states.
 
 - [Explicit local task backups](61-local-task-backups.md)
+
+- [Native schedule preview](62-native-schedule-preview.md)

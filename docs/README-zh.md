@@ -104,3 +104,5 @@ E9 已选定原生 worker 路由设计，并实现离线约束验证器和部分
 [原子项目标签重命名](60-project-label-rename-zh.md)：显式整组预览和版本安全改名，保留依赖和终态。
 
 - [显式本地任务备份](61-local-task-backups-zh.md)
+
+- [原生时间规则预览](62-native-schedule-preview-zh.md)

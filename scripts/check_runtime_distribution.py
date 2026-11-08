@@ -264,6 +264,11 @@ else:
                    "--title", "Updated synthetic task", "--request-id", "distribution-update")
     updated = cli(manager, *update_args, expected=0)
     assert updated["data"]["revision"] == 2 and not updated["replayed"]
+    preview = cli(manager, "schedule-preview", "--schedule", "0 9 * * *",
+                  "--timezone", "Asia/Shanghai", "--after", "2027-01-01T08:00:00+08:00",
+                  "--count", "2", expected=0)
+    assert preview["scheduled"] is False and preview["delivery_verified"] is False
+    assert preview["occurrences"][0]["local"] == "2027-01-01T09:00:00+08:00"
     backup = cli(manager, "task-backup", "create", "--name", "distribution", expected=0)
     assert backup["data"]["counts"]["tasks"] == 1
     assert backup["data"]["integrity"] == "ok"
@@ -303,7 +308,7 @@ else:
         "global_personal_agent_import_blocked": True, "network_blocked": True,
         "python": sys.version.split()[0], "subprocesses_blocked": True,
         "synthetic_configuration_preserved": True, "task_backup_reload_no_overwrite": True,
-        "task_backup_historical_recovery_reads": True,
+        "task_backup_historical_recovery_reads": True, "native_schedule_preview": True,
     }, sort_keys=True))
 """
 
