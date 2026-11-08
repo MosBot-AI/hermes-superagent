@@ -22,6 +22,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- [Add explicit local task snapshots with integrity checks, private no-overwrite publication and metadata inspection; no automatic restore or export to external services.](docs/61-local-task-backups.md)
+
 - Add cold runtime-package acceptance through native LOCAL conversation dispatch, with replay and denied-capability checks; deployed acceptance remains open.
 - Added opt-in [Gateway bootstrap diagnostics](docs/gateway-boot-diagnostics.md) that preserve the upstream listener failure traceback, with read-only planning and offline regression coverage. Prepared a manual-only pinned upstream, credential-free native lifecycle CI gate for actual control/WebSocket attach, queued recovery and managed-worker execution. Approved-provider/plugin acceptance remains a separate gate.
 - Add 11 host-free abrupt-process memory recovery tests for atomic candidate acceptance, forgetting and durable no-resurrection replay (refs #21); no live Gateway acceptance claim.

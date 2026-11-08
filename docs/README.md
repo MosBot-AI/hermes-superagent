@@ -102,3 +102,5 @@ E9 has a selected native worker-routing design, an offline constraint evaluator 
 - [Gateway bootstrap diagnostics](gateway-boot-diagnostics.md): read-only planning and opt-in traceback capture; not transport acceptance.
 - [Task transaction process-recovery evidence](task-transaction-recovery.md): 88 isolated crash cases; not full M1 acceptance.
 [Atomic project-label rename](60-project-label-rename.md): explicit whole-group preview and revision-safe relabeling, preserving dependencies and terminal states.
+
+- [Explicit local task backups](61-local-task-backups.md)

@@ -551,3 +551,37 @@ def test_stale_status_handler_does_not_recreate_a_deleted_profile(native, capsys
     assert code == 1
     assert result["error"]["code"] == "profile_context_changed"
     assert not home.exists()
+
+
+def test_local_backup_snapshot_survives_native_reload(native, capsys):
+    home, manager = native
+    command = entry(manager)
+    capture(command, capsys)
+    code, created = invoke(command, capsys, "task-backup", "create", "--name", "before-upgrade")
+    assert code == 0 and created["data"]["counts"]["tasks"] == 1
+    assert "Synthetic" not in json.dumps(created)
+    manager.unload()
+    command = entry(manager)
+    code, inspected = invoke(command, capsys, "task-backup", "inspect", "--name", "before-upgrade")
+    assert code == 0 and inspected == created
+    code, duplicate = invoke(command, capsys, "task-backup", "create", "--name", "before-upgrade")
+    assert code == 1 and duplicate["error"]["code"] == "backup_exists"
+    snapshot = home / "plugin-data" / PLUGIN_ID / "task-backups" / "before-upgrade.sqlite3"
+    assert snapshot.stat().st_mode & 0o777 == 0o600
+
+
+def test_local_backup_obeys_live_mode_revocation(native, capsys):
+    home, manager = native
+    command = entry(manager)
+    capture(command, capsys)
+    configure(home, "read_only")
+    code, output = invoke(command, capsys, "task-backup", "create", "--name", "not-admitted")
+    assert code == 1 and output["error"]["code"] == "local_tasks_disabled"
+    assert not (home / "plugin-data" / PLUGIN_ID / "task-backups").exists()
+
+
+def test_local_backup_never_initializes_missing_task_store(native, capsys):
+    home, manager = native
+    code, output = invoke(entry(manager), capsys, "task-backup", "create", "--name", "empty")
+    assert code == 1 and output["error"]["code"] == "backup_not_found"
+    assert not (home / "plugin-data").exists()
