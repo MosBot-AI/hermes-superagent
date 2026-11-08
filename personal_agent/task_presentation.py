@@ -12,6 +12,10 @@ _STATUS = {
     "blocked": "blocked",
 }
 _ERRORS = {
+    "project_not_found": "The exact source project label has no tasks.",
+    "project_exists": "The destination label is already in use. Groups are never merged.",
+    "project_rename_limit": "This group exceeds the 1,000-task rename limit. Nothing changed.",
+    "project_snapshot_conflict": "The source group changed. Preview again before renaming.",
     "breakdown_in_progress": (
         "An in-progress task cannot be broken down. Explicitly record a non-running "
         "work status after reviewing actual work, then retry from its current revision."
@@ -216,6 +220,10 @@ def _help(prefix: str) -> str:
             "Saved native attention: " + prefix + " native-review --on YYYY-MM-DD",
             "Blocked: " + prefix + " list --work-status blocked",
             "Projects: " + prefix + " projects",
+            "Rename preview: " + prefix + " project-rename-preview --project OLD --new-project NEW",
+            "Rename: " + prefix + " rename-project --project OLD --new-project NEW "
+            "--expected-snapshot HASH --request-id KEY",
+            "Rename includes terminal tasks and preserves edges; destination must be unused.",
             "Available: " + prefix + " ready [--project LABEL | --unassigned]",
             "Dependencies: "
             + prefix
@@ -407,6 +415,23 @@ def _render(result: dict, *, operation: str, payload: dict, prefix: str) -> str:
         return _help(prefix)
     if operation in ("list", "search", "agenda", "ready"):
         lines = _page(data, operation, payload, prefix)
+    elif operation in ("project_rename_preview", "rename_project"):
+        preview = operation == "project_rename_preview"
+        lines = [
+            "Project rename preview (no rename saved)." if preview else "Project label renamed.",
+            "From: " + _quoted(data["project"]),
+            "To: " + _quoted(data["new_project"]),
+            f"All tasks: {data['task_count']} (including done and cancelled).",
+            "States: " + json.dumps(data["state_counts"], sort_keys=True),
+            "Snapshot: " + data["snapshot"],
+            "No native project, worker, reminder or external resource was changed.",
+        ]
+        if preview:
+            lines.append(
+                "Confirm explicitly with rename-project, this snapshot and a stable request ID."
+            )
+        elif result.get("replayed"):
+            lines.insert(0, "Replayed historical receipt; read current tasks for live state.")
     elif operation in ("capture_plan", "breakdown"):
         breakdown = operation == "breakdown"
         label = "Task breakdown" if breakdown else "Plan"
