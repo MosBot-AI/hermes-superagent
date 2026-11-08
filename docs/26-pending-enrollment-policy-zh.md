@@ -86,3 +86,11 @@ epoch 仅在**同一数据库历史中的一条记录内**单调增长。它不�
 6. 在获得授权的环境验证真实入口，需要时安全连接选定 Bot。确定性摘要不必使用模型 API key；凭据不能弥补缺失的身份契约。
 
 此基础明确停在这些门禁之前。生产状态仍报告 `identity_binding: false`、`protected_reads_enabled: false` 和 `release_gate: blocked`。
+
+## 策略历史检查
+
+`EnrollmentStore.policy_history(key, after_epoch=-1, limit=50)` 是内部管理读取接口，不是 CLI、模型工具、远程路由或认证 API。精确的 owner/profile/enrollment 选择条件仍是调用者负责的标签。接口仅返回操作、epoch、变更后的 enrollment/policy revision，以及当前记录的状态、revision、epoch 水位。它不返回拟定的 actor/receiver ID、scope 内容、资源 ID、凭据或任意事件文本。
+
+初始游标 `-1` 包含 epoch 为零的创建事件。每页允许 1–100 项，返回 `next_after_epoch` 和 `has_more`；终态撤销后仍可读取。超过当前 epoch 的游标会被拒绝。单次事务提供一致的页面和当前水位；分次调用不是冻结快照，可能观察到后续策略变更或撤销。返回的水位仅用于历史检查，不是授权屏障，也不证明外部操作已经停止。
+
+读取器验证精确 schema、当前记录与计数器的关系、当前尾事件，以及包含一条前瞻记录的所选连续区间。所选事件缺失或不一致时失败关闭，SELECT 或 COMMIT 失败也不会返回页面。它不会扫描或认证页面之前的全部历史。通过作用域和 epoch 索引，查询最多获取 `limit + 1` 条页面记录及一条尾记录；接口不执行变更、保留清理或 schema 迁移。本地数据库仍不防篡改，也不能作为恢复或克隆后的新鲜度权威。调用者已有事务会被拒绝，但不会被回滚。

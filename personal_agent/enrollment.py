@@ -363,6 +363,87 @@ class EnrollmentStore:
             operation=apply,
         )
 
+    def policy_history(self, key: dict, *, after_epoch: int = -1, limit: int = 50) -> dict:
+        """Inspect bounded administrative events, not authenticated authority.
+
+        Return one coherent page and current-record watermark. Separate calls are
+        not a frozen snapshot. Validate the selected range and current tail, not
+        the entire historical database. No policy content or intended identities
+        leave this internal, unwired API; scope selectors remain caller-owned.
+        """
+        request = _request("get", key)
+        if (
+            type(after_epoch) is not int
+            or not -1 <= after_epoch <= _MAX
+            or type(limit) is not int
+            or not 1 <= limit <= 100
+        ):
+            raise EnrollmentError("invalid_request")
+        if not self._initialized:
+            raise EnrollmentError("not_initialized")
+
+        def read() -> dict:
+            self._schema()
+            record = self._get(request)
+            epoch = record["epoch"]
+            if after_epoch > epoch:
+                raise EnrollmentError("invalid_cursor")
+            revoked = record["state"] == "revoked"
+            if (
+                record["enrollment_revision"] != (2 if revoked else 1)
+                or record["policy_revision"] != epoch + (0 if revoked else 1)
+                or (revoked and epoch == 0)
+            ):
+                raise EnrollmentError("invalid_policy_audit")
+            scope = tuple(request[name] for name in ("owner_id", "profile_id", "enrollment_id"))
+            columns = "epoch,operation,enrollment_revision,policy_revision"
+            where = "owner_id=? AND profile_id=? AND enrollment_id=?"
+
+            def validate(row: tuple, expected_epoch: int) -> None:
+                expected_operation = (
+                    "create"
+                    if expected_epoch == 0
+                    else "revoke"
+                    if revoked and expected_epoch == epoch
+                    else "set_policy"
+                )
+                terminal = expected_operation == "revoke"
+                if any(type(row[index]) is not int for index in (0, 2, 3)) or row != (
+                    expected_epoch,
+                    expected_operation,
+                    2 if terminal else 1,
+                    expected_epoch if terminal else expected_epoch + 1,
+                ):
+                    raise EnrollmentError("invalid_policy_audit")
+
+            tail = self._connection.execute(
+                f"SELECT {columns} FROM main.events WHERE {where} AND epoch=?", scope + (epoch,)
+            ).fetchone()
+            if tail is None:
+                raise EnrollmentError("invalid_policy_audit")
+            validate(tail, epoch)
+            rows = self._connection.execute(
+                f"SELECT {columns} FROM main.events WHERE {where} AND epoch>? "
+                "ORDER BY epoch LIMIT ?",
+                scope + (after_epoch, limit + 1),
+            ).fetchall()
+            if len(rows) != min(epoch - after_epoch, limit + 1):
+                raise EnrollmentError("invalid_policy_audit")
+            for offset, row in enumerate(rows, start=1):
+                validate(row, after_epoch + offset)
+            items = [dict(zip(columns.split(","), row, strict=True)) for row in rows[:limit]]
+            return {
+                "items": items,
+                "has_more": len(rows) > limit,
+                "next_after_epoch": items[-1]["epoch"] if items else after_epoch,
+                "current_epoch": epoch,
+                "current_state": record["state"],
+                "current_enrollment_revision": record["enrollment_revision"],
+                "current_policy_revision": record["policy_revision"],
+            }
+
+        return self._transaction(read)
+
     def read_admission_history(
         self, key: dict, *, after_sequence: int = 0, limit: int = 50
     ) -> dict:
