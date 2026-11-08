@@ -111,6 +111,13 @@ def setup_tasks_cli(parent: argparse._SubParsersAction) -> None:
     projects = commands.add_parser("projects", help="Count current local task project labels")
     projects.add_argument("--limit", type=int, default=20)
     projects.add_argument("--after", default=None, help="Exclusive binary-order project label")
+    for name in ("project-rename-preview", "rename-project"):
+        command = commands.add_parser(name, help="Explicitly rename a whole local project label")
+        command.add_argument("--project", required=True)
+        command.add_argument("--new-project", required=True)
+        if name == "rename-project":
+            command.add_argument("--expected-snapshot", required=True)
+            command.add_argument("--request-id", required=True)
     for name in ("update", "complete", "cancel", "progress"):
         command = commands.add_parser(name, help=f"{name.capitalize()} a local task explicitly")
         command.add_argument("task_id")
@@ -157,6 +164,10 @@ def setup_tasks_cli(parent: argparse._SubParsersAction) -> None:
 
 def command_request(args: argparse.Namespace) -> tuple[str, dict]:
     operation = "get" if args.task_operation == "show" else args.task_operation
+    operation = {
+        "project-rename-preview": "project_rename_preview",
+        "rename-project": "rename_project",
+    }.get(operation, operation)
     if operation == "native-review":
         operation = "native_review"
     if operation == "dependencies":
@@ -181,6 +192,8 @@ def command_request(args: argparse.Namespace) -> tuple[str, dict]:
             "capture_plan", {"project": args.project, "tasks": tasks, "request_id": args.request_id}
         )
     fields = {
+        "project_rename_preview": ("project", "new_project"),
+        "rename_project": ("project", "new_project", "expected_snapshot", "request_id"),
         "capture": ("title", "details", "request_id", "due_date", "project"),
         "get": ("task_id",),
         "ready": ("limit", "after", "project", "unassigned"),

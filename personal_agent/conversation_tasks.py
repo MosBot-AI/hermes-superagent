@@ -56,6 +56,10 @@ HELP = (
     'cancel TASK_ID --expected-revision N --note "Reason". '
     "add is an alias for capture; done is an alias for complete. "
     "Projects are task label groups, not native Project entities. "
+    "project-rename-preview --project OLD --new-project NEW returns a bounded whole-group "
+    "snapshot; rename-project --project OLD --new-project NEW --expected-snapshot HASH "
+    "--request-id KEY atomically relabels every active and terminal task, preserving edges. "
+    "Destination must be unused; preview again after any source task changes. "
     "Writes accept --request-id KEY. "
     "For capture/update/complete/cancel/progress, if omitted a fresh key is returned. "
     "dependencies TASK_ID --expected-revision N (--needs ID [--needs ID...] | --clear) "

@@ -25,6 +25,9 @@ This file distinguishes design work, development changes, and released capabilit
 - Add cold runtime-package acceptance through native LOCAL conversation dispatch, with replay and denied-capability checks; deployed acceptance remains open.
 - Added opt-in [Gateway bootstrap diagnostics](docs/gateway-boot-diagnostics.md) that preserve the upstream listener failure traceback, with read-only planning and offline regression coverage. Prepared a manual-only pinned upstream, credential-free native lifecycle CI gate for actual control/WebSocket attach, queued recovery and managed-worker execution. Approved-provider/plugin acceptance remains a separate gate.
 - Add 11 host-free abrupt-process memory recovery tests for atomic candidate acceptance, forgetting and durable no-resurrection replay (refs #21); no live Gateway acceptance claim.
+- Added 88 offline task-transaction process-crash cases across DELETE/WAL journals, covering atomic records, dependency edges, events and retry receipts; no production behavior change.
+
+- Add explicit local project-label rename with bounded preview, atomic all-task updates, dependency preservation and durable retry receipts.
 
 - [Project task dependencies](docs/51-project-task-dependencies.md) now enforce explicit same-project prerequisites before starting or completing work, with a ready queue and fresh dependency snapshots in review/focus. Cancelled prerequisites remain blockers; no worker is launched and no native Kanban state is modified.
 

@@ -12,6 +12,7 @@ from uuid import UUID, uuid4
 
 from . import task_dependencies as dependencies
 from . import task_native_sync as native_sync
+from . import task_project_rename as project_rename
 from .task_native_review import task_native_review
 from .task_review import task_review
 
@@ -136,6 +137,8 @@ def _date(value: Any) -> str:
 def validate_request(operation: str, payload: dict) -> dict:
     """Validate without touching storage; return an independent normalized mapping."""
     fields = {
+        "project_rename_preview": ({"project", "new_project"}, set()),
+        "rename_project": ({"project", "new_project", "expected_snapshot", "request_id"}, set()),
         "set_dependencies": (
             {"task_id", "expected_revision", "dependency_ids", "request_id"},
             set(),
@@ -194,6 +197,14 @@ def validate_request(operation: str, payload: dict) -> dict:
     if "project" in result:
         if not (operation in ("capture", "update") and result["project"] is None):
             result["project"] = _project(result["project"])
+    if "new_project" in result:
+        result["new_project"] = _project(result["new_project"])
+        if result["project"] == result["new_project"]:
+            raise TaskError("invalid_request")
+    if "expected_snapshot" in result:
+        value = result["expected_snapshot"]
+        if type(value) is not str or re.fullmatch(r"[0-9a-f]{64}", value) is None:
+            raise TaskError("invalid_request")
     if "work_status" in result:
         if type(result["work_status"]) is not str or result["work_status"] not in _WORK_STATUSES:
             raise TaskError("invalid_request")
@@ -650,10 +661,13 @@ class TaskStore:
                 "review",
                 "native_review",
                 "ready",
+                "project_rename_preview",
             ):
                 self._connection.execute("BEGIN")
                 began = True
-                if operation == "get":
+                if operation == "project_rename_preview":
+                    data = project_rename.preview(self, request)
+                elif operation == "get":
                     data = self._get(request["task_id"])
                 elif operation == "review":
                     data = task_review(self._connection, request)
@@ -695,7 +709,9 @@ class TaskStore:
                 self._connection.execute("COMMIT")
                 return {"data": data, "replayed": True}
             now = datetime.now(UTC).isoformat(timespec="microseconds")
-            if operation == "capture_plan":
+            if operation == "rename_project":
+                data = project_rename.rename(self, request, now)
+            elif operation == "capture_plan":
                 data = self._capture_batch(request, now, operation)
             elif operation == "breakdown":
                 parent = self._get(request["task_id"])
@@ -752,7 +768,7 @@ class TaskStore:
                 if cursor.rowcount != 1:
                     raise TaskError("revision_conflict")
                 data = self._get(task_id)
-            if operation not in ("capture_plan", "breakdown"):
+            if operation not in ("capture_plan", "breakdown", "rename_project"):
                 self._record_event(data, operation, now)
             self._connection.execute(
                 "INSERT INTO receipts (request_id,digest,receipt) VALUES (?,?,?)",

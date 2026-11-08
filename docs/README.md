@@ -100,3 +100,5 @@ E9 has a selected native worker-routing design, an offline constraint evaluator 
 [Native result review and explicit local acceptance](58-native-result-review.md): Review untrusted card text directly, then explicitly complete the local task with a rechecked digest and human note; no automatic completion or native mutation.
 
 - [Gateway bootstrap diagnostics](gateway-boot-diagnostics.md): read-only planning and opt-in traceback capture; not transport acceptance.
+- [Task transaction process-recovery evidence](task-transaction-recovery.md): 88 isolated crash cases; not full M1 acceptance.
+[Atomic project-label rename](60-project-label-rename.md): explicit whole-group preview and revision-safe relabeling, preserving dependencies and terminal states.
