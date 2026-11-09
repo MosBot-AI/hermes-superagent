@@ -1,0 +1,7 @@
+manifest_version: 2
+name: worker-policy-probe
+version: "0.0.0"
+description: Offline persistent worker policy fixture
+kind: standalone
+provides_tools:
+  - worker_policy_probe

@@ -13,6 +13,8 @@ This file distinguishes design work, development changes, and released capabilit
 - Run runtime artifact acceptance on exact pull-request heads with read-only credentials; keep downloadable artifact publication push-only.
 ### Changed
 
+- Verify current SQLite policy and revocation inside a synthetic protected read handler under native frozen worker configuration, including direct dispatch, contention and audit failures. Reuse existing internal coordinators; no production write authority is added.
+
 - Extend E0.4 boundary evidence to pinned terminal/browser and batched tool execution, preserving all controlled-write release blocks and distinguishing synthetic endpoints from real account, containment and revocation acceptance.
 
 - Extend the blocked [write-path inventory](docs/13-enforcement-contracts.md) with real pinned-host RPC/MCP admission contracts and explicit response-loss, direct-registry and dishonest read-only counterexamples. Transport/approval doubles are limited and disclosed; no controlled write capability is enabled.

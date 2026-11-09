@@ -106,10 +106,21 @@ _WRITE_PATHS = (
     ),
     WritePath(
         "managed_worker",
-        "synthetic_contract",
-        "Ordinary workers retain frozen config; troubleshooting safe workers skip hooks. "
-        "Current persistent policy checks are not integrated.",
-        ("managed_worker_frozen_config", "safe_worker_hook_suppression"),
+        "pinned_host_boundary_contract",
+        "Fresh native worker binding retains frozen config while a synthetic read handler "
+        "rechecks current SQLite policy and revocation on both dispatch routes. "
+        "No production authority, write grant or complete managed-worker lifecycle is integrated.",
+        (
+            "managed_worker_frozen_config",
+            "safe_worker_hook_suppression",
+            "worker_current_policy_recheck",
+            "worker_missing_authority",
+            "worker_transaction_failure",
+            "worker_safe_capability_absence",
+            "worker_admission_before_revoke",
+            "worker_revoke_before_admission",
+            "worker_one_shot_cross_path",
+        ),
     ),
     WritePath(
         "scheduled_job",

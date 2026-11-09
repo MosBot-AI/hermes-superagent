@@ -23,7 +23,6 @@ def test_every_known_or_unlisted_write_path_remains_blocked():
 def test_boundary_contracts_do_not_become_full_write_path_coverage():
     rows = {row["path_id"]: row for row in build_enforcement_inventory()["paths"]}
     assert rows["native_dispatch"]["evidence"] == "synthetic_contract"
-    assert rows["managed_worker"]["evidence"] == "synthetic_contract"
     for path in (
         "mcp",
         "execute_code_rpc",
@@ -32,6 +31,7 @@ def test_boundary_contracts_do_not_become_full_write_path_coverage():
         "local_tool_batch",
         "connector_batch",
         "short_worker",
+        "managed_worker",
     ):
         assert rows[path]["evidence"] == "pinned_host_boundary_contract"
         assert rows[path]["contract_ids"]
@@ -44,6 +44,8 @@ def test_boundary_contracts_do_not_become_full_write_path_coverage():
     assert "local_batch_uncertain_retry" in rows["local_tool_batch"]["contract_ids"]
     assert "delegated_child_toolset_and_batch_admission" in rows["short_worker"]["contract_ids"]
     assert "connector_batch_item_veto_partial_retry" in rows["connector_batch"]["contract_ids"]
+    assert "worker_current_policy_recheck" in rows["managed_worker"]["contract_ids"]
+    assert "worker_revoke_before_admission" in rows["managed_worker"]["contract_ids"]
     for path in ("scheduled_job",):
         assert rows[path]["evidence"] == "not_tested"
         assert rows[path]["contract_ids"] == []

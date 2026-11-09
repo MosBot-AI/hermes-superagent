@@ -2,9 +2,9 @@
 
 English | [简体中文](13-enforcement-contracts-zh.md)
 
-This page records the earlier E0 slice and its bounded RPC/MCP, terminal/browser and local-batch follow-ons for [Issue #12](https://github.com/MosBot-AI/hermes-superagent/issues/12). See [16](16-local-task-inbox.md) for the newer opt-in local task inbox; it does not enable the native/external controlled-write paths described here.
+This page records the earlier E0 slice and its bounded RPC/MCP, terminal/browser, local-batch and persistent worker-policy follow-ons for [Issue #12](https://github.com/MosBot-AI/hermes-superagent/issues/12). See [16](16-local-task-inbox.md) for the newer opt-in local task inbox; it does not enable the native/external controlled-write paths described here.
 
-This follow-on P0 slice advances E0.4 without enabling any controlled write capability. It adds reproducible failure-boundary tests and a machine-readable release inventory. The follow-ons exercise actual pinned RPC consumers/server dispatch, MCP admission, terminal/browser pre-execution guards and local batches in primary and delegated agent loops with synthetic effects; they do not complete all alternate paths. E0.4, E0/M0, and E1 authorization remain incomplete.
+This follow-on P0 slice advances E0.4 without enabling any controlled write capability. It adds reproducible failure-boundary tests and a machine-readable release inventory. The follow-ons exercise actual pinned RPC consumers/server dispatch, MCP admission, terminal/browser pre-execution guards and local batches in primary and delegated agent loops, and current durable policy checks in a protected synthetic read handler; they do not complete all alternate paths. E0.4, E0/M0, and E1 authorization remain incomplete.
 
 ## 1. What the implementation does
 
@@ -106,6 +106,31 @@ An allowed item records an effect, a denied item is refused before client acquis
 
 The test uses primary-session context for direct model dispatch. It does not run a child connector loop, the concurrent batch executor, real gateway credential/permission resolution or production operation-level grants. The inventory ID `connector_batch_item_veto_partial_retry` maps to this assertion. All controlled-write gates remain blocked.
 
+### 2.6 Frozen worker configuration with current durable read policy
+
+[Worker-policy contracts](../tests/contracts/test_worker_policy_enforcement.py) launch a fresh process that calls the real `agent.managed_worker.bind_worker_policy` before runtime imports, loads a real directory fixture plugin and remains alive across multiple model-facing/direct-registry calls. The handler uses the existing [fenced read coordinator](27-fenced-read-admission.md) and [prepared-read audit](63-prepared-read-audit.md). No new runtime authorizer, production adapter, grant state or activation option is introduced.
+
+The fixture explicitly supplies independent synthetic one-shot host confirmations and synthetic ownership/resource snapshots through its private test-control pipe. Pending database rows, `approved: true` and draft labels in model arguments cannot supply those adapters or handles. It reads only a fixed synthetic summary. Real owner adoption, `WorkerChannel`, provider inference, full managed-worker lifecycle and production write authority are outside this test.
+
+- The same handler succeeds through both model and direct registry dispatch before a separate connection revokes or replaces the policy. Subsequent calls re-enter the handler but do not read the resource or commit another audit under stale versions. The PID stays unchanged and native config still returns its frozen value, even after the on-disk config becomes invalid. Current policy comes from the separate SQLite store, not a profile-config refresh.
+- A no-op policy replacement advances policy revision/epoch. Only a newly issued independent synthetic confirmation matching the new policy can read again; the enrollment remains pending. A synthetic confirmation matching even the revoked row's current versions is still refused: terminal revocation is not a route to activate an enrollment.
+- Admission-first ordering holds a real SQLite write lock during the bounded synthetic read. An independent zero-timeout contender observes `SQLITE_BUSY`; the separately initialized revoker attempts its own `BEGIN IMMEDIATE` and commits only after the admitted read completes. Its audit retains the admitted epoch. Revoke-first ordering holds the revoke transaction at COMMIT while the worker attempts admission; once revoke commits, no resource read or audit occurs. These tests do not promise to retract already-admitted data.
+- Missing authority/resource adapters refuse before resource access. A consumed one-shot handle cannot replay through the other dispatch route. The dispatcher hook is not the policy gate: enforcement is inside the fixture handler's call to the coordinator.
+- SQLite authorizer fault injection denies enrollment reads, audit insertion or COMMIT. Every case returns no summary and commits no prepared-read audit. Audit/COMMIT failures occur after the synthetic summary has already been read; the tests do not claim to undo that read. After fault removal, a fresh independent confirmation permits recovery.
+- Troubleshooting safe bootstrap omits this fixture plugin/tool; actual registry/model attempts fail and no read audit is added. This verifies fixture-capability absence, not actual production-package fallback or host-wide read-only behavior. Separate production exposure tests are still required.
+
+The child environment uses an explicit allowlist and denies socket connections. The shared test-control reader enforces an absolute whole-frame deadline, byte limit and complete JSON-object framing, including partial-frame, EOF, consecutive-frame and oversize regression cases. Teardown closes streams, joins mutation threads and reaps the child. This is a fixture protocol, not the native owner/worker IPC or a new public API.
+
+| Inventory contract ID | Executable assertion |
+| --- | --- |
+| `worker_current_policy_recheck` | `test_live_worker_rechecks_persistent_policy_on_both_dispatch_paths` |
+| `worker_missing_authority` | `test_pending_record_and_model_claims_do_not_replace_adapters` |
+| `worker_transaction_failure` | `test_handler_storage_failures_return_no_data_or_committed_audit` |
+| `worker_safe_capability_absence` | `test_safe_worker_suppresses_fixture_plugin_and_registry` |
+| `worker_admission_before_revoke` | `test_admission_holds_sqlite_lock_before_competing_revoke` |
+| `worker_revoke_before_admission` | `test_revoke_commit_wins_while_worker_waits_for_sqlite` |
+| `worker_one_shot_cross_path` | `test_confirmation_is_consumed_across_dispatch_paths` |
+
 ## 3. Controlled-write release inventory
 
 | Path | Evidence in this slice | Release status |
@@ -119,7 +144,7 @@ The test uses primary-session context for direct model dispatch. It does not run
 | `local_tool_batch` | Real primary/child loops, per-item veto, result pairing and explicit retry counterexample | Blocked; no durable effect idempotency or persistent revocation |
 | `connector_batch` | Real per-item model dispatch, indexed partial results and explicit retry at an offline gateway client | Blocked; production grants, credentials, transport retry and server deduplication remain unverified |
 | `short_worker` | Real child construction/toolset restriction and local-batch loop | Blocked; scheduler, background lifecycle and production authority remain unverified |
-| `managed_worker` | Synthetic frozen-config and safe-mode contracts | Blocked; current persistent policy checks are absent |
+| `managed_worker` | Real pre-import worker binding; current SQLite policy/revocation checked inside a synthetic read handler on both dispatch routes | Blocked; no production authority, write grant or full worker lifecycle |
 | `scheduled_job` | No authorization/cancel/delivery/reconciliation contract | Blocked |
 
 `synthetic_contract` and `pinned_host_boundary_contract` are bounded evidence labels, not full coverage of a named tool family. A successful in-memory probe does not prove shell, MCP, browser, external delivery, or real worker side effects are protected. The inventory is immutable internally and returns independent snapshots; mutating a report cannot grant a capability or change later reports.
@@ -138,7 +163,7 @@ No mode or configuration toggle in this slice enables writes. It remains possibl
 
 - Current target: Hermes `2281116525106e3c109993ccb5dc74d02bfc1427`, Linux, Python 3.14, isolated test homes and no account credentials, as recorded in [compatibility.json](../compatibility.json). The original slice used `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`; historical results remain separate from current exact-revision runs.
 - The checker now runs every file under `tests/contracts` through the official per-file Hermes runner, in addition to unit tests, Ruff, ty, and bilingual document checks.
-- Observed dispatcher failure applies to the tested `model_tools` wrapper, including default nested RPC dispatch. MCP observations cover the real stdio fixture and native trust wrapper, not all server transports or account policies. Terminal/browser observations stop at inert execution endpoints. Connector-only observations stop at an offline gateway client. Local-batch and constructed-child loops do not establish delegated scheduling or background lifecycle, and no concurrent batch executor is exercised. Actual containment, authenticated effects and current persistent-policy admission in managed workers remain separate gates. Frozen config/safe-mode probes do not verify revocation or read-only degradation.
+- Observed dispatcher failure applies to the tested `model_tools` wrapper, including default nested RPC dispatch. MCP observations cover the real stdio fixture and native trust wrapper, not all server transports or account policies. Terminal/browser observations stop at inert execution endpoints. Connector-only observations stop at an offline gateway client. Local-batch and constructed-child loops do not establish delegated scheduling or background lifecycle, and no concurrent batch executor is exercised. Current durable policy is now exercised inside a synthetic read handler under native worker binding. Actual containment, authenticated effects, production-package safe-mode fallback and complete managed-worker lifecycle remain separate evidence gaps. Earlier config/safe-mode probes alone did not establish those guarantees.
 - No production account, API key, live model request, external send, or real connector write was needed. Future online tests need a separate scoped test setup and secure credential handoff; credentials must not enter chat, logs, or the repository.
 - The later [E0.2–E0.3 lifecycle contracts](75-native-lifecycle-contracts.md) add bounded Project/Kanban/cron operator evidence and document missing supported plugin CRUD APIs; they enable no production capability. Untested E0.4 paths, E1-dependent write admission, E3 orchestration and E4 controlled scheduling remain separate gates. Passing this slice does not complete M0 or permit those write features to ship.
 
@@ -151,13 +176,14 @@ bash /absolute/path/hermes-agent/scripts/run_tests.sh \
   /absolute/path/hermes-superagent/tests/contracts/test_mcp_enforcement.py \
   /absolute/path/hermes-superagent/tests/contracts/test_shell_browser_enforcement.py \
   /absolute/path/hermes-superagent/tests/contracts/test_batch_worker_enforcement.py \
+  /absolute/path/hermes-superagent/tests/contracts/test_worker_policy_enforcement.py \
   --file-retries 0 -- \
   -o "pythonpath=/absolute/path/hermes-agent /absolute/path/hermes-superagent" -q --tb=short
 python scripts/check.py --hermes /absolute/path/hermes-agent \
   --hermes-python /absolute/path/hermes-test-venv/bin/python
 ```
 
-Use the prepared Python 3.14 test interpreter for `python` in the aggregate command. The earlier RPC/MCP files contain 21 parametrized cases; the terminal/browser and batch/worker files add their own bounded cases. Focused success does not stand in for the aggregate or full E0.4 acceptance. Exact executed results belong to Issue #12 and its linked PR. No host patch or production capability is introduced.
+Use the prepared Python 3.14 test interpreter for `python` in the aggregate command. The earlier RPC/MCP files contain 21 parametrized cases; the terminal/browser, batch/worker and persistent-worker-policy files add their own bounded cases. Focused success does not stand in for the aggregate or full E0.4 acceptance. Exact executed results belong to Issue #12 and its linked PR. No host patch or production capability is introduced.
 
 Current pinned sources:
 
@@ -173,3 +199,15 @@ Current pinned sources:
 - [Terminal public handler and execution guards](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/tools/terminal_tool.py) and [browser execution](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/tools/browser_use_cli.py)
 - [Local batch expansion](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/agent/tool_call_batches.py) and [delegated child construction](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/tools/delegate_tool.py)
 - [Connector batch dispatch](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/tools/connectors/dispatch.py)
+
+## 6. E0.4 completion versus later capability enablement
+
+E0.4 verifies boundaries, recovery limits and an actually disabled or read-only project-controlled surface. E1 depends on E0.4; implementing all production identity, approval and external-outcome machinery cannot become a circular prerequisite for this verification package. Those capabilities must still remain disabled until their own gates pass.
+
+Before closing Issue #12, the remaining bounded evidence must establish:
+
+1. Actual production-package exposure and negative dispatch under default/read-only, ordinary managed, config-only and troubleshooting safe bootstrap. A report-only inventory or absence of a test fixture tool is insufficient.
+2. Native concurrent batch admission and the remaining delegated/background and execute-code alternate routes: a behavioral boundary test, or an explicit unsupported seam plus verified non-exposure from the project-controlled mode. Inert shell/browser endpoints do not establish backend containment.
+3. A final finite ledger linking each path to its exact boundary, denial/non-exposure assertion, effect oracle and tested revision. Separate verified E0.4 boundaries, technically unavailable modes and downstream E1/E3/E4/E5 enablement work.
+
+This project can prove that its controlled-write adapter is unavailable while an independently configured Hermes host still exposes native tools. It must not describe that result as host-wide read-only enforcement. Any later claim to contain the host or a general-purpose worker requires corresponding tool, credential and OS/process isolation evidence.

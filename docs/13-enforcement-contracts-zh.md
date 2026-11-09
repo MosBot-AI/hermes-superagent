@@ -2,9 +2,9 @@
 
 [English](13-enforcement-contracts.md) | 简体中文
 
-此页记录较早的 E0 切片，以及针对 [Issue #12](https://github.com/MosBot-AI/hermes-superagent/issues/12) 的有界 RPC/MCP、终端/浏览器及本地批量后续核验。当前新增的显式本地任务收件箱见 [16](16-local-task-inbox-zh.md)；它不启用这里列出的原生/外部受控写路径。
+此页记录较早的 E0 切片，以及针对 [Issue #12](https://github.com/MosBot-AI/hermes-superagent/issues/12) 的有界 RPC/MCP、终端/浏览器、本地批量及持久 worker 策略后续核验。当前新增的显式本地任务收件箱见 [16](16-local-task-inbox-zh.md)；它不启用这里列出的原生/外部受控写路径。
 
-本次后续 P0 切片推进 E0.4，但不启用任何受控写能力。新增可复验的失败边界测试和机器可读发布清单。后续切片使用合成副作用核验固定宿主的真实 RPC 消费者/服务端调度、MCP 准入、终端/浏览器执行前守卫，以及主 agent 和被委派 agent 循环中的本地批量；并未完成所有替代路径。E0.4、E0/M0 与 E1 授权仍未完成。
+本次后续 P0 切片推进 E0.4，但不启用任何受控写能力。新增可复验的失败边界测试和机器可读发布清单。后续切片使用合成副作用核验固定宿主的真实 RPC 消费者/服务端调度、MCP 准入、终端/浏览器执行前守卫，主 agent 和被委派 agent 循环中的本地批量，以及受保护合成读 handler 中的当前持久策略检查；并未完成所有替代路径。E0.4、E0/M0 与 E1 授权仍未完成。
 
 ## 1. 实现了什么
 
@@ -106,6 +106,31 @@ Worker 探针在全新进程中运行，因为 bootstrap policy 必须在 runtim
 
 此测试为直接模型调度提供主会话上下文。它不运行子 agent connector 循环、并发批量执行器、真实 gateway 凭据/权限解析或生产操作级 grant。清单 ID `connector_batch_item_veto_partial_retry` 对应该断言。所有受控写门禁继续阻断。
 
+### 2.6 冻结 worker 配置与当前持久读策略
+
+[Worker 策略契约](../tests/contracts/test_worker_policy_enforcement.py)启动全新进程，在 runtime import 前调用真实 `agent.managed_worker.bind_worker_policy`，加载真实目录夹具插件，并在多次模型/直接 registry 调用之间持续存活。Handler 使用现有[加 fence 的读协调器](27-fenced-read-admission-zh.md)及[准备读审计](63-prepared-read-audit-zh.md)。不新增运行时授权器、生产 adapter、grant 状态或激活选项。
+
+夹具通过私有测试控制管道明确提供独立的合成单次 host confirmation，以及合成所有权/resource snapshot。Pending 数据库行、模型参数中的 `approved: true` 和 draft 标签都不能提供这些 adapter 或 handle。读取内容仅为固定合成摘要。真实 owner adoption、`WorkerChannel`、提供方推理、完整 managed-worker 生命周期及生产写入权限不在测试范围内。
+
+- 在另一连接撤权或替换策略前，同一 handler 经模型和直接 registry 调度均可成功。后续调用会再次进入 handler，但旧版本条件下不读取资源，也不提交新的审计。PID 不变，即使磁盘 config 已损坏，原生 config 仍返回冻结值。当前策略来自独立 SQLite 存储，而非 profile-config 刷新。
+- 无内容变化的策略替换仍推进 policy revision/epoch。只有独立新签发、匹配新策略的合成 confirmation 才能再次读取；enrollment 仍为 pending。即使合成 confirmation 匹配已撤权行的当前版本，也仍会被拒绝：终态撤权不是激活 enrollment 的路径。
+- 准入优先顺序在有界合成读取期间持有真实 SQLite 写锁。独立零超时竞争者观察到 `SQLITE_BUSY`；预先初始化的另一撤权者尝试自己的 `BEGIN IMMEDIATE`，仅在已准入读完成后提交。读审计保留准入时的 epoch。撤权优先顺序将撤权事务保持在 COMMIT 处，同时 worker 尝试准入；撤权提交后不发生资源读取或审计。这些测试不承诺收回已准入的数据。
+- 缺少 authority/resource adapter 时，在访问资源前拒绝。已消耗的单次 handle 无法经另一调度路径重放。Dispatcher hook 不是该策略门禁：执行检查位于夹具 handler 对协调器的调用内部。
+- SQLite authorizer 故障注入分别拒绝 enrollment 读取、审计插入或 COMMIT。所有情形均不返回摘要，也不提交 prepared-read 审计。审计/COMMIT 失败发生在合成摘要已被读取之后；测试不宣称撤销该次读取。移除故障后，新独立 confirmation 可恢复成功。
+- Troubleshooting safe bootstrap 不加载该夹具插件/工具；真实 registry/模型尝试失败，且不增加读审计。这验证夹具能力缺失，不验证真实生产包 fallback 或宿主全局只读行为。仍需独立的生产暴露面测试。
+
+子进程环境使用显式 allowlist 并拒绝 socket 连接。共享测试控制读取器强制绝对整帧截止时间、字节数上限及完整 JSON object 分帧，覆盖部分帧、EOF、连续帧和超限回归用例；teardown 关闭流、join 策略修改线程并回收子进程。它是夹具协议，不是原生 owner/worker IPC，也不是新公开 API。
+
+| 清单契约 ID | 可执行断言 |
+| --- | --- |
+| `worker_current_policy_recheck` | `test_live_worker_rechecks_persistent_policy_on_both_dispatch_paths` |
+| `worker_missing_authority` | `test_pending_record_and_model_claims_do_not_replace_adapters` |
+| `worker_transaction_failure` | `test_handler_storage_failures_return_no_data_or_committed_audit` |
+| `worker_safe_capability_absence` | `test_safe_worker_suppresses_fixture_plugin_and_registry` |
+| `worker_admission_before_revoke` | `test_admission_holds_sqlite_lock_before_competing_revoke` |
+| `worker_revoke_before_admission` | `test_revoke_commit_wins_while_worker_waits_for_sqlite` |
+| `worker_one_shot_cross_path` | `test_confirmation_is_consumed_across_dispatch_paths` |
+
 ## 3. 受控写发布清单
 
 | 路径 | 本切片证据 | 发布状态 |
@@ -119,7 +144,7 @@ Worker 探针在全新进程中运行，因为 bootstrap policy 必须在 runtim
 | `local_tool_batch` | 真实主/子循环、逐项否决、结果配对及显式重试反例 | 阻断；没有持久副作用幂等或持久撤权 |
 | `connector_batch` | 离线 gateway 客户端上的真实逐项模型调度、索引化部分结果及显式重试 | 阻断；生产 grant、凭据、传输重试及服务端幂等仍未验证 |
 | `short_worker` | 真实子 agent 构造/工具集限制与本地批量循环 | 阻断；调度器、后台生命周期及生产权限仍未验证 |
-| `managed_worker` | 合成冻结 config 与 safe-mode 合同 | 阻断；未接入当前持久 policy 检查 |
+| `managed_worker` | 真实 import 前 worker 绑定；合成读 handler 在两条调度路径内检查当前 SQLite 策略/撤权 | 阻断；没有生产 authority、write grant 或完整 worker 生命周期 |
 | `scheduled_job` | 无授权/取消/交付/对账合同 | 阻断 |
 
 `synthetic_contract` 和 `pinned_host_boundary_contract` 是有界证据标签，不等于完整覆盖某类工具。内存探针通过，不能证明 shell、MCP、browser、外发或真实 worker 副作用受保护。清单内部不可变，返回独立快照；修改报告不能授予能力，也不能改变后续报告。
@@ -138,7 +163,7 @@ Worker 探针在全新进程中运行，因为 bootstrap policy 必须在 runtim
 
 - 当前目标：[compatibility.json](../compatibility.json)记录的 Hermes `2281116525106e3c109993ccb5dc74d02bfc1427`、Linux、Python 3.14、隔离测试 home，无账号凭据。最初切片使用 `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`；历史结果与当前确切修订运行分开记录。
 - 检查脚本现在通过官方逐文件 Hermes runner 运行 `tests/contracts` 下全部文件，同时执行单元测试、Ruff、ty 和双语文档检查。
-- 实测 dispatcher 失败覆盖 `model_tools` wrapper，包括默认嵌套 RPC 调度。MCP 观察覆盖真实 stdio 夹具与原生 trust wrapper，不代表全部服务端传输或账号策略。终端/浏览器观察止于惰性执行端点。纯 connector 观察止于离线 gateway 客户端。本地批量及构造出的子循环不证明被委派调度或后台生命周期，且未执行并发批量执行器。真实隔离、身份绑定副作用及 managed worker 的当前持久策略准入仍需独立验收。冻结 config/safe-mode 探针不证明撤权或只读降级。
+- 实测 dispatcher 失败覆盖 `model_tools` wrapper，包括默认嵌套 RPC 调度。MCP 观察覆盖真实 stdio 夹具与原生 trust wrapper，不代表全部服务端传输或账号策略。终端/浏览器观察止于惰性执行端点。纯 connector 观察止于离线 gateway 客户端。本地批量及构造出的子循环不证明被委派调度或后台生命周期，且未执行并发批量执行器。现在已在原生 worker 绑定下的合成读 handler 内核验当前持久策略。真实隔离、身份绑定副作用、生产包 safe-mode fallback 及完整 managed-worker 生命周期仍是独立证据缺口。早期 config/safe-mode 探针本身并不建立这些保证。
 - 无需生产账号、API key、在线模型调用、外发或真实 connector 写操作。未来在线测试需要独立、限定范围的测试配置与安全凭据交接；凭据不得进入聊天、日志或仓库。
 - 后续 [E0.2–E0.3 生命周期契约](75-native-lifecycle-contracts-zh.md)增加有界的 Project/Kanban/cron 操作入口证据，并记录缺失的受支持插件 CRUD API；不启用任何生产能力。E0.4 未测路径、依赖 E1 的写入准入、E3 编排与 E4 受控调度仍需独立验收。本切片通过不代表 M0 完成，也不允许这些写功能发布。
 
@@ -151,13 +176,14 @@ bash /absolute/path/hermes-agent/scripts/run_tests.sh \
   /absolute/path/hermes-superagent/tests/contracts/test_mcp_enforcement.py \
   /absolute/path/hermes-superagent/tests/contracts/test_shell_browser_enforcement.py \
   /absolute/path/hermes-superagent/tests/contracts/test_batch_worker_enforcement.py \
+  /absolute/path/hermes-superagent/tests/contracts/test_worker_policy_enforcement.py \
   --file-retries 0 -- \
   -o "pythonpath=/absolute/path/hermes-agent /absolute/path/hermes-superagent" -q --tb=short
 python scripts/check.py --hermes /absolute/path/hermes-agent \
   --hermes-python /absolute/path/hermes-test-venv/bin/python
 ```
 
-聚合命令中的 `python` 应使用已准备的 Python 3.14 测试解释器。较早的 RPC/MCP 文件包含 21 个参数化用例；终端/浏览器与批量/worker 文件新增各自有界用例。聚焦通过不能替代聚合验证或完整 E0.4 验收。准确执行结果以 Issue #12 及关联 PR 为准。本切片不引入宿主补丁或生产能力。
+聚合命令中的 `python` 应使用已准备的 Python 3.14 测试解释器。较早的 RPC/MCP 文件包含 21 个参数化用例；终端/浏览器、批量/worker 与持久 worker 策略文件新增各自有界用例。聚焦通过不能替代聚合验证或完整 E0.4 验收。准确执行结果以 Issue #12 及关联 PR 为准。本切片不引入宿主补丁或生产能力。
 
 当前固定来源：
 
@@ -173,3 +199,15 @@ python scripts/check.py --hermes /absolute/path/hermes-agent \
 - [终端公开 handler 与执行守卫](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/tools/terminal_tool.py)及[浏览器执行](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/tools/browser_use_cli.py)
 - [本地批量展开](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/agent/tool_call_batches.py)及[被委派子 agent 构造](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/tools/delegate_tool.py)
 - [Connector 批量调度](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/tools/connectors/dispatch.py)
+
+## 6. E0.4 完成条件与后续能力启用
+
+E0.4 验证边界、恢复限制，以及确实停用或只读的本项目受控能力面。E1 依赖 E0.4；不能将全部生产身份、批准与外部结果机制的实现反过来设为此验证包的循环前置条件。这些能力仍须在各自门禁通过前保持停用。
+
+关闭 Issue #12 前，剩余的有限证据须证明：
+
+1. Default/read-only、普通 managed、config-only 与 troubleshooting safe bootstrap 下真实生产包的暴露面及负向调度。仅报告用途的清单或测试夹具工具缺失并不足够。
+2. 原生并发批量准入及其余委派/后台与 execute-code 替代路径：提供行为边界测试，或明确不支持的接缝并验证本项目受控模式不暴露它。惰性 shell/browser 端点不证明 backend 隔离。
+3. 最终有限清单将每条路径映射到确切边界、拒绝/不暴露断言、副作用判据及已测修订。分开列出已验证的 E0.4 边界、技术上不可用模式，以及下游 E1/E3/E4/E5 启用工作。
+
+本项目可以证明自身受控写 adapter 不可用，同时独立配置的 Hermes 宿主仍暴露原生工具；不能将此描述为宿主全局只读执行约束。未来任何隔离宿主或通用 worker 的主张，都需要相应工具、凭据及 OS/进程隔离证据。
