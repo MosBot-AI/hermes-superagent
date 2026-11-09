@@ -6,7 +6,7 @@ English | [简体中文](27-fenced-read-admission-zh.md)
 
 This slice implements a default-denied **internal read coordinator** and a real SQLite policy/revocation transaction guard. Offline fixtures supply independent confirmations and resource snapshots to test that coordination. The repository does **not** supply a production identity authority, confirmation issuer, resource reader or enrollment activation flow. It does not authenticate the fixtures as real users.
 
-No command, tool, HTTP route, manifest setting or plugin callback constructs this service. Even an internal `enabled=True` is insufficient without both trusted adapters. Production status and `/personal-access` remain blocked. Pending records remain pending, the enrollment schema is now v2 with explicit exact-v1 migration, and `tasks.sqlite3` is neither opened nor adopted.
+No production command, tool, HTTP route, manifest setting or plugin callback constructs this service. Even an internal `enabled=True` is insufficient without both trusted adapters. Production status and `/personal-access` remain blocked. Pending records remain pending, the enrollment schema is now v2 with explicit exact-v1 migration, and `tasks.sqlite3` is neither opened nor adopted.
 
 This advances the E1.3/E1.4 read-admission foundation, not the whole E1 or M1 gate. [26](26-pending-enrollment-policy.md) describes the prospective policy store; [23](23-host-command-context-experiment.md) records the still-unresolved host identity path. Python objects and types are not authentication or isolation against malicious code in the same interpreter.
 
@@ -85,6 +85,8 @@ Tests combine actual SQLite transactions and independent connections with clearl
 Deterministic contention tests exercise summary-first versus revoke/policy-edit ordering, subsequent stale-confirmation denial, and expiry while `BEGIN IMMEDIATE` really waits. They prove the implemented database ordering and coordinator behavior. They do not prove that an actual Hermes/Telegram host supplies authenticated context or genuinely blocks invalidation.
 
 Native contracts import the actual namespaced directory plugin under the pinned Hermes checkout, exercise default/no-adapter refusal and confirm all normal modes retain denial diagnostics without creating storage. They are package/registration boundary tests, not live summary retrieval or end-to-end Bot authorization. Run the repository aggregate checker; historical environment-blocked socket tests are not retried or reclassified.
+
+Additional [worker-policy contracts](13-enforcement-contracts.md#26-frozen-worker-configuration-with-current-durable-read-policy) now run this same coordinator inside a genuine discovered fixture handler after native pre-import worker-policy binding. A separate connection changes durable policy while that process retains frozen config. Model-facing/direct-registry denial, both real SQLite lock orderings, one-shot replay and storage/audit/COMMIT failure recovery are verified with synthetic independent adapters. This adds no production route or authority; actual production-package safe-mode fallback and full managed-worker lifecycle remain separate gates.
 
 This slice passed 754 unit tests and 304 pinned-host contracts (1,058 total), including 100 new unit cases and three new native boundary cases. Ruff, type checks and bilingual documentation checks passed.
 

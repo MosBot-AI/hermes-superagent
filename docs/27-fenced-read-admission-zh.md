@@ -6,7 +6,7 @@
 
 本切片实现默认拒绝的**内部读取协调器**和实际 SQLite 策略/撤权事务守卫。离线 fixture 提供独立确认与资源快照来测试协调过程。仓库**没有**生产身份权威、确认签发器、资源读取器或登记激活流程，也没有把 fixture 认证为真实用户。
 
-没有命令、工具、HTTP 路由、manifest 设置或插件回调创建此服务。即使内部使用 `enabled=True`，缺少两个可信 adapter 也不能运行。生产状态及 `/personal-access` 仍保持阻断。pending 记录保持 pending，登记 schema 现为 v2；仅显式初始化会原子迁移精确匹配的 v1，不打开或接管 `tasks.sqlite3`。
+没有生产命令、工具、HTTP 路由、manifest 设置或插件回调创建此服务。即使内部使用 `enabled=True`，缺少两个可信 adapter 也不能运行。生产状态及 `/personal-access` 仍保持阻断。pending 记录保持 pending，登记 schema 现为 v2；仅显式初始化会原子迁移精确匹配的 v1，不打开或接管 `tasks.sqlite3`。
 
 这推进 E1.3/E1.4 的读取准入基础，不代表整个 E1 或 M1 门禁完成。[26](26-pending-enrollment-policy-zh.md)介绍拟议策略存储；[23](23-host-command-context-experiment-zh.md)记录尚未解决的宿主身份路径。Python 对象和类型不是身份认证，也不能隔离同一解释器中的恶意代码。
 
@@ -85,6 +85,8 @@ SQLite 协调此数据库的当前策略，不认证宿主身份、分布式所�
 确定性竞争测试验证摘要先行与撤权/策略修改的排序、后续过时确认拒绝，以及 `BEGIN IMMEDIATE` 实际等待时到期。它们证明已实现的数据库排序和协调器行为，不证明实际 Hermes/Telegram 宿主提供经过认证的 context 或真正阻止失效。
 
 原生契约在固定 Hermes checkout 下导入实际带命名空间的目录插件，验证默认/缺少 adapter 拒绝，并确认普通模式仍保留拒绝诊断、不创建存储。这是包/注册边界测试，不是实际摘要检索或端到端 Bot 授权。运行仓库统一检查器；历史环境受限 socket 测试不会被重试或重新归类。
+
+新增[worker 策略契约](13-enforcement-contracts-zh.md#26-冻结-worker-配置与当前持久读策略)在原生 import 前 worker-policy 绑定后，将同一协调器运行于真实 discovery 加载的夹具 handler 内。另一连接修改持久策略，而原进程保持冻结 config。使用独立合成 adapter 验证模型/直接 registry 拒绝、两种真实 SQLite 锁顺序、单次重放，以及存储/审计/COMMIT 失败恢复。不新增生产路径或权限；真实生产包 safe-mode fallback 与完整 managed-worker 生命周期仍是独立门禁。
 
 本切片通过 754 项单元测试和 304 项固定宿主契约（共 1,058 项），其中新增 100 项单元用例和 3 项原生边界用例。Ruff、类型检查和双语文档检查通过。
 

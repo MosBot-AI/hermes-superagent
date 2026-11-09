@@ -37,7 +37,7 @@
 
 验收：每个复用点有一个行为测试或明确 blocker；首次 `requires_hermes` 范围来自测试，不用随意版本号。输出逐工具/逐路径 enforcement 清单；有未知或可绕过的写路径时不得启用该集合，不能用 prompt 约束替代。
 
-当前 E0.4 进度：[合成失败契约、真实固定宿主 RPC/MCP 边界探针与阻断写清单](13-enforcement-contracts-zh.md)已实现。Issue #12 保持 In Progress：batch、shell/browser、委派副作用和当前 worker 策略准入仍未验证。这只是部分证据，不代表路径全部覆盖，也不允许启用写操作。
+当前 E0.4 进度：已通过有界合成端点/adapter 实现[固定宿主失败、RPC/MCP、终端/浏览器、本地/connector 批量及持久 worker 策略边界契约](13-enforcement-contracts-zh.md)。Issue #12 保持 In Progress：真实生产包 fallback/不暴露、原生并发执行及其余委派/替代代码路径，仍需边界证据或经测试的排除。生产 E1 授权仍是下游启用门禁，不是 E0.4 的循环前置条件。这只是部分证据，不代表路径全部覆盖，也不允许启用写操作。
 
 E0.6 是独立的可选客户端契约路线，不阻塞 profile-first local M0/M1 退出；除非明确列出 E0.6、E0.7、E0.8 或 E0.9，现有一般 E0 依赖均指适用的 E0.1–E0.5 门禁。E0.7/E1.6/E3.6 是启用 Primary Bot 能力时的条件门槛，不会静默成为本地收件箱或未绑定本地基线的前置条件。
 
