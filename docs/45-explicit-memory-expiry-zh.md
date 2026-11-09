@@ -4,6 +4,8 @@
 
 显式到期为本地记忆记录增加按时间判断的召回资格边界，不安排删除、不推断保留期，也不激活 provider。已有[本地记忆开启条件](31-explicit-local-memory-zh.md)、[模型工具激活](32-session-scoped-memory-tools-zh.md)及[原生 provider 准入](41-native-memory-recall-zh.md)仍各自适用。
 
+后续能力：[经审核的已到期记忆清理](73-reviewed-expired-memory-cleanup-zh.md)增加显式、有界的预览后批量遗忘。仅经过截止点仍不会删除正文；每一批都需要已审核快照和独立的操作人员动作。
+
 ## 1. 保存临时旅行计划
 
 以下合成示例使用明确 UTC 截止时间。请自行选择实际截止时间；“旅行结束前”这样的短语不提供时间戳。后续操作使用实际返回的记录 ID 和最新 revision，而非下方占位符。

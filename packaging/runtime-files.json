@@ -37,6 +37,7 @@
     "personal_agent/memory_progress.py",
     "personal_agent/memory_projection.py",
     "personal_agent/memory_query.py",
+    "personal_agent/memory_retention.py",
     "personal_agent/memory_storage.py",
     "personal_agent/memory_tool_contract.py",
     "personal_agent/native_kanban.py",

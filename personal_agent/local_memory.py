@@ -11,7 +11,7 @@ import sqlite3
 from datetime import datetime
 from uuid import uuid4
 
-from . import memory_edits, memory_expiry, memory_fts, memory_projection
+from . import memory_edits, memory_expiry, memory_fts, memory_projection, memory_retention
 from .memory_backend import MemoryError, _text, validate_expiry, validate_request
 from .memory_candidate_store import SCHEMA as CANDIDATE_SCHEMA
 from .memory_candidate_store import execute as execute_candidate
@@ -111,6 +111,7 @@ class LocalMemoryBackend:
                 "private_edit_drafts",
                 "review_candidates",
                 "record_expiry",
+                "reviewed_expired_cleanup",
                 "explicit_records",
                 "durable_write",
                 "cas",
@@ -381,6 +382,9 @@ class LocalMemoryBackend:
             raise MemoryError("not_open")
         if conn.in_transaction:
             raise MemoryError("connection_in_transaction")
+        if operation in {"expired_preview", "forget_expired"}:
+            if self._read_only or self._source_kind != "explicit_local_operator":
+                raise MemoryError("retention_scope_required")
         if operation.startswith("edit_"):
             if self._read_only or self._source_kind != "explicit_local_operator":
                 raise MemoryError("edit_scope_required")
@@ -410,6 +414,7 @@ class LocalMemoryBackend:
                     "consumer_advance",
                     "checkpoint_create",
                     "projection_disable",
+                    "forget_expired",
                 }
                 else "BEGIN"
             )
@@ -421,7 +426,9 @@ class LocalMemoryBackend:
             conn.execute("SELECT id FROM namespace").fetchone()
             memory_fts.validate_index_config(conn)
             now = datetime.fromisoformat(memory_expiry.utc_now())
-            if operation.startswith("edit_"):
+            if operation in {"expired_preview", "forget_expired"}:
+                result = memory_retention.execute(self, conn, operation, request, now)
+            elif operation.startswith("edit_"):
                 result = memory_edits.execute(self, conn, operation, request, now)
             elif operation.startswith("candidate_"):
                 result = execute_candidate(self, conn, operation, request, now)

@@ -7,6 +7,17 @@ import unicodedata
 from .memory_backend import _identifier
 
 _ERRORS = {
+    "retention_preview_too_large": (
+        "The complete preview exceeds 64000 ASCII JSON characters. Reduce --limit and review "
+        "the complete smaller batch; nothing was forgotten."
+    ),
+    "retention_future_cutoff": "The cutoff is later than the current trusted UTC time.",
+    "retention_snapshot_conflict": (
+        "Memory changed after review. Preview again and review every selected record before "
+        "using the new snapshot."
+    ),
+    "retention_empty_batch": "No expired records are selected. Nothing was forgotten.",
+    "retention_scope_required": "Expired cleanup is available only to the local operator.",
     "invalid_request": "Invalid memory command. Use /personal-memory help for fields and limits.",
     "not_found": "Memory record not found. Use an ID returned by a current list or search.",
     "invalid_cursor": "The page cursor is invalid. Start a fresh list or search.",
@@ -155,6 +166,9 @@ def _render(envelope: dict, operation: str | None, payload: dict) -> str:
     if envelope["status"] != "ok" or type(envelope["replayed"]) is not bool:
         raise ValueError("unsupported result")
     data = envelope["data"]
+    if operation in {"expired_preview", "forget_expired"}:
+        # Preserve the entire bounded review and historical receipt verbatim.
+        return json.dumps(envelope, ensure_ascii=True, sort_keys=True)
     if envelope["replayed"] and operation not in {"remember", "correct", "forget"}:
         raise ValueError("preserve historical structured result")
     if operation == "help":

@@ -40,6 +40,13 @@ HELP = (
     "edit.md is managed: apply/discard removes it including edits; for correction drafts, "
     "target correction/forgetting also removes it. "
     "Only content/topic editable, no expiry change; one active draft, no background cleanup. "
+    "expired-preview --before UTC [--limit N]; "
+    "forget-expired --before UTC [--limit N] --expected-snapshot SHA256 --request-id KEY. "
+    "Review every selected record before applying; default limit 10, maximum 20. "
+    "The complete ASCII JSON preview data must fit 64000 characters; reduce --limit if refused. "
+    "Cutoff must not be in the future. Exact retries return historical metadata, "
+    "never a new batch. "
+    "Managed files cannot roll back with SQLite; tombstones remain and capacity is not reset. "
     "index-status; index-rebuild --expected-watermark N (explicit canonical FTS maintenance). "
     "Index maintenance requires an existing current-schema store; no migration or history receipt. "
     "projection-status; projection-refresh (explicitly enable/rebuild a private Markdown view); "
@@ -151,6 +158,13 @@ def parse_command(raw_args: str) -> tuple[str, dict]:
     retention.add_argument("--keep", dest="expires_at", action="store_const", const=None)
     retention.add_argument("--expires-at")
     edit_new.add_argument("--request-id")
+    for name in ("expired-preview", "forget-expired"):
+        cleanup = commands.add_parser(name)
+        cleanup.add_argument("--before", required=True)
+        cleanup.add_argument("--limit", type=int, default=10)
+        if name == "forget-expired":
+            cleanup.add_argument("--expected-snapshot", required=True)
+            cleanup.add_argument("--request-id", required=True)
     commands.add_parser("index-status")
     index = commands.add_parser("index-rebuild")
     index.add_argument("--expected-watermark", type=int, required=True)
@@ -195,6 +209,8 @@ def parse_command(raw_args: str) -> tuple[str, dict]:
     )
     operation = {
         "edit-new": "edit_new",
+        "expired-preview": "expired_preview",
+        "forget-expired": "forget_expired",
         "index-status": "index_status",
         "index-rebuild": "index_rebuild",
         "edit-status": "edit_status",

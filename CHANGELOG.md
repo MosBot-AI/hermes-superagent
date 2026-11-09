@@ -31,6 +31,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Add operator-only [reviewed expired-memory cleanup](docs/73-reviewed-expired-memory-cleanup.md): complete bounded previews, snapshot-bound atomic forgetting and historical batch retries. No automatic deletion, tombstone removal or capacity reclamation.
+
 - Add operator-only memory FTS inspection and explicit watermark-bound rebuild from canonical records. Unsafe configuration, unknown schema and canonical damage remain refusals; no automatic repair or payload restoration.
 
 - Add explicit project-wide task date shifting with complete previews, atomic snapshot-bound apply and historical retry receipts. Terminal/undated tasks, native cards and reminders remain unchanged.
