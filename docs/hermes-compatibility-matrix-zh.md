@@ -10,6 +10,12 @@
 
 仅供评审的宿主提案保留历史基线和隔离解释器，不静默变基，也不算作最新版宿主支持。新的干净检出结果记录在 [E0.1](https://github.com/MosBot-AI/hermes-superagent/issues/1) 关联 Issue/PR 中。
 
+## E0.5 合成 MCP 夹具范围（22811165）
+
+[离线合成连接器测试框架](74-synthetic-connector-fixtures-zh.md)以当前准确宿主版本为目标，不修改 `compatibility.json`。其[原生契约](../tests/contracts/test_synthetic_connectors.py)使用真实 MCP 发现、注册表/模型工具分发和 SDK stdio 会话，连接持久假远端。测试覆盖提交后响应丢失、重启对账，以及依据声明重试故意谎报只读的工具。会话过期错误在真实 stdio RPC 之后注入，不是真实 HTTP 会话过期的证据。
+
+测试文件同时检查宿主提交及宿主声明的 MCP SDK 固定版本。确切执行结果以 Issue #13 及其关联 PR 为准；本段不更新下方历史计数。不启用真实账号、服务商、OAuth 流程、网络监听器或生产连接器。该反例证明不能信任 `readOnlyHint`，不是 E0.4 执行控制或 E1/E5 完成的证明。
+
 ## 历史 E0.1 证据（90d6b98）
 
 此前的兼容性基线固定 Hermes `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`。已验证的环境为 Linux、Python 3.14.9，以及使用固定版本 Hermes 的 `dev` 和 `test` 组构建的 PM 环境。大多数插件契约测试在临时 profile 中使用原生 `in_process` 加载。取得带版本的兼容性证据之前，保持 `semver_support_range` 为 `null`，[清单](../plugin.yaml)继续省略 `requires_hermes`。以下历史证据对应的开发目标是该确切提交。

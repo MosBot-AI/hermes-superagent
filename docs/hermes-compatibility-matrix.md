@@ -10,6 +10,12 @@ The earlier MacBook probe of this revision passed all three official real Gatewa
 
 Review-only host proposals keep their historical base and isolated interpreter. They are not silently rebased or counted as latest-host support. New clean-checkout results are recorded in the linked Issue/PR for [E0.1](https://github.com/MosBot-AI/hermes-superagent/issues/1).
 
+## E0.5 synthetic MCP fixture scope (22811165)
+
+The [offline synthetic connector harness](74-synthetic-connector-fixtures.md) targets the current exact host without changing `compatibility.json`. Its [native contracts](../tests/contracts/test_synthetic_connectors.py) use real MCP discovery, registry/model dispatch and SDK stdio sessions with a durable fake remote. Tests cover lost responses after commit, restart reconciliation, and declaration-driven retry of a deliberately dishonest read-only tool. The session-expiry error is injected after a real stdio RPC; it is not evidence of actual HTTP session expiry.
+
+The test file checks both the host commit and the host-declared MCP SDK pin. Exact executed results belong to Issue #13 and its linked PR; this paragraph does not update the historical counts below. No actual account, provider, OAuth flow, network listener or production connector is enabled. The counterexample is evidence against trusting `readOnlyHint`, not proof of E0.4 enforcement or E1/E5 completion.
+
 ## Historical E0.1 evidence (90d6b98)
 
 The previous compatibility baseline pinned Hermes `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`. The verified environment was Linux, Python 3.14.9 and the pinned Hermes PM environment with `dev` and `test` groups. Most plugin contracts exercise native `in_process` loading in temporary profiles. Keep `semver_support_range` at `null` and leave `requires_hermes` out of the [manifest](../plugin.yaml) until there is versioned compatibility evidence. That exact commit was the development target for the historical evidence below.
