@@ -16,6 +16,12 @@
 
 证据区分原生弱去重、Project 元数据归档、Kanban 归档副作用的测试限制、已保存但未注册的 cron 作业、取消请求确认及废弃尝试的 `unknown` 结果。实际一次性执行的常量输出 `no_agent` 脚本提供本地完成回执，投递受抑制。不涉及模型、线上 daemon、真实账号或外部投递。确切执行结果以 [Issue #11](https://github.com/MosBot-AI/hermes-superagent/issues/11) 及其关联 PR 为准，不更新下方历史计数。E3/E4 及线上验收仍独立进行。
 
+## E0.4 RPC/MCP 边界范围（22811165）
+
+[写路径证据](13-enforcement-contracts-zh.md)增加内存传输上的真实 RPC 服务端/default 嵌套调度，以及生成的持久客户端在响应丢失后的重试。真实 MCP discovery 和 SDK stdio 探针区分已注册插件否决与直接 registry 绕过，也区分原生不可信工具批准拒绝与虚假只读声明。唯一新增的批准替身是测试 UI 端点，不替换动作门禁。
+
+这 21 个聚焦用例测试合成副作用，不是 shell/browser 沙箱、真实 socket 传输、connector batch、线上 worker 或生产账号。所有受控写发布门禁仍阻断。准确聚合结果以 [Issue #12](https://github.com/MosBot-AI/hermes-superagent/issues/12)及关联 PR 为准；不替换下方历史计数，也不代表 E0.4 完成。
+
 ## E0.5 合成 MCP 夹具范围（22811165）
 
 [离线合成连接器测试框架](74-synthetic-connector-fixtures-zh.md)以当前准确宿主版本为目标，不修改 `compatibility.json`。其[原生契约](../tests/contracts/test_synthetic_connectors.py)使用真实 MCP 发现、注册表/模型工具分发和 SDK stdio 会话，连接持久假远端。测试覆盖提交后响应丢失、重启对账，以及依据声明重试故意谎报只读的工具。会话过期错误在真实 stdio RPC 之后注入，不是真实 HTTP 会话过期的证据。

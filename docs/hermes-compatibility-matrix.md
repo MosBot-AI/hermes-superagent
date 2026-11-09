@@ -16,6 +16,12 @@ The [native lifecycle contracts](75-native-lifecycle-contracts.md) add actual op
 
 The evidence distinguishes weak native deduplication, Project metadata archive, limits on Kanban archive side effects, a saved-but-unregistered cron job, cancel-request acknowledgement and an abandoned attempt's `unknown` result. An actual one-off constant-output `no_agent` script supplies a local completion receipt with suppressed delivery. No model, live daemon, real account or external delivery is involved. Exact executed results belong to [Issue #11](https://github.com/MosBot-AI/hermes-superagent/issues/11) and its linked PR, not the historical totals below. E3/E4 and live acceptance remain separate.
 
+## E0.4 RPC/MCP boundary scope (22811165)
+
+The [write-path evidence](13-enforcement-contracts.md) adds actual RPC server/default nested dispatch and the generated persistent client's response-loss retry over an in-memory wire. Actual MCP discovery and SDK stdio probes distinguish registered plugin veto from direct-registry bypass, and native untrusted approval denial from a dishonest read-only declaration. The only new approval substitution is the test UI endpoint; no action gate is replaced.
+
+These 21 focused cases test synthetic effects, not a shell/browser sandbox, real socket transport, connector batch, live worker or production account. Every controlled-write release gate remains blocked. Exact aggregate results belong to [Issue #12](https://github.com/MosBot-AI/hermes-superagent/issues/12) and its linked PR; this does not replace historical counts below or complete E0.4.
+
 ## E0.5 synthetic MCP fixture scope (22811165)
 
 The [offline synthetic connector harness](74-synthetic-connector-fixtures.md) targets the current exact host without changing `compatibility.json`. Its [native contracts](../tests/contracts/test_synthetic_connectors.py) use real MCP discovery, registry/model dispatch and SDK stdio sessions with a durable fake remote. Tests cover lost responses after commit, restart reconciliation, and declaration-driven retry of a deliberately dishonest read-only tool. The session-expiry error is injected after a real stdio RPC; it is not evidence of actual HTTP session expiry.

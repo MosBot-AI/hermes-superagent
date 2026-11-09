@@ -2,9 +2,9 @@
 
 [English](13-enforcement-contracts.md) | 简体中文
 
-此页记录较早的 E0 切片。当前新增的显式本地任务收件箱见 [16](16-local-task-inbox-zh.md)；它不启用这里列出的原生/外部受控写路径。
+此页记录较早的 E0 切片，以及针对 [Issue #12](https://github.com/MosBot-AI/hermes-superagent/issues/12) 的有界 RPC/MCP 后续核验。当前新增的显式本地任务收件箱见 [16](16-local-task-inbox-zh.md)；它不启用这里列出的原生/外部受控写路径。
 
-本次后续 P0 切片推进 E0.4，但不启用任何受控写能力。新增可复验的失败边界测试和机器可读发布清单。E0.4、E0/M0 与 E1 授权仍未完成。
+本次后续 P0 切片推进 E0.4，但不启用任何受控写能力。新增可复验的失败边界测试和机器可读发布清单。当前后续切片使用合成副作用核验固定宿主的真实 RPC 消费者/服务端调度及 MCP 准入；并未完成所有替代路径。E0.4、E0/M0 与 E1 授权仍未完成。
 
 ## 1. 实现了什么
 
@@ -14,7 +14,7 @@
 
 ## 2. 固定基线的实际行为
 
-新增测试通过真实 discovery 加载真实目录插件，其唯一 handler 只在内存中记录调用。没有替换 manager、context、manifest parser、registry 或 config loader。测试夹具控制 callback 行为；外层 dispatcher 测试显式注入一次逃逸的 dispatcher 异常。
+最初的执行边界测试通过真实 discovery 加载真实目录插件，其唯一 handler 只在内存中记录调用。没有替换 manager、context、manifest parser、registry 或 config loader。测试夹具控制 callback 行为；外层 dispatcher 测试显式注入一次逃逸的 dispatcher 异常。
 
 | 边界 | 观察结果 | 含义 |
 |---|---|---|
@@ -33,22 +33,50 @@ Worker 探针在全新进程中运行，因为 bootstrap policy 必须在 runtim
 
 测试位于 [原生执行边界契约](../tests/contracts/test_enforcement_boundaries.py)。该夹具仅用于测试，不会作为插件运行时工具面安装。
 
+### 2.1 嵌套 RPC 准入与响应丢失反例
+
+[RPC 契约](../tests/contracts/test_nested_rpc_enforcement.py)调用真实 `_rpc_server_loop`，不传入其可选的 dispatch 替换参数。JSON 分帧、令牌比较、工具 allowlist、调用预算、`_default_dispatch`、`model_tools`、插件 hooks/middleware 和错误日志均保留原生实现。仅 socket 协议端点使用内存替身：不创建监听器、socket 连接、沙箱、shell 或模型调用。真实加载的夹具 handler 在内存中记录副作用。
+
+- 空值/不匹配/非 ASCII 令牌、空服务端令牌、损坏 JSON、不可用工具和耗尽预算均在执行 handler 前拒绝。仅已派发尝试消耗预算；被 hook 拒绝的尝试仍计一次，并由 `tool_errors_since` 记录。
+- 正常插件否决和 callback 失败会阻断嵌套调用。显式注入的外层 hook dispatcher 逃逸异常仍会进入 handler。经 RPC 嵌套不会修复已有失败边界。
+- 两个完全相同且通过令牌验证的数据包会执行两次。令牌、工具 allowlist 和调用预算都不是 ActionIntent 或幂等键。
+- 测试执行宿主生成的 `_UDS_TRANSPORT_HEADER` 客户端，仅替换连接建立。传输替身在真实服务端/default dispatch 完成**之后**丢弃第一次响应。一次性客户端抛出异常，独立观察到一次副作用；持久客户端重连、重复相同数据包，并在第二次副作用后返回。这是在内存传输上验证生成客户端重试的反例，不是真实 UDS/TCP 或完整 session-kernel 测试。Session kernel 自定义的当前 cell 权限重新绑定及远端文件系统轮询传输在此仍未验证。
+
+### 2.2 MCP 准入与声明式只读行为
+
+[MCP 执行边界契约](../tests/contracts/test_mcp_enforcement.py)复用 [74 的 SDK stdio 外观层](74-synthetic-connector-fixtures-zh.md)。测试使用真实 MCP discovery、registry 注册、原生 wrappers 和 stdio 会话。独立只读 SQLite 观察器统计尝试/副作用；返回文案不是判据。唯一的批准替身是返回拒绝、取消或异常的合成 UI 端点，不替换原生 trust gate。
+
+- 真实注册的插件否决或 callback 异常，会在任何远端 execute 尝试之前阻断面向模型的 MCP 调度。在合成 `trust: full` 配置下，对相同参数直接 registry dispatch 会跳过该插件 callback，并产生一次夹具副作用。这**不表示**直接 registry 会跳过所有 MCP 门禁。
+- 配置为 `trust: untrusted` 的写工具，在面向模型和直接 registry 两条路径都保留原生 trust gate。拒绝、取消及批准端点失败均在获取调用服务端之前拒绝，远端 execute 尝试/副作用为零。
+- 不可信服务端上刻意虚报 `readOnlyHint: true` 的工具，在没有 trust 提示时产生副作用。该 annotation 是声明，不是副作用级授权或隔离。[74](74-synthetic-connector-fixtures-zh.md)另行记录注入会话过期错误之后由声明驱动的重放。
+
+| 清单契约 ID | 可执行断言 |
+| --- | --- |
+| `rpc_token_allowlist_budget` | `test_rpc_invalid_tokens_never_reach_default_dispatch`、`test_rpc_empty_server_token_fails_closed`、`test_rpc_framing_allowlist_and_budget_refuse_before_dispatch` |
+| `rpc_nested_hook_failure` | `test_rpc_default_dispatch_honors_plugin_denial_and_callback_failure` |
+| `rpc_outer_dispatcher_failure` | `test_rpc_outer_dispatcher_failure_still_reaches_nested_handler` |
+| `rpc_duplicate_request` | `test_rpc_identical_authenticated_requests_are_not_deduplicated` |
+| `rpc_persistent_client_response_loss` | `test_generated_rpc_client_response_loss_can_replay_an_effect` |
+| `mcp_plugin_veto_and_registry_bypass` | `test_registered_plugin_blocks_mcp_but_direct_registry_bypasses_plugin` |
+| `mcp_native_trust_gate` | `test_native_untrusted_gate_stops_before_transport` |
+| `mcp_dishonest_read_hint` | `test_untrusted_read_only_hint_is_not_effect_level_authorization` |
+
 ## 3. 受控写发布清单
 
 | 路径 | 本切片证据 | 发布状态 |
 |---|---|---|
 | `native_dispatch` | 合成 hook 与外层 dispatcher 失败契约 | 阻断；尚未接入操作级授权 |
 | `direct_registry` | 合成跳过 hooks 契约 | 阻断；handler 需自行检查操作级权限 |
-| `mcp` | 无端到端裸 MCP 写合同 | 阻断 |
+| `mcp` | 真实 SDK stdio 的插件否决/直接 registry 及原生 trust gate 边界；虚假只读反例 | 阻断；没有生产逐动作授权或凭据/结果合同 |
 | `shell` | 无 backend containment 或操作级写合同 | 阻断 |
 | `browser` | 无身份绑定写入/结果合同 | 阻断 |
-| `execute_code_rpc` | 无端到端嵌套调用权限合同 | 阻断 |
+| `execute_code_rpc` | 内存传输上的原生服务端/default 嵌套调度及生成客户端重试 | 阻断；存在重放反例，沙箱与当前 cell 权限仍未验证 |
 | `connector_batch` | 无逐项授权/部分结果/重试合同 | 阻断 |
 | `short_worker` | 无被委派副作用/撤权合同 | 阻断 |
 | `managed_worker` | 合成冻结 config 与 safe-mode 合同 | 阻断；未接入当前持久 policy 检查 |
 | `scheduled_job` | 无授权/取消/交付/对账合同 | 阻断 |
 
-“合成合同”不等于完整覆盖某类工具。内存探针通过，不能证明 shell、MCP、browser、外发或真实 worker 副作用受保护。清单内部不可变，返回独立快照；修改报告不能授予能力，也不能改变后续报告。
+`synthetic_contract` 和 `pinned_host_boundary_contract` 是有界证据标签，不等于完整覆盖某类工具。内存探针通过，不能证明 shell、MCP、browser、外发或真实 worker 副作用受保护。清单内部不可变，返回独立快照；修改报告不能授予能力，也不能改变后续报告。
 
 ## 4. 启用写操作前的要求
 
@@ -62,16 +90,34 @@ Worker 探针在全新进程中运行，因为 bootstrap policy 必须在 runtim
 
 ## 5. 证据与限制
 
-- 基线：Hermes `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`、Linux、Python 3.14、隔离测试 home，无账号凭据。
+- 当前目标：[compatibility.json](../compatibility.json)记录的 Hermes `2281116525106e3c109993ccb5dc74d02bfc1427`、Linux、Python 3.14、隔离测试 home，无账号凭据。最初切片使用 `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`；历史结果与当前确切修订运行分开记录。
 - 检查脚本现在通过官方逐文件 Hermes runner 运行 `tests/contracts` 下全部文件，同时执行单元测试、Ruff、ty 和双语文档检查。
-- 实测 dispatcher 失败仅覆盖 `model_tools` wrapper。其他 wrappers 与直接 MCP helper 仅做源码检查，没有运行端到端写操作。
+- 实测 dispatcher 失败覆盖 `model_tools` wrapper，包括默认嵌套 RPC 调度。MCP 观察覆盖真实 stdio 夹具与原生 trust wrapper，不代表全部服务端传输或账号策略。Shell、browser、connector batch、short-worker 副作用和 managed worker 的当前持久策略准入仍需独立验收。冻结 config/safe-mode 探针不证明撤权或只读降级。
 - 无需生产账号、API key、在线模型调用、外发或真实 connector 写操作。未来在线测试需要独立、限定范围的测试配置与安全凭据交接；凭据不得进入聊天、日志或仓库。
 - 后续 [E0.2–E0.3 生命周期契约](75-native-lifecycle-contracts-zh.md)增加有界的 Project/Kanban/cron 操作入口证据，并记录缺失的受支持插件 CRUD API；不启用任何生产能力。E0.4 未测路径、依赖 E1 的写入准入、E3 编排与 E4 受控调度仍需独立验收。本切片通过不代表 M0 完成，也不允许这些写功能发布。
 
-固定来源：
+使用绝对路径复现聚焦原生测试，因为官方 runner 会切换工作目录：
 
-- [插件 dispatch 行为](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/hermes_cli/plugins_dispatch.py)
-- [面向模型的工具 dispatch](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/model_tools.py)
-- [执行 middleware](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/hermes_cli/middleware.py)
-- [Managed/safe worker policy](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/agent/safe_worker_policy.py)
-- [上游安全模型](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/SECURITY.md)
+```bash
+HERMES_PYTHON=/absolute/path/hermes-test-venv/bin/python \
+bash /absolute/path/hermes-agent/scripts/run_tests.sh \
+  /absolute/path/hermes-superagent/tests/contracts/test_nested_rpc_enforcement.py \
+  /absolute/path/hermes-superagent/tests/contracts/test_mcp_enforcement.py \
+  --file-retries 0 -- \
+  -o "pythonpath=/absolute/path/hermes-agent /absolute/path/hermes-superagent" -q --tb=short
+python scripts/check.py --hermes /absolute/path/hermes-agent \
+  --hermes-python /absolute/path/hermes-test-venv/bin/python
+```
+
+聚合命令中的 `python` 应使用已准备的 Python 3.14 测试解释器。聚焦文件包含 21 个参数化用例；其通过不能替代聚合验证或完整 E0.4 验收。准确执行结果以 Issue #12 及关联 PR 为准。本切片不引入宿主补丁或生产能力。
+
+当前固定来源：
+
+- [插件 dispatch 行为](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_cli/plugins_dispatch.py)
+- [面向模型的工具 dispatch](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/model_tools.py)
+- [执行 middleware](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_cli/middleware.py)
+- [Managed/safe worker policy](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/agent/safe_worker_policy.py)
+- [上游安全模型](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/SECURITY.md)
+
+- [Code RPC 服务端](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/tools/code_execution_rpc.py)与[生成客户端](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/tools/code_execution_tool.py)
+- [MCP 原生准入与恢复](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/tools/mcp_tool_handlers.py)

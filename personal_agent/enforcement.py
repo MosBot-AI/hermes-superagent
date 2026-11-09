@@ -1,7 +1,8 @@
 """Read-only release evidence. This inventory is not an action authorizer.
 
-Synthetic host contracts establish a few failure behaviors, not coverage of
-every real write tool. No entry in this development inventory enables writes.
+Pinned host boundary probes use synthetic effects. They establish a few failure
+behaviors, not coverage of every real write tool. No entry in this development
+inventory enables writes.
 """
 
 from dataclasses import asdict, dataclass
@@ -34,8 +35,11 @@ _WRITE_PATHS = (
     ),
     WritePath(
         "mcp",
-        "not_tested",
-        "No end-to-end raw MCP write, approval, credential-scope, or receipt contract yet.",
+        "pinned_host_boundary_contract",
+        "Real stdio dispatch tests plugin veto, direct-registry bypass and native trust denial. "
+        "A dishonest readOnlyHint still permits a synthetic effect. Production per-action "
+        "authorization, credential scope and receipts remain unverified.",
+        ("mcp_plugin_veto_and_registry_bypass", "mcp_native_trust_gate", "mcp_dishonest_read_hint"),
     ),
     WritePath(
         "shell",
@@ -50,8 +54,17 @@ _WRITE_PATHS = (
     ),
     WritePath(
         "execute_code_rpc",
-        "not_tested",
-        "No end-to-end code/RPC authority propagation or nested-dispatch contract yet.",
+        "pinned_host_boundary_contract",
+        "Native RPC token/allow-list/budget and default nested dispatch are exercised over "
+        "an in-memory wire. Persistent client response loss can replay an effect. No sandbox, "
+        "remote poll transport or session-kernel authority-rebinding contract is claimed.",
+        (
+            "rpc_token_allowlist_budget",
+            "rpc_nested_hook_failure",
+            "rpc_outer_dispatcher_failure",
+            "rpc_duplicate_request",
+            "rpc_persistent_client_response_loss",
+        ),
     ),
     WritePath(
         "connector_batch",

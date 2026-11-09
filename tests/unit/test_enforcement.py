@@ -20,15 +20,20 @@ def test_every_known_or_unlisted_write_path_remains_blocked():
     assert not any(row["controlled_writes_enabled"] for row in rows)
 
 
-def test_synthetic_contracts_do_not_become_real_connector_coverage():
+def test_boundary_contracts_do_not_become_full_write_path_coverage():
     rows = {row["path_id"]: row for row in build_enforcement_inventory()["paths"]}
     assert rows["native_dispatch"]["evidence"] == "synthetic_contract"
     assert rows["managed_worker"]["evidence"] == "synthetic_contract"
+    for path in ("mcp", "execute_code_rpc"):
+        assert rows[path]["evidence"] == "pinned_host_boundary_contract"
+        assert rows[path]["contract_ids"]
+        assert rows[path]["controlled_writes_enabled"] is False
+        assert rows[path]["release_gate"] == "blocked"
+    assert "mcp_native_trust_gate" in rows["mcp"]["contract_ids"]
+    assert "rpc_persistent_client_response_loss" in rows["execute_code_rpc"]["contract_ids"]
     for path in (
-        "mcp",
         "shell",
         "browser",
-        "execute_code_rpc",
         "connector_batch",
         "short_worker",
         "scheduled_job",
