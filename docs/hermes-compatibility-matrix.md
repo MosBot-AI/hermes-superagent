@@ -22,6 +22,12 @@ The [offline synthetic connector harness](74-synthetic-connector-fixtures.md) ta
 
 The test file checks both the host commit and the host-declared MCP SDK pin. Exact executed results belong to Issue #13 and its linked PR; this paragraph does not update the historical counts below. No actual account, provider, OAuth flow, network listener or production connector is enabled. The counterexample is evidence against trusting `readOnlyHint`, not proof of E0.4 enforcement or E1/E5 completion.
 
+## E0.9 native memory scope (22811165)
+
+The [native memory contract matrix](76-native-memory-contracts.md) separates provider discovery/admission, builtin capacity/reload, native history retrieval and lifecycle/context wiring from the existing recall and checkpoint boundaries. Exact execution results belong to [Issue #42](https://github.com/MosBot-AI/hermes-superagent/issues/42) and its linked PR; this addition does not replace historical counts below.
+
+Unsupported isolation, cross-profile authorization and durable source-bound checkpoints remain explicit. The project provider stays API v1 and required checkpointing fails closed. This test-only verification does not enable automatic capture, remote identity, a second provider slot or a production deployment.
+
 ## Historical E0.1 evidence (90d6b98)
 
 The previous compatibility baseline pinned Hermes `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`. The verified environment was Linux, Python 3.14.9 and the pinned Hermes PM environment with `dev` and `test` groups. Most plugin contracts exercise native `in_process` loading in temporary profiles. Keep `semver_support_range` at `null` and leave `requires_hermes` out of the [manifest](../plugin.yaml) until there is versioned compatibility evidence. That exact commit was the development target for the historical evidence below.

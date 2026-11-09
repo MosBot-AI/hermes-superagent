@@ -33,7 +33,7 @@ Complete a safe, reliable vertical slice first, then add connectors, entry point
 
 - E0.8: Verify Voice Provider Contracts (M0, In progress; offline subset only): depends on E0.1/E0.2, using E0.4/E0.7 identity findings where applicable. Verify pinned ASR/TTS, native audio/live protocols, credentials, cancellation/streaming contracts, public adapter seams and unsupported modes. See [19](19-unified-voice-provider-contracts.md).
 
-- E0.9: Verify Memory Provider Contracts (M0, Backlog): depends on E0.1/E0.2/E0.5. Verify actual native loading/lifecycle/single-external-provider, profile/cron/worker context, compression checkpoint and source-reference contracts, including unsupported isolation modes. This gate applies when personal memory is enabled; it does not block the existing local task loop. See [30](30-pluggable-memory-contracts.md).
+- E0.9: Verify Memory Provider Contracts (M0, In Progress; bounded native-contract verification): depends on E0.1/E0.2/E0.5. Verify actual native loading/lifecycle/single-external-provider, profile/cron/worker context, compression checkpoint and source-reference contracts, including unsupported isolation modes. This gate applies when personal memory is enabled; it does not block the existing local task loop. See [30](30-pluggable-memory-contracts.md).
 
 Acceptance: Every reuse point has a behavioral test or an explicit blocker; the initial `requires_hermes` range comes from tests, not arbitrary version numbers. Produce a per-tool, per-path enforcement inventory. A capability set must not be enabled while it has unknown or bypassable write paths; prompt constraints cannot substitute for enforcement.
 
@@ -76,7 +76,7 @@ Dependencies follow the trust mode. Explicit trusted-profile local memory reuses
 
 [43](43-native-checkpoint-boundary.md) adds pinned-host evidence gates and unwired candidate preparation; full checkpointing still needs source-coverage handoff bound to native commit, not UID presence or a successful return alone.
 
-E0.9/E2.9 remain Backlog. E2.8 now has the optional read-only native recall slice in [41](41-native-memory-recall.md); ingestion and durable conversation checkpointing remain open. E2.6/E2.7 are In Progress only for the narrow explicit-record precursor below. [30](30-pluggable-memory-contracts.md) is the complete design, not an implementation report. Existing E2.1–E2.5 retain their checklist IDs and local-task evidence; no duplicate work packages are created.
+E0.9 is In Progress with the pinned native-contract matrix in [76](76-native-memory-contracts.md); E2.9 remains Backlog. E2.8 now has the optional read-only native recall slice in [41](41-native-memory-recall.md); ingestion and durable conversation checkpointing remain open. E2.6/E2.7 are In Progress only for the narrow explicit-record precursor below. [30](30-pluggable-memory-contracts.md) is the complete design, not an implementation report. Existing E2.1–E2.5 retain their checklist IDs and local-task evidence; no duplicate work packages are created.
 
 Acceptance: Long-term facts have provenance or inference labels; they are not readable across profiles/group chats; retrieval tests after correction and deletion pass.
 

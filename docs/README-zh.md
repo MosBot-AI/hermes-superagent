@@ -130,3 +130,5 @@ E9 已选定原生 worker 路由设计，并实现离线约束验证器和部分
 - [离线合成连接器测试夹具](74-synthetic-connector-fixtures-zh.md)：持久假远端副作用、有界不可信来源、故障/对账观察器和真实固定宿主 MCP stdio 反例；仅用于测试，不提供生产权限。
 
 - [原生插件与调度生命周期契约](75-native-lifecycle-contracts-zh.md)：固定版本的 Project/Kanban/cron 操作入口探测、弱去重及如实的取消/历史边界；不新增生产 CRUD API 或调度权限。
+
+- [原生记忆提供方契约](76-native-memory-contracts-zh.md): 固定版本发现、内置存储、历史检索、生命周期/上下文及检查点边界；核验不代表实现持久 v2。

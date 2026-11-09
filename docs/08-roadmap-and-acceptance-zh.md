@@ -33,7 +33,7 @@
 
 - E0.8：Verify Voice Provider Contracts（M0，In progress，仅离线子集）：依赖 E0.1/E0.2，适用时采用 E0.4/E0.7 身份发现。核验固定 ASR/TTS、原生音频/live 协议、凭据、取消和流式契约，列明公开 adapter seam 与不支持模式。见 [19](19-unified-voice-provider-contracts-zh.md)。
 
-- E0.9：Verify Memory Provider Contracts（M0，Backlog）：依赖 E0.1/E0.2/E0.5。核验真实原生加载/生命周期/单外部 provider、profile/cron/worker 上下文、压缩 checkpoint 与来源引用契约，包括不支持的隔离模式。此门禁仅适用于启用个人记忆，不阻塞已有本地任务闭环。见 [30](30-pluggable-memory-contracts-zh.md)。
+- E0.9：Verify Memory Provider Contracts（M0，In Progress；有界原生契约核验）：依赖 E0.1/E0.2/E0.5。核验真实原生加载/生命周期/单外部 provider、profile/cron/worker 上下文、压缩 checkpoint 与来源引用契约，包括不支持的隔离模式。此门禁仅适用于启用个人记忆，不阻塞已有本地任务闭环。见 [30](30-pluggable-memory-contracts-zh.md)。
 
 验收：每个复用点有一个行为测试或明确 blocker；首次 `requires_hermes` 范围来自测试，不用随意版本号。输出逐工具/逐路径 enforcement 清单；有未知或可绕过的写路径时不得启用该集合，不能用 prompt 约束替代。
 
@@ -78,7 +78,7 @@ E0.6 是独立的可选客户端契约路线，不阻塞 profile-first local M0/
 
 [43](43-native-checkpoint-boundary-zh.md) 增加固定宿主证据门禁与未接入运行时的候选准备；完整检查点仍需与原生提交绑定的来源覆盖交接，不能仅靠 UID 或返回成功。
 
-E0.9/E2.9 保持 Backlog。E2.8 现有 [41](41-native-memory-recall-zh.md) 的可选只读原生召回切片；摄取和持久会话检查点仍待实现。E2.6/E2.7 仅因下述狭窄显式记录先导切片设为 In Progress。[30](30-pluggable-memory-contracts-zh.md) 是完整方案，不是实现报告。现有 E2.1–E2.5 保留其清单 ID 和本地任务证据，不重复创建工作包。
+E0.9 进入 In Progress，固定原生契约矩阵见 [76](76-native-memory-contracts-zh.md)；E2.9 保持 Backlog。E2.8 现有 [41](41-native-memory-recall-zh.md) 的可选只读原生召回切片；摄取和持久会话检查点仍待实现。E2.6/E2.7 仅因下述狭窄显式记录先导切片设为 In Progress。[30](30-pluggable-memory-contracts-zh.md) 是完整方案，不是实现报告。现有 E2.1–E2.5 保留其清单 ID 和本地任务证据，不重复创建工作包。
 
 验收：长期事实都有 provenance 或 inference 标记；跨 profile/群聊不可读；纠错与删除后的检索测试通过。
 

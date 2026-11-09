@@ -2,6 +2,8 @@
 
 English | [简体中文](43-native-checkpoint-boundary-zh.md)
 
+Current E0.9 update: [76](76-native-memory-contracts.md) places these existing checkpoint contracts in the current Hermes `22811165` verification matrix. The original evidence and source links below retain their historical pin. A verified limitation can satisfy a verification criterion without implementing the missing E2.8 durable guarantee.
+
 Status: pinned-host compatibility tests and an internal, I/O-free evidence preparer are implemented. **No native checkpoint-v2, automatic ingestion, source resolver or runtime configuration is enabled.** The optional [native recall provider](41-native-memory-recall.md) remains API v1. This is a capability-boundary result, not an end-to-end memory checkpoint implementation.
 
 ## 1. What the Pinned Host Actually Provides
@@ -46,7 +48,7 @@ A general source-reference checkpoint needs a host-owned handoff that:
 
 This can build on the existing UID, revision and compression transaction machinery; it need not duplicate the host transcript store. It remains a proposal, not a patched or tested host API. Provider-side work still includes explicit capture/retention opt-in, profile/session/context admission, exact source reconciliation, bounded transactional receipts, idempotency, revoke/forget races and recovery after an uncertain commit. Read-only recall opt-in is not permission for automatic capture or extra model-provider data sharing.
 
-Until those contracts are implemented and tested, leave the provider at API v1 and keep strict checkpoint requirements failing closed. Do not add a flag that reports v2 support without its durable guarantees. E0.9 and E2.8 are not complete.
+Until those contracts are implemented and tested, leave the provider at API v1 and keep strict checkpoint requirements failing closed. Do not add a flag that reports v2 support without its durable guarantees. This historical slice did not complete E0.9 or E2.8; current E0.9 verification is tracked separately in [76](76-native-memory-contracts.md), while E2.8 durable integration remains open.
 
 ## 5. Verification and Evidence
 
