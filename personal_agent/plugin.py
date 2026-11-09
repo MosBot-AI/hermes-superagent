@@ -379,7 +379,8 @@ def register(ctx: PluginContext) -> None:
                 "remember | list | search | search-terms | recall | changes | show | "
                 "correct | forget | export | candidate-list | candidate-show | "
                 "candidate-accept | candidate-discard | candidate-purge-expired | "
-                "projection-status | projection-refresh | projection-disable | help"
+                "projection-status | projection-refresh | projection-disable | "
+                "edit-status | edit-create | edit-preview | edit-apply | edit-discard | help"
             ),
         )
 

@@ -16,6 +16,7 @@ ENTRY_POINT_GROUP = "hermes_personal_agent.memory_backends"
 _CAPABILITIES = frozenset(
     {
         "private_markdown_projection",
+        "private_edit_drafts",
         "review_candidates",
         "record_expiry",
         "explicit_records",
@@ -56,6 +57,11 @@ _DESCRIPTOR_FIELDS = {
     *_LIMITS,
 }
 _OPERATION_CAPABILITIES = {
+    "edit_status": {"private_edit_drafts"},
+    "edit_create": {"private_edit_drafts", "durable_write", "cas", "idempotency"},
+    "edit_preview": {"private_edit_drafts"},
+    "edit_apply": {"private_edit_drafts", "durable_write", "cas", "idempotency"},
+    "edit_discard": {"private_edit_drafts", "durable_write"},
     "projection_disable": {"private_markdown_projection", "durable_write"},
     "projection_status": {"private_markdown_projection"},
     "projection_refresh": {"private_markdown_projection", "durable_write"},

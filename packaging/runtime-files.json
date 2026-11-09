@@ -28,6 +28,7 @@
     "personal_agent/memory_candidate_store.py",
     "personal_agent/memory_candidate_tool_contract.py",
     "personal_agent/memory_checkpoints.py",
+    "personal_agent/memory_edits.py",
     "personal_agent/memory_expiry.py",
     "personal_agent/memory_fts.py",
     "personal_agent/memory_lifecycle.py",

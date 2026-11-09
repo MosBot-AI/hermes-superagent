@@ -57,6 +57,10 @@ def validate_expiry(value: object, *, error_code: str = "invalid_request") -> st
 
 
 def validate_request(operation: str, payload: dict) -> dict:
+    if isinstance(operation, str) and operation.startswith("edit_"):
+        from .memory_edits import validate
+
+        return validate(operation, payload)
     if isinstance(operation, str) and operation.startswith("candidate_"):
         from .memory_candidate_store import validate
 
@@ -194,7 +198,7 @@ class MemoryService:
         request = validate_request(operation, payload)
         self.descriptor.check_request(operation, request)
         result = self.backend.execute(operation, request)
-        if operation.startswith("candidate_") or operation in {
+        if operation.startswith(("candidate_", "edit_")) or operation in {
             "remember",
             "correct",
             "forget",

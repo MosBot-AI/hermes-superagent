@@ -13,6 +13,8 @@ Hermes 原生 personal-agent 插件，目标是让一个主 agent 管理项目�
 
 [有界中文自动回忆](docs/69-chinese-automatic-recall-zh.md)：共享本地切分及保守匹配门槛，附固定合成评估；不改变显式检索或权限。
 
+[私有 Markdown 记忆编辑草稿](docs/70-private-memory-edit-drafts-zh.md): 显式预览、绑定摘要与 revision 的更正，不编辑生成投影。
+
 
 ## 当前进度
 

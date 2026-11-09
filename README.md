@@ -13,6 +13,8 @@ The [native memory workbench](docs/67-readable-memory-workbench.md) now uses rea
 
 [Bounded Chinese automatic recall](docs/69-chinese-automatic-recall.md): shared local query planning and conservative matching, with fixed synthetic evidence; explicit search and authority are unchanged.
 
+[Private Markdown memory edit drafts](docs/70-private-memory-edit-drafts.md): explicit preview and digest/revision-bound correction without editing the generated projection.
+
 
 ## Current status
 
