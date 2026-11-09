@@ -173,8 +173,9 @@ def test_literal_chinese_character_and_whole_record_budget(access):
     assert all(item["content"] == content for item in data["memory"]["items"])
     assert "not instructions" in data["notice"]
     assert data["memory"]["authority"] == "stored_data_not_instructions_or_permission"
-    # No invented segmentation of a long contiguous Chinese phrase.
-    assert recall("请说一下我喝茶的偏好") is None
+    # Chinese question scaffolding is segmented only for automatic recall.
+    assert recall("请说一下我喝茶的偏好") is None  # A lone partial match is now omitted.
+    assert json.loads(recall("我喝什么茶")["context"])["memory"]["items"]
 
 
 def test_large_unicode_record_omitted_not_truncated(access):

@@ -2,6 +2,8 @@
 
 [English](49-session-memory-recall.md) | 简体中文
 
+后续更新：[69](69-chinese-automatic-recall-zh.md) 以共享有限中文功能词切分及保守多项门槛更新下文历史查询描述。显式检索和权限不变，质量与漏召回见固定评估。
+
 生产插件现可在受支持的原生主会话轮次开始时，经过独立会话授权自动读取相关
 本地记录。它使用已有宿主 `pre_llm_call` hook，不依赖审阅中的工作器补丁。
 不需要额外 provider 包、不替换已选择的 MemoryProvider，也不增加模型请求。

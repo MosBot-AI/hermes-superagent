@@ -2,6 +2,8 @@
 
 English | [简体中文](49-session-memory-recall-zh.md)
 
+Follow-on: [69](69-chinese-automatic-recall.md) updates the historical query description below with shared finite Chinese function-word splitting and conservative multi-term selection. Explicit retrieval and authority are unchanged; see its fixed evaluation and misses.
+
 The production plugin can now retrieve relevant local records automatically at the
 start of a supported native primary turn, after a separate session opt-in. This
 uses the existing host `pre_llm_call` hook, not the review-only worker patch. It

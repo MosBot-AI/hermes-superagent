@@ -2,6 +2,8 @@
 
 [English](41-native-memory-recall.md) | 简体中文
 
+后续更新：[69](69-chinese-automatic-recall-zh.md) 以共享有限中文功能词切分及保守多项门槛更新下文历史查询描述。显式检索和权限不变，质量与漏召回见固定评估。
+
 另一条受支持路径：[49](49-session-memory-recall-zh.md)在独立插件内增加另行开启的自动召回，无需安装/选择本 provider。若分别启用，两条路径可能重叠；均不进行提取或 checkpoint-v2。
 
 后续：[45](45-explicit-memory-expiry-zh.md)要求 schema v5，并按每次新召回捕获的 UTC 墙上时钟时间排除已到期记录。只读 provider 永远不迁移。恢复召回前，获准打开存储的命令或已经激活的模型工具操作均可升级自有旧存储；建议操作员使用 /personal-memory list 主动完成升级。评估时间在实际取得 SQLite 快照后采样，而非在等待锁之前。不更改 provider 选择或配置。到期无法撤回已进入原生历史或模型上下文的召回包。
