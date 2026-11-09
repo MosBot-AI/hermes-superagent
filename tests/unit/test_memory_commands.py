@@ -192,3 +192,49 @@ def test_unsafe_storage_rejected_without_repair(private_store, tmp_path, kind):
         with memory_storage.open_memory_backend(home, "session"):
             pass
     assert target.read_text() == "DO NOT MODIFY"
+
+
+def test_search_terms_command_current_content_pagination_and_expiry(local):
+    _, call, _, _, _ = local
+    ids = []
+    for n, text in enumerate(("北京 Hermes alpha", "北京 Hermes beta", "上海 Hermes gamma")):
+        ids.append(call(f'remember "{text}" --request-id terms-{n}')["data"]["record_id"])
+    command = 'search-terms "北京" "Hermes" --limit 1'
+    page = call(command)["data"]
+    assert [item["record_id"] for item in page["items"]] == [ids[1]]
+    assert page["has_more"] and page["next_cursor"] == ids[1]
+    second = call(command + f" --after {page['next_cursor']}")["data"]
+    assert [item["record_id"] for item in second["items"]] == [ids[0]]
+    assert not second["has_more"]
+    assert call('search-terms "北京" "hermes"')["data"]["items"] == []
+    call(f'correct {ids[1]} --text "上海 Hermes beta" --expected-revision 1 --request-id terms-c')
+    assert call(command)["data"]["items"][0]["record_id"] == ids[0]
+    call(f"forget {ids[0]} --expected-revision 1 --request-id terms-f")
+    assert call(command)["data"]["items"] == []
+    expired = call(
+        'remember "北京 Hermes expired" --expires-at 2000-01-01T00:00:00Z --request-id terms-e'
+    )["data"]["record_id"]
+    assert call(command)["data"]["items"] == []
+    inspected = call(command + " --include-expired")["data"]["items"]
+    assert len(inspected) == 1 and inspected[0]["record_id"] == expired and inspected[0]["expired"]
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "search-terms",
+        'search-terms ""',
+        'search-terms "北京" "北京"',
+        "search-terms " + " ".join(f"term{i}" for i in range(9)),
+        'search-terms "' + "x" * 129 + '"',
+        "search-terms 北京 --limit 51",
+        "search-terms 北京 --after fake",
+        "search-terms 北京 --profile other",
+        "search-terms 北京 --query 北京",
+    ],
+)
+def test_search_terms_command_invalid_before_storage(local, raw):
+    _, call, _, _, opened = local
+    result = call(raw)
+    assert result["error"]["code"] == "invalid_request"
+    assert not opened

@@ -21,6 +21,8 @@ VALID = [
     (READ, {"action": "show", "record_id": ID}),
     (READ, {"action": "search", "query": "偏好", "after": None}),
     (READ, {"action": "search", "query": "x" * 128, "limit": 1}),
+    (READ, {"action": "search_terms", "terms": ["北京", "Hermes"], "include_expired": True}),
+    (READ, {"action": "search_terms", "terms": ["x" * 128], "limit": 50, "after": ID}),
     (WRITE, {"action": "remember", "content": "Synthetic\n\tnote", "request_id": "a._-9"}),
     (
         WRITE,
@@ -69,6 +71,11 @@ def test_shared_validation_and_input_immutability(tool, arguments):
         (READ, {"action": "show", "record_id": ID, "limit": 1}),
         (READ, {"action": "list", "query": "x"}),
         (READ, {"action": "search"}),
+        (READ, {"action": "search_terms"}),
+        (READ, {"action": "search_terms", "query": "北京"}),
+        (READ, {"action": "search", "terms": ["北京"]}),
+        (WRITE, {"action": "search_terms", "terms": ["北京"]}),
+        (READ, {"action": "search_terms", "terms": ["北京"], "max_chars": 6000}),
         (WRITE, {"action": "remember", "content": "x"}),
         (WRITE, {"action": "remember", "request_id": "x"}),
         (WRITE, {"action": "remember", **CAS, "content": "x"}),
@@ -140,7 +147,12 @@ def test_canonical_uuid4_required(value, arguments, field):
 @pytest.mark.parametrize(
     "schema,name,actions,required",
     [
-        (PERSONAL_MEMORY_READ_SCHEMA, READ, ["list", "show", "search", "recall"], ["action"]),
+        (
+            PERSONAL_MEMORY_READ_SCHEMA,
+            READ,
+            ["list", "show", "search", "search_terms", "recall"],
+            ["action"],
+        ),
         (
             PERSONAL_MEMORY_WRITE_SCHEMA,
             WRITE,
@@ -182,3 +194,31 @@ def test_schema_bounds_and_receipt_guidance():
         "not current state",
     ):
         assert phrase in PERSONAL_MEMORY_WRITE_SCHEMA["description"]
+
+
+@pytest.mark.parametrize(
+    "terms",
+    [
+        None,
+        "北京",
+        [],
+        [""],
+        [" "],
+        ["北京", "北京"],
+        [True],
+        ["x" * 129],
+        ["x\n"],
+        [f"term{i}" for i in range(9)],
+    ],
+)
+def test_search_terms_rejects_invalid_term_lists(terms):
+    with pytest.raises(MemoryError, match="invalid_request"):
+        normalize_memory_tool_request(READ, {"action": "search_terms", "terms": terms})
+
+
+def test_search_terms_schema_documents_bounded_distinct_literal_terms():
+    field = PERSONAL_MEMORY_READ_SCHEMA["parameters"]["properties"]["terms"]
+    assert field["type"] == "array"
+    assert field["minItems"] == 1 and field["maxItems"] == 8 and field["uniqueItems"]
+    assert field["items"] == {"type": "string", "minLength": 1, "maxLength": 128}
+    assert "literal" in field["description"]

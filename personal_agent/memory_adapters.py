@@ -22,6 +22,7 @@ _CAPABILITIES = frozenset(
         "cas",
         "idempotency",
         "literal_search",
+        "multi_term_fts",
         "bounded_record_export",
         "bounded_recall",
         "metadata_changes",
@@ -60,6 +61,7 @@ _OPERATION_CAPABILITIES = {
     "get": {"explicit_records"},
     "list": {"explicit_records"},
     "search": {"explicit_records", "literal_search"},
+    "search_terms": {"explicit_records", "multi_term_fts"},
     "recall": {"explicit_records", "literal_search", "bounded_recall"},
     "export": {"explicit_records", "bounded_record_export"},
     "changes": {"explicit_records", "metadata_changes"},
@@ -135,7 +137,10 @@ class BackendDescriptor:
                 raise MemoryError("backend_limit_exceeded")
         if "limit" in payload and payload["limit"] > limits["max_page_records"]:
             raise MemoryError("backend_limit_exceeded")
-        if any(len(query) > limits["max_query_chars"] for query in payload.get("queries", [])):
+        if any(
+            len(query) > limits["max_query_chars"]
+            for query in [*payload.get("queries", []), *payload.get("terms", [])]
+        ):
             raise MemoryError("backend_limit_exceeded")
 
 

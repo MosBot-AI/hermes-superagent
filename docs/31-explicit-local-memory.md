@@ -8,6 +8,9 @@ Follow-on: [32](32-session-scoped-memory-tools.md) adds separately configured an
 
 Status: an implemented, explicitly enabled local precursor of E2.6/E2.7, not completion of the [full memory design](30-pluggable-memory-contracts.md). Users can save, inspect, correct and forget short records inside an existing native Hermes session. This slice adds no memory model tool, automatic recall/extraction, native MemoryProvider bridge, package loader, Markdown projection, vector service or remote account.
 
+Current follow-on: [explicit multi-term FTS search](66-local-memory-full-text-search.md) adds schema v7 and transactional indexing. The literal-search behavior described here is unchanged.
+
+
 ## 1. Enable the Narrow Local Mode
 
 Use the pinned Hermes version and an isolated trusted single-user profile, as described in [28](28-profile-first-local-conversations.md). Preserve all other settings and explicitly add:
