@@ -9,6 +9,8 @@ The [local full-text memory search guide](docs/66-local-memory-full-text-search.
 
 The [native memory workbench](docs/67-readable-memory-workbench.md) now uses readable views; prefix `/personal-memory --json` for structured integrations. Model tool JSON is unchanged.
 
+[Private Markdown memory projection](docs/68-private-memory-projection.md): explicit refresh, fixed private files and fenced crash recovery; SQLite remains canonical.
+
 
 ## Current status
 

@@ -29,6 +29,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Add an opt-in private Markdown memory projection with explicit status/refresh/disable, safe mutation invalidation and crash recovery. Schema v8 requires a compatible writable migration; no model file tools or Markdown import.
+
 - Add explicit multi-term local memory search with transactional FTS5 and short Chinese substring checks; preserve literal search/recall. Schema v7 atomically migrates owned stores and requires FTS5 trigram plus secure-delete support; read-only access never migrates.
 
 - Add explicit digest-bound backup task preview and recovery as a fresh local record, with atomic retry receipts; no live-store replacement or execution-state restoration.

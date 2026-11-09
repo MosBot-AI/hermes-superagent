@@ -33,6 +33,7 @@
     "personal_agent/memory_lifecycle.py",
     "personal_agent/memory_presentation.py",
     "personal_agent/memory_progress.py",
+    "personal_agent/memory_projection.py",
     "personal_agent/memory_storage.py",
     "personal_agent/memory_tool_contract.py",
     "personal_agent/native_kanban.py",

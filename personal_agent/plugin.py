@@ -378,7 +378,8 @@ def register(ctx: PluginContext) -> None:
             args_hint=(
                 "remember | list | search | search-terms | recall | changes | show | "
                 "correct | forget | export | candidate-list | candidate-show | "
-                "candidate-accept | candidate-discard | candidate-purge-expired | help"
+                "candidate-accept | candidate-discard | candidate-purge-expired | "
+                "projection-status | projection-refresh | projection-disable | help"
             ),
         )
 

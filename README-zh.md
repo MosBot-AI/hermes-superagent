@@ -9,6 +9,8 @@ Hermes 原生 personal-agent 插件，目标是让一个主 agent 管理项目�
 
 [原生记忆工作台](docs/67-readable-memory-workbench-zh.md) 现在使用可读视图；结构化集成请使用 `/personal-memory --json` 前缀。模型工具 JSON 不变。
 
+[私有 Markdown 记忆投影](docs/68-private-memory-projection-zh.md): 显式刷新、固定私有文件和隔离式崩溃恢复；SQLite 仍为权威。
+
 
 ## 当前进度
 
