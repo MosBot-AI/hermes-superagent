@@ -126,3 +126,5 @@ E9 已选定原生 worker 路由设计，并实现离线约束验证器和部分
 - [记忆索引检查与恢复](72-memory-index-recovery-zh.md)：检查权威记录与索引对应关系，在当前事件水位下显式重建派生 FTS，不恢复已遗忘记录。
 
 - [经审核的已到期记忆清理](73-reviewed-expired-memory-cleanup-zh.md)：检查完整有界批次，再遗忘准确匹配的快照，保留历史重试回执并清理受管理文件。
+
+- [离线合成连接器测试夹具](74-synthetic-connector-fixtures-zh.md)：持久假远端副作用、有界不可信来源、故障/对账观察器和真实固定宿主 MCP stdio 反例；仅用于测试，不提供生产权限。

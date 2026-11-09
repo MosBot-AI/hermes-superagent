@@ -43,7 +43,7 @@ Tests use synthetic inputs, temporary homes, and blocked Python socket connectio
 
 1. E0.3: real public-operation, idempotency, and receipt contracts for Project/Kanban/cron.
 2. E0.4: per-tool/path coverage, hook/dispatcher/middleware failures, safe mode, managed workers, and revocation. A write set cannot be enabled before its gate passes.
-3. E0.5: expand synthetic inputs into source/connector failure fixtures. This slice has no complete connector simulator.
+3. E0.5: the later [offline synthetic connector fixtures](74-synthetic-connector-fixtures.md) add durable fake-remote and pinned-host MCP stdio scenarios. This historical foundation slice alone had no complete connector simulator; the later harness does not complete E0.4, E1, E5 or real-provider acceptance.
 4. E1: verified owner identity, grants, intent hashes, approvals, transactional admission/revocation, and redacted audit.
 5. Only after these gates, add domain storage and the reliable reminder/task vertical slice. E9 routing remains Backlog; automatic switching does not jump ahead.
 

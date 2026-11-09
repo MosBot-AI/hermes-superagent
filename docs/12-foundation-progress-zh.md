@@ -43,7 +43,7 @@
 
 1. E0.3：Project/Kanban/cron 公共操作路径、幂等和 receipt 的真实合同。
 2. E0.4：逐工具/路径覆盖，hook、dispatcher、middleware、safe mode、managed worker 的异常与撤权行为。此项通过前不能启用相应写集合。
-3. E0.5：扩展成 source/connector 故障 fixtures；本次只有合成调用输入，无完整 connector 模拟器。
+3. E0.5：后续[离线合成连接器测试夹具](74-synthetic-connector-fixtures-zh.md)增加持久假远端及固定宿主 MCP stdio 场景。此历史基础切片本身没有完整连接器模拟器；后续测试框架不完成 E0.4、E1、E5 或真实服务商验收。
 4. E1：verified owner、grant、intent hash、审批、事务准入/撤权和脱敏审计。
 5. 完成这些门槛后，再接领域存储、可靠提醒与任务纵切。E9 路由继续 Backlog，不抢先上线自动切换。
 

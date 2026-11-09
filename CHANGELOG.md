@@ -31,6 +31,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Add reusable [offline synthetic connector fixtures](docs/74-synthetic-connector-fixtures.md) with durable fake-remote effects, finite idempotency, recovery oracles and pinned-host MCP stdio failure tests. Source prose and read-only hints grant no authority; production connectors remain disabled.
+
 - Add operator-only [reviewed expired-memory cleanup](docs/73-reviewed-expired-memory-cleanup.md): complete bounded previews, snapshot-bound atomic forgetting and historical batch retries. No automatic deletion, tombstone removal or capacity reclamation.
 
 - Add operator-only memory FTS inspection and explicit watermark-bound rebuild from canonical records. Unsafe configuration, unknown schema and canonical damage remain refusals; no automatic repair or payload restoration.
