@@ -59,6 +59,7 @@ _DESCRIPTOR_FIELDS = {
 _OPERATION_CAPABILITIES = {
     "edit_status": {"private_edit_drafts"},
     "edit_create": {"private_edit_drafts", "durable_write", "cas", "idempotency"},
+    "edit_new": {"private_edit_drafts", "durable_write", "idempotency", "record_expiry"},
     "edit_preview": {"private_edit_drafts"},
     "edit_apply": {"private_edit_drafts", "durable_write", "cas", "idempotency"},
     "edit_discard": {"private_edit_drafts", "durable_write"},

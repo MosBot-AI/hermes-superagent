@@ -31,6 +31,9 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Add operator-only new-memory Markdown drafts with explicit retention and preview-before-save. Exact apply retries return historical receipts even after forgetting, without recreating the record. This is manual capture, not generic file import.
+
+
 - Add a private single-record Markdown edit draft with explicit preview, digest/CAS apply and discard. Schema v9 tracks bounded lifecycle metadata; target corrections/forgetting clean the managed draft, including edits.
 
 - Add an opt-in private Markdown memory projection with explicit status/refresh/disable, safe mutation invalidation and crash recovery. Schema v8 requires a compatible writable migration; no model file tools or Markdown import.

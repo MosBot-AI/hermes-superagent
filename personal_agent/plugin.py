@@ -380,7 +380,8 @@ def register(ctx: PluginContext) -> None:
                 "correct | forget | export | candidate-list | candidate-show | "
                 "candidate-accept | candidate-discard | candidate-purge-expired | "
                 "projection-status | projection-refresh | projection-disable | "
-                "edit-status | edit-create | edit-preview | edit-apply | edit-discard | help"
+                "edit-status | edit-new | edit-create | edit-preview | "
+                "edit-apply | edit-discard | help"
             ),
         )
 

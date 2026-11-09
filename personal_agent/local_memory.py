@@ -19,7 +19,7 @@ from .memory_checkpoints import CHECKPOINT_SCHEMA, checkpoint_status, create_che
 from .memory_progress import PROGRESS_SCHEMA, advance_consumer, get_changes, get_consumer
 
 _APPLICATION_ID = 0x50414D45
-_SCHEMA_VERSION = 9
+_SCHEMA_VERSION = 10
 _SCHEMA_V1 = {
     "namespace": "CREATE TABLE namespace (id TEXT PRIMARY KEY NOT NULL)",
     "records": """CREATE TABLE records (
@@ -61,6 +61,7 @@ _SCHEMA_V5 = {
 _SCHEMA_V6 = {**_SCHEMA_V5, **CANDIDATE_SCHEMA}
 _SCHEMA_V7 = {**_SCHEMA_V6, **memory_fts.SCHEMA}
 _SCHEMA_V8 = {**_SCHEMA_V7, **memory_projection.SCHEMA}
+_SCHEMA_V9 = {**_SCHEMA_V8, **memory_edits.SCHEMA_V9}
 _SCHEMA = {**_SCHEMA_V8, **memory_edits.SCHEMA}
 
 _COLUMNS = (
@@ -252,6 +253,14 @@ class LocalMemoryBackend:
                 for sql in memory_edits.SCHEMA.values():
                     connection.execute(sql)
                 connection.execute(f"PRAGMA user_version={_SCHEMA_VERSION}")
+            if version == 9:
+                connection.execute("ALTER TABLE memory_edits RENAME TO memory_edits_v9")
+                connection.execute(memory_edits.SCHEMA["memory_edits"])
+                connection.execute(
+                    "INSERT INTO memory_edits SELECT *, 'correction', NULL FROM memory_edits_v9"
+                )
+                connection.execute("DROP TABLE memory_edits_v9")
+                connection.execute(f"PRAGMA user_version={_SCHEMA_VERSION}")
             memory_fts.validate_index_config(connection)
             connection.execute("COMMIT")
         except BaseException as error:
@@ -276,7 +285,8 @@ class LocalMemoryBackend:
             6: _SCHEMA_V6,
             7: _SCHEMA_V7,
             8: _SCHEMA_V8,
-            9: _SCHEMA,
+            9: _SCHEMA_V9,
+            10: _SCHEMA,
         }.get(version)
         return expected is not None and dict(rows) == expected and len(rows) == len(expected)
 
@@ -372,7 +382,7 @@ class LocalMemoryBackend:
         if operation.startswith("edit_"):
             if self._read_only or self._source_kind != "explicit_local_operator":
                 raise MemoryError("edit_scope_required")
-            if operation == "edit_create":
+            if operation in {"edit_create", "edit_new"}:
                 try:
                     return memory_edits.create(self, conn, request)
                 except sqlite3.Error as error:
