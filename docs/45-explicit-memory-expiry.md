@@ -4,6 +4,8 @@ English | [简体中文](45-explicit-memory-expiry-zh.md)
 
 Explicit expiry adds a time eligibility boundary to local memory records. It does not schedule deletion, infer a retention period or activate a provider. Existing [local-memory opt-in](31-explicit-local-memory.md), [model-tool activation](32-session-scoped-memory-tools.md) and [native-provider admission](41-native-memory-recall.md) still apply independently.
 
+Follow-on: [reviewed expired-memory cleanup](73-reviewed-expired-memory-cleanup.md) adds explicit, bounded preview-and-forget batches. Passing a deadline alone still does not delete payload; each batch requires a reviewed snapshot and a separate operator action.
+
 ## 1. Save a Temporary Trip Plan
 
 These synthetic examples use an explicit UTC deadline. Choose the actual deadline yourself; a phrase such as “until my trip ends” does not supply a timestamp. Use the returned record ID and latest revision, not the placeholders below.

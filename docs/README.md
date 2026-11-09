@@ -124,3 +124,5 @@ E9 has a selected native worker-routing design, an offline constraint evaluator 
 - [Project-wide task date shifting](71-project-task-reschedule.md): preview all affected dates, then atomically shift active dated tasks with snapshot checks and durable retry receipts.
 
 - [Memory index inspection and recovery](72-memory-index-recovery.md): check canonical/index correspondence and explicitly rebuild derived FTS under the current event watermark, without restoring forgotten records.
+
+- [Reviewed expired-memory cleanup](73-reviewed-expired-memory-cleanup.md): inspect complete bounded batches, then forget the exact snapshot with historical retry receipts and managed-file cleanup.

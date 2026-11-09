@@ -19,6 +19,7 @@ _CAPABILITIES = frozenset(
         "private_edit_drafts",
         "review_candidates",
         "record_expiry",
+        "reviewed_expired_cleanup",
         "explicit_records",
         "durable_write",
         "cas",
@@ -57,6 +58,15 @@ _DESCRIPTOR_FIELDS = {
     *_LIMITS,
 }
 _OPERATION_CAPABILITIES = {
+    "expired_preview": {"explicit_records", "record_expiry", "reviewed_expired_cleanup"},
+    "forget_expired": {
+        "explicit_records",
+        "record_expiry",
+        "reviewed_expired_cleanup",
+        "durable_write",
+        "cas",
+        "idempotency",
+    },
     "edit_status": {"private_edit_drafts"},
     "edit_create": {"private_edit_drafts", "durable_write", "cas", "idempotency"},
     "edit_new": {"private_edit_drafts", "durable_write", "idempotency", "record_expiry"},
