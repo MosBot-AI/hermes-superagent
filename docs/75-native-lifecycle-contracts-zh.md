@@ -33,6 +33,8 @@ Project 归档改变项目元数据和可见性，不证明关联会话、Kanban
 
 原生归档还可能停止 worker 并推动依赖任务进入可运行状态。这里只覆盖无 worker 的合成路径；测试配置不得复制到生产看板，也不能当作通用取消验收。归档卡片不证明已经开始的外部副作用被撤销。已有[结果审核](58-native-result-review-zh.md)继续要求显式本地接受；原生终态不会自动完成本地任务。
 
+Kanban 子进程测试包装在每一步后记录链接的 SQLite 版本和解释器这些运行时元数据，并通过独立的只读连接观察实际 `PRAGMA journal_mode`。对于 SQLite `3.46.1` 这类易受影响的运行时，只接受固定宿主的完整 WAL-reset 警告及观察到的 `DELETE` 回退；对于 `3.53.1` 这类已修复的运行时，这些隔离夹具要求无警告并使用 `WAL`。测试覆盖修复版本的回移边界、意外/缺失/重复诊断、版本/解释器/模式不一致，以及重启后的警告再次出现。固定宿主按进程和数据库标签去重，因此首次打开看板后，共用 `kanban.db (kanban.db)` 标签的其他看板不会再告警。测试不屏蔽警告，也不强制日志模式；无关的文件系统回退仍使这一限定契约失败，而不会被静默接受。
+
 ## Cron 定义、尝试与回执
 
 - **创建不等于执行。** 操作入口的创建响应标识一个已保存的作业定义。没有运行中的调度器时，保存的作业不会触发。重复创建没有通用的原生请求键去重保证，可能产生另一个作业。
@@ -57,6 +59,7 @@ Project 归档改变项目元数据和可见性，不证明关联会话、Kanban
 | Kanban 创建与观察 | `test_native_consumer_create_show_list_and_real_receipts` | CLI 创建卡片、真实 created/blocked 事件及空运行历史；不伪造执行回执。 |
 | Kanban 较弱的原生去重 | `test_native_same_key_changed_payload_returns_original_after_restart`；`test_native_archive_replay_missing_and_archived_key_reuse` | 改变载荷的重复请求返回原对象；重复/不存在目标的归档不改变事件；已归档键可创建不同替代卡片。 |
 | Kanban 范围与归档历史 | `test_native_board_separation_and_explicit_scratch_override`；`test_native_consumer_archive_keeps_queryable_history` | 命名看板保持分离；显式 scratch 不继承 Project；CLI 归档保留可查询事件，无 worker 或工作区。 |
+| Kanban SQLite 诊断 | `test_native_journal_diagnostic_is_once_per_process_and_returns_after_restart`；诊断校验器回归场景 | 完整安全回退警告或已修复运行时的无警告行为、实际只读日志模式观察、每进程一次的行为，并严格拒绝无关或不一致的诊断。 |
 | Cron 定义生命周期 | `test_real_paused_cron_lifecycle_survives_restarts`；`test_cron_profiles_have_independent_jobs_and_receipts` | 真实创建/列表/恢复/暂停/移除、重新打开的定义、运行前空历史，以及临时 profile 间定义/合成 claim 历史的分离；无 ticker。 |
 | Cron 不安全重放与校验 | `test_duplicate_creates_are_not_idempotent_and_names_can_be_ambiguous`；`test_missing_job_is_a_failure_without_new_jobs`；`test_invalid_create_has_no_persisted_effect` | 重复创建产生不同 ID；歧义名称、未知 ID 和非法创建输入失败，不增加副作用。 |
 | 已保存但未注册的创建 | `test_registration_partial_failure_keeps_job_and_warns_against_recreate`；`test_actual_registration_exception_exposes_partial_commit_contract` | 注入注册 provider 故障，使用真实持久化和真实部分异常：`job_saved: true`、`scheduler_registered: false`、`retry_create: false`。不发起重复创建。 |
