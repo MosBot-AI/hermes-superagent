@@ -16,6 +16,8 @@ def test_empty_snapshot(store):
     result = store.review_pending(SCOPE)
     assert result == {
         "items": [],
+        "latest_event_at": None,
+        "clock_behind_events": False,
         "pending_count": 0,
         "truncated": False,
         "observed_at": NOW.isoformat(timespec="microseconds"),

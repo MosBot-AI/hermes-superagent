@@ -67,3 +67,15 @@ An exact retry validates the durable link and both records, then returns `previo
 Schema version 2 adds the metadata-only replacement link table. Explicit initialization upgrades only the exact owned version-1 schema in the same transaction; unknown schema additions are refused and failed commits leave v1 intact. Raw payload/target bytes remain absent, existing intent/event records stay unchanged, and the 1,000 retained-intent cap also bounds replacement links. There is no automatic production opener or downgrade support; older code refuses the v2 schema.
 
 Synthetic tests cover exact replay across reopen, changed bindings, no adoption/resurrection, chain replacement, expiry/capacity, concurrency, migration rollback, and abrupt exits during writes and around COMMIT. These are local bookkeeping tests, not real approval or effect acceptance.
+
+### Review time watermark
+
+`review_pending` also returns `latest_event_at` (the latest persisted event for
+validated intents in the selected scope, or null for an empty scope) and
+`clock_behind_events`. The watermark includes terminal records and newly
+reconciled expirations even outside the output limit. Other scopes do not affect
+it. `observed_at` remains the sampled trusted wall clock; if it is earlier than
+that watermark, the flag is true. Terminal retries remain stable during clock
+correction and never revive records. All fields share the review transaction.
+This is not a global monotonic clock, a freshness token, clone/rollback detection
+or execution authority. No schema migration is required.

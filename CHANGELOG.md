@@ -6,6 +6,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ## Unreleased
 
+- Add scoped durable event-time watermarks to internal ActionIntent review, preserving stable terminal retries during clock correction.
+
 - Run runtime artifact acceptance on exact pull-request heads with read-only credentials; keep downloadable artifact publication push-only.
 ### Changed
 
