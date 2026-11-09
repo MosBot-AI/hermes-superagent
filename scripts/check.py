@@ -91,6 +91,17 @@ def main() -> int:
             "PYTHONPATH": str(ROOT),
             "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
         }
+        run(
+            [
+                sys.executable,
+                "-c",
+                "import json,sqlite3,sys; print('Check runtime: ' + json.dumps("
+                "{'executable':sys.executable,'python':sys.version,'sqlite':sqlite3.sqlite_version},"
+                "sort_keys=True))",
+            ],
+            cwd=ROOT,
+            env=env,
+        )
         run([sys.executable, "-m", "pytest", "tests/unit", "-q"], cwd=ROOT, env=env)
         run([sys.executable, "-m", "ruff", "check", "."], cwd=ROOT, env=env)
         run([sys.executable, "-m", "ruff", "format", "--check", "."], cwd=ROOT, env=env)
