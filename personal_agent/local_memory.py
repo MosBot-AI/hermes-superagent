@@ -11,7 +11,7 @@ import sqlite3
 from datetime import datetime
 from uuid import uuid4
 
-from . import memory_expiry, memory_fts, memory_projection
+from . import memory_edits, memory_expiry, memory_fts, memory_projection
 from .memory_backend import MemoryError, _text, validate_expiry, validate_request
 from .memory_candidate_store import SCHEMA as CANDIDATE_SCHEMA
 from .memory_candidate_store import execute as execute_candidate
@@ -19,7 +19,7 @@ from .memory_checkpoints import CHECKPOINT_SCHEMA, checkpoint_status, create_che
 from .memory_progress import PROGRESS_SCHEMA, advance_consumer, get_changes, get_consumer
 
 _APPLICATION_ID = 0x50414D45
-_SCHEMA_VERSION = 8
+_SCHEMA_VERSION = 9
 _SCHEMA_V1 = {
     "namespace": "CREATE TABLE namespace (id TEXT PRIMARY KEY NOT NULL)",
     "records": """CREATE TABLE records (
@@ -60,7 +60,8 @@ _SCHEMA_V5 = {
 
 _SCHEMA_V6 = {**_SCHEMA_V5, **CANDIDATE_SCHEMA}
 _SCHEMA_V7 = {**_SCHEMA_V6, **memory_fts.SCHEMA}
-_SCHEMA = {**_SCHEMA_V7, **memory_projection.SCHEMA}
+_SCHEMA_V8 = {**_SCHEMA_V7, **memory_projection.SCHEMA}
+_SCHEMA = {**_SCHEMA_V8, **memory_edits.SCHEMA}
 
 _COLUMNS = (
     "record_id",
@@ -95,6 +96,7 @@ class LocalMemoryBackend:
         self._source_kind = None
         self._read_only = False
         self._projection = None
+        self._edits = None
 
     def describe(self) -> dict:
         result = {
@@ -105,6 +107,7 @@ class LocalMemoryBackend:
             "deployment": "trusted_profile_local",
             "capabilities": [
                 "private_markdown_projection",
+                "private_edit_drafts",
                 "review_candidates",
                 "record_expiry",
                 "explicit_records",
@@ -156,6 +159,7 @@ class LocalMemoryBackend:
         session_ref: str,
         source_kind: str = "explicit_local_operator",
         projection: memory_projection.PrivateProjection | None = None,
+        edits: memory_edits.PrivateEdits | None = None,
     ) -> None:
         """Bind trusted route metadata, never supplied by a mutation payload."""
         if self._connection is not None:
@@ -168,6 +172,8 @@ class LocalMemoryBackend:
             raise MemoryError("connection_in_transaction")
         if projection is not None:
             projection.bind(connection)
+        if edits is not None:
+            edits.bind(connection)
         began = False
         try:
             # Read ownership in one snapshot: another first opener may commit
@@ -202,7 +208,11 @@ class LocalMemoryBackend:
                 "SELECT name, sql FROM sqlite_master WHERE name NOT GLOB 'sqlite_*'"
             ).fetchall()
             if app_id == 0 and version == 0 and not rows:
-                for sql in {**_SCHEMA_V6, **memory_projection.SCHEMA}.values():
+                for sql in {
+                    **_SCHEMA_V6,
+                    **memory_projection.SCHEMA,
+                    **memory_edits.SCHEMA,
+                }.values():
                     connection.execute(sql)
                 memory_fts.create_index(connection)
                 connection.execute("INSERT INTO namespace VALUES (?)", (namespace_id,))
@@ -238,6 +248,10 @@ class LocalMemoryBackend:
                 for sql in memory_projection.SCHEMA.values():
                     connection.execute(sql)
                 connection.execute(f"PRAGMA user_version={_SCHEMA_VERSION}")
+            if version in (1, 2, 3, 4, 5, 6, 7, 8):
+                for sql in memory_edits.SCHEMA.values():
+                    connection.execute(sql)
+                connection.execute(f"PRAGMA user_version={_SCHEMA_VERSION}")
             memory_fts.validate_index_config(connection)
             connection.execute("COMMIT")
         except BaseException as error:
@@ -249,6 +263,7 @@ class LocalMemoryBackend:
         self._connection, self._namespace, self._session = connection, namespace_id, session_ref
         self._source_kind = source_kind
         self._projection = projection
+        self._edits = edits
 
     @staticmethod
     def _valid_schema(version, rows):
@@ -260,7 +275,8 @@ class LocalMemoryBackend:
             5: _SCHEMA_V5,
             6: _SCHEMA_V6,
             7: _SCHEMA_V7,
-            8: _SCHEMA,
+            8: _SCHEMA_V8,
+            9: _SCHEMA,
         }.get(version)
         return expected is not None and dict(rows) == expected and len(rows) == len(expected)
 
@@ -334,6 +350,7 @@ class LocalMemoryBackend:
         self._connection = self._namespace = self._session = self._source_kind = None
         self._read_only = False
         self._projection = None
+        self._edits = None
 
     def execute(self, operation: str, payload: dict) -> dict:
         request = validate_request(operation, payload)
@@ -352,6 +369,14 @@ class LocalMemoryBackend:
             raise MemoryError("not_open")
         if conn.in_transaction:
             raise MemoryError("connection_in_transaction")
+        if operation.startswith("edit_"):
+            if self._read_only or self._source_kind != "explicit_local_operator":
+                raise MemoryError("edit_scope_required")
+            if operation == "edit_create":
+                try:
+                    return memory_edits.create(self, conn, request)
+                except sqlite3.Error as error:
+                    raise _storage_error(error) from None
         if operation.startswith("projection_"):
             if self._read_only or self._source_kind != "explicit_local_operator":
                 raise MemoryError("projection_scope_required")
@@ -364,7 +389,7 @@ class LocalMemoryBackend:
         try:
             conn.execute(
                 "BEGIN IMMEDIATE"
-                if operation.startswith("candidate_")
+                if operation.startswith(("candidate_", "edit_"))
                 or operation
                 in {
                     "remember",
@@ -384,7 +409,9 @@ class LocalMemoryBackend:
             conn.execute("SELECT id FROM namespace").fetchone()
             memory_fts.validate_index_config(conn)
             now = datetime.fromisoformat(memory_expiry.utc_now())
-            if operation.startswith("candidate_"):
+            if operation.startswith("edit_"):
+                result = memory_edits.execute(self, conn, operation, request, now)
+            elif operation.startswith("candidate_"):
                 result = execute_candidate(self, conn, operation, request, now)
             elif operation in {"remember", "correct", "forget"}:
                 result = self._mutate(conn, operation, request, now)
@@ -647,6 +674,7 @@ class LocalMemoryBackend:
             "INSERT INTO events(record_id,revision,operation) VALUES (?,?,?)",
             (record_id, revision, operation),
         )
+        memory_edits.invalidate(self, conn, record_id)
         memory_projection.invalidate(self, conn)
         receipt = {
             "record_id": record_id,

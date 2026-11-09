@@ -31,6 +31,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Add a private single-record Markdown edit draft with explicit preview, digest/CAS apply and discard. Schema v9 tracks bounded lifecycle metadata; target corrections/forgetting clean the managed draft, including edits.
+
 - Add an opt-in private Markdown memory projection with explicit status/refresh/disable, safe mutation invalidation and crash recovery. Schema v8 requires a compatible writable migration; no model file tools or Markdown import.
 
 - Add explicit multi-term local memory search with transactional FTS5 and short Chinese substring checks; preserve literal search/recall. Schema v7 atomically migrates owned stores and requires FTS5 trigram plus secure-delete support; read-only access never migrates.
