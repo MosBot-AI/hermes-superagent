@@ -56,6 +56,9 @@ HELP = (
     'cancel TASK_ID --expected-revision N --note "Reason". '
     "add is an alias for capture; done is an alias for complete. "
     "Projects are task label groups, not native Project entities. "
+    "project-reschedule-preview --project LABEL --days N reviews all date changes; "
+    "reschedule-project --project LABEL --days N --expected-snapshot HASH --request-id KEY "
+    "shifts only captured dated tasks, with explicit nonzero -3650..3650 days. "
     "project-rename-preview --project OLD --new-project NEW returns a bounded whole-group "
     "snapshot; rename-project --project OLD --new-project NEW --expected-snapshot HASH "
     "--request-id KEY atomically relabels every active and terminal task, preserving edges. "

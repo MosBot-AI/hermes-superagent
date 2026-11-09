@@ -61,6 +61,7 @@
     "personal_agent/task_plan_worker.py",
     "personal_agent/task_presentation.py",
     "personal_agent/task_project_rename.py",
+    "personal_agent/task_project_reschedule.py",
     "personal_agent/task_result_review.py",
     "personal_agent/task_review.py",
     "personal_agent/task_tool_contract.py",

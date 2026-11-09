@@ -120,3 +120,5 @@ E9 has a selected native worker-routing design, an offline constraint evaluator 
 
 - [Bounded Chinese automatic recall](69-chinese-automatic-recall.md): shared local query planning and conservative matching, with fixed synthetic evidence; explicit search and authority are unchanged.
 - [Private Markdown memory edit drafts](70-private-memory-edit-drafts.md): editor-based first capture with explicit retention, plus digest/revision-bound corrections; preview before saving, without editing the generated projection.
+
+- [Project-wide task date shifting](71-project-task-reschedule.md): preview all affected dates, then atomically shift active dated tasks with snapshot checks and durable retry receipts.

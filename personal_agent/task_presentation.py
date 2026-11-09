@@ -12,10 +12,15 @@ _STATUS = {
     "blocked": "blocked",
 }
 _ERRORS = {
+    "project_reschedule_limit": (
+        "Project exceeds 100 members or the full 16,000-character review budget. Nothing changed."
+    ),
+    "project_date_range": "A shifted date is outside Gregorian years 0001–9999. Nothing changed.",
+    "project_no_dated_tasks": "No captured task in this project has a due date. Nothing changed.",
     "project_not_found": "The exact source project label has no tasks.",
     "project_exists": "The destination label is already in use. Groups are never merged.",
     "project_rename_limit": "This group exceeds the 1,000-task rename limit. Nothing changed.",
-    "project_snapshot_conflict": "The source group changed. Preview again before renaming.",
+    "project_snapshot_conflict": "The source group changed. Preview again before applying.",
     "breakdown_in_progress": (
         "An in-progress task cannot be broken down. Explicitly record a non-running "
         "work status after reviewing actual work, then retry from its current revision."
@@ -220,6 +225,9 @@ def _help(prefix: str) -> str:
             "Saved native attention: " + prefix + " native-review --on YYYY-MM-DD",
             "Blocked: " + prefix + " list --work-status blocked",
             "Projects: " + prefix + " projects",
+            "Date preview: " + prefix + " project-reschedule-preview --project LABEL --days N",
+            "Apply dates: " + prefix + " reschedule-project --project LABEL --days N "
+            "--expected-snapshot HASH --request-id KEY",
             "Rename preview: " + prefix + " project-rename-preview --project OLD --new-project NEW",
             "Rename: " + prefix + " rename-project --project OLD --new-project NEW "
             "--expected-snapshot HASH --request-id KEY",
@@ -415,6 +423,35 @@ def _render(result: dict, *, operation: str, payload: dict, prefix: str) -> str:
         return _help(prefix)
     if operation in ("list", "search", "agenda", "ready"):
         lines = _page(data, operation, payload, prefix)
+    elif operation in ("project_reschedule_preview", "reschedule_project"):
+        preview = operation == "project_reschedule_preview"
+        lines = [
+            "Project date preview (nothing changed)."
+            if preview
+            else "Project due dates rescheduled.",
+            "Project: " + _quoted(data["project"]),
+            f"Shift: {data['days']:+d} Gregorian calendar days.",
+            f"Members: {data['task_count']}; affected: {data['affected_count']}.",
+            "Excluded: " + json.dumps(data["excluded_counts"], sort_keys=True),
+        ]
+        for item in data["items"]:
+            lines.append(
+                f"{item['id']} (reviewed revision {item['revision']}): "
+                + _quoted(item["title"])
+                + f" | {item['old_due_date']} -> {item['new_due_date']}"
+            )
+        lines.extend(
+            [
+                "Snapshot: " + data["snapshot"],
+                "No timezone, reminder, native card or external resource was changed.",
+            ]
+        )
+        if preview:
+            lines.append(
+                "Confirm explicitly with reschedule-project, this snapshot and a stable request ID."
+            )
+        elif result.get("replayed"):
+            lines.insert(0, "Replayed historical receipt; dates were not shifted again.")
     elif operation in ("project_rename_preview", "rename_project"):
         preview = operation == "project_rename_preview"
         lines = [
