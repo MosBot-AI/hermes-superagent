@@ -32,6 +32,7 @@ This file distinguishes design work, development changes, and released capabilit
 ### Added
 
 - Add [native plugin and scheduling lifecycle contracts](docs/75-native-lifecycle-contracts.md) for exact-pin operator Project/Kanban/cron behavior, weak deduplication, partial creation, cancellation requests, uncertain history and a one-off local-only execution receipt. Tests and documented gaps do not enable production scheduling or plugin CRUD authority.
+  Kanban checks distinguish the exact native SQLite safety warning and observed DELETE fallback from unexpected diagnostics, without changing host behavior or forcing WAL.
 
 - Add reusable [offline synthetic connector fixtures](docs/74-synthetic-connector-fixtures.md) with durable fake-remote effects, finite idempotency, recovery oracles and pinned-host MCP stdio failure tests. Source prose and read-only hints grant no authority; production connectors remain disabled.
 

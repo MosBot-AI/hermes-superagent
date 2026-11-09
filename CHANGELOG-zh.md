@@ -32,6 +32,7 @@
 ### 新增
 
 - 新增[原生插件与调度生命周期契约](docs/75-native-lifecycle-contracts-zh.md)，覆盖固定版本的 Project/Kanban/cron 操作行为、弱去重、部分创建、取消请求、未知历史及一次性仅本地执行回执。测试与已记录缺口不启用生产调度或插件 CRUD 权限。
+  Kanban 检查区分原生完整 SQLite 安全警告及观察到的 DELETE 回退与意外诊断，不改变宿主行为，也不强制 WAL。
 
 - 新增可复用的[离线合成连接器测试夹具](docs/74-synthetic-connector-fixtures-zh.md)，覆盖持久假远端副作用、有限幂等、恢复观察器和固定宿主 MCP stdio 故障测试。来源文字与只读提示不授予权限，生产连接器仍保持禁用。
 
