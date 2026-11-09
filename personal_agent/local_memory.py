@@ -364,6 +364,8 @@ class LocalMemoryBackend:
 
     def execute(self, operation: str, payload: dict) -> dict:
         request = validate_request(operation, payload)
+        if operation.startswith("index_"):
+            raise MemoryError("index_maintenance_required")
         if self._read_only and operation.startswith("candidate_"):
             raise MemoryError("read_only_backend")
         if self._read_only and operation in {

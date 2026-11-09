@@ -57,6 +57,10 @@ def validate_expiry(value: object, *, error_code: str = "invalid_request") -> st
 
 
 def validate_request(operation: str, payload: dict) -> dict:
+    if isinstance(operation, str) and operation.startswith("index_"):
+        from .memory_index import validate
+
+        return validate(operation, payload)
     if isinstance(operation, str) and operation.startswith("edit_"):
         from .memory_edits import validate
 

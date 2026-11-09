@@ -16,6 +16,8 @@ The [native memory workbench](docs/67-readable-memory-workbench.md) now uses rea
 [Private Markdown memory edit drafts](docs/70-private-memory-edit-drafts.md): editor-based first capture with explicit retention, plus digest/revision-bound corrections; preview before saving, without editing the generated projection.
 
 
+[Memory index inspection and recovery](docs/72-memory-index-recovery.md): check canonical/index correspondence and explicitly rebuild derived FTS under the current event watermark, without restoring forgotten records.
+
 [Project-wide task date shifting](docs/71-project-task-reschedule.md): preview all affected dates, then atomically shift active dated tasks with snapshot checks and durable retry receipts.
 
 ## Current status

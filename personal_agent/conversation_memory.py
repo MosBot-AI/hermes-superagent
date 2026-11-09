@@ -17,6 +17,7 @@ from uuid import uuid4
 
 from .conversation_tasks import _supported_origin
 from .memory_backend import MemoryError, MemoryService, validate_request
+from .memory_index import maintain
 from .memory_presentation import render_memory_result
 from .memory_storage import open_memory_backend
 from .task_cli import current_profile_home
@@ -39,6 +40,8 @@ HELP = (
     "edit.md is managed: apply/discard removes it including edits; for correction drafts, "
     "target correction/forgetting also removes it. "
     "Only content/topic editable, no expiry change; one active draft, no background cleanup. "
+    "index-status; index-rebuild --expected-watermark N (explicit canonical FTS maintenance). "
+    "Index maintenance requires an existing current-schema store; no migration or history receipt. "
     "projection-status; projection-refresh (explicitly enable/rebuild a private Markdown view); "
     "projection-disable (remove the managed view, preserve canonical records). "
     "Projection is not a backup; fixed records.md is managed, never edit or import it. "
@@ -148,6 +151,9 @@ def parse_command(raw_args: str) -> tuple[str, dict]:
     retention.add_argument("--keep", dest="expires_at", action="store_const", const=None)
     retention.add_argument("--expires-at")
     edit_new.add_argument("--request-id")
+    commands.add_parser("index-status")
+    index = commands.add_parser("index-rebuild")
+    index.add_argument("--expected-watermark", type=int, required=True)
     commands.add_parser("edit-status")
     edit = commands.add_parser("edit-create")
     edit.add_argument("record_id")
@@ -189,6 +195,8 @@ def parse_command(raw_args: str) -> tuple[str, dict]:
     )
     operation = {
         "edit-new": "edit_new",
+        "index-status": "index_status",
+        "index-rebuild": "index_rebuild",
         "edit-status": "edit_status",
         "edit-create": "edit_create",
         "edit-preview": "edit_preview",
@@ -299,6 +307,8 @@ class LocalMemoryCommands:
                 request_id = payload.get("request_id")
                 if operation == "help":
                     result = {"data": {"help": HELP}, "replayed": False}
+                elif operation in {"index_status", "index_rebuild"}:
+                    result = maintain(self._home, operation, payload)
                 else:
                     with open_memory_backend(self._home, session_id) as backend:
                         result = MemoryService(backend).execute(operation, payload)

@@ -122,3 +122,5 @@ E9 已选定原生 worker 路由设计，并实现离线约束验证器和部分
 - [私有 Markdown 记忆编辑草稿](70-private-memory-edit-drafts-zh.md): 支持在编辑器首次录入并显式选择保留期限，也支持绑定摘要与 revision 的更正；保存前预览，不编辑生成投影。
 
 - [项目任务整体改期](71-project-task-reschedule-zh.md)：预览所有受影响日期，再通过快照校验和持久重试回执原子平移活跃且有日期的任务。
+
+- [记忆索引检查与恢复](72-memory-index-recovery-zh.md)：检查权威记录与索引对应关系，在当前事件水位下显式重建派生 FTS，不恢复已遗忘记录。

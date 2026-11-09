@@ -74,14 +74,11 @@ def open_memory_backend(
         connection.close()
 
 
-@contextmanager
-def open_existing_memory_reader(bound_home: Path, session_ref: str) -> Generator[MemoryBackend]:
-    """No canonical writes, creation or migration; require the owned rollback store.
+def existing_memory_path(bound_home: Path, *, allow_journal: bool = False) -> Path:
+    """Validate existing paths without opening/closing the database inode.
 
-    Existing sidecars and WAL are refused, not repaired. SQLite can still create
-    sidecars if another process races this opener by switching to WAL; the backend
-    rechecks journal mode before reading records and refuses that unsupported mode.
-    This is not a VFS/filesystem read-only sandbox against unrelated same-UID code.
+    Closing a raw descriptor can release another connection's POSIX locks.
+    Maintenance permits a safe rollback journal for SQLite's own recovery only.
     """
     if not bound_home.is_dir() or current_profile_home() != bound_home:
         raise MemoryError("profile_context_changed")
@@ -97,8 +94,32 @@ def open_existing_memory_reader(bound_home: Path, session_ref: str) -> Generator
                 raise MemoryError("memory_store_missing")
         for suffix in ("-journal", "-wal", "-shm"):
             sidecar = path.with_name(path.name + suffix)
+            if allow_journal and suffix == "-journal":
+                _private_database_file(sidecar, create=False)
+                continue
             if sidecar.exists() or sidecar.is_symlink():
                 raise MemoryError("memory_reader_busy", retryable=True)
+        _private_database_file(path, create=False)
+        if not path.exists():
+            raise MemoryError("memory_store_missing")
+        return path
+    except TaskError as error:
+        raise MemoryError(error.code, retryable=error.retryable) from None
+    except OSError:
+        raise MemoryError("memory_reader_unavailable") from None
+
+
+@contextmanager
+def open_existing_memory_reader(bound_home: Path, session_ref: str) -> Generator[MemoryBackend]:
+    """No canonical writes, creation or migration; require the owned rollback store.
+
+    Existing sidecars and WAL are refused, not repaired. SQLite can still create
+    sidecars if another process races this opener by switching to WAL; the backend
+    rechecks journal mode before reading records and refuses that unsupported mode.
+    This is not a VFS/filesystem read-only sandbox against unrelated same-UID code.
+    """
+    path = existing_memory_path(bound_home)
+    try:
         flags = os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_NONBLOCK", 0)
         try:
             descriptor = os.open(path, flags)
