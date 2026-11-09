@@ -8,6 +8,7 @@ No model call, native memory bridge or automatic canonical write occurs here.
 
 import argparse
 import json
+import re
 import shlex
 import threading
 from collections.abc import Callable
@@ -16,6 +17,7 @@ from uuid import uuid4
 
 from .conversation_tasks import _supported_origin
 from .memory_backend import MemoryError, MemoryService, validate_request
+from .memory_presentation import render_memory_result
 from .memory_storage import open_memory_backend
 from .task_cli import current_profile_home
 
@@ -31,6 +33,7 @@ HELP = (
     "--expected-revision N "
     "[--request-id KEY]; forget ID --expected-revision N [--request-id KEY]; "
     "export [--limit N --after ID]. Use POSIX quotes. "
+    "Native views are readable by default; prefix --json for the original structured envelope. "
     "candidate-list [--limit N --after ID]; candidate-show ID; "
     "candidate-accept ID --expected-revision N (--keep | --expires-at UTC); "
     "candidate-discard ID --expected-revision N; candidate-purge-expired. "
@@ -181,7 +184,16 @@ def _bound_key() -> str:
 class LocalMemoryCommands:
     """Serialize unload with bounded operations; already admitted work may finish."""
 
-    def __init__(self, *, bound_home: Path, read_config: Callable[[str, object], object]):
+    def __init__(
+        self,
+        *,
+        bound_home: Path,
+        read_config: Callable[[str, object], object],
+        default_format: str = "json",
+    ):
+        if default_format not in {"json", "text"}:
+            raise ValueError("unsupported default output format")
+        self._default_format = default_format
         self._home = bound_home
         self._config = read_config
         self._lock = threading.RLock()
@@ -202,6 +214,12 @@ class LocalMemoryCommands:
     ) -> str:
         request_id = None
         operation = None
+        payload = {}
+        machine = (
+            type(raw_args) is str
+            and re.match(r"^[ \t]{0,32}--json(?:[ \t\r\n]|$)", raw_args[:64]) is not None
+        )
+        output_format = "json" if machine else self._default_format
         try:
             with self._lock:
                 if self._closed:
@@ -228,7 +246,10 @@ class LocalMemoryCommands:
                     raise MemoryError("invalid_configuration")
                 if mode != "local_tasks" or not conversation or not memory:
                     raise MemoryError("local_memory_disabled")
-                operation, payload = parse_command(raw_args)
+                if type(raw_args) is not str or len(raw_args) > 8192:
+                    raise MemoryError("invalid_request")
+                command_args = raw_args.lstrip(" \t")[6:] if machine else raw_args
+                operation, payload = parse_command(command_args)
                 request_id = payload.get("request_id")
                 if operation == "help":
                     result = {"data": {"help": HELP}, "replayed": False}
@@ -245,13 +266,16 @@ class LocalMemoryCommands:
                 "replayed": False,
                 "error": {"code": error.code, "retryable": error.retryable},
             }
+        envelope = {
+            "schema_version": "personal.local-memory.v1",
+            "scope": "trusted_local_operator_records",
+            "request_id": request_id,
+            **output,
+        }
+        if output_format == "text":
+            return render_memory_result(envelope, operation=operation, payload=payload)
         return json.dumps(
-            {
-                "schema_version": "personal.local-memory.v1",
-                "scope": "trusted_local_operator_records",
-                "request_id": request_id,
-                **output,
-            },
+            envelope,
             # Review must show the proposed text and quote legibly, including
             # Chinese. JSON still escapes controls and never evaluates content.
             ensure_ascii=not (operation and operation.startswith("candidate_")),

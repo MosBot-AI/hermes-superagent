@@ -114,3 +114,5 @@ E9 已选定原生 worker 路由设计，并实现离线约束验证器和部分
 - [真实原生任务会话验收](65-live-task-acceptance-zh.md)：确切修订上的真实 TUI/提供方创建、查询、更新、完成及停用后拒绝。
 
 - [本地多词记忆检索](66-local-memory-full-text-search-zh.md)：事务式 FTS5、中文短词及不变的字面契约。
+
+- [可读的原生记忆工作台](67-readable-memory-workbench-zh.md)：人类视图与显式 JSON 输出，不增加存储或权限。

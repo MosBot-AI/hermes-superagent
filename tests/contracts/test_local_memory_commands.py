@@ -43,7 +43,7 @@ def command(host, text):
     from gateway.session_commands import execute_command
 
     result = asyncio.run(
-        execute_command(host.connection, host.ref, {"command": "personal-memory " + text})
+        execute_command(host.connection, host.ref, {"command": "personal-memory --json " + text})
     )
     assert result["type"] == "exec"
     return json.loads(result["output"])
@@ -181,7 +181,7 @@ def test_native_inbound_rejects_nonlocal_memory_before_storage(host, platform):
     from gateway.platforms.base import MessageEvent
 
     source = replace(host.source, platform=Platform(platform))
-    event = MessageEvent(text="/personal-memory list", source=source)
+    event = MessageEvent(text="/personal-memory --json list", source=source)
     entry = host.runner.session_store.lookup_by_session_key(host.live.route)
     result = asyncio.run(host.runner._hm_run_plugin_handler(handler(host), event, source, entry))
     assert_error(json.loads(result), "unsupported_origin")
@@ -197,7 +197,7 @@ def test_native_inbound_rejects_nonlocal_memory_before_storage(host, platform):
     ],
 )
 def test_unbound_direct_callbacks_cannot_open_store(host, context):
-    assert_error(json.loads(handler(host)("list", **context)), "unsupported_origin")
+    assert_error(json.loads(handler(host)("--json list", **context)), "unsupported_origin")
     assert not (host.home / "plugin-data").exists()
 
 
@@ -221,7 +221,7 @@ def database(home):
 def retained_command(host, callback, text):
     from gateway.platforms.base import MessageEvent
 
-    event = MessageEvent(text="/personal-memory " + text, source=host.source)
+    event = MessageEvent(text="/personal-memory --json " + text, source=host.source)
     entry = host.runner.session_store.lookup_by_session_key(host.live.route)
     return json.loads(
         asyncio.run(host.runner._hm_run_plugin_handler(callback, event, host.source, entry))
@@ -249,7 +249,7 @@ def test_retained_callback_rechecks_config_and_unload(host):
 
 def test_even_real_source_without_host_context_is_unbound(host):
     result = handler(host)(
-        "list",
+        "--json list",
         platform="local",
         source=host.source,
         session_id=host.ref.session_id,

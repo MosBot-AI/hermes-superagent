@@ -13,6 +13,9 @@ This file distinguishes design work, development changes, and released capabilit
 - Run runtime artifact acceptance on exact pull-request heads with read-only credentials; keep downloadable artifact publication push-only.
 ### Changed
 
+- Native `/personal-memory` now shows readable human views by default. Scripts must prefix `--json` to retain the original envelope; model tools, storage and authority are unchanged.
+
+
 - Reconcile the integrated acceptance workflows with the current Hermes compatibility target; runtime-package verification now exercises the combined changes on exact PR heads.
 
 - Advance the exact Hermes development target to `22811165`, preserving clean-source identity and Kanban hash guards. Keep historical host proposals on their original isolated baseline; this does not claim a broad support range or production installation.
