@@ -16,6 +16,8 @@ Hermes 原生 personal-agent 插件，目标是让一个主 agent 管理项目�
 [私有 Markdown 记忆编辑草稿](docs/70-private-memory-edit-drafts-zh.md): 支持在编辑器首次录入并显式选择保留期限，也支持绑定摘要与 revision 的更正；保存前预览，不编辑生成投影。
 
 
+[项目任务整体改期](docs/71-project-task-reschedule-zh.md)：预览所有受影响日期，再通过快照校验和持久重试回执原子平移活跃且有日期的任务。
+
 ## 当前进度
 
 当前优先交付 **profile-first 单用户本地 MVP**，不要求先绑定主 Bot。已实现 E0 基础、本地任务存储及显式启用的原生会话 `/personal-tasks` 命令，并已新增会话范围任务模型工具；尚未完成真实模型自然语言验收。

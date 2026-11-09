@@ -16,6 +16,8 @@ The [native memory workbench](docs/67-readable-memory-workbench.md) now uses rea
 [Private Markdown memory edit drafts](docs/70-private-memory-edit-drafts.md): editor-based first capture with explicit retention, plus digest/revision-bound corrections; preview before saving, without editing the generated projection.
 
 
+[Project-wide task date shifting](docs/71-project-task-reschedule.md): preview all affected dates, then atomically shift active dated tasks with snapshot checks and durable retry receipts.
+
 ## Current status
 
 The current priority is a **profile-first single-user local MVP**, without mandatory Primary Bot binding. E0 foundations, local task storage and an opt-in native conversation `/personal-tasks` command are implemented; session-scoped task model tools are also implemented, with real-model natural-language acceptance still pending.
