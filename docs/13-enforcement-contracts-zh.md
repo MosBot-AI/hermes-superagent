@@ -66,7 +66,7 @@ Worker 探针在全新进程中运行，因为 bootstrap policy 必须在 runtim
 - 检查脚本现在通过官方逐文件 Hermes runner 运行 `tests/contracts` 下全部文件，同时执行单元测试、Ruff、ty 和双语文档检查。
 - 实测 dispatcher 失败仅覆盖 `model_tools` wrapper。其他 wrappers 与直接 MCP helper 仅做源码检查，没有运行端到端写操作。
 - 无需生产账号、API key、在线模型调用、外发或真实 connector 写操作。未来在线测试需要独立、限定范围的测试配置与安全凭据交接；凭据不得进入聊天、日志或仓库。
-- E0.3 公共 Project/Kanban/cron 合同及 E0.4 未测路径仍待完成。本切片通过不代表 M0 完成，也不允许依赖 E1 的写功能发布。
+- 后续 [E0.2–E0.3 生命周期契约](75-native-lifecycle-contracts-zh.md)增加有界的 Project/Kanban/cron 操作入口证据，并记录缺失的受支持插件 CRUD API；不启用任何生产能力。E0.4 未测路径、依赖 E1 的写入准入、E3 编排与 E4 受控调度仍需独立验收。本切片通过不代表 M0 完成，也不允许这些写功能发布。
 
 固定来源：
 

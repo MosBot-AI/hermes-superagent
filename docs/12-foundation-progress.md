@@ -41,7 +41,7 @@ Tests use synthetic inputs, temporary homes, and blocked Python socket connectio
 
 ## Remaining work
 
-1. E0.3: real public-operation, idempotency, and receipt contracts for Project/Kanban/cron.
+1. E0.3: the later [native lifecycle contracts](75-native-lifecycle-contracts.md) cover bounded Project/Kanban/cron operator behavior and missing plugin CRUD seams. This historical slice did not include those probes. Weak native deduplication, cancellation requests and uncertain attempts must not be treated as controlled execution or reliable delivery.
 2. E0.4: per-tool/path coverage, hook/dispatcher/middleware failures, safe mode, managed workers, and revocation. A write set cannot be enabled before its gate passes.
 3. E0.5: the later [offline synthetic connector fixtures](74-synthetic-connector-fixtures.md) add durable fake-remote and pinned-host MCP stdio scenarios. This historical foundation slice alone had no complete connector simulator; the later harness does not complete E0.4, E1, E5 or real-provider acceptance.
 4. E1: verified owner identity, grants, intent hashes, approvals, transactional admission/revocation, and redacted audit.

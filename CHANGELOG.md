@@ -31,6 +31,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Add [native plugin and scheduling lifecycle contracts](docs/75-native-lifecycle-contracts.md) for exact-pin operator Project/Kanban/cron behavior, weak deduplication, partial creation, cancellation requests, uncertain history and a one-off local-only execution receipt. Tests and documented gaps do not enable production scheduling or plugin CRUD authority.
+
 - Add reusable [offline synthetic connector fixtures](docs/74-synthetic-connector-fixtures.md) with durable fake-remote effects, finite idempotency, recovery oracles and pinned-host MCP stdio failure tests. Source prose and read-only hints grant no authority; production connectors remain disabled.
 
 - Add operator-only [reviewed expired-memory cleanup](docs/73-reviewed-expired-memory-cleanup.md): complete bounded previews, snapshot-bound atomic forgetting and historical batch retries. No automatic deletion, tombstone removal or capacity reclamation.
@@ -179,7 +181,7 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Boundaries
 
-- E0.3, full E0.4 coverage, E0.6, identity/authorization, full domain storage, reminders, connectors, mobile, voice, and E9 model routing remain unimplemented.
+- Bounded E0.2–E0.3 native lifecycle contracts do not enable controlled native execution. Full E0.4 coverage, E0.6, identity/authorization, full domain storage, reminders, connectors, mobile, voice, and E9 model routing remain unimplemented.
 - Local task storage is a trusted-local-operator feature, not owner authentication, native task execution or an OS sandbox. Windows storage, encryption, export/forget and full retention policy remain unsupported.
 - The plugin does not secure other Hermes tools. The status reports a blocked release gate.
 - Full install transactions and isolated-host execution have not been validated. The host-isolated CLI is unsupported by the pinned host.
