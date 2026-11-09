@@ -1,0 +1,9 @@
+manifest_version: 2
+name: batch-worker-probe
+version: "0.0.0"
+description: Offline batch admission fixture
+kind: standalone
+provides_tools:
+  - batch_worker_probe
+provides_hooks:
+  - pre_tool_call

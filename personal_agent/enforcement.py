@@ -43,14 +43,27 @@ _WRITE_PATHS = (
     ),
     WritePath(
         "shell",
-        "not_tested",
-        "No shell/backend containment or operation-level authorization contract yet. "
-        "A tool hook is not an OS sandbox.",
+        "pinned_host_boundary_contract",
+        "Native deny/workdir guards and public versus internal force paths are exercised "
+        "against an inert backend. Direct registry skips plugin admission. No actual shell, "
+        "backend containment or operation-level authorization contract is established.",
+        (
+            "shell_native_deny_and_force_surface",
+            "shell_internal_force_boundary",
+            "shell_plugin_registry_boundary",
+        ),
     ),
     WritePath(
         "browser",
-        "not_tested",
-        "No browser write-path, session identity, or external outcome contract yet.",
+        "pinned_host_boundary_contract",
+        "Native metadata-URL literal admission and plugin/direct-helper boundaries are tested "
+        "against an inert browser endpoint. Dynamic URLs exceed literal pre-scan coverage. "
+        "No real navigation, session identity, write outcome or containment is established.",
+        (
+            "browser_metadata_literal_floor",
+            "browser_plugin_helper_boundary",
+            "browser_dynamic_url_prescan_limit",
+        ),
     ),
     WritePath(
         "execute_code_rpc",
@@ -67,14 +80,29 @@ _WRITE_PATHS = (
         ),
     ),
     WritePath(
+        "local_tool_batch",
+        "pinned_host_boundary_contract",
+        "Real local tool_call expansion and agent loops preserve per-item veto and pairing. "
+        "A new model-emitted retry can repeat a completed synthetic effect; in-memory "
+        "fixture policy rechecks do not establish durable revocation or effect idempotency.",
+        ("local_batch_item_veto", "local_batch_uncertain_retry", "local_batch_policy_recheck"),
+    ),
+    WritePath(
         "connector_batch",
-        "not_tested",
-        "No per-item authorization, partial-outcome, or retry contract yet.",
+        "pinned_host_boundary_contract",
+        "Native per-item dispatch and veto retain indexed partial results against an offline "
+        "gateway client. An explicit outer retry repeats completed synthetic effects. "
+        "Production grants, credentials, transport retry and server deduplication "
+        "remain unverified.",
+        ("connector_batch_item_veto_partial_retry",),
     ),
     WritePath(
         "short_worker",
-        "not_tested",
-        "No per-action grant, revocation, or tool-surface coverage for delegated workers yet.",
+        "pinned_host_boundary_contract",
+        "Native child construction narrows requested toolsets to the parent's selection; "
+        "its real loop retains tested local-batch gates. No delegate_task scheduler, "
+        "background lifecycle, production per-action grants or persistent revocation is verified.",
+        ("delegated_child_toolset_and_batch_admission",),
     ),
     WritePath(
         "managed_worker",
