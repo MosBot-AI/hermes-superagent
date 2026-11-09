@@ -50,7 +50,8 @@ def test_native_status_recovers_id_and_discard_allows_new_draft(host):
 
 
 @pytest.mark.parametrize(
-    "command", ["edit-status", "edit-create", "edit-preview", "edit-apply", "edit-discard"]
+    "command",
+    ["edit-status", "edit-new", "edit-create", "edit-preview", "edit-apply", "edit-discard"],
 )
 def test_native_edit_commands_reject_foreign_actor_before_storage(host, command):
     from hermes_state_runtime import RuntimeStoreError
@@ -74,6 +75,31 @@ def test_no_model_edit_file_actions(native, monkeypatch):
     host = local.make_host(home, manager)
     model.activate(host)
     with model.turn(host):
-        for action in ("edit_status", "edit_create", "edit_preview", "edit_apply", "edit_discard"):
+        for action in (
+            "edit_status",
+            "edit_new",
+            "edit_create",
+            "edit_preview",
+            "edit_apply",
+            "edit_discard",
+        ):
             assert model.call(host, {"action": action})["error"]["code"] == "invalid_request"
     assert not memory.database(home).exists()
+
+
+def test_native_new_memory_editor_requires_retention_and_saves_multiline(host):
+    assert memory.command(host, "edit-new")["status"] == "error"
+    create = memory.command(host, "edit-new --keep --request-id new-draft")
+    assert create["status"] == "ok" and create["data"]["kind"] == "new"
+    did = create["data"]["draft_id"]
+    target = memory.database(host.home).parent / "edit.md"
+    target.write_text(target.read_text() + "中文新记忆\n# 第二行")
+    preview = memory.command(host, f"edit-preview {did}")["data"]
+    assert preview["operation"] == "remember" and preview["before"] is None
+    command = f"edit-apply {did} --expected-digest {preview['sha256']} --request-id new-apply"
+    applied = memory.command(host, command)
+    rid = applied["data"]["record"]["record_id"]
+    assert memory.command(host, f"show {rid}")["data"]["content"] == "中文新记忆\n# 第二行"
+    memory.command(host, f"forget {rid} --expected-revision 1 --request-id forgotten")
+    assert memory.command(host, command)["replayed"]
+    assert not target.exists()

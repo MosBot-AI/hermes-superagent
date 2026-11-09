@@ -15,11 +15,12 @@ FILENAME = "edit.md"
 TEMP = ".edit.md.pending"
 MAX_BYTES = 32768
 NOTICE = (
-    "Managed editable draft: applying, discarding, correcting or forgetting its target removes "
-    "this file and staging, including your edits. No automatic expiry cleanup. "
+    "Managed editable draft: apply/discard removes this file and staging, including your edits. "
+    "For correction drafts, correcting/forgetting the target also removes them. "
+    "No automatic expiry cleanup. "
     "Only content and topic are editable; this is not a backup, authority or instructions."
 )
-SCHEMA = {
+SCHEMA_V9 = {
     "memory_edits": """CREATE TABLE memory_edits (
     draft_id TEXT PRIMARY KEY NOT NULL, record_id TEXT NOT NULL, base_revision INTEGER NOT NULL,
     create_key TEXT UNIQUE NOT NULL, create_digest TEXT NOT NULL, created_at TEXT NOT NULL,
@@ -29,6 +30,22 @@ SCHEMA = {
     CHECK((state IN ('preparing','ready') AND slot=1 AND action_digest IS NULL AND receipt IS NULL)
        OR (state IN ('applied','discarded','invalidated') AND slot IS NULL)))"""
 }
+SCHEMA = {
+    "memory_edits": SCHEMA_V9["memory_edits"]
+    .replace(
+        "record_id TEXT NOT NULL, base_revision INTEGER NOT NULL,",
+        "record_id TEXT, base_revision INTEGER,",
+    )
+    .replace(
+        "CHECK(base_revision>0),",
+        "kind TEXT NOT NULL, expires_at TEXT, "
+        "CHECK((kind='correction' AND record_id IS NOT NULL AND base_revision>0 "
+        "AND expires_at IS NULL) "
+        "OR (kind='new' AND record_id IS NULL AND base_revision IS NULL)),",
+    )
+}
+
+
 COLUMNS = (
     "draft_id",
     "record_id",
@@ -41,6 +58,8 @@ COLUMNS = (
     "slot",
     "action_digest",
     "receipt",
+    "kind",
+    "expires_at",
 )
 
 
@@ -53,6 +72,7 @@ def digest(value):
 def validate(operation, payload):
     fields = {
         "edit_status": set(),
+        "edit_new": {"expires_at", "request_id"},
         "edit_create": {"record_id", "expected_revision", "request_id"},
         "edit_preview": {"draft_id"},
         "edit_apply": {"draft_id", "expected_digest", "request_id"},
@@ -79,6 +99,8 @@ def validate(operation, payload):
         or not re.fullmatch(r"[0-9a-f]{64}", value["expected_digest"])
     ):
         raise MemoryError("invalid_request")
+    if "expires_at" in value:
+        value["expires_at"] = validate_expiry(value["expires_at"])
     return value
 
 
@@ -91,16 +113,26 @@ def rows(conn):
         for raw in values:
             row = dict(zip(COLUMNS, raw, strict=True))
             _identifier(row["draft_id"])
-            _identifier(row["record_id"])
+            if row["kind"] == "new":
+                if row["record_id"] is not None or row["base_revision"] is not None:
+                    raise ValueError()
+                validate(
+                    "edit_new", {"expires_at": row["expires_at"], "request_id": row["create_key"]}
+                )
+            elif row["kind"] != "correction" or row["expires_at"] is not None:
+                raise ValueError()
+            else:
+                _identifier(row["record_id"])
             validate_expiry(row["created_at"], error_code="edit_state_corrupt")
-            validate(
-                "edit_create",
-                {
-                    "record_id": row["record_id"],
-                    "expected_revision": row["base_revision"],
-                    "request_id": row["create_key"],
-                },
-            )
+            if row["kind"] == "correction":
+                validate(
+                    "edit_create",
+                    {
+                        "record_id": row["record_id"],
+                        "expected_revision": row["base_revision"],
+                        "request_id": row["create_key"],
+                    },
+                )
             for key in ("create_digest", "publish_sha"):
                 if not re.fullmatch(r"[0-9a-f]{64}", row[key]):
                     raise ValueError()
@@ -132,13 +164,17 @@ def get(conn, draft_id):
 
 
 def metadata(row):
-    return {key: row[key] for key in ("draft_id", "record_id", "base_revision", "created_at")}
+    return {
+        key: row[key]
+        for key in ("draft_id", "record_id", "base_revision", "created_at", "kind", "expires_at")
+    }
 
 
 def header(backend, row):
     return {
         **{k: row[k] for k in ("draft_id", "record_id", "base_revision")},
         "namespace": backend._namespace,
+        **({"kind": "new", "expires_at": row["expires_at"]} if row["kind"] == "new" else {}),
     }
 
 
@@ -153,7 +189,7 @@ def render(backend, row, record):
     ).encode("utf-8")
 
 
-def parse(backend, row, data):
+def parse(backend, row, data, *, allow_empty=False):
     try:
         title, identity, topic, blank, content = data.decode("utf-8").split("\n", 4)
         # Exact canonical identity line rejects duplicate keys and fabricated metadata.
@@ -165,7 +201,7 @@ def parse(backend, row, data):
         ):
             raise ValueError()
         return {
-            "content": _text(content, 2048, multiline=True),
+            "content": _text(content, 2048, multiline=True, empty=allow_empty),
             "topic": _text(json.loads(topic[7:]), 128, empty=True),
         }
     except ValueError, TypeError, MemoryError:
@@ -332,6 +368,8 @@ def invalidate(backend, conn, record_id):
 
 
 def current_record(backend, conn, row, now):
+    if row["kind"] == "new":
+        return {"content": "", "topic": "", "expires_at": row["expires_at"]}
     record = backend._get(conn, row["record_id"], now)
     if record["status"] != "active":
         raise MemoryError("record_forgotten")
@@ -372,8 +410,10 @@ def create(backend, conn, request):
             files.read_files(False)
             row = {
                 "draft_id": str(uuid4()),
-                "record_id": request["record_id"],
-                "base_revision": request["expected_revision"],
+                "record_id": request.get("record_id"),
+                "base_revision": request.get("expected_revision"),
+                "kind": "correction" if "record_id" in request else "new",
+                "expires_at": request.get("expires_at"),
                 "create_key": request["request_id"],
                 "create_digest": identity,
                 "created_at": utc_now(),
@@ -386,7 +426,7 @@ def create(backend, conn, request):
             record = current_record(backend, conn, row, datetime.fromisoformat(row["created_at"]))
             row["publish_sha"] = hashlib.sha256(render(backend, row, record)).hexdigest()
             conn.execute(
-                "INSERT INTO memory_edits VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO memory_edits VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 tuple(row[k] for k in COLUMNS),
             )
         conn.execute("COMMIT")
@@ -404,7 +444,7 @@ def create(backend, conn, request):
         else:
             # A rename may have survived metadata rollback. Preserve any valid
             # operator edits; never overwrite this already published final file.
-            parse(backend, row, existing)
+            parse(backend, row, existing, allow_empty=row["kind"] == "new")
         conn.execute("UPDATE memory_edits SET state='ready' WHERE draft_id=?", (row["draft_id"],))
         conn.execute("COMMIT")
         row["state"] = "ready"
@@ -465,7 +505,10 @@ def execute(backend, conn, operation, request, now):
                     **metadata(row),
                     "state": row["state"],
                     "sha256": sha,
-                    "before": {k: record[k] for k in ("content", "topic")},
+                    "before": None
+                    if row["kind"] == "new"
+                    else {k: record[k] for k in ("content", "topic")},
+                    "operation": "remember" if row["kind"] == "new" else "correct",
                     "proposed": proposed,
                     "unchanged_expiry": record["expires_at"],
                     "notice": NOTICE,
@@ -474,17 +517,34 @@ def execute(backend, conn, operation, request, now):
             }
         if sha != request["expected_digest"]:
             raise MemoryError("edit_digest_conflict")
+        # A new draft is a new intention, not a retry of another remember.
+        # Successful retries have already returned through the terminal branch.
+        if (
+            row["kind"] == "new"
+            and conn.execute(
+                "SELECT 1 FROM receipts WHERE request_id=?", (request["request_id"],)
+            ).fetchone()
+        ):
+            raise MemoryError("idempotency_conflict")
         result = backend._mutate(
             conn,
-            "correct",
+            "remember" if row["kind"] == "new" else "correct",
             {
                 **proposed,
-                "record_id": row["record_id"],
-                "expected_revision": row["base_revision"],
+                **(
+                    {"expires_at": row["expires_at"]}
+                    if row["kind"] == "new"
+                    else {
+                        "record_id": row["record_id"],
+                        "expected_revision": row["base_revision"],
+                    }
+                ),
                 "request_id": request["request_id"],
             },
             now,
         )
+        if row["kind"] == "new":
+            files.remove(True)
         receipt = {**metadata(row), "state": "applied", "record": result["data"]}
     conn.execute(
         "UPDATE memory_edits SET state=?,slot=NULL,action_digest=?,receipt=? WHERE draft_id=?",

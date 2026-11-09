@@ -269,7 +269,7 @@ def test_schema_v8_requires_writable_migration(tmp_path):
     conn.close()
     conn = sqlite3.connect(path, isolation_level=None)
     b.open(conn, namespace_id="test", session_ref="s")
-    assert conn.execute("PRAGMA user_version").fetchone() == (9,)
+    assert conn.execute("PRAGMA user_version").fetchone() == (10,)
     assert conn.execute("SELECT * FROM memory_edits").fetchall() == []
     b.close()
     conn.close()
@@ -287,12 +287,13 @@ class Crash(sqlite3.Connection):
     commits=0
     def execute(self,sql,*args):
         if self.armed and sql=='COMMIT' and stage=='before_commit':
-            if operation!='create' or self.commits==1: os._exit(73)
+            if operation not in ('create','new') or self.commits==1: os._exit(73)
         value=super().execute(sql,*args)
         if self.armed and sql=='COMMIT':
             self.commits+=1
             if stage=='after_prepare' and self.commits==1: os._exit(73)
-            if stage=='after_commit' and (operation!='create' or self.commits==2): os._exit(73)
+            if stage=='after_commit' and (operation not in ('create','new') or self.commits==2):
+                os._exit(73)
         return value
 p=Path(directory); c=sqlite3.connect(p/'records.sqlite3',isolation_level=None,factory=Crash)
 b=create_backend();b.open(c,namespace_id='test',session_ref='s',edits=PrivateEdits(p));s=MemoryService(b)
@@ -309,7 +310,9 @@ def unlinking(*a,**k):
     if stage=='after_unlink':os._exit(73)
     return v
 os.replace=replacing;os.write=writing;os.unlink=unlinking;c.armed=True
-if operation=='create':
+if operation=='new':
+    s.execute('edit_new',{'expires_at':None,'request_id':'draft'})
+elif operation=='create':
     s.execute('edit_create',{'record_id':identifier,'expected_revision':1,'request_id':'draft'})
 elif operation=='apply':
     s.execute('edit_apply',{'draft_id':identifier,'expected_digest':sha,'request_id':'apply'})
@@ -474,7 +477,7 @@ def test_capacity_limits_new_drafts_not_cleanup_or_replay(store):
     row[7], row[8] = "invalidated", None
     for n in range(999):
         row[0], row[3] = str(uuid4()), f"terminal-{n}"
-        c.execute("INSERT INTO memory_edits VALUES (?,?,?,?,?,?,?,?,?,?,?)", row)
+        c.execute("INSERT INTO memory_edits VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", row)
     s.execute("edit_discard", {"draft_id": did})
     error("edit_limit", lambda: draft(s, rid, key="new"))
     assert draft(s, rid) == did
@@ -763,3 +766,178 @@ def test_clean_external_secure_delete_after_prewarmed_integrity(store):
         c.execute("SELECT rowid FROM memory_fts WHERE memory_fts MATCH '更新中文'").fetchall() == []
     )
     assert_persisted_integrity(d / "records.sqlite3")
+
+
+def new_draft(s, key="draft", expiry=None):
+    return s.execute("edit_new", {"expires_at": expiry, "request_id": key})["data"]["draft_id"]
+
+
+@pytest.mark.parametrize("expiry", [None, "2001-01-01T00:00:00Z", "2030-01-01T00:00:00Z"])
+def test_new_editor_complete_lifecycle_and_no_resurrection(store, expiry):
+    s, c, d = store
+    did = new_draft(s, expiry=expiry)
+    status = s.execute("edit_status", {})["data"]["active"]
+    assert status["kind"] == "new" and status["record_id"] is None
+    assert c.execute("SELECT count(*) FROM records").fetchone() == (0,)
+    error("edit_format_invalid", lambda: s.execute("edit_preview", {"draft_id": did}))
+    change_file(d)
+    preview = s.execute("edit_preview", {"draft_id": did})["data"]
+    assert preview["operation"] == "remember" and preview["before"] is None
+    assert preview["unchanged_expiry"] == expiry
+    request = apply_request(s, did)
+    result = s.execute("edit_apply", request)
+    rid = result["data"]["record"]["record_id"]
+    assert result["data"]["record"]["revision"] == 1
+    assert s.execute("get", {"record_id": rid})["data"]["expires_at"] == expiry
+    assert not (d / FILENAME).exists()
+    assert "更新中文" not in str(c.execute("SELECT * FROM memory_edits").fetchall())
+    s.execute("forget", {"record_id": rid, "expected_revision": 1, "request_id": "forget"})
+    other = new_draft(s, "next")
+    change_file(d, "another draft")
+    preserved = (d / FILENAME).read_bytes()
+    assert s.execute("edit_apply", request) == {**result, "replayed": True}
+    assert new_draft(s, expiry=expiry) == did
+    assert (d / FILENAME).read_bytes() == preserved
+    assert s.execute("edit_status", {})["data"]["active"]["draft_id"] == other
+    assert c.execute("SELECT count(*) FROM records").fetchone() == (1,)
+
+
+@pytest.mark.parametrize(
+    "stage", ["after_prepare", "partial_temp", "after_replace", "before_commit", "after_commit"]
+)
+def test_new_empty_publication_crashes_recover_without_canonical_writes(store, stage):
+    s, c, d = store
+    crash(stage, d, "new", "unused")
+    did = new_draft(s)
+    assert c.execute("SELECT count(*) FROM records").fetchone() == (0,)
+    assert (d / FILENAME).read_text().endswith("\n\n")
+    s.execute("edit_discard", {"draft_id": did})
+    assert new_draft(s) == did and not (d / FILENAME).exists()
+
+
+@pytest.mark.parametrize("stage", ["after_unlink", "before_commit", "after_commit"])
+def test_new_apply_crash_is_atomic_and_retry_does_not_duplicate(store, stage):
+    s, c, d = store
+    did = new_draft(s)
+    change_file(d)
+    request = apply_request(s, did)
+    crash(stage, d, "apply", did, request["expected_digest"])
+    count = c.execute("SELECT count(*) FROM records").fetchone()[0]
+    assert count == int(stage == "after_commit")
+    if stage == "after_commit":
+        assert s.execute("edit_apply", request)["replayed"]
+    else:
+        error("edit_file_missing", lambda: s.execute("edit_apply", request))
+        s.execute("edit_discard", {"draft_id": did})
+    assert not (d / FILENAME).exists()
+
+
+def test_new_and_correction_share_slot_and_unknown_files_are_not_adopted(store):
+    s, _, d = store
+    rid = seed(s)
+    did = new_draft(s)
+    error("edit_active", lambda: draft(s, rid, key="correction"))
+    s.execute(
+        "correct",
+        {"record_id": rid, "expected_revision": 1, "content": "elsewhere", "request_id": "correct"},
+    )
+    assert s.execute("edit_status", {})["data"]["active"]["draft_id"] == did
+    s.execute("edit_discard", {"draft_id": did})
+    other = draft(s, rid, key="correction", revision=2)
+    error("edit_active", lambda: new_draft(s, "another"))
+    s.execute("edit_discard", {"draft_id": other})
+    (d / FILENAME).write_text("unknown")
+    (d / FILENAME).chmod(0o600)
+    error("edit_file_conflict", lambda: new_draft(s, "another"))
+
+
+def test_new_file_expiry_identity_and_digest_are_fixed(store):
+    s, _, d = store
+    did = new_draft(s)
+    change_file(d)
+    request = apply_request(s, did)
+    change_file(d, "changed after preview")
+    error("edit_digest_conflict", lambda: s.execute("edit_apply", request))
+    p = d / FILENAME
+    p.write_text(
+        p.read_text().replace('"expires_at": null', '"expires_at": "2030-01-01T00:00:00Z"')
+    )
+    error("edit_format_invalid", lambda: s.execute("edit_preview", {"draft_id": did}))
+
+
+@pytest.mark.parametrize("stage", ["preparing", "ready", "discarded"])
+def test_v9_existing_drafts_migrate_without_changing_header_or_retry(store, stage):
+    from personal_agent.memory_edits import COLUMNS, SCHEMA_V9
+
+    s, c, d = store
+    rid = seed(s)
+    did = draft(s, rid)
+    original = (d / FILENAME).read_bytes()
+    if stage == "discarded":
+        s.execute("edit_discard", {"draft_id": did})
+    elif stage == "preparing":
+        c.execute("UPDATE memory_edits SET state='preparing'")
+    old_columns = ",".join(COLUMNS[:-2])
+    c.execute("ALTER TABLE memory_edits RENAME TO new_edits")
+    c.execute(SCHEMA_V9["memory_edits"])
+    c.execute(f"INSERT INTO memory_edits SELECT {old_columns} FROM new_edits")
+    c.execute("DROP TABLE new_edits")
+    c.execute("PRAGMA user_version=9")
+    readonly = create_backend()
+    rc = sqlite3.connect(d / "records.sqlite3", isolation_level=None)
+    error(
+        "readonly_schema_unavailable",
+        lambda: readonly.open_readonly(rc, namespace_id="test", session_ref="s"),
+    )
+    rc.close()
+    b, migrated = opened(d)
+    try:
+        service = MemoryService(b)
+        assert draft(service, rid) == did
+        assert migrated.execute("PRAGMA user_version").fetchone() == (10,)
+        if stage != "discarded":
+            assert (d / FILENAME).read_bytes() == original
+            service.execute("edit_apply", apply_request(service, did))
+        else:
+            assert not (d / FILENAME).exists()
+    finally:
+        b.close()
+        migrated.close()
+
+
+def test_concurrent_new_apply_returns_one_record_and_historical_receipt(store):
+    from concurrent.futures import ThreadPoolExecutor
+
+    s, c, d = store
+    did = new_draft(s)
+    change_file(d)
+    request = apply_request(s, did)
+
+    def apply():
+        b, conn = opened(d)
+        try:
+            return MemoryService(b).execute("edit_apply", request)
+        finally:
+            b.close()
+            conn.close()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(lambda _: apply(), range(2)))
+    assert results[0]["data"] == results[1]["data"]
+    assert sorted(r["replayed"] for r in results) == [False, True]
+    assert c.execute("SELECT count(*) FROM records").fetchone() == (1,)
+    assert not (d / FILENAME).exists()
+
+
+def test_new_apply_cannot_adopt_another_remember_receipt(store):
+    s, c, d = store
+    s.execute(
+        "remember", {"content": "same text", "topic": "", "expires_at": None, "request_id": "used"}
+    )
+    did = new_draft(s)
+    change_file(d, "same text", "")
+    error("idempotency_conflict", lambda: s.execute("edit_apply", apply_request(s, did, "used")))
+    assert (d / FILENAME).exists()
+    assert c.execute("SELECT count(*) FROM records").fetchone() == (1,)
+    s.execute("edit_apply", apply_request(s, did, "fresh"))
+    assert c.execute("SELECT count(*) FROM records").fetchone() == (2,)

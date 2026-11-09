@@ -33,9 +33,11 @@ HELP = (
     "--expected-revision N "
     "[--request-id KEY]; forget ID --expected-revision N [--request-id KEY]; "
     "export [--limit N --after ID]. Use POSIX quotes. "
-    "edit-status; edit-create ID --expected-revision N [--request-id KEY]; edit-preview DRAFT; "
+    "edit-status; edit-new (--keep | --expires-at UTC) [--request-id KEY]; "
+    "edit-create ID --expected-revision N [--request-id KEY]; edit-preview DRAFT; "
     "edit-apply DRAFT --expected-digest SHA256 [--request-id KEY]; edit-discard DRAFT. "
-    "edit.md is a managed draft: target correction/forgetting removes it including your edits. "
+    "edit.md is managed: apply/discard removes it including edits; for correction drafts, "
+    "target correction/forgetting also removes it. "
     "Only content/topic editable, no expiry change; one active draft, no background cleanup. "
     "projection-status; projection-refresh (explicitly enable/rebuild a private Markdown view); "
     "projection-disable (remove the managed view, preserve canonical records). "
@@ -141,6 +143,11 @@ def parse_command(raw_args: str) -> tuple[str, dict]:
             retention = review.add_mutually_exclusive_group(required=True)
             retention.add_argument("--keep", dest="expires_at", action="store_const", const=None)
             retention.add_argument("--expires-at")
+    edit_new = commands.add_parser("edit-new")
+    retention = edit_new.add_mutually_exclusive_group(required=True)
+    retention.add_argument("--keep", dest="expires_at", action="store_const", const=None)
+    retention.add_argument("--expires-at")
+    edit_new.add_argument("--request-id")
     commands.add_parser("edit-status")
     edit = commands.add_parser("edit-create")
     edit.add_argument("record_id")
@@ -181,6 +188,7 @@ def parse_command(raw_args: str) -> tuple[str, dict]:
         operation, operation
     )
     operation = {
+        "edit-new": "edit_new",
         "edit-status": "edit_status",
         "edit-create": "edit_create",
         "edit-preview": "edit_preview",
@@ -198,7 +206,15 @@ def parse_command(raw_args: str) -> tuple[str, dict]:
     }.get(operation, operation)
     if (
         operation
-        in ("remember", "correct", "forget", "checkpoint_create", "edit_create", "edit_apply")
+        in (
+            "remember",
+            "correct",
+            "forget",
+            "checkpoint_create",
+            "edit_create",
+            "edit_new",
+            "edit_apply",
+        )
         and payload["request_id"] is None
     ):
         payload["request_id"] = str(uuid4())

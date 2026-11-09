@@ -119,4 +119,4 @@ E9 has a selected native worker-routing design, an offline constraint evaluator 
 - [Private Markdown memory projection](68-private-memory-projection.md): explicit refresh, fixed private files and fenced crash recovery; SQLite remains canonical.
 
 - [Bounded Chinese automatic recall](69-chinese-automatic-recall.md): shared local query planning and conservative matching, with fixed synthetic evidence; explicit search and authority are unchanged.
-- [Private Markdown memory edit drafts](70-private-memory-edit-drafts.md): explicit preview and digest/revision-bound correction without editing the generated projection.
+- [Private Markdown memory edit drafts](70-private-memory-edit-drafts.md): editor-based first capture with explicit retention, plus digest/revision-bound corrections; preview before saving, without editing the generated projection.
