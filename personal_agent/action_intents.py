@@ -386,8 +386,23 @@ class ActionIntentStore:
                     pending.append(record)
             # Parsed instants, not variable-precision ISO text, determine order.
             pending.sort(key=lambda item: (_parse_stamp(item["expires_at"]), item["request_id"]))
+            # Preserve stable terminal retries during clock correction. Report
+            # a durable event watermark separately from the sampled wall clock
+            # rather than pretending this snapshot predates committed history.
+            event_times = [
+                _parse_stamp(row[0])
+                for record in records
+                for row in self._connection.execute(
+                    "SELECT recorded_at FROM main.events WHERE owner_id=? AND profile_id=? "
+                    "AND request_id=?",
+                    tuple(record[name] for name in _KEYS),
+                ).fetchall()
+            ]
+            latest = max(event_times, default=None)
             return {
                 "observed_at": _stamp(now),
+                "latest_event_at": _stamp(latest) if latest is not None else None,
+                "clock_behind_events": latest is not None and now < latest,
                 "pending_count": len(pending),
                 "truncated": len(pending) > limit,
                 "items": pending[:limit],
