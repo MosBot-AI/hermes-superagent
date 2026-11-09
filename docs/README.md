@@ -122,3 +122,5 @@ E9 has a selected native worker-routing design, an offline constraint evaluator 
 - [Private Markdown memory edit drafts](70-private-memory-edit-drafts.md): editor-based first capture with explicit retention, plus digest/revision-bound corrections; preview before saving, without editing the generated projection.
 
 - [Project-wide task date shifting](71-project-task-reschedule.md): preview all affected dates, then atomically shift active dated tasks with snapshot checks and durable retry receipts.
+
+- [Memory index inspection and recovery](72-memory-index-recovery.md): check canonical/index correspondence and explicitly rebuild derived FTS under the current event watermark, without restoring forgotten records.

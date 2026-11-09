@@ -31,6 +31,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Add operator-only memory FTS inspection and explicit watermark-bound rebuild from canonical records. Unsafe configuration, unknown schema and canonical damage remain refusals; no automatic repair or payload restoration.
+
 - Add explicit project-wide task date shifting with complete previews, atomic snapshot-bound apply and historical retry receipts. Terminal/undated tasks, native cards and reminders remain unchanged.
 
 - Add operator-only new-memory Markdown drafts with explicit retention and preview-before-save. Exact apply retries return historical receipts even after forgetting, without recreating the record. This is manual capture, not generic file import.
