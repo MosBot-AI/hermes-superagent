@@ -116,3 +116,4 @@ E9 has a selected native worker-routing design, an offline constraint evaluator 
 - [Local multi-term memory search](66-local-memory-full-text-search.md): transactional FTS5, short Chinese terms and unchanged literal contracts.
 
 - [Readable native memory workbench](67-readable-memory-workbench.md): human views and explicit JSON output, without new storage or authority.
+- [Private Markdown memory projection](68-private-memory-projection.md): explicit refresh, fixed private files and fenced crash recovery; SQLite remains canonical.

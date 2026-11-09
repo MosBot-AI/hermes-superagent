@@ -33,6 +33,9 @@ HELP = (
     "--expected-revision N "
     "[--request-id KEY]; forget ID --expected-revision N [--request-id KEY]; "
     "export [--limit N --after ID]. Use POSIX quotes. "
+    "projection-status; projection-refresh (explicitly enable/rebuild a private Markdown view); "
+    "projection-disable (remove the managed view, preserve canonical records). "
+    "Projection is not a backup; fixed records.md is managed, never edit or import it. "
     "Native views are readable by default; prefix --json for the original structured envelope. "
     "candidate-list [--limit N --after ID]; candidate-show ID; "
     "candidate-accept ID --expected-revision N (--keep | --expires-at UTC); "
@@ -135,6 +138,9 @@ def parse_command(raw_args: str) -> tuple[str, dict]:
             retention.add_argument("--keep", dest="expires_at", action="store_const", const=None)
             retention.add_argument("--expires-at")
     commands.add_parser("candidate-purge-expired")
+    commands.add_parser("projection-disable")
+    commands.add_parser("projection-status")
+    commands.add_parser("projection-refresh")
     for operation in ("correct", "forget"):
         writer = commands.add_parser(operation)
         writer.add_argument("record_id")
@@ -160,6 +166,9 @@ def parse_command(raw_args: str) -> tuple[str, dict]:
         operation, operation
     )
     operation = {
+        "projection-disable": "projection_disable",
+        "projection-status": "projection_status",
+        "projection-refresh": "projection_refresh",
         "search-terms": "search_terms",
         "candidate-list": "candidate_list",
         "candidate-show": "candidate_get",

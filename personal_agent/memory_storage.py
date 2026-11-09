@@ -12,6 +12,7 @@ from pathlib import Path
 from . import PLUGIN_ID
 from .local_memory import create_backend
 from .memory_backend import MemoryBackend, MemoryError
+from .memory_projection import PrivateProjection
 from .task_cli import _private_database_file, _private_storage_directory, current_profile_home
 from .tasks import TaskError
 
@@ -63,6 +64,7 @@ def open_memory_backend(
             namespace_id=namespace,
             session_ref=session_ref,
             source_kind=source_kind,
+            projection=PrivateProjection(directory),
         )
         yield backend
     finally:

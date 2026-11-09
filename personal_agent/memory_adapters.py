@@ -15,6 +15,7 @@ from .memory_backend import MemoryError
 ENTRY_POINT_GROUP = "hermes_personal_agent.memory_backends"
 _CAPABILITIES = frozenset(
     {
+        "private_markdown_projection",
         "review_candidates",
         "record_expiry",
         "explicit_records",
@@ -55,6 +56,9 @@ _DESCRIPTOR_FIELDS = {
     *_LIMITS,
 }
 _OPERATION_CAPABILITIES = {
+    "projection_disable": {"private_markdown_projection", "durable_write"},
+    "projection_status": {"private_markdown_projection"},
+    "projection_refresh": {"private_markdown_projection", "durable_write"},
     "remember": {"explicit_records", "durable_write", "idempotency"},
     "correct": {"explicit_records", "durable_write", "cas", "idempotency"},
     "forget": {"explicit_records", "durable_write", "cas", "idempotency"},
