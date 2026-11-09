@@ -8,6 +8,9 @@
 
 状态：已实现、需显式开启的 E2.6/E2.7 本地先导切片，不代表[完整记忆方案](30-pluggable-memory-contracts-zh.md)完成。用户可在已有 Hermes 原生会话中保存、查看、更正和遗忘短记录。本切片不增加记忆模型工具、自动召回/提取、原生 MemoryProvider 桥接、包加载器、Markdown 投影、向量服务或远程账号。
 
+当前后续能力：[显式多词 FTS 检索](66-local-memory-full-text-search-zh.md) 增加 schema v7 和事务式索引。本文所述字面搜索行为保持不变。
+
+
 ## 1. 开启受限本地模式
 
 按 [28](28-profile-first-local-conversations-zh.md) 使用固定 Hermes 版本与隔离的可信单用户 profile。保留其他设置，并显式加入：

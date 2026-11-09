@@ -71,6 +71,7 @@ def validate_request(operation: str, payload: dict) -> dict:
         "get": ({"record_id"}, set()),
         "list": (set(), {"limit", "after", "include_expired"}),
         "search": ({"query"}, {"limit", "after", "include_expired"}),
+        "search_terms": ({"terms"}, {"limit", "after", "include_expired"}),
         "recall": ({"queries"}, {"limit", "max_chars"}),
         "export": (set(), {"limit", "after"}),
         "changes": (set(), {"limit", "after_sequence", "through_sequence"}),
@@ -117,12 +118,20 @@ def validate_request(operation: str, payload: dict) -> dict:
         minimum = 0 if operation == "consumer_advance" else 1
         if type(value) is not int or not minimum <= value < 2**63 - 1:
             raise MemoryError("invalid_request")
-    if operation in {"list", "search", "export"}:
+    if operation in {"list", "search", "search_terms", "export"}:
         result = {"limit": 20, "after": None, **result}
         if type(result["limit"]) is not int or not 1 <= result["limit"] <= 50:
             raise MemoryError("invalid_request")
         if result["after"] is not None:
             result["after"] = _identifier(result["after"])
+    if operation == "search_terms":
+        terms = result["terms"]
+        if type(terms) is not list or not 1 <= len(terms) <= 8:
+            raise MemoryError("invalid_request")
+        validated_terms = [_text(term, 128) for term in terms]
+        result["terms"] = validated_terms
+        if len(set(validated_terms)) != len(terms):
+            raise MemoryError("invalid_request")
     if operation == "recall":
         result = {"limit": 6, "max_chars": 6000, **result}
         queries = result["queries"]

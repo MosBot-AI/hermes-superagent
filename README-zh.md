@@ -4,6 +4,9 @@
 
 Hermes 原生 personal-agent 插件，目标是让一个主 agent 管理项目、承诺、提醒和受控 worker。完整设计见 [docs 索引](docs/README-zh.md)。不运行第二套 agent loop，也不要求额外 API 网关。
 
+[本地记忆全文检索指南](docs/66-local-memory-full-text-search-zh.md) 增加显式多词 AND 检索、中文短词检查和事务式 FTS5。记忆 schema v7 要求 SQLite FTS5/trigram/secure-delete；只读打开不迁移旧存储。
+
+
 ## 当前进度
 
 当前优先交付 **profile-first 单用户本地 MVP**，不要求先绑定主 Bot。已实现 E0 基础、本地任务存储及显式启用的原生会话 `/personal-tasks` 命令，并已新增会话范围任务模型工具；尚未完成真实模型自然语言验收。

@@ -374,7 +374,7 @@ def register(ctx: PluginContext) -> None:
             handler=memory.command,
             description="Explicitly save, inspect, correct or forget local operator records.",
             args_hint=(
-                "remember | list | search | recall | changes | show | "
+                "remember | list | search | search-terms | recall | changes | show | "
                 "correct | forget | export | candidate-list | candidate-show | "
                 "candidate-accept | candidate-discard | candidate-purge-expired | help"
             ),

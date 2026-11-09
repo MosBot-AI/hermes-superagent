@@ -187,3 +187,34 @@ def test_storage_error_retains_validated_request_id(access):
     failed = call({"action": "remember", "content": "two", "request_id": "key"}, write=True)
     assert failed["error"]["code"] == "idempotency_conflict"
     assert failed["request_id"] == "key"
+
+
+def test_search_terms_reuses_read_activation_and_does_not_grant_writes(access):
+    instance, command, call, config, _, opened = access
+    query = {"action": "search_terms", "terms": ["北京", "Hermes"]}
+    assert call(query)["error"]["code"] == "session_tools_not_activated"
+    assert not opened
+    command("enable-write")
+    saved = call(
+        {"action": "remember", "content": "北京 Hermes 项目", "request_id": "terms"}, write=True
+    )
+    command("enable-read")
+    result = call(query)
+    assert [row["record_id"] for row in result["data"]["items"]] == [saved["data"]["record_id"]]
+    assert call(query, sid="other")["error"]["code"] == "session_tools_not_activated"
+    assert (
+        call({"action": "remember", "content": "Blocked", "request_id": "blocked"}, write=True)[
+            "error"
+        ]["code"]
+        == "session_write_not_activated"
+    )
+    count = len(opened)
+    config["memory_model_tools"] = False
+    assert call(query)["error"]["code"] == "memory_model_tools_disabled"
+    assert len(opened) == count
+    config["memory_model_tools"] = True
+    assert call(query)["error"]["code"] == "session_tools_not_activated"
+    command("enable-read")
+    instance.close()
+    assert call(query)["error"]["code"] == "memory_model_tools_unloaded"
+    assert len(opened) == count

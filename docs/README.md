@@ -112,3 +112,5 @@ E9 has a selected native worker-routing design, an offline constraint evaluator 
 - [Durable internal ActionIntent drafts](64-action-intent-drafts.md): metadata binding and terminal drafts only, not approval or execution.
 
 - [Live native task conversation acceptance](65-live-task-acceptance.md): real TUI/provider capture, lookup, update, completion and post-disable refusal on exact revisions.
+
+- [Local multi-term memory search](66-local-memory-full-text-search.md): transactional FTS5, short Chinese terms and unchanged literal contracts.

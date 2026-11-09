@@ -468,3 +468,23 @@ def test_native_checkpoint_requires_current_watermark_and_preserves_native_provi
     host.connection.actor = replace(host.connection.actor, capabilities=frozenset())
     with pytest.raises(RuntimeStoreError):
         command(host, "checkpoint --expected-watermark 2")
+
+
+def test_native_search_terms_uses_current_records_without_changing_host_config(host):
+    before = (host.home / "config.yaml").read_bytes()
+    saved = command(host, 'remember "北京 Hermes 原生测试" --request-id native-terms')
+    assert saved["status"] == "ok", saved
+    rid = saved["data"]["record_id"]
+    query = 'search-terms "北京" "Hermes"'
+    rows = command(host, query)["data"]["items"]
+    assert len(rows) == 1 and rows[0]["record_id"] == rid
+    assert command(host, 'search-terms "北京" "hermes"')["data"]["items"] == []
+    updated = command(
+        host, f'correct {rid} --text "上海 Hermes 原生测试" --expected-revision 1 --request-id nt-c'
+    )
+    assert updated["status"] == "ok"
+    assert command(host, query)["data"]["items"] == []
+    assert command(host, 'search-terms "上海" "Hermes"')["data"]["items"][0]["revision"] == 2
+    command(host, f"forget {rid} --expected-revision 2 --request-id nt-f")
+    assert command(host, 'search-terms "上海" "Hermes"')["data"]["items"] == []
+    assert (host.home / "config.yaml").read_bytes() == before

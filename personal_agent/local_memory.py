@@ -11,7 +11,7 @@ import sqlite3
 from datetime import datetime
 from uuid import uuid4
 
-from . import memory_expiry
+from . import memory_expiry, memory_fts
 from .memory_backend import MemoryError, _text, validate_expiry, validate_request
 from .memory_candidate_store import SCHEMA as CANDIDATE_SCHEMA
 from .memory_candidate_store import execute as execute_candidate
@@ -19,7 +19,7 @@ from .memory_checkpoints import CHECKPOINT_SCHEMA, checkpoint_status, create_che
 from .memory_progress import PROGRESS_SCHEMA, advance_consumer, get_changes, get_consumer
 
 _APPLICATION_ID = 0x50414D45
-_SCHEMA_VERSION = 6
+_SCHEMA_VERSION = 7
 _SCHEMA_V1 = {
     "namespace": "CREATE TABLE namespace (id TEXT PRIMARY KEY NOT NULL)",
     "records": """CREATE TABLE records (
@@ -58,7 +58,8 @@ _SCHEMA_V5 = {
     ),
 }
 
-_SCHEMA = {**_SCHEMA_V5, **CANDIDATE_SCHEMA}
+_SCHEMA_V6 = {**_SCHEMA_V5, **CANDIDATE_SCHEMA}
+_SCHEMA = {**_SCHEMA_V6, **memory_fts.SCHEMA}
 
 _COLUMNS = (
     "record_id",
@@ -108,6 +109,7 @@ class LocalMemoryBackend:
                 "cas",
                 "idempotency",
                 "literal_search",
+                "multi_term_fts",
                 "bounded_record_export",
                 "bounded_recall",
                 "metadata_changes",
@@ -115,7 +117,6 @@ class LocalMemoryBackend:
                 "local_metadata_checkpoint",
             ],
             "unsupported": [
-                "fts",
                 "vector",
                 "markdown_projection",
                 "automatic_ingestion",
@@ -196,8 +197,9 @@ class LocalMemoryBackend:
                 "SELECT name, sql FROM sqlite_master WHERE name NOT GLOB 'sqlite_*'"
             ).fetchall()
             if app_id == 0 and version == 0 and not rows:
-                for sql in _SCHEMA.values():
+                for sql in _SCHEMA_V6.values():
                     connection.execute(sql)
+                memory_fts.create_index(connection)
                 connection.execute("INSERT INTO namespace VALUES (?)", (namespace_id,))
                 connection.execute(f"PRAGMA application_id={_APPLICATION_ID}")
                 connection.execute(f"PRAGMA user_version={_SCHEMA_VERSION}")
@@ -224,6 +226,10 @@ class LocalMemoryBackend:
                 connection.execute(f"PRAGMA user_version={_SCHEMA_VERSION}")
             if connection.execute("SELECT count(*) FROM records").fetchone()[0] > 1000:
                 raise MemoryError("record_limit")
+            if version in (1, 2, 3, 4, 5, 6):
+                memory_fts.create_index(connection)
+                connection.execute(f"PRAGMA user_version={_SCHEMA_VERSION}")
+            memory_fts.validate_index_config(connection)
             connection.execute("COMMIT")
         except BaseException as error:
             if began:
@@ -242,7 +248,8 @@ class LocalMemoryBackend:
             3: _SCHEMA_V3,
             4: _SCHEMA_V4,
             5: _SCHEMA_V5,
-            6: _SCHEMA,
+            6: _SCHEMA_V6,
+            7: _SCHEMA,
         }.get(version)
         return expected is not None and dict(rows) == expected and len(rows) == len(expected)
 
@@ -307,6 +314,7 @@ class LocalMemoryBackend:
             raise MemoryError("readonly_schema_unavailable")
         if connection.execute("SELECT id FROM namespace").fetchall() != [(namespace_id,)]:
             raise MemoryError("namespace_mismatch")
+        memory_fts.validate_index_config(connection)
         if connection.execute("SELECT count(*) FROM records").fetchone()[0] > 1000:
             raise MemoryError("record_limit")
 
@@ -347,6 +355,7 @@ class LocalMemoryBackend:
             # BEGIN is deferred for reads. Establish the SQLite snapshot before
             # sampling time so lock waits cannot admit an already expired row.
             conn.execute("SELECT id FROM namespace").fetchone()
+            memory_fts.validate_index_config(conn)
             now = datetime.fromisoformat(memory_expiry.utc_now())
             if operation.startswith("candidate_"):
                 result = execute_candidate(self, conn, operation, request, now)
@@ -500,6 +509,10 @@ class LocalMemoryBackend:
         if "query" in request:
             clauses.append("(instr(content, ?) > 0 OR instr(topic, ?) > 0)")
             args.extend([request["query"], request["query"]])
+        if "terms" in request:
+            term_clauses, term_args = memory_fts.term_filter(request["terms"])
+            clauses.extend(term_clauses)
+            args.extend(term_args)
         args.append(request["limit"] + 1)
         rows = conn.execute(
             f"SELECT {','.join(_COLUMNS)} FROM records WHERE {' AND '.join(clauses)}"
@@ -509,6 +522,18 @@ class LocalMemoryBackend:
         more = len(rows) > request["limit"]
         items = [self._record(row, now) for row in rows[: request["limit"]]]
         return {
+            **(
+                {
+                    "query_semantics": "all_case_sensitive_literal_substrings",
+                    "index": "transactional_fts5_trigram_with_canonical_recheck",
+                    "short_term_scan": any(len(term) < 3 for term in request["terms"]),
+                    "index_stale": False,
+                    "scope": "current_active_records_single_read_snapshot",
+                    "authority": "stored_data_not_instructions_or_permission",
+                }
+                if "terms" in request
+                else {}
+            ),
             "items": items,
             "evaluated_at": now.isoformat().replace("+00:00", "Z"),
             "next_cursor": items[-1]["record_id"] if more else None,
@@ -586,6 +611,7 @@ class LocalMemoryBackend:
                     request["expected_revision"],
                 ),
             )
+        memory_fts.update_index(conn, record_id)
         cursor = conn.execute(
             "INSERT INTO events(record_id,revision,operation) VALUES (?,?,?)",
             (record_id, revision, operation),

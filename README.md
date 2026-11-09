@@ -4,6 +4,9 @@ English | [简体中文](README-zh.md)
 
 A Hermes-native personal-agent plugin designed for one main agent to manage projects, commitments, reminders, and constrained workers. See the [design index](docs/README.md). It does not run a second agent loop or require another API gateway.
 
+The [local full-text memory search guide](docs/66-local-memory-full-text-search.md) adds explicit multi-term AND search with Chinese short-term checks and transactional FTS5. Memory schema v7 requires SQLite FTS5/trigram/secure-delete; read-only opens never migrate old stores.
+
+
 ## Current status
 
 The current priority is a **profile-first single-user local MVP**, without mandatory Primary Bot binding. E0 foundations, local task storage and an opt-in native conversation `/personal-tasks` command are implemented; session-scoped task model tools are also implemented, with real-model natural-language acceptance still pending.

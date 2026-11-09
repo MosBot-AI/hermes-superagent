@@ -23,6 +23,7 @@ HELP = (
     'remember "Text" [--topic LABEL] [--expires-at UTC] [--request-id KEY]; '
     "list [--include-expired --limit N --after ID]; "
     'search "Text" [--include-expired --limit N --after ID]; show ID; '
+    'search-terms "Term" ["Other term" ...] [--include-expired --limit N --after ID]; '
     'recall "Keyword" ["Other keyword" ...] [--limit N --max-chars N]; '
     "changes [--after-sequence N --through-sequence N --limit N]; "
     "checkpoint --expected-watermark N [--request-id KEY]; checkpoint-status ID; "
@@ -43,9 +44,11 @@ HELP = (
     "deduplication metadata remains, capped at 1000 retained candidates. "
     "Recall ranks 1-8 distinct literal keywords; defaults to 6 whole records and a 6000-character "
     "ASCII JSON items budget, not tokens. It reports omitted matches and is not semantic search. "
+    "Search-terms requires every one of 1-8 distinct case-sensitive substrings to match "
+    "content or topic. It is not semantic search; 1-2-character terms use literal fallback. "
     "Checkpoints cover local record metadata only, not native conversations or backups. "
     "Expiry uses an explicit UTC YYYY-MM-DDTHH:MM:SSZ timestamp; no default is inferred. "
-    "Expired records are excluded from ordinary list/search/recall, not deleted. "
+    "Expired records are excluded from ordinary list/search/search-terms/recall, not deleted. "
     "Use --include-expired or show to inspect, correct --clear-expiry to restore eligibility, "
     "or forget to clear canonical payload. Expiry does not erase previous model context. "
     "Writes return metadata receipts, not remembered content. Generated request IDs are "
@@ -92,11 +95,13 @@ def parse_command(raw_args: str) -> tuple[str, dict]:
     remember.add_argument("--request-id")
     show = commands.add_parser("show")
     show.add_argument("record_id")
-    for operation in ("list", "search", "export"):
+    for operation in ("list", "search", "search-terms", "export"):
         reader = commands.add_parser(operation)
         if operation == "search":
             reader.add_argument("query")
-        if operation in ("list", "search"):
+        if operation == "search-terms":
+            reader.add_argument("terms", nargs="+")
+        if operation in ("list", "search", "search-terms"):
             reader.add_argument("--include-expired", action="store_true", default=argparse.SUPPRESS)
         reader.add_argument("--limit", type=int, default=20)
         reader.add_argument("--after", default=None)
@@ -152,6 +157,7 @@ def parse_command(raw_args: str) -> tuple[str, dict]:
         operation, operation
     )
     operation = {
+        "search-terms": "search_terms",
         "candidate-list": "candidate_list",
         "candidate-show": "candidate_get",
         "candidate-accept": "candidate_accept",
