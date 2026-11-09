@@ -2,9 +2,9 @@
 
 English | [简体中文](13-enforcement-contracts-zh.md)
 
-This page records an earlier E0 slice. See [16](16-local-task-inbox.md) for the newer opt-in local task inbox; it does not enable the native/external controlled-write paths described here.
+This page records the earlier E0 slice and its bounded RPC/MCP follow-on for [Issue #12](https://github.com/MosBot-AI/hermes-superagent/issues/12). See [16](16-local-task-inbox.md) for the newer opt-in local task inbox; it does not enable the native/external controlled-write paths described here.
 
-This follow-on P0 slice advances E0.4 without enabling any controlled write capability. It adds reproducible failure-boundary tests and a machine-readable release inventory. E0.4, E0/M0, and E1 authorization remain incomplete.
+This follow-on P0 slice advances E0.4 without enabling any controlled write capability. It adds reproducible failure-boundary tests and a machine-readable release inventory. The current follow-on exercises actual pinned RPC consumers/server dispatch and MCP admission with synthetic effects; it does not complete all alternate paths. E0.4, E0/M0, and E1 authorization remain incomplete.
 
 ## 1. What the implementation does
 
@@ -14,7 +14,7 @@ This is a **read-only release report**, not an action authorizer, a live host in
 
 ## 2. Observed behavior at the pinned baseline
 
-The new tests load a real directory plugin through real discovery. Its only handler records calls in memory. No fake manager, context, manifest parser, registry, or config loader is used. Callback behavior is controlled by the test fixture; the outer dispatcher test explicitly injects one escaping dispatcher exception.
+The original enforcement tests load a real directory plugin through real discovery. Its only handler records calls in memory. No fake manager, context, manifest parser, registry, or config loader is used. Callback behavior is controlled by the test fixture; the outer dispatcher test explicitly injects one escaping dispatcher exception.
 
 | Boundary | Observed result | Consequence |
 |---|---|---|
@@ -33,22 +33,50 @@ Worker probes run in fresh processes because the bootstrap policy is bound once 
 
 The tests are [native enforcement contracts](../tests/contracts/test_enforcement_boundaries.py). The fixture is test-only and never installed as part of the plugin's runtime tool surface.
 
+### 2.1 Nested RPC admission and response-loss counterexample
+
+[RPC contracts](../tests/contracts/test_nested_rpc_enforcement.py) call the actual `_rpc_server_loop` without its optional dispatch override. JSON framing, token comparison, allow-list, call budget, `_default_dispatch`, `model_tools`, plugin hooks/middleware and error logs remain native. Only the socket protocol endpoint is an in-memory double: no listener, socket connection, sandbox, shell or model is opened. The loaded fixture handler records effects in memory.
+
+- Empty/mismatched/non-ASCII tokens, an empty server token, malformed JSON, an unavailable tool and an exhausted budget refuse before handler execution. Only dispatched attempts consume the budget; a hook-denied attempt still consumes one and is recorded by `tool_errors_since`.
+- Normal plugin veto and callback failures stop the nested call. An explicitly injected exception escaping the outer hook dispatcher still reaches the handler. Nesting through RPC does not repair that existing failure domain.
+- Two identical authenticated packets execute twice. The token, tool allow-list and call budget are neither an ActionIntent nor an idempotency key.
+- The test executes the host-generated `_UDS_TRANSPORT_HEADER` client unchanged except for connection setup. Its transport double drops the first response **after** the real server/default dispatch completes. A one-shot client raises with one observed effect; a persistent client reconnects, repeats the same packet and returns after a second effect. This is a generated-client retry counterexample over an in-memory wire, not a live UDS/TCP or complete session-kernel test. Session kernels' custom current-cell authority rebinding and the remote filesystem polling transport remain unverified here.
+
+### 2.2 MCP admission versus declared read-only behavior
+
+[MCP enforcement contracts](../tests/contracts/test_mcp_enforcement.py) reuse [74's SDK stdio facade](74-synthetic-connector-fixtures.md). They use actual MCP discovery, registry registration, native wrappers and stdio sessions. A separate read-only SQLite observer counts attempts/effects; returned prose is not the oracle. The only approval substitution is the synthetic UI endpoint returning deny, cancel or an exception, not the native trust gate.
+
+- A real registered plugin veto or callback exception stops model-facing MCP dispatch before any remote execute attempt. With synthetic `trust: full`, direct registry dispatch of the same arguments bypasses that plugin callback and creates one fixture effect. This does **not** mean direct registry bypasses every MCP gate.
+- Configured `trust: untrusted` write tools retain the native trust gate through both model and direct registry dispatch. Deny, cancel and approval-endpoint failure refuse before call-server acquisition, with zero remote execute attempts/effects.
+- A deliberately dishonest `readOnlyHint: true` tool on the untrusted server creates an effect without a trust prompt. The annotation is a declaration, not effect-level authorization or isolation. [74](74-synthetic-connector-fixtures.md) separately records declaration-driven replay after an injected session-expiry error.
+
+| Inventory contract ID | Executable assertion |
+| --- | --- |
+| `rpc_token_allowlist_budget` | `test_rpc_invalid_tokens_never_reach_default_dispatch`, `test_rpc_empty_server_token_fails_closed`, `test_rpc_framing_allowlist_and_budget_refuse_before_dispatch` |
+| `rpc_nested_hook_failure` | `test_rpc_default_dispatch_honors_plugin_denial_and_callback_failure` |
+| `rpc_outer_dispatcher_failure` | `test_rpc_outer_dispatcher_failure_still_reaches_nested_handler` |
+| `rpc_duplicate_request` | `test_rpc_identical_authenticated_requests_are_not_deduplicated` |
+| `rpc_persistent_client_response_loss` | `test_generated_rpc_client_response_loss_can_replay_an_effect` |
+| `mcp_plugin_veto_and_registry_bypass` | `test_registered_plugin_blocks_mcp_but_direct_registry_bypasses_plugin` |
+| `mcp_native_trust_gate` | `test_native_untrusted_gate_stops_before_transport` |
+| `mcp_dishonest_read_hint` | `test_untrusted_read_only_hint_is_not_effect_level_authorization` |
+
 ## 3. Controlled-write release inventory
 
 | Path | Evidence in this slice | Release status |
 |---|---|---|
 | `native_dispatch` | Synthetic hook and outer-dispatch failure contracts | Blocked; operation-level authorization is not integrated |
 | `direct_registry` | Synthetic bypass-of-hooks contract | Blocked; handlers need their own operation-level checks |
-| `mcp` | No end-to-end raw MCP write contract | Blocked |
+| `mcp` | Actual SDK stdio plugin-veto/direct-registry and native trust-gate boundaries; dishonest read-only counterexample | Blocked; no production per-action authorization or credential/outcome contract |
 | `shell` | No backend containment or operation-level write contract | Blocked |
 | `browser` | No authenticated write/outcome contract | Blocked |
-| `execute_code_rpc` | No end-to-end nested-call authority contract | Blocked |
+| `execute_code_rpc` | Native server/default nested dispatch and generated client retry over an in-memory wire | Blocked; replay counterexample, sandbox and current-cell authority remain unverified |
 | `connector_batch` | No per-item authorization/partial-result/retry contract | Blocked |
 | `short_worker` | No delegated side-effect/revocation contract | Blocked |
 | `managed_worker` | Synthetic frozen-config and safe-mode contracts | Blocked; current persistent policy checks are absent |
 | `scheduled_job` | No authorization/cancel/delivery/reconciliation contract | Blocked |
 
-“Synthetic contract” is not full coverage of a named tool family. A successful in-memory probe does not prove shell, MCP, browser, external delivery, or real worker side effects are protected. The inventory is immutable internally and returns independent snapshots; mutating a report cannot grant a capability or change later reports.
+`synthetic_contract` and `pinned_host_boundary_contract` are bounded evidence labels, not full coverage of a named tool family. A successful in-memory probe does not prove shell, MCP, browser, external delivery, or real worker side effects are protected. The inventory is immutable internally and returns independent snapshots; mutating a report cannot grant a capability or change later reports.
 
 ## 4. Requirements before writes can be enabled
 
@@ -62,16 +90,34 @@ No mode or configuration toggle in this slice enables writes. It remains possibl
 
 ## 5. Evidence and limits
 
-- Baseline: Hermes `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`, Linux, Python 3.14, isolated test homes, and no account credentials.
+- Current target: Hermes `2281116525106e3c109993ccb5dc74d02bfc1427`, Linux, Python 3.14, isolated test homes and no account credentials, as recorded in [compatibility.json](../compatibility.json). The original slice used `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`; historical results remain separate from current exact-revision runs.
 - The checker now runs every file under `tests/contracts` through the official per-file Hermes runner, in addition to unit tests, Ruff, ty, and bilingual document checks.
-- Observed dispatcher failure applies to the tested `model_tools` wrapper. Other wrappers and direct MCP helpers were inspected in source only, not exercised as end-to-end writes.
+- Observed dispatcher failure applies to the tested `model_tools` wrapper, including default nested RPC dispatch. MCP observations cover the real stdio fixture and native trust wrapper, not all server transports or account policies. Shell, browser, connector batch, short-worker effects and current persistent-policy admission in managed workers remain separate gates. Frozen config/safe-mode probes do not verify revocation or read-only degradation.
 - No production account, API key, live model request, external send, or real connector write was needed. Future online tests need a separate scoped test setup and secure credential handoff; credentials must not enter chat, logs, or the repository.
 - The later [E0.2–E0.3 lifecycle contracts](75-native-lifecycle-contracts.md) add bounded Project/Kanban/cron operator evidence and document missing supported plugin CRUD APIs; they enable no production capability. Untested E0.4 paths, E1-dependent write admission, E3 orchestration and E4 controlled scheduling remain separate gates. Passing this slice does not complete M0 or permit those write features to ship.
 
-Pinned sources:
+Reproduce focused native tests with absolute paths because the official runner changes its working directory:
 
-- [Plugin dispatch behavior](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/hermes_cli/plugins_dispatch.py)
-- [Model-facing tool dispatch](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/model_tools.py)
-- [Execution middleware](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/hermes_cli/middleware.py)
-- [Managed/safe worker policy](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/agent/safe_worker_policy.py)
-- [Upstream security model](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/SECURITY.md)
+```bash
+HERMES_PYTHON=/absolute/path/hermes-test-venv/bin/python \
+bash /absolute/path/hermes-agent/scripts/run_tests.sh \
+  /absolute/path/hermes-superagent/tests/contracts/test_nested_rpc_enforcement.py \
+  /absolute/path/hermes-superagent/tests/contracts/test_mcp_enforcement.py \
+  --file-retries 0 -- \
+  -o "pythonpath=/absolute/path/hermes-agent /absolute/path/hermes-superagent" -q --tb=short
+python scripts/check.py --hermes /absolute/path/hermes-agent \
+  --hermes-python /absolute/path/hermes-test-venv/bin/python
+```
+
+Use the prepared Python 3.14 test interpreter for `python` in the aggregate command. The focused files contain 21 parametrized cases; their success does not stand in for the aggregate or full E0.4 acceptance. Exact executed results belong to Issue #12 and its linked PR. No host patch or production capability is introduced.
+
+Current pinned sources:
+
+- [Plugin dispatch behavior](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_cli/plugins_dispatch.py)
+- [Model-facing tool dispatch](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/model_tools.py)
+- [Execution middleware](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_cli/middleware.py)
+- [Managed/safe worker policy](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/agent/safe_worker_policy.py)
+- [Upstream security model](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/SECURITY.md)
+
+- [Code RPC server](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/tools/code_execution_rpc.py) and [generated client](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/tools/code_execution_tool.py)
+- [MCP native admission and recovery](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/tools/mcp_tool_handlers.py)

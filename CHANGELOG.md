@@ -13,6 +13,8 @@ This file distinguishes design work, development changes, and released capabilit
 - Run runtime artifact acceptance on exact pull-request heads with read-only credentials; keep downloadable artifact publication push-only.
 ### Changed
 
+- Extend the blocked [write-path inventory](docs/13-enforcement-contracts.md) with real pinned-host RPC/MCP admission contracts and explicit response-loss, direct-registry and dishonest read-only counterexamples. Transport/approval doubles are limited and disclosed; no controlled write capability is enabled.
+
 - Add test-only [native memory contracts](docs/76-native-memory-contracts.md) for E0.9 discovery, stores, retrieval and lifecycle boundaries on Hermes `22811165`; preserve strict checkpoint refusal and separate unsupported capabilities from runtime implementation.
 
 - Improve unspaced questions in [Chinese automatic recall](docs/69-chinese-automatic-recall.md) with conservative multi-term selection, preserving explicit queries and access gates. Fixed-corpus misses remain; no general semantic understanding is claimed.
