@@ -13,6 +13,8 @@ This file distinguishes design work, development changes, and released capabilit
 - Run runtime artifact acceptance on exact pull-request heads with read-only credentials; keep downloadable artifact publication push-only.
 ### Changed
 
+- Add test-only [native memory contracts](docs/76-native-memory-contracts.md) for E0.9 discovery, stores, retrieval and lifecycle boundaries on Hermes `22811165`; preserve strict checkpoint refusal and separate unsupported capabilities from runtime implementation.
+
 - Improve unspaced questions in [Chinese automatic recall](docs/69-chinese-automatic-recall.md) with conservative multi-term selection, preserving explicit queries and access gates. Fixed-corpus misses remain; no general semantic understanding is claimed.
 
 - Native `/personal-memory` now shows readable human views by default. Scripts must prefix `--json` to retain the original envelope; model tools, storage and authority are unchanged.

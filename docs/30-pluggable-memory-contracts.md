@@ -2,6 +2,8 @@
 
 English | [简体中文](30-pluggable-memory-contracts-zh.md)
 
+Current E0.9 update: [76](76-native-memory-contracts.md) adds the native-contract verification matrix for Hermes `22811165`. The historical source findings below retain their original baseline. Verifying supported behavior and unsupported modes does not implement the full memory design, durable checkpoint-v2 or automatic capture.
+
 Implementation update: [31](31-explicit-local-memory.md) now provides a narrow explicit local-record precursor, with an internal backend seam and native commands; [32](32-session-scoped-memory-tools.md) adds separately activated model tools and explicit model-origin labels. The full SDK, lifecycle, automatic retrieval/ingestion and migration contract below remain proposed; the source review and this local slice do not complete them.
 
 **Status: target design with a narrow local precursor; full contract not implemented.** This document specifies replaceable personal-memory storage/retrieval, lifecycle adapters and acceptance gates. It does not install a provider, ingest conversations, enable extraction, replace a user's memory, or prove recall quality. Existing task tools and policy foundations are separate implementations, not this memory system.
@@ -298,7 +300,7 @@ Run synthetic corpora and fake backends first, then approved real-data/provider/
 
 | ID | Milestone/status and dependencies | Deliverable |
 |---|---|---|
-| E0.9 Verify Memory Provider Contracts | M0; Backlog; E0.1/E0.2/E0.5 | Public loading/lifecycle/single-slot, profile/cron/worker, compression checkpoint and source-reference matrix; actual isolation gaps |
+| E0.9 Verify Memory Provider Contracts | M0; In Progress; E0.1/E0.2/E0.5 | Public loading/lifecycle/single-slot, profile/cron/worker, compression checkpoint and source-reference matrix; actual isolation gaps |
 | E2.6 Define Pluggable Memory Contracts | M1; In Progress (local precursor); E0.9, local audit/data-classification/secret-reference contracts in E1.5 and applicable local E2.1/E2.2 contracts | Versioned backend/service, record/event/receipt/deletion semantics, SDK fixtures and trust-mode gates |
 | E2.7 Build Local Memory Backend | M2; In Progress (local precursor); E2.6, local E2.1/E2.2 and applicable E8.1/E8.2 harness | SQLite canonical records/events/FTS, Markdown projections, correction/forgetting, bounded retrieval and explicit local commands |
 | E2.8 Integrate Native Memory Lifecycle | M2; In Progress (read-only recall); E0.9/E2.6/E2.7 and applicable E6.8/E6.9 entry contracts | Optional single-slot bridge, consented candidates/recall, scheduled/compaction checkpoints, source coverage and budgets |

@@ -22,6 +22,12 @@
 
 测试文件同时检查宿主提交及宿主声明的 MCP SDK 固定版本。确切执行结果以 Issue #13 及其关联 PR 为准；本段不更新下方历史计数。不启用真实账号、服务商、OAuth 流程、网络监听器或生产连接器。该反例证明不能信任 `readOnlyHint`，不是 E0.4 执行控制或 E1/E5 完成的证明。
 
+## E0.9 原生记忆范围（22811165）
+
+[原生记忆契约矩阵](76-native-memory-contracts-zh.md) 区分提供方发现/准入、内置容量/重载、原生历史检索及生命周期/上下文接线，与现有召回及检查点边界。准确执行结果以 [Issue #42](https://github.com/MosBot-AI/hermes-superagent/issues/42) 及关联 PR 为准；此补充不替换下方历史计数。
+
+不支持的隔离、跨配置档案授权及持久来源绑定检查点仍明确保留。项目提供方保持 API v1，必需检查点失败关闭。此仅测试核验不启用自动捕获、远程身份、第二个提供方槽位或生产部署。
+
 ## 历史 E0.1 证据（90d6b98）
 
 此前的兼容性基线固定 Hermes `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`。已验证的环境为 Linux、Python 3.14.9，以及使用固定版本 Hermes 的 `dev` 和 `test` 组构建的 PM 环境。大多数插件契约测试在临时 profile 中使用原生 `in_process` 加载。取得带版本的兼容性证据之前，保持 `semver_support_range` 为 `null`，[清单](../plugin.yaml)继续省略 `requires_hermes`。以下历史证据对应的开发目标是该确切提交。
