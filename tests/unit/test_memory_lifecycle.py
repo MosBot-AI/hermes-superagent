@@ -284,3 +284,35 @@ def test_removing_standalone_plugin_enablement_revokes_recall(lifecycle):
     config["plugins"]["enabled"] = []
     assert instance.prefetch("breakfast", session_id="s1") == ""
     assert state["reads"] == 0
+
+
+def test_chinese_question_provider_uses_one_fresh_snapshot(lifecycle):
+    instance, backend, conn, _, state, home = lifecycle
+    rid = save(backend, content="早餐喝燕麦奶")
+    initialize(instance, home)
+    before = conn.total_changes
+    result = json.loads(instance.prefetch("我早餐喜欢喝什么？", session_id="s1"))
+    assert [r["record_id"] for r in result["memory"]["items"]] == [rid]
+    assert state["reads"] == 1 and conn.total_changes == before
+    # Explicit recall still requires the supplied literal term, not its fragments.
+    assert (
+        MemoryService(backend).execute("recall", {"queries": ["我早餐喜欢喝什么"]})["data"]["items"]
+        == []
+    )
+    backend.execute("forget", {"record_id": rid, "expected_revision": 1, "request_id": "gone"})
+    assert instance.prefetch("我早餐喜欢喝什么？", session_id="s1") == ""
+    assert state["reads"] == 2
+
+
+def test_chinese_multiterm_provider_omits_single_attribute_matches(lifecycle):
+    instance, backend, _, _, state, home = lifecycle
+    target = save(backend, content="王明生日是五月十日", key="birthday")
+    save(backend, content="王明地址是北京", key="address")
+    save(backend, content="李四生日是六月十日", key="other")
+    initialize(instance, home)
+    result = json.loads(instance.prefetch("王明的生日是哪天？", session_id="s1"))["memory"]
+    assert [r["record_id"] for r in result["items"]] == [target]
+    assert result["automatic_filter"]["filtered_returned_records"] == 2
+    assert result["omitted_records"] == 2 and state["reads"] == 1
+    assert instance.prefetch("赵六的生日是哪天？", session_id="s1") == ""
+    assert state["reads"] == 2

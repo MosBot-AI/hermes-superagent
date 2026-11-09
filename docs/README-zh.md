@@ -117,3 +117,5 @@ E9 已选定原生 worker 路由设计，并实现离线约束验证器和部分
 
 - [可读的原生记忆工作台](67-readable-memory-workbench-zh.md)：人类视图与显式 JSON 输出，不增加存储或权限。
 - [私有 Markdown 记忆投影](68-private-memory-projection-zh.md): 显式刷新、固定私有文件和隔离式崩溃恢复；SQLite 仍为权威。
+
+- [有界中文自动回忆](69-chinese-automatic-recall-zh.md)：共享本地切分及保守匹配门槛，附固定合成评估；不改变显式检索或权限。

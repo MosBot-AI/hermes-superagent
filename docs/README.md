@@ -117,3 +117,5 @@ E9 has a selected native worker-routing design, an offline constraint evaluator 
 
 - [Readable native memory workbench](67-readable-memory-workbench.md): human views and explicit JSON output, without new storage or authority.
 - [Private Markdown memory projection](68-private-memory-projection.md): explicit refresh, fixed private files and fenced crash recovery; SQLite remains canonical.
+
+- [Bounded Chinese automatic recall](69-chinese-automatic-recall.md): shared local query planning and conservative matching, with fixed synthetic evidence; explicit search and authority are unchanged.

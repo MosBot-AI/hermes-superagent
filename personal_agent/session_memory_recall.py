@@ -9,6 +9,7 @@ import json
 from . import session_task_tools as admission
 from .memory_backend import MemoryService
 from .memory_lifecycle import literal_terms
+from .memory_query import filter_automatic_recall
 from .memory_storage import open_existing_memory_reader
 from .session_memory_tools import SessionMemoryTools
 from .tasks import TaskError
@@ -164,6 +165,7 @@ class RecallingSessionMemoryTools(SessionMemoryTools):
                             "max_chars": MAX_CONTEXT_CHARS - 1024,
                         },
                     )["data"]
+                data = filter_automatic_recall(data, user_message, terms)
                 context = recall_context(data)
                 # Release the activation lock during I/O so off/disable/close can
                 # take effect. A revoked and re-enabled selection never revives this read.

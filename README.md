@@ -11,6 +11,8 @@ The [native memory workbench](docs/67-readable-memory-workbench.md) now uses rea
 
 [Private Markdown memory projection](docs/68-private-memory-projection.md): explicit refresh, fixed private files and fenced crash recovery; SQLite remains canonical.
 
+[Bounded Chinese automatic recall](docs/69-chinese-automatic-recall.md): shared local query planning and conservative matching, with fixed synthetic evidence; explicit search and authority are unchanged.
+
 
 ## Current status
 

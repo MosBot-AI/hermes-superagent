@@ -2,6 +2,8 @@
 
 English | [简体中文](41-native-memory-recall-zh.md)
 
+Follow-on: [69](69-chinese-automatic-recall.md) updates the historical query description below with shared finite Chinese function-word splitting and conservative multi-term selection. Explicit retrieval and authority are unchanged; see its fixed evaluation and misses.
+
 Alternative supported route: [49](49-session-memory-recall.md) adds separately enabled automatic recall inside the standalone plugin, without installing/selecting this provider. Both routes can overlap if independently enabled; neither performs extraction or checkpoint-v2.
 
 Follow-on: [45](45-explicit-memory-expiry.md) requires schema v5 and excludes expired records from each fresh recall at its captured UTC wall-clock time. The read-only provider never migrates. A permitted store-opening command or already-activated model-tool operation can upgrade an owned old store before recall resumes; /personal-memory list is the recommended deliberate operator workflow. Evaluation time is sampled after actual SQLite snapshot acquisition, not before any lock wait. No provider selection/configuration changes are made. Expiry cannot retract a pack already in native history or model context.

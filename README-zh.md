@@ -11,6 +11,8 @@ Hermes 原生 personal-agent 插件，目标是让一个主 agent 管理项目�
 
 [私有 Markdown 记忆投影](docs/68-private-memory-projection-zh.md): 显式刷新、固定私有文件和隔离式崩溃恢复；SQLite 仍为权威。
 
+[有界中文自动回忆](docs/69-chinese-automatic-recall-zh.md)：共享本地切分及保守匹配门槛，附固定合成评估；不改变显式检索或权限。
+
 
 ## 当前进度
 

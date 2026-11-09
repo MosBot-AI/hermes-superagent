@@ -358,3 +358,52 @@ def test_native_activation_renewal_requires_new_recall_selection(host, renew):
     assert activate(host, "recall-on")["status"] == "ok"
     with turn(host):
         assert "oat milk" in collect(host)
+
+
+def test_native_chinese_question_recall_and_explicit_literal_contract(host):
+    record = save(host, "早餐喝燕麦奶", key="chinese-auto")
+    expired = save(
+        host, "早餐喝豆浆", key="chinese-expired", extra="--expires-at 2000-01-01T00:00:00Z"
+    )
+    enable(host)
+    before = memory.database(host.home).read_bytes()
+    with turn(host):
+        first = collect(host, "我早餐喜欢喝什么？")
+    assert record["record_id"] in first and expired["record_id"] not in first
+    assert memory.database(host.home).read_bytes() == before
+    literal = memory.command(host, 'recall "我早餐喜欢喝什么"')
+    assert literal["data"]["items"] == []
+    rid = record["record_id"]
+    assert (
+        memory.command(
+            host, f'correct {rid} --text "早餐喝绿茶" --expected-revision 1 --request-id chinese-c'
+        )["status"]
+        == "ok"
+    )
+    with turn(host):
+        corrected = collect(host, "我早餐喜欢喝什么？")
+    assert [r["content"] for r in json.loads(corrected)["memory"]["items"]] == ["早餐喝绿茶"]
+    assert (
+        memory.command(host, f"forget {rid} --expected-revision 2 --request-id chinese-f")["status"]
+        == "ok"
+    )
+    with turn(host):
+        assert rid not in collect(host, "我早餐喜欢喝什么？")
+
+
+def test_native_chinese_multiterm_filter_avoids_unrelated_private_attributes(host):
+    target = save(host, "王明生日是五月十日", key="chinese-birthday")
+    address = save(host, "王明地址是北京", key="chinese-address")
+    other = save(host, "李四生日是六月十日", key="chinese-other")
+    enable(host)
+    with turn(host):
+        result = json.loads(collect(host, "王明的生日是哪天？"))["memory"]
+    assert [r["record_id"] for r in result["items"]] == [target["record_id"]]
+    assert result["omitted_records"] == 2
+    assert result["automatic_filter"]["filtered_returned_records"] == 2
+    with turn(host):
+        missing = collect(host, "赵六的生日是哪天？")
+    assert all(r["record_id"] not in missing for r in (target, address, other))
+    # Explicit literal OR recall remains available and unchanged for deliberate inspection.
+    explicit = memory.command(host, 'recall "王明" "生日"')["data"]
+    assert len(explicit["items"]) == 3 and "automatic_filter" not in explicit

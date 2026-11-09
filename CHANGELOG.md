@@ -13,6 +13,8 @@ This file distinguishes design work, development changes, and released capabilit
 - Run runtime artifact acceptance on exact pull-request heads with read-only credentials; keep downloadable artifact publication push-only.
 ### Changed
 
+- Improve unspaced questions in [Chinese automatic recall](docs/69-chinese-automatic-recall.md) with conservative multi-term selection, preserving explicit queries and access gates. Fixed-corpus misses remain; no general semantic understanding is claimed.
+
 - Native `/personal-memory` now shows readable human views by default. Scripts must prefix `--json` to retain the original envelope; model tools, storage and authority are unchanged.
 
 

@@ -5,11 +5,11 @@ mutation. All returned records are freshly read; no payload cache survives a tur
 """
 
 import json
-import re
 import threading
 from pathlib import Path
 
 from .memory_backend import MemoryError, MemoryService, _text
+from .memory_query import automatic_recall_terms, filter_automatic_recall
 from .memory_storage import open_existing_memory_reader
 from .task_cli import current_profile_home
 
@@ -63,20 +63,8 @@ def recall_settings(config):
 
 
 def literal_terms(query):
-    """At most eight distinct literal chunks. No semantic inference or expansion."""
-    if type(query) is not str or len(query) > 2048 or query.lstrip().startswith("/"):
-        return []
-    try:
-        _text(query, 2048, empty=True, multiline=True)
-    except MemoryError:
-        return []
-    terms = []
-    for term in re.findall(r"[^\W_]+(?:[-_][^\W_]+)*", query):
-        if len(term) <= 128 and term not in terms:
-            terms.append(term)
-            if len(terms) == 8:
-                break
-    return terms
+    """Shared automatic-only bounded planner; explicit recall remains unchanged."""
+    return automatic_recall_terms(query)
 
 
 class MemoryRecallLifecycle:
@@ -147,6 +135,7 @@ class MemoryRecallLifecycle:
                     data = MemoryService(backend).execute(
                         "recall", {"queries": terms, "limit": limit, "max_chars": maximum - 1024}
                     )["data"]
+                data = filter_automatic_recall(data, query, terms)
                 # Revocation during an admitted read does not publish a new pack.
                 if self._admit() != (maximum, limit):
                     raise MemoryError("native_recall_configuration_changed")
