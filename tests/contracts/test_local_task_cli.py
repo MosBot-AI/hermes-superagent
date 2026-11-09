@@ -650,3 +650,35 @@ def test_backup_recovery_read_refuses_changed_digest(native, capsys):
     )
     assert code == 1 and denied["error"]["code"] == "backup_changed"
     assert denied["data"] is None
+
+
+def test_backup_copy_preview_reload_retry_and_revocation(native, capsys):
+    home, manager = native
+    command = entry(manager)
+    old_id = capture(command, capsys)["data"]["id"]
+    code, created = invoke(command, capsys, "task-backup", "create", "--name", "recover")
+    assert code == 0
+    flags = ("--name", "recover", "--sha256", created["data"]["sha256"], "--task-id", old_id)
+    database = home / "plugin-data" / PLUGIN_ID / "tasks.sqlite3"
+    before = database.read_bytes()
+    code, preview = invoke(command, capsys, "task-backup", "recover-preview", *flags)
+    assert code == 0 and "recovery" not in preview["data"]
+    assert database.read_bytes() == before
+    code, copied = invoke(
+        command, capsys, "task-backup", "recover-copy", *flags, "--request-id", "copy-one"
+    )
+    assert code == 0
+    task = copied["data"]["recovery"]["data"]
+    assert task["id"] != old_id and task["state"] == "captured"
+    manager.unload()
+    command = entry(manager)
+    code, replay = invoke(
+        command, capsys, "task-backup", "recover-copy", *flags, "--request-id", "copy-one"
+    )
+    assert code == 0 and replay["data"]["recovery"]["replayed"]
+    assert replay["data"]["recovery"]["data"] == task
+    configure(home, "read_only")
+    code, denied = invoke(
+        command, capsys, "task-backup", "recover-copy", *flags, "--request-id", "copy-two"
+    )
+    assert code == 1 and denied["error"]["code"] == "local_tasks_disabled"

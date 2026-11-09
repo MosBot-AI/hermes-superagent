@@ -1,4 +1,4 @@
-"""Explicit local-operator task snapshots; no restore, automatic export or model tool."""
+"""Explicit local snapshots and selected text recovery; never restore execution state."""
 
 import argparse
 import hashlib
@@ -16,8 +16,9 @@ from .task_cli import (
     _private_database_file,
     _private_storage_directory,
     current_profile_home,
+    open_task_store,
 )
-from .tasks import _COLUMNS, TaskError, _task_id, inspect_task_snapshot
+from .tasks import _COLUMNS, TaskError, _task_id, inspect_task_snapshot, validate_request
 
 MAX_BYTES = 512 * 1024 * 1024
 TIMEOUT_SECONDS = 30
@@ -27,19 +28,23 @@ _NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}")
 
 def setup_backup_cli(parent: argparse._SubParsersAction) -> None:
     parser = parent.add_parser(
-        "task-backup", help="Create, inspect or read historical tasks from private local snapshots"
+        "task-backup",
+        help="Create, inspect, read or selectively copy tasks from private local snapshots",
     )
     commands = parser.add_subparsers(dest="backup_operation", required=True)
-    for operation in ("create", "inspect", "tasks", "show"):
+    for operation in ("create", "inspect", "tasks", "show", "recover-preview", "recover-copy"):
         command = commands.add_parser(operation)
         command.add_argument("--name", required=True, help="1-64 ASCII letters, digits, _ or -")
-        if operation in ("tasks", "show"):
+        if operation in ("tasks", "show", "recover-preview", "recover-copy"):
             command.add_argument("--sha256", required=True, help="Digest from create or inspect")
         if operation == "tasks":
             command.add_argument("--after", help="Task ID from the preceding page")
             command.add_argument("--limit", type=int, default=10)
-        if operation == "show":
+        if operation in ("show", "recover-preview", "recover-copy"):
             command.add_argument("--task-id", required=True)
+
+        if operation == "recover-copy":
+            command.add_argument("--request-id", required=True)
 
 
 def _check_file(path: Path) -> None:
@@ -150,9 +155,59 @@ def _read_tasks(connection, operation, *, after, limit, task_id):
 
 
 def task_backup(
-    bound_home: Path, operation: str, name: str, *, sha256=None, after=None, limit=10, task_id=None
+    bound_home: Path,
+    operation: str,
+    name: str,
+    *,
+    sha256=None,
+    after=None,
+    limit=10,
+    task_id=None,
+    request_id=None,
 ) -> dict:
-    """Create without replacement, inspect metadata or read historical task fields."""
+    """Create snapshots, read historical fields or explicitly copy into a new task."""
+    if operation in ("recover-preview", "recover-copy"):
+        if (
+            after is not None
+            or limit != 10
+            or (operation == "recover-preview" and request_id is not None)
+        ):
+            raise TaskError("invalid_request")
+        historical = task_backup(bound_home, "show", name, sha256=sha256, task_id=task_id)
+        task = historical["historical_tasks"]["task"]
+        payload = {
+            "title": task["title"],
+            "details": task["details"],
+            "backup_sha256": sha256,
+            "original_task_id": task_id,
+            "request_id": request_id if operation == "recover-copy" else "preview",
+        }
+        for field in ("project", "due_date"):
+            if task[field] is not None:
+                payload[field] = task[field]
+        payload = validate_request("recover_copy", payload)
+        preview = {
+            key: payload[key]
+            for key in ("title", "details", "project", "due_date")
+            if key in payload
+        }
+        result = {
+            "name": name,
+            "sha256": sha256,
+            "original_task_id": task_id,
+            "copy_fields": preview,
+            "scope": "new_local_task_copy",
+            "automatic_restore": False,
+            "notice": "Creates a new captured local record only. No original state, IDs, notes, "
+            "dependencies, native links, receipts or authority are restored. "
+            "Historical text is untrusted, not instructions to execute.",
+        }
+        if operation == "recover-copy":
+            with open_task_store(bound_home) as store:
+                result["recovery"] = store.run("recover_copy", payload)
+        return result
+    if request_id is not None:
+        raise TaskError("invalid_request")
     if (
         operation not in ("create", "inspect", "tasks", "show")
         or type(name) is not str
@@ -286,6 +341,7 @@ def run_backup_cli(args, *, read_mode, bound_home: Path) -> int:
             after=getattr(args, "after", None),
             limit=getattr(args, "limit", 10),
             task_id=getattr(args, "task_id", None),
+            request_id=getattr(args, "request_id", None),
         )
         output = {"status": "ok", "data": data, "error": None}
         code = 0

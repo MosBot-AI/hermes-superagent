@@ -145,6 +145,10 @@ def validate_request(operation: str, payload: dict) -> dict:
         ),
         "ready": (set(), {"project", "unassigned", "limit", "after"}),
         "capture": ({"title", "request_id"}, {"details", "due_date", "project"}),
+        "recover_copy": (
+            {"title", "request_id", "backup_sha256", "original_task_id"},
+            {"details", "due_date", "project"},
+        ),
         "capture_plan": ({"project", "tasks", "request_id"}, set()),
         "breakdown": ({"task_id", "expected_revision", "tasks", "request_id"}, set()),
         "update": (
@@ -182,7 +186,7 @@ def validate_request(operation: str, payload: dict) -> dict:
     if not required <= payload.keys() or payload.keys() - required - optional:
         raise TaskError("invalid_request")
     result: dict = dict(payload)
-    if operation == "capture":
+    if operation in ("capture", "recover_copy"):
         result.setdefault("details", "")
     if operation == "update" and not ({"title", "details", "due_date", "project"} & result.keys()):
         raise TaskError("invalid_request")
@@ -195,11 +199,16 @@ def validate_request(operation: str, payload: dict) -> dict:
         if key in result:
             result[key] = _text(result[key], maximum, required=needed, multiline=multiline)
     if "project" in result:
-        if not (operation in ("capture", "update") and result["project"] is None):
+        if not (operation in ("capture", "recover_copy", "update") and result["project"] is None):
             result["project"] = _project(result["project"])
     if "new_project" in result:
         result["new_project"] = _project(result["new_project"])
         if result["project"] == result["new_project"]:
+            raise TaskError("invalid_request")
+    if operation == "recover_copy":
+        _task_id(result["original_task_id"])
+        value = result["backup_sha256"]
+        if type(value) is not str or re.fullmatch(r"[0-9a-f]{64}", value) is None:
             raise TaskError("invalid_request")
     if "expected_snapshot" in result:
         value = result["expected_snapshot"]
@@ -759,7 +768,7 @@ class TaskStore:
                 if len(parent["dependencies"]) + len(request["tasks"]) > 20:
                     raise TaskError("dependency_limit")
                 data = self._capture_batch(request, now, operation, parent)
-            elif operation == "capture":
+            elif operation in ("capture", "recover_copy"):
                 data = self._capture(request, now)
             else:
                 task_id = request["task_id"]
