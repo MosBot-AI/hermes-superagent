@@ -128,3 +128,5 @@ E9 has a selected native worker-routing design, an offline constraint evaluator 
 - [Reviewed expired-memory cleanup](73-reviewed-expired-memory-cleanup.md): inspect complete bounded batches, then forget the exact snapshot with historical retry receipts and managed-file cleanup.
 
 - [Offline synthetic connector fixtures](74-synthetic-connector-fixtures.md): durable fake-remote effects, bounded untrusted sources, failure/reconciliation oracles and real pinned-host MCP stdio counterexamples; test-only, without production authority.
+
+- [Native plugin and scheduling lifecycle contracts](75-native-lifecycle-contracts.md): exact-pin operator Project/Kanban/cron probes, weak deduplication and truthful cancellation/history boundaries; no new production CRUD API or scheduling authority.

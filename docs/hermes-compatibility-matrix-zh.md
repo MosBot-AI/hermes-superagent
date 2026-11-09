@@ -10,6 +10,12 @@
 
 仅供评审的宿主提案保留历史基线和隔离解释器，不静默变基，也不算作最新版宿主支持。新的干净检出结果记录在 [E0.1](https://github.com/MosBot-AI/hermes-superagent/issues/1) 关联 Issue/PR 中。
 
+## E0.2–E0.3 原生生命周期范围（22811165）
+
+[原生生命周期契约](75-native-lifecycle-contracts-zh.md)在可丢弃的合成 profile 中增加 Project/Kanban/cron 真实操作入口的创建、查询及归档/取消/历史探测。目标版本和插件运行时依赖不变。已导出的插件 API 包含 `cron.execution_identity`，不包含 Project/Kanban/cron CRUD SDK；仅测试导入原生入口不会把私有内部实现变成生产接口。
+
+证据区分原生弱去重、Project 元数据归档、Kanban 归档副作用的测试限制、已保存但未注册的 cron 作业、取消请求确认及废弃尝试的 `unknown` 结果。实际一次性执行的常量输出 `no_agent` 脚本提供本地完成回执，投递受抑制。不涉及模型、线上 daemon、真实账号或外部投递。确切执行结果以 [Issue #11](https://github.com/MosBot-AI/hermes-superagent/issues/11) 及其关联 PR 为准，不更新下方历史计数。E3/E4 及线上验收仍独立进行。
+
 ## E0.5 合成 MCP 夹具范围（22811165）
 
 [离线合成连接器测试框架](74-synthetic-connector-fixtures-zh.md)以当前准确宿主版本为目标，不修改 `compatibility.json`。其[原生契约](../tests/contracts/test_synthetic_connectors.py)使用真实 MCP 发现、注册表/模型工具分发和 SDK stdio 会话，连接持久假远端。测试覆盖提交后响应丢失、重启对账，以及依据声明重试故意谎报只读的工具。会话过期错误在真实 stdio RPC 之后注入，不是真实 HTTP 会话过期的证据。
@@ -32,8 +38,8 @@
 | 原生本地命令、会话权限与主轮次上下文 | `gateway/session_commands.py`、`gateway/session_authority.py`、`agent/turn_facade.py`、`agent/turn_context.py`、`model_tools.py` | [命令契约](../tests/contracts/test_local_conversation_tasks.py)、[会话工具契约](../tests/contracts/test_session_task_tools.py)和[任务聚焦契约](../tests/contracts/test_task_focus.py)覆盖已注册来源的准入、拒绝不支持的来源、限定范围的激活及即时有界上下文。部署后的 CLI/TUI 和真实模型服务商的自然语言验收仍待完成。 |
 | Hook 和中间件执行控制 | `hermes_cli/plugins_dispatch.py`、`hermes_cli/middleware.py`、`model_tools.py`、`agent/safe_worker_policy.py` | [执行控制测试](../tests/contracts/test_enforcement_boundaries.py)验证回调拒绝和超时、外层分发器失败、直接注册表绕过、安全模式跳过 hook，以及 worker 配置冻结。[写路径清单](13-enforcement-contracts-zh.md)规定未覆盖的能力集保持禁用。 |
 | Profile、渠道与接收 Bot 身份 | `gateway/profile_routing.py`、`gateway/session_identity.py`、`hermes_cli/plugin_host_http_auth.py` | [Owner 入口契约](../tests/contracts/test_owner_entry_contracts.py)验证公开上下文缺少接收适配器证明，以及对歧义身份的拒绝。[读取准入测试](../tests/contracts/test_read_admission_boundary.py)验证生产入口保持关闭。[命令上下文实验](23-host-command-context-experiment-zh.md)仅供评审。经验证的 owner 登记和 Primary Bot 绑定需要宿主提供受支持的证明。 |
-| 原生 Projects、Kanban 与 goals | `hermes_cli/projects_db.py`、`tools/project_tools.py`、`hermes_cli/kanban_db.py`、`website/docs/user-guide/features/goals.md` | [Kanban 契约](../tests/contracts/test_native_kanban.py)覆盖向确切看板创建停放卡片、身份约束及结果未知。[结果审核契约](../tests/contracts/test_native_result_review.py)覆盖过期证据、依赖门槛及显式本地完成。原生 Project 映射、goal 驱动的派发和部署后的 Kanban 验收仍待完成。 |
-| 调度、蓝图与投递 | `cron/blueprint_catalog.py`、`cron/jobs.py`、`cron/scheduler.py`、`cron/scheduler_delivery.py` | [蓝图契约](../tests/contracts/test_planning_blueprint.py)验证注册、表单校验，并以替身拦截创建调用来检查原生消费者传递的参数。作业、运行及每次触发的回执、投递对账和 heartbeat 行为仍需单独验收。 |
+| 原生 Projects、Kanban 与 goals | `hermes_cli/projects_db.py`、`tools/project_tools.py`、`hermes_cli/kanban_db.py`、`website/docs/user-guide/features/goals.md` | [Kanban 契约](../tests/contracts/test_native_kanban.py)覆盖向确切看板创建停放卡片、身份约束及结果未知。[结果审核契约](../tests/contracts/test_native_result_review.py)覆盖过期证据、依赖门槛及显式本地完成。后续[操作生命周期探测](75-native-lifecycle-contracts-zh.md)增加原生创建/查询/归档证据及副作用限制。原生 Project 映射、goal 驱动的派发和部署后的 Kanban 验收仍待完成。 |
+| 调度、蓝图与投递 | `cron/blueprint_catalog.py`、`cron/jobs.py`、`cron/scheduler.py`、`cron/scheduler_delivery.py` | [蓝图契约](../tests/contracts/test_planning_blueprint.py)验证注册、表单校验，并以替身拦截创建调用来检查原生消费者传递的参数。后续[生命周期探测](75-native-lifecycle-contracts-zh.md)区分已保存作业、取消请求与执行历史。完整的每次触发/投递核对和 heartbeat 行为仍需单独验收。 |
 | 子代理生命周期与纯文本规划 worker | `agent/subagent_lifecycle.py`、`tools/delegate_tool_toolsets.py` | [Worker 路由契约](../tests/contracts/test_worker_routing_contracts.py)证明公开 API 的空允许列表无法保证零工具。[生产入口测试](../experiments/text-worker/test_production_entrypoint.py)覆盖未打补丁宿主的拒绝行为和隔离的宿主提案。未打补丁的固定宿主缺少 `hermes.text-worker.v1`。线上 worker 验收和通用工具隔离仍待完成。 |
 | 记忆提供方、轮次 hook 和对话记录生命周期 | `plugins/memory/__init__.py`、`agent/memory_manager.py`、`agent/turn_context.py`、`hermes_state_messages.py` | [提供方契约](../tests/contracts/test_native_memory_provider.py)和[候选契约](../tests/contracts/test_memory_candidates.py)覆盖分别选择的有界路径。[重启契约](../tests/contracts/test_memory_process_restart.py)覆盖已持久化的本地状态。[检查点测试](../tests/contracts/test_native_checkpoint_boundary.py)说明保留 UID 无法证明持久的来源覆盖或提交回执。严格检查点和完整恢复仍待完成。 |
 | MCP、OAuth 与费用估算 | `website/docs/user-guide/features/mcp.md`、`website/docs/developer-guide/plugins/index.md`、`model_tools.py` | 源码审查确认原生连接器和凭据入口。按账号限定范围的连接器适配、按副作用逐项准入、持久费用记录及未知结果对账需要单独取证。`readOnlyHint` 不足以授权工具。 |

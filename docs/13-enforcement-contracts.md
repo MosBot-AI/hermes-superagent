@@ -66,7 +66,7 @@ No mode or configuration toggle in this slice enables writes. It remains possibl
 - The checker now runs every file under `tests/contracts` through the official per-file Hermes runner, in addition to unit tests, Ruff, ty, and bilingual document checks.
 - Observed dispatcher failure applies to the tested `model_tools` wrapper. Other wrappers and direct MCP helpers were inspected in source only, not exercised as end-to-end writes.
 - No production account, API key, live model request, external send, or real connector write was needed. Future online tests need a separate scoped test setup and secure credential handoff; credentials must not enter chat, logs, or the repository.
-- E0.3 public Project/Kanban/cron contracts and the untested E0.4 paths remain open. Passing this slice does not complete M0 or permit E1-dependent write features to ship.
+- The later [E0.2–E0.3 lifecycle contracts](75-native-lifecycle-contracts.md) add bounded Project/Kanban/cron operator evidence and document missing supported plugin CRUD APIs; they enable no production capability. Untested E0.4 paths, E1-dependent write admission, E3 orchestration and E4 controlled scheduling remain separate gates. Passing this slice does not complete M0 or permit those write features to ship.
 
 Pinned sources:
 
