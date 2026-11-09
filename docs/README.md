@@ -110,3 +110,5 @@ E9 has a selected native worker-routing design, an offline constraint evaluator 
 - [Durable prepared-read audit](63-prepared-read-audit.md): internal committed snapshot metadata, not delivery proof or production identity.
 
 - [Durable internal ActionIntent drafts](64-action-intent-drafts.md): metadata binding and terminal drafts only, not approval or execution.
+
+- [Live native task conversation acceptance](65-live-task-acceptance.md): real TUI/provider capture, lookup, update, completion and post-disable refusal on exact revisions.
