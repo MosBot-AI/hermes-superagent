@@ -383,7 +383,18 @@ def test_mutation_process_crashes_have_truthful_db_and_no_payload_resurrection(
     else:
         assert current["revision"] == 1
         assert s.execute("edit_discard", {"draft_id": did})["replayed"]
-    assert c.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+    # Exercise the original live connection, not only a fresh reader. An external
+    # first secure-delete upgrades FTS format 4 -> 5; some SQLite builds retain
+    # stale integrity-check configuration here even though MATCH is current.
+    committed = stage == "after_commit"
+    sequence = c.execute("SELECT sequence FROM records WHERE record_id=?", (rid,)).fetchone()[0]
+    assert c.execute(
+        "SELECT rowid FROM memory_fts WHERE memory_fts MATCH ?", ("原正文",)
+    ).fetchall() == ([] if committed and operation in {"apply", "forget"} else [(sequence,)])
+    assert c.execute(
+        "SELECT rowid FROM memory_fts WHERE memory_fts MATCH ?", ("更新中文",)
+    ).fetchall() == ([(sequence,)] if committed and operation == "apply" else [])
+    assert_persisted_integrity(d / "records.sqlite3")
 
 
 def test_paused_create_after_durable_intent_cannot_publish_after_forget(store):
@@ -696,3 +707,59 @@ def test_candidate_acceptance_preserves_unrelated_active_edit(store):
     assert accepted["data"]["state"] == "accepted"
     assert s.execute("edit_status", {})["data"]["active"]["draft_id"] == did
     assert (d / FILENAME).exists()
+
+
+def assert_persisted_integrity(path):
+    # Reopen without rebuilding or modifying index configuration. Verify BOTH
+    # SQLite structure and native FTS content/index consistency after recovery.
+    fresh = sqlite3.connect(path, isolation_level=None)
+    try:
+        assert fresh.execute("PRAGMA integrity_check").fetchall() == [("ok",)]
+        fresh.execute("INSERT INTO memory_fts(memory_fts,rank) VALUES('integrity-check',1)")
+    finally:
+        fresh.close()
+
+
+def test_clean_external_secure_delete_after_prewarmed_integrity(store):
+    s, c, d = store
+    rid = seed(s)
+    assert c.execute("PRAGMA integrity_check").fetchall() == [("ok",)]
+    assert c.execute("SELECT v FROM memory_fts_config WHERE k='version'").fetchone() == (4,)
+    writer, connection = opened(d)
+    try:
+        writer.execute(
+            "correct",
+            {
+                "record_id": rid,
+                "expected_revision": 1,
+                "request_id": "external-correction",
+                "content": "更新中文",
+            },
+        )
+    finally:
+        writer.close()
+        connection.close()
+    # Normal close, no crash: still exercise the same external format transition.
+    assert c.execute("SELECT v FROM memory_fts_config WHERE k='version'").fetchone() == (5,)
+    assert s.execute("get", {"record_id": rid})["data"]["content"] == "更新中文"
+    assert (
+        c.execute("SELECT rowid FROM memory_fts WHERE memory_fts MATCH '原正文'").fetchall() == []
+    )
+    assert (
+        len(c.execute("SELECT rowid FROM memory_fts WHERE memory_fts MATCH '更新中文'").fetchall())
+        == 1
+    )
+    assert_persisted_integrity(d / "records.sqlite3")
+    writer, connection = opened(d)
+    try:
+        writer.execute(
+            "forget", {"record_id": rid, "expected_revision": 2, "request_id": "external-forget"}
+        )
+    finally:
+        writer.close()
+        connection.close()
+    assert s.execute("get", {"record_id": rid})["data"]["status"] == "forgotten"
+    assert (
+        c.execute("SELECT rowid FROM memory_fts WHERE memory_fts MATCH '更新中文'").fetchall() == []
+    )
+    assert_persisted_integrity(d / "records.sqlite3")
