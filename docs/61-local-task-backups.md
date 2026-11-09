@@ -31,7 +31,7 @@ Filesystem checks cover pre-existing symlinks, hardlinks, non-private files and 
 
 ## Recovery boundary and verification
 
-No command replaces a live store or imports an older snapshot. Restoring old task state could resurrect terminal tasks, old revisions or native references; full recovery requires a separate stop-before-start, authority-aware workflow. Do not copy a backup over a running profile or use it to trigger old external work. For now it is a verified recovery artifact for deliberate offline inspection, not automatic recovery.
+No command replaces a live store or imports an older snapshot wholesale. Selective copying into a new task is described below. Restoring old task state could resurrect terminal tasks, old revisions or native references; full recovery requires a separate stop-before-start, authority-aware workflow. Do not copy a backup over a running profile or use it to trigger old external work. For now it is a verified recovery artifact for deliberate offline inspection, not automatic recovery.
 
 Synthetic tests cover DELETE/WAL snapshots, concurrent commits, preserved rows and receipt replay in an isolated test copy, safe publication, duplicate names, unsafe files, schema refusal without mutation, corruption/sidecars, size/deadline limits, late sync failure and redacted CLI errors. Pinned-host tests exercise native registration, creation, reload/inspection and live mode revocation. No personal data, real model, Gateway, provider call or MacBook is used in this slice. Exact counts and CI belong to the final commit; broader #17/E8 criteria remain open.
 
@@ -52,3 +52,22 @@ Use the exact lowercase SHA256 returned by `create` or `inspect`. Every page and
 All reads retain the private-path, exact-schema, integrity, sidecar and processing-budget gates. The SQLite read transaction stays open while hashing and selecting rows, preventing an ordinary DELETE-journal writer from committing a different snapshot between those steps. Filesystem isolation against malicious same-UID code is still not promised. A selected row exceeding 32,000 stored bytes, or a historical result exceeding 80,000 ASCII-serialized JSON characters, fails without returning a partial result. `invalid_cursor`, `not_found`, `backup_record_too_large` and `backup_result_too_large` are explicit read failures. SQLite/path errors are redacted. No initialization, migration, task mutation, receipt replay, import or restore is performed.
 
 Inspection and recovery reads now reject non-DELETE SQLite header modes before opening the file (`backup_not_standalone`). This prevents SQLite from creating WAL/SHM sidecars even when a modified WAL-mode snapshot was cleanly closed and had no sidecars initially.
+
+## Explicit recovery as a new task
+
+The local operator can preview and copy one selected historical task into the current profile:
+
+```bash
+hermes personal-agent task-backup recover-preview --name before-upgrade --sha256 DIGEST --task-id TASK_UUID
+hermes personal-agent task-backup recover-copy --name before-upgrade --sha256 DIGEST --task-id TASK_UUID --request-id recovery-1
+```
+
+Preview validates the snapshot and task, returns only the fields eligible for copying, and never opens or creates the live task store. It is a useful review step, not a one-use approval token: `recover-copy` is itself the explicit local operator command and can be called independently. Both require the exact selected snapshot digest. The CLI retains its live profile/mode and private-file checks; there is no model tool or conversation alias.
+
+Copy creates a **new** captured task at revision 1 with a fresh ID, current timestamps, empty progress/resolution notes and normal ready status. Only title, details, optional project label and due date are copied. It never imports the old ID, state, timestamps, progress, dependencies, receipts, native observations or authority. Even a historical completed task becomes a new local record, not a reversal of the original task's completion. No existing task is replaced, no external work is executed and no worker is dispatched. An old due date remains explicitly historical, not a new notification request. This is selective text recovery, not database restoration or a full-profile migration. `automatic_restore` remains false.
+
+The original snapshot SHA256, original task ID and normalized copied fields are bound to the live store's durable request receipt. Use the same request ID and exact selection after an uncertain response. A successful replay returns the original new-task ID and historical revision without duplicating or undoing later changes. A different source/task or changed fields under the same key fails with `idempotency_conflict`; a new key deliberately creates another copy. The task, `recover_copy` history event and receipt commit together or roll back together. No schema migration is added.
+
+Every retry still validates and reads the named source snapshot first. Keep that snapshot unchanged until the recovery outcome is known. If it is removed or changed, retry fails closed rather than replaying a receipt without its source; inspect the live tasks instead of inventing a new key. Identical snapshot bytes under another valid name represent the same source. SHA256 binds content, not authenticity. Historical text can contain untrusted instructions and is revalidated as ordinary task fields before the live store is opened. The explicit command displays copied text in terminal output; no provider receives it automatically.
+
+Tests cover pure preview with missing live storage, fresh-record semantics, unchanged original tasks, durable replay after later completion, changed source/key conflicts, invalid text/digest/task/request refusal, atomic event-failure rollback, and actual pinned-host CLI reload/mode revocation. These are isolated synthetic tests, not real-device/provider acceptance or a complete backup/restore claim.
