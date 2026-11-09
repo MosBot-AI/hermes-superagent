@@ -367,7 +367,9 @@ def register(ctx: PluginContext) -> None:
     if memory_enabled:
         from .conversation_memory import LocalMemoryCommands
 
-        memory = LocalMemoryCommands(bound_home=bound_home, read_config=ctx.get_config)
+        memory = LocalMemoryCommands(
+            bound_home=bound_home, read_config=ctx.get_config, default_format="text"
+        )
         ctx.on_unload(memory.close)
         ctx.register_command(
             "personal-memory",

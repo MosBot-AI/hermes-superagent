@@ -102,7 +102,7 @@ def command(host, text):
     from gateway.session_commands import execute_command
 
     result = asyncio.run(
-        execute_command(host.connection, host.ref, {"command": "personal-memory " + text})
+        execute_command(host.connection, host.ref, {"command": "personal-memory --json " + text})
     )
     assert result["type"] == "exec"
     return json.loads(result["output"])

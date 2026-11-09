@@ -7,6 +7,9 @@ Hermes 原生 personal-agent 插件，目标是让一个主 agent 管理项目�
 [本地记忆全文检索指南](docs/66-local-memory-full-text-search-zh.md) 增加显式多词 AND 检索、中文短词检查和事务式 FTS5。记忆 schema v7 要求 SQLite FTS5/trigram/secure-delete；只读打开不迁移旧存储。
 
 
+[原生记忆工作台](docs/67-readable-memory-workbench-zh.md) 现在使用可读视图；结构化集成请使用 `/personal-memory --json` 前缀。模型工具 JSON 不变。
+
+
 ## 当前进度
 
 当前优先交付 **profile-first 单用户本地 MVP**，不要求先绑定主 Bot。已实现 E0 基础、本地任务存储及显式启用的原生会话 `/personal-tasks` 命令，并已新增会话范围任务模型工具；尚未完成真实模型自然语言验收。

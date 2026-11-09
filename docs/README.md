@@ -114,3 +114,5 @@ E9 has a selected native worker-routing design, an offline constraint evaluator 
 - [Live native task conversation acceptance](65-live-task-acceptance.md): real TUI/provider capture, lookup, update, completion and post-disable refusal on exact revisions.
 
 - [Local multi-term memory search](66-local-memory-full-text-search.md): transactional FTS5, short Chinese terms and unchanged literal contracts.
+
+- [Readable native memory workbench](67-readable-memory-workbench.md): human views and explicit JSON output, without new storage or authority.
