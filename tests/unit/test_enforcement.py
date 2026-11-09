@@ -24,20 +24,27 @@ def test_boundary_contracts_do_not_become_full_write_path_coverage():
     rows = {row["path_id"]: row for row in build_enforcement_inventory()["paths"]}
     assert rows["native_dispatch"]["evidence"] == "synthetic_contract"
     assert rows["managed_worker"]["evidence"] == "synthetic_contract"
-    for path in ("mcp", "execute_code_rpc"):
+    for path in (
+        "mcp",
+        "execute_code_rpc",
+        "shell",
+        "browser",
+        "local_tool_batch",
+        "connector_batch",
+        "short_worker",
+    ):
         assert rows[path]["evidence"] == "pinned_host_boundary_contract"
         assert rows[path]["contract_ids"]
         assert rows[path]["controlled_writes_enabled"] is False
         assert rows[path]["release_gate"] == "blocked"
     assert "mcp_native_trust_gate" in rows["mcp"]["contract_ids"]
     assert "rpc_persistent_client_response_loss" in rows["execute_code_rpc"]["contract_ids"]
-    for path in (
-        "shell",
-        "browser",
-        "connector_batch",
-        "short_worker",
-        "scheduled_job",
-    ):
+    assert "shell_native_deny_and_force_surface" in rows["shell"]["contract_ids"]
+    assert "browser_metadata_literal_floor" in rows["browser"]["contract_ids"]
+    assert "local_batch_uncertain_retry" in rows["local_tool_batch"]["contract_ids"]
+    assert "delegated_child_toolset_and_batch_admission" in rows["short_worker"]["contract_ids"]
+    assert "connector_batch_item_veto_partial_retry" in rows["connector_batch"]["contract_ids"]
+    for path in ("scheduled_job",):
         assert rows[path]["evidence"] == "not_tested"
         assert rows[path]["contract_ids"] == []
 

@@ -2,9 +2,9 @@
 
 [English](13-enforcement-contracts.md) | 简体中文
 
-此页记录较早的 E0 切片，以及针对 [Issue #12](https://github.com/MosBot-AI/hermes-superagent/issues/12) 的有界 RPC/MCP 后续核验。当前新增的显式本地任务收件箱见 [16](16-local-task-inbox-zh.md)；它不启用这里列出的原生/外部受控写路径。
+此页记录较早的 E0 切片，以及针对 [Issue #12](https://github.com/MosBot-AI/hermes-superagent/issues/12) 的有界 RPC/MCP、终端/浏览器及本地批量后续核验。当前新增的显式本地任务收件箱见 [16](16-local-task-inbox-zh.md)；它不启用这里列出的原生/外部受控写路径。
 
-本次后续 P0 切片推进 E0.4，但不启用任何受控写能力。新增可复验的失败边界测试和机器可读发布清单。当前后续切片使用合成副作用核验固定宿主的真实 RPC 消费者/服务端调度及 MCP 准入；并未完成所有替代路径。E0.4、E0/M0 与 E1 授权仍未完成。
+本次后续 P0 切片推进 E0.4，但不启用任何受控写能力。新增可复验的失败边界测试和机器可读发布清单。后续切片使用合成副作用核验固定宿主的真实 RPC 消费者/服务端调度、MCP 准入、终端/浏览器执行前守卫，以及主 agent 和被委派 agent 循环中的本地批量；并未完成所有替代路径。E0.4、E0/M0 与 E1 授权仍未完成。
 
 ## 1. 实现了什么
 
@@ -61,6 +61,51 @@ Worker 探针在全新进程中运行，因为 bootstrap policy 必须在 runtim
 | `mcp_native_trust_gate` | `test_native_untrusted_gate_stops_before_transport` |
 | `mcp_dishonest_read_hint` | `test_untrusted_read_only_hint_is_not_effect_level_authorization` |
 
+### 2.3 惰性执行端点前的终端与浏览器准入
+
+[终端/浏览器契约](../tests/contracts/test_shell_browser_enforcement.py)保留原生模型/registry 调度、已加载插件、终端命令/workdir 守卫及浏览器 URL 预扫描。终端执行计划/获取、命令执行以及浏览器生命周期/进程端点使用不执行真实动作的测试替身。记录到端点调用**不表示**执行了 shell 命令、真实浏览器动作或证明 backend 隔离。夹具禁止创建进程、DNS 与 socket 连接。每个拒绝测试均包含能够到达同一端点的允许对照。
+
+- Profile 本地的原生终端 deny 规则通过模型和直接 registry 调度均会拒绝。提交 `force: true` 无效：公开 registry handler 不转发内部 helper 的 `force` 参数，公开 schema 也不暴露它。
+- 直接调用内部 `terminal_tool(..., force=True)`，即使存在该 deny 规则及插件否决，仍会进入合成 backend。同样的调用仍会在 backend 前拒绝不合法 workdir。这记录的是不同的 Python helper 权限面，并非模型可用的 force 字段。
+- 正常插件否决会阻断终端与 `browser_exec` 模型调用。直接 registry 调用跳过该插件否决；直接 `browser_exec` helper 调用也如此。工具原生守卫是另一层，已测部分仍然适用。
+- 云元数据 URL 字面量经模型和 registry 路径均会被真实 `browser_exec` 预扫描拒绝，包括设置 `browser.allow_private_urls: true` 时。动态拼接 URL 会通过此**字面量预扫描**并到达惰性端点。其代码从未被求值：真实 harness/CDP 的 URL 准入及导航仍未验证。没有把已移除的 `browser_tool` 兼容 stub 当成当前浏览器工具。
+
+| 清单契约 ID | 可执行断言 |
+| --- | --- |
+| `shell_native_deny_and_force_surface` | `test_terminal_native_deny_survives_registry_and_model_force_argument` |
+| `shell_internal_force_boundary` | `test_terminal_internal_force_skips_approval_but_not_workdir_guard` |
+| `shell_plugin_registry_boundary` | `test_terminal_plugin_veto_does_not_cover_direct_registry` |
+| `browser_metadata_literal_floor` | `test_browser_metadata_literal_is_blocked_before_backend` |
+| `browser_plugin_helper_boundary` | `test_browser_plugin_veto_and_direct_helper_boundary` |
+| `browser_dynamic_url_prescan_limit` | `test_browser_dynamic_url_is_not_evaluated_by_literal_prescan` |
+
+### 2.4 本地桥接批量与构造出的被委派子 agent
+
+[批量/worker 契约](../tests/contracts/test_batch_worker_enforcement.py)中的本地批量用例构造真实 `AIAgent`，执行其真实 `run_conversation` 循环。已加载的测试插件独立记录内存副作用，不以结果文案为判据。仅模型客户端/元数据端点使用替身；隔离夹具关闭 prompt caching、compression 和 trajectory 保存。本地 `tool_call` 展开、分段规划、逐项准入、插件 hooks、registry dispatch 及消息/结果配对均保留原生实现。
+
+每个本地批量用例同时在主 agent 和真实 `_build_child_agent` 构造的子 agent 上运行。子 agent 请求父 agent 配置工具集之外的 `terminal`，但不会获得它。这证明已测构造器选择及子循环，不证明 `delegate_task` 调度、后台生命周期或任意被委派代码隔离。
+
+- 三项本地批量执行获准的首项/末项，在 handler 之前拒绝中间项，并返回三个唯一配对的工具结果。部分拒绝不使整个批量原子化，也不撤销之前的副作用。
+- 夹具 handler 记录副作用后抛异常，模拟副作用发生后结果丢失。新的**脚本化模型响应**再次发出同一项，造成第二次副作用；两次被拒项仍然被拒。这不是传输自动重试，也不宣称真实模型行为。逐项结果 ID 和批量展开不提供副作用级幂等。
+- 内存夹具策略变更后，新的脚本化模型轮次重新进入当前 callback，并拒绝先前获准项。这仅证明 callback 重新检查，不证明当前持久策略读取、事务化撤权或 worker 取消。
+
+| 清单契约 ID | 可执行断言 |
+| --- | --- |
+| `local_batch_item_veto` | `test_native_local_batch_veto_preserves_other_items_and_pairing` |
+| `local_batch_uncertain_retry` | `test_native_local_batch_uncertain_item_retry_is_not_deduplicated` |
+| `local_batch_policy_recheck` | `test_native_local_batch_retry_rechecks_changed_fixture_policy` |
+| `delegated_child_toolset_and_batch_admission` | `delegated-child` 夹具下的同三个用例，包括构造器工具集断言 |
+
+`local_tool_batch` 清单行与 `connector_batch` 分开：纯 connector 批量保留自己的原生 dispatcher，不能由本地桥接展开验证。这些本地用例不覆盖 RPC/code 批量或生产 connector 授权。
+
+### 2.5 纯 connector 批量的部分结果与显式重试
+
+同一文件的 `test_connector_only_batch_veto_partial_result_and_explicit_retry` 调用真实 `model_tools` `tool_call` 调度，进入原生纯 connector 批量调度及逐项模型调度。原生可用性检查、已加载插件准入/middleware、远端调用规划、文件暂存及结果拼接均保留。仅 gateway 客户端构造被替换为离线 schemas/execute 端点。隔离 profile 无凭据；核验默认访客发现可用性，但不签发访客凭据、不连接 gateway，也不测试身份认证。
+
+获准项记录副作用，被拒项在获取客户端前被阻断，未知项记录副作用后，其合成客户端省略结果槽。原生输出保留带索引的成功/拒绝/`PROVIDER_ERROR` 结果。显式重复外层调用会再次记录成功项和未知项的副作用，而被拒项仍不获取客户端。每次尝试的客户端获取 ID 均恰好是外层调用 ID 加 `#0`/`#2`；它们不证明服务端幂等。这是**调用方发起的重试**，不是真实 `ToolGatewayClient` 的传输重试路径。
+
+此测试为直接模型调度提供主会话上下文。它不运行子 agent connector 循环、并发批量执行器、真实 gateway 凭据/权限解析或生产操作级 grant。清单 ID `connector_batch_item_veto_partial_retry` 对应该断言。所有受控写门禁继续阻断。
+
 ## 3. 受控写发布清单
 
 | 路径 | 本切片证据 | 发布状态 |
@@ -68,11 +113,12 @@ Worker 探针在全新进程中运行，因为 bootstrap policy 必须在 runtim
 | `native_dispatch` | 合成 hook 与外层 dispatcher 失败契约 | 阻断；尚未接入操作级授权 |
 | `direct_registry` | 合成跳过 hooks 契约 | 阻断；handler 需自行检查操作级权限 |
 | `mcp` | 真实 SDK stdio 的插件否决/直接 registry 及原生 trust gate 边界；虚假只读反例 | 阻断；没有生产逐动作授权或凭据/结果合同 |
-| `shell` | 无 backend containment 或操作级写合同 | 阻断 |
-| `browser` | 无身份绑定写入/结果合同 | 阻断 |
+| `shell` | 惰性 backend 上的原生 deny/workdir 与公开/内部 force 边界 | 阻断；没有真实 shell、隔离或操作级权限合同 |
+| `browser` | 惰性端点前的原生云元数据 URL 字面量预扫描及插件/直接 helper 边界 | 阻断；没有真实导航、身份绑定写入或结果合同 |
 | `execute_code_rpc` | 内存传输上的原生服务端/default 嵌套调度及生成客户端重试 | 阻断；存在重放反例，沙箱与当前 cell 权限仍未验证 |
-| `connector_batch` | 无逐项授权/部分结果/重试合同 | 阻断 |
-| `short_worker` | 无被委派副作用/撤权合同 | 阻断 |
+| `local_tool_batch` | 真实主/子循环、逐项否决、结果配对及显式重试反例 | 阻断；没有持久副作用幂等或持久撤权 |
+| `connector_batch` | 离线 gateway 客户端上的真实逐项模型调度、索引化部分结果及显式重试 | 阻断；生产 grant、凭据、传输重试及服务端幂等仍未验证 |
+| `short_worker` | 真实子 agent 构造/工具集限制与本地批量循环 | 阻断；调度器、后台生命周期及生产权限仍未验证 |
 | `managed_worker` | 合成冻结 config 与 safe-mode 合同 | 阻断；未接入当前持久 policy 检查 |
 | `scheduled_job` | 无授权/取消/交付/对账合同 | 阻断 |
 
@@ -92,7 +138,7 @@ Worker 探针在全新进程中运行，因为 bootstrap policy 必须在 runtim
 
 - 当前目标：[compatibility.json](../compatibility.json)记录的 Hermes `2281116525106e3c109993ccb5dc74d02bfc1427`、Linux、Python 3.14、隔离测试 home，无账号凭据。最初切片使用 `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`；历史结果与当前确切修订运行分开记录。
 - 检查脚本现在通过官方逐文件 Hermes runner 运行 `tests/contracts` 下全部文件，同时执行单元测试、Ruff、ty 和双语文档检查。
-- 实测 dispatcher 失败覆盖 `model_tools` wrapper，包括默认嵌套 RPC 调度。MCP 观察覆盖真实 stdio 夹具与原生 trust wrapper，不代表全部服务端传输或账号策略。Shell、browser、connector batch、short-worker 副作用和 managed worker 的当前持久策略准入仍需独立验收。冻结 config/safe-mode 探针不证明撤权或只读降级。
+- 实测 dispatcher 失败覆盖 `model_tools` wrapper，包括默认嵌套 RPC 调度。MCP 观察覆盖真实 stdio 夹具与原生 trust wrapper，不代表全部服务端传输或账号策略。终端/浏览器观察止于惰性执行端点。纯 connector 观察止于离线 gateway 客户端。本地批量及构造出的子循环不证明被委派调度或后台生命周期，且未执行并发批量执行器。真实隔离、身份绑定副作用及 managed worker 的当前持久策略准入仍需独立验收。冻结 config/safe-mode 探针不证明撤权或只读降级。
 - 无需生产账号、API key、在线模型调用、外发或真实 connector 写操作。未来在线测试需要独立、限定范围的测试配置与安全凭据交接；凭据不得进入聊天、日志或仓库。
 - 后续 [E0.2–E0.3 生命周期契约](75-native-lifecycle-contracts-zh.md)增加有界的 Project/Kanban/cron 操作入口证据，并记录缺失的受支持插件 CRUD API；不启用任何生产能力。E0.4 未测路径、依赖 E1 的写入准入、E3 编排与 E4 受控调度仍需独立验收。本切片通过不代表 M0 完成，也不允许这些写功能发布。
 
@@ -103,13 +149,15 @@ HERMES_PYTHON=/absolute/path/hermes-test-venv/bin/python \
 bash /absolute/path/hermes-agent/scripts/run_tests.sh \
   /absolute/path/hermes-superagent/tests/contracts/test_nested_rpc_enforcement.py \
   /absolute/path/hermes-superagent/tests/contracts/test_mcp_enforcement.py \
+  /absolute/path/hermes-superagent/tests/contracts/test_shell_browser_enforcement.py \
+  /absolute/path/hermes-superagent/tests/contracts/test_batch_worker_enforcement.py \
   --file-retries 0 -- \
   -o "pythonpath=/absolute/path/hermes-agent /absolute/path/hermes-superagent" -q --tb=short
 python scripts/check.py --hermes /absolute/path/hermes-agent \
   --hermes-python /absolute/path/hermes-test-venv/bin/python
 ```
 
-聚合命令中的 `python` 应使用已准备的 Python 3.14 测试解释器。聚焦文件包含 21 个参数化用例；其通过不能替代聚合验证或完整 E0.4 验收。准确执行结果以 Issue #12 及关联 PR 为准。本切片不引入宿主补丁或生产能力。
+聚合命令中的 `python` 应使用已准备的 Python 3.14 测试解释器。较早的 RPC/MCP 文件包含 21 个参数化用例；终端/浏览器与批量/worker 文件新增各自有界用例。聚焦通过不能替代聚合验证或完整 E0.4 验收。准确执行结果以 Issue #12 及关联 PR 为准。本切片不引入宿主补丁或生产能力。
 
 当前固定来源：
 
@@ -121,3 +169,7 @@ python scripts/check.py --hermes /absolute/path/hermes-agent \
 
 - [Code RPC 服务端](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/tools/code_execution_rpc.py)与[生成客户端](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/tools/code_execution_tool.py)
 - [MCP 原生准入与恢复](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/tools/mcp_tool_handlers.py)
+
+- [终端公开 handler 与执行守卫](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/tools/terminal_tool.py)及[浏览器执行](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/tools/browser_use_cli.py)
+- [本地批量展开](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/agent/tool_call_batches.py)及[被委派子 agent 构造](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/tools/delegate_tool.py)
+- [Connector 批量调度](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/tools/connectors/dispatch.py)
