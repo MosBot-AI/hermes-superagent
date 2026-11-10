@@ -132,3 +132,5 @@ E9 已选定原生 worker 路由设计，并实现离线约束验证器和部分
 - [原生插件与调度生命周期契约](75-native-lifecycle-contracts-zh.md)：固定版本的 Project/Kanban/cron 操作入口探测、弱去重及如实的取消/历史边界；不新增生产 CRUD API 或调度权限。
 
 - [原生记忆提供方契约](76-native-memory-contracts-zh.md): 固定版本发现、内置存储、历史检索、生命周期/上下文及检查点边界；核验不代表实现持久 v2。
+
+参见 [78. 带栅栏的登记确认流程证据](78-enrollment-ceremony-zh.md)，了解未接线的一次性确认基础和当前 pin 身份边界；生产 owner authority 仍不可用。

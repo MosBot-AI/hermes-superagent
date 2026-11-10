@@ -103,3 +103,5 @@ Run the [full repository checker](../README.md#development-checks) at the tested
 - I4: [Hosted HTTP admission marker](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/hermes_cli/plugin_host_http_auth.py#L17-L23).
 - I5: [Native command dispatch](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/gateway/run_inbound_hooks.py#L262-L301) and [injection command-control flag](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/gateway/platforms/event.py#L176-L185).
 - I6: [Desktop route-aware host APIs](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/website/docs/developer-guide/desktop-plugin-sdk.md#L1446-L1514).
+
+See [78. Fenced enrollment ceremony evidence](78-enrollment-ceremony.md) for the unwired one-shot confirmation foundation and current-pin identity boundary; production owner authority remains unavailable.

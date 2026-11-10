@@ -103,3 +103,5 @@ Context 缺失或不受支持时，插件必须 fail closed。私有 adapter 导
 - I4：[Hosted HTTP admission 标记](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/hermes_cli/plugin_host_http_auth.py#L17-L23)。
 - I5：[原生命令派发](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/gateway/run_inbound_hooks.py#L262-L301)及[注入命令控制标志](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/gateway/platforms/event.py#L176-L185)。
 - I6：[Desktop 路由感知宿主 API](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/website/docs/developer-guide/desktop-plugin-sdk.md#L1446-L1514)。
+
+参见 [78. 带栅栏的登记确认流程证据](78-enrollment-ceremony-zh.md)，了解未接线的一次性确认基础和当前 pin 身份边界；生产 owner authority 仍不可用。
