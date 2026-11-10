@@ -37,3 +37,9 @@ A real process crash before the link may leave an orphan staging file and no des
 ## Evidence
 
 Tests cover metadata/canonical consistency, historical retention after forgetting, namespace/schema/config/source rejection, path and permission faults, size/time bounds, post-publication failure, persistent hardlink aliases, real process exit before/after linking, concurrent forgetting, and a separate-process writer that cannot commit during inspect hashing. Native contracts exercise real trusted-local commands, disabled/foreign/remote refusal and model-tool exclusion against the recorded compatibility pin. No real model, credentials, live provider, user profile or external transfer is used. This is synthetic validation, not deployment or user acceptance.
+
+## Concurrent inspection lock lifetime (#94)
+
+Controlled snapshot inspectors now share a process-local non-reentrant gate from private-file/header validation through SQLite and raw-descriptor cleanup. A second inspector waits only within its cooperative deadline, then returns `snapshot_timeout`; it cannot close a descriptor and release the first inspector's POSIX lock. Both task and memory connection helpers explicitly close connections if PRAGMA/progress setup fails. Cleanup still closes the raw descriptor and releases the gate if connection closure raises.
+
+A synthetic two-inspector regression holds the first read at digest completion, rejects a deadline-limited second read, and verifies with a real separate-process writer that commit remains blocked until the first read finishes. This covers ordinary overlapping plugin inspections, not coordination with arbitrary unmanaged same-process SQLite connections on snapshot files or hostile same-UID access. No restore, authority, schema or release gate changes.

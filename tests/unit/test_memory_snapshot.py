@@ -312,3 +312,76 @@ c.close()
             "forgotten",
         )
     assert run(home, "inspect")["active_records"] == 1
+
+
+def test_parallel_inspect_cannot_release_active_inspect_lock(store, monkeypatch):
+    import concurrent.futures
+    import threading
+    import time
+
+    service, _, path, home = store
+    remember(service)
+    run(home)
+    target = path.parent / "snapshots/before-change.sqlite3"
+    original = hashlib.sha256(target.read_bytes()).hexdigest()
+    entered, release = threading.Event(), threading.Event()
+    real_sha = hashlib.sha256
+
+    class Digest:
+        def __init__(self):
+            self.inner = real_sha()
+
+        def update(self, data):
+            self.inner.update(data)
+
+        def hexdigest(self):
+            if threading.current_thread().name.startswith("inspector-A"):
+                entered.set()
+                assert release.wait(5)
+            return self.inner.hexdigest()
+
+    def sha(*args, **kwargs):
+        return real_sha(*args, **kwargs) if args or kwargs else Digest()
+
+    monkeypatch.setattr(memory_snapshot.hashlib, "sha256", sha)
+    namespace = "trusted-profile:" + real_sha(str(home).encode()).hexdigest()
+    writer = """import sqlite3,sys
+c=sqlite3.connect(sys.argv[1],timeout=.05,isolation_level=None)
+try:
+ c.execute('BEGIN IMMEDIATE')
+ c.execute("UPDATE records SET topic='changed'")
+ c.execute('COMMIT')
+ print('committed')
+except sqlite3.OperationalError as e:
+ if 'locked' not in str(e): raise
+ print('blocked')
+finally: c.close()
+"""
+    with concurrent.futures.ThreadPoolExecutor(
+        max_workers=1, thread_name_prefix="inspector-A"
+    ) as pool:
+        future = pool.submit(memory_snapshot._metadata, target, namespace, time.monotonic() + 10)
+        try:
+            assert entered.wait(5)
+            with pytest.raises(MemoryError, match="snapshot_timeout"):
+                memory_snapshot._metadata(target, namespace, time.monotonic() + 0.05)
+            result = subprocess.run(
+                [sys.executable, "-c", writer, str(target)],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=True,
+            )
+            assert result.stdout.strip() == "blocked"
+        finally:
+            release.set()
+        assert future.result(timeout=5)["sha256"] == original
+    assert run(home, "inspect")["sha256"] == original
+    result = subprocess.run(
+        [sys.executable, "-c", writer, str(target)],
+        capture_output=True,
+        text=True,
+        timeout=5,
+        check=True,
+    )
+    assert result.stdout.strip() == "committed"

@@ -6,6 +6,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ## Unreleased
 
+- Fix task/memory snapshot POSIX lock lifetime across hashing and historical reads; serialize controlled inspectors and preserve live-source locks, with real process contention regressions (#94).
+
 - Add explicit private consistent memory snapshot creation/inspection with bounded SQLite copying, historical plaintext retention notices and truthful publication/crash failure handling; no restore or model-tool access.
 
 - Add an unwired, default-denied enrollment ceremony and one-shot SQLite evidence with exact channel/session/policy fences and truthful cross-store failure semantics; no production authority or private reads are enabled.

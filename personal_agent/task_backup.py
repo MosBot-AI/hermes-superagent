@@ -8,6 +8,7 @@ import re
 import sqlite3
 import stat
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -23,6 +24,7 @@ from .tasks import _COLUMNS, TaskError, _task_id, inspect_task_snapshot, validat
 MAX_BYTES = 512 * 1024 * 1024
 TIMEOUT_SECONDS = 30
 MAX_RESULT_CHARS = 80000
+_METADATA_LOCK = threading.Lock()
 _NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}")
 
 
@@ -59,13 +61,28 @@ def _connection(path: Path, deadline: float) -> sqlite3.Connection:
     connection = sqlite3.connect(
         path.as_uri() + "?mode=ro", uri=True, timeout=1, isolation_level=None
     )
-    connection.execute("PRAGMA trusted_schema=OFF")
-    connection.execute("PRAGMA query_only=ON")
-    connection.set_progress_handler(lambda: int(time.monotonic() >= deadline), 1000)
-    return connection
+    try:
+        connection.execute("PRAGMA trusted_schema=OFF")
+        connection.execute("PRAGMA query_only=ON")
+        connection.set_progress_handler(lambda: int(time.monotonic() >= deadline), 1000)
+        return connection
+    except BaseException:
+        connection.close()
+        raise
 
 
 def _metadata(path: Path, deadline: float, *, reader=None, expected_digest=None) -> dict:
+    # Serialize controlled snapshot readers: a raw close in another invocation
+    # would also release this invocation's process-wide POSIX SQLite locks.
+    if not _METADATA_LOCK.acquire(timeout=max(0, deadline - time.monotonic())):
+        raise TaskError("backup_timeout")
+    try:
+        return _locked_metadata(path, deadline, reader=reader, expected_digest=expected_digest)
+    finally:
+        _METADATA_LOCK.release()
+
+
+def _locked_metadata(path: Path, deadline: float, *, reader=None, expected_digest=None) -> dict:
     _check_file(path)
     # Published snapshots use DELETE journaling. Refuse sidecars rather than
     # silently inspecting a changed, concurrently written or incomplete backup.
@@ -75,32 +92,53 @@ def _metadata(path: Path, deadline: float, *, reader=None, expected_digest=None)
         for suffix in ("-wal", "-shm", "-journal")
     ):
         raise TaskError("backup_sidecar_present")
-    # Even mode=ro can create WAL/SHM files for a closed WAL-mode database.
-    # Published snapshots must be DELETE-journal files before SQLite opens them.
-    with path.open("rb") as stream:
-        header = stream.read(20)
-    if header[:16] != b"SQLite format 3\x00" or header[18:20] != b"\x01\x01":
-        raise TaskError("backup_not_standalone")
-    connection = _connection(path, deadline)
+    # Hold ONE raw descriptor from header validation until SQLite closes.
+    # Closing any descriptor for this inode releases process-wide POSIX locks,
+    # including locks held by other SQLite connections in this process.
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_NONBLOCK", 0))
+    connection = None
     try:
+        info = os.fstat(fd)
+        identity = (info.st_dev, info.st_ino)
+        if (
+            not stat.S_ISREG(info.st_mode)
+            or info.st_nlink != 1
+            or info.st_uid != os.getuid()
+            or stat.S_IMODE(info.st_mode) & 0o077
+        ):
+            raise TaskError("unsafe_storage_file")
+        # Even mode=ro can create sidecars for a closed WAL-mode database.
+        header = os.read(fd, 20)
+        if header[:16] != b"SQLite format 3\x00" or header[18:20] != b"\x01\x01":
+            raise TaskError("backup_not_standalone")
+        os.lseek(fd, 0, os.SEEK_SET)
+        connection = _connection(path, deadline)
         connection.execute("BEGIN")
         result = inspect_task_snapshot(connection)
-        # Keep the read lock while hashing and reading payload. Ordinary SQLite
-        # writers cannot commit a different DELETE-journal snapshot underneath us.
         digest = hashlib.sha256()
-        with path.open("rb") as stream:
-            while block := stream.read(1024 * 1024):
-                if time.monotonic() >= deadline:
-                    raise TaskError("backup_timeout")
-                digest.update(block)
+        total = 0
+        while block := os.read(fd, 1024 * 1024):
+            total += len(block)
+            if total > MAX_BYTES:
+                raise TaskError("backup_size_limit")
+            if time.monotonic() >= deadline:
+                raise TaskError("backup_timeout")
+            digest.update(block)
         sha256 = digest.hexdigest()
         if expected_digest is not None and sha256 != expected_digest:
             raise TaskError("backup_changed")
         if reader is not None:
             result["historical_tasks"] = reader(connection)
-        return {**result, "bytes": path.stat().st_size, "sha256": sha256}
+        after = path.stat(follow_symlinks=False)
+        if (after.st_dev, after.st_ino) != identity or after.st_size != total:
+            raise TaskError("backup_changed")
+        return {**result, "bytes": total, "sha256": sha256}
     finally:
-        connection.close()
+        try:
+            if connection is not None:
+                connection.close()
+        finally:
+            os.close(fd)
 
 
 def _read_tasks(connection, operation, *, after, limit, task_id):
