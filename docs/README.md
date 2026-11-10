@@ -152,3 +152,5 @@ See [79. Explicit consistent local memory snapshots](79-local-memory-snapshots.m
 87. [Explicit local task priorities](87-local-task-priority.md): visible priority and bounded next eligible work, without dispatch or shared REST changes.
 
 88. [Explicit waiting-task follow-ups](88-local-task-followups.md): date-only local follow-up workbench, not automatic reminders.
+
+89. [Packaged Gateway crash recovery](89-packaged-gateway-crash.md): manual unobserved-reply and abrupt-process recovery acceptance.

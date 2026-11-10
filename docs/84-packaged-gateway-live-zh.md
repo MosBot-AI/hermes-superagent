@@ -4,7 +4,7 @@
 
 ## 范围与状态
 
-Issue #50 跟踪 profile-first 本地 MVP 的真实传输前提；#40 已按其原始本地命令范围单独完成。原始单任务安装包生命周期已在精确 head `71fa6efa15a3058c98b09e9f0376a18575818b17` 的[手动运行 42821354726](https://github.com/MosBot-AI/hermes-superagent/actions/runs/42821354726) 中通过。该历史检查点不认证以后每个主分支版本。下述扩展中文项目计划链在自身精确 head 运行通过前，仍是**仅手动运行的验收候选**。普通 PR/单元检查只验证准备工作，不代表真实验收或整个 MVP 完成。
+Issue #50 跟踪 profile-first 本地 MVP 的真实传输前提；#40 已按其原始本地命令范围单独完成。原始单任务安装包生命周期已在精确 head `71fa6efa15a3058c98b09e9f0376a18575818b17` 的[手动运行 42821354726](https://github.com/MosBot-AI/hermes-superagent/actions/runs/42821354726) 中通过。该历史检查点不认证以后每个主分支版本。单任务、中文项目计划、显式优先级和等待跟进四条链，已共同在精确 head `7b6de7d3e26337ad0748bbb8ff5cb56ebfc580b0` 的[手动运行 42851494795](https://github.com/MosBot-AI/hermes-superagent/actions/runs/42851494795) 中通过。相同树已进入 main `04bce5a2011633b3d0020ef80a9ee179db752a09`；[主分支 CI 42853591272](https://github.com/MosBot-AI/hermes-superagent/actions/runs/42853591272) 通过。这是精确树证据，不认证以后版本。独立的[突然崩溃候选](89-packaged-gateway-crash-zh.md) 需要自身精确 head 的真实运行。普通 PR/单元检查只验证准备工作，不代表真实验收或整个 MVP 完成。
 
 工作流从当前已提交版本构建带来源清单的生产运行包，验证后将其准备成隔离的本地 Git 来源。固定版本的官方 Hermes 安装器在一次性私有 profile 中执行扫描、安装和启用。扫描拒绝或安装失败会让测试失败，不使用绕过标志。仅安装阶段可沿用 runner 现有代理/CA 路由下载官方 Python 依赖。不继承 provider 秘密，Gateway 接收更小的环境，不包含代理/provider 配置。
 
