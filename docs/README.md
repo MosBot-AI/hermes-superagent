@@ -146,3 +146,5 @@ See [79. Explicit consistent local memory snapshots](79-local-memory-snapshots.m
 84. [Packaged Gateway lifecycle acceptance](84-packaged-gateway-live.md): manual-only production-install and real transport/restart acceptance candidate; no model calls.
 
 85. [Versioned local memory SDK](85-local-memory-sdk.md): explicit reviewed adapters, validated results and reusable synthetic conformance; no automatic loading or provider switch.
+
+86. [Fenced local memory repack](86-local-memory-maintenance.md): current-source compaction, controlled cutover and explicit interruption recovery; not historical restore.

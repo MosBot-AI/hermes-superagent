@@ -12,6 +12,7 @@ from pathlib import Path
 from . import PLUGIN_ID
 from .local_memory import create_backend
 from .memory_backend import MemoryBackend, MemoryError
+from .memory_coordination import memory_lock
 from .memory_edits import PrivateEdits
 from .memory_projection import PrivateProjection
 from .task_cli import _private_database_file, _private_storage_directory, current_profile_home
@@ -19,7 +20,7 @@ from .tasks import TaskError
 
 
 @contextmanager
-def open_memory_backend(
+def _open_memory_backend(
     bound_home: Path, session_ref: str, *, source_kind: str = "explicit_local_operator"
 ) -> Generator[MemoryBackend]:
     """Open only the current profile's owned store; reject unsafe existing paths."""
@@ -110,7 +111,7 @@ def existing_memory_path(bound_home: Path, *, allow_journal: bool = False) -> Pa
 
 
 @contextmanager
-def open_existing_memory_reader(bound_home: Path, session_ref: str) -> Generator[MemoryBackend]:
+def _open_existing_memory_reader(bound_home: Path, session_ref: str) -> Generator[MemoryBackend]:
     """No canonical writes, creation or migration; require the owned rollback store.
 
     Existing sidecars and WAL are refused, not repaired. SQLite can still create
@@ -159,3 +160,21 @@ def open_existing_memory_reader(bound_home: Path, session_ref: str) -> Generator
         backend.close()
         if connection is not None:
             connection.close()
+
+
+@contextmanager
+def open_memory_backend(
+    bound_home: Path, session_ref: str, *, source_kind="explicit_local_operator"
+):
+    """Coordinate the entire backend and derivative publication lifetime."""
+    with memory_lock(bound_home, create_directory=True):
+        with _open_memory_backend(bound_home, session_ref, source_kind=source_kind) as backend:
+            yield backend
+
+
+@contextmanager
+def open_existing_memory_reader(bound_home: Path, session_ref: str):
+    """Existing-only database read held behind the maintenance fence."""
+    with memory_lock(bound_home):
+        with _open_existing_memory_reader(bound_home, session_ref) as backend:
+            yield backend

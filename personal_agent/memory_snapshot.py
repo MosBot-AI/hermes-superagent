@@ -16,6 +16,7 @@ from pathlib import Path
 from . import PLUGIN_ID
 from .local_memory import LocalMemoryBackend
 from .memory_backend import MemoryError, _identifier, _text, validate_expiry
+from .memory_coordination import memory_lock
 from .memory_storage import existing_memory_path
 from .task_cli import _private_database_file, _private_storage_directory, current_profile_home
 from .tasks import TaskError
@@ -256,7 +257,7 @@ def _locked_metadata(path, namespace, deadline, *, reader=None, expected_digest=
             os.close(fd)
 
 
-def snapshot(bound_home: Path, operation: str, payload: dict) -> dict:
+def _snapshot(bound_home: Path, operation: str, payload: dict) -> dict:
     """Current trusted-profile operator only; caller must recheck mode/config first."""
     request = validate(operation, payload)
     published = False
@@ -379,3 +380,12 @@ def snapshot(bound_home: Path, operation: str, payload: dict) -> dict:
             for suffix in ("-journal", "-wal", "-shm"):
                 with suppress(OSError):
                     temporary.with_name(temporary.name + suffix).unlink(missing_ok=True)
+
+
+def snapshot(bound_home: Path, operation: str, payload: dict) -> dict:
+    # Historical inspection remains available during interrupted live maintenance.
+    validate(operation, payload)
+    if operation == "snapshot_create":
+        with memory_lock(bound_home):
+            return _snapshot(bound_home, operation, payload)
+    return _snapshot(bound_home, operation, payload)

@@ -18,6 +18,8 @@ from uuid import uuid4
 from .conversation_tasks import _supported_origin
 from .memory_backend import MemoryError, MemoryService, validate_request
 from .memory_index import maintain
+from .memory_maintenance import maintain as maintain_store
+from .memory_maintenance import validate as validate_maintenance
 from .memory_presentation import render_memory_result
 from .memory_snapshot import snapshot
 from .memory_snapshot import validate as validate_snapshot
@@ -36,6 +38,12 @@ HELP = (
     "--expected-revision N "
     "[--request-id KEY]; forget ID --expected-revision N [--request-id KEY]; "
     "export [--limit N --after ID]. Use POSIX quotes. "
+    "maintenance-preview; maintenance-prepare NAME --expected-watermark N; "
+    "maintenance-commit NAME; maintenance-status NAME; maintenance-recover NAME. "
+    "Current-store repack only, never historical restore. Stop old runtimes before upgrading "
+    "to this lock-aware version. Prepared/interrupted maintenance blocks ordinary memory "
+    "until commit/recover; recovery finishes the recorded intent, never rolls back new writes. "
+    "Preserved old files retain private plaintext after later forgetting. "
     "snapshot-create NAME / snapshot-inspect NAME create/inspect a private consistent plaintext "
     "database copy. Copies retain historical private memory after forgetting; no restore/import. "
     "snapshot-list NAME --sha256 DIGEST [--limit N --after ID]; "
@@ -127,6 +135,17 @@ def parse_command(raw_args: str) -> tuple[str, dict]:
     remember.add_argument("--request-id")
     show = commands.add_parser("show")
     show.add_argument("record_id")
+    commands.add_parser("maintenance-preview")
+    for operation in (
+        "maintenance-prepare",
+        "maintenance-commit",
+        "maintenance-status",
+        "maintenance-recover",
+    ):
+        command = commands.add_parser(operation)
+        command.add_argument("name")
+        if operation == "maintenance-prepare":
+            command.add_argument("--expected-watermark", type=int, required=True)
     for operation in ("snapshot-create", "snapshot-inspect", "snapshot-list", "snapshot-show"):
         command = commands.add_parser(operation)
         command.add_argument("name")
@@ -228,6 +247,11 @@ def parse_command(raw_args: str) -> tuple[str, dict]:
         operation, operation
     )
     operation = {
+        "maintenance-preview": "maintenance_preview",
+        "maintenance-prepare": "maintenance_prepare",
+        "maintenance-commit": "maintenance_commit",
+        "maintenance-status": "maintenance_status",
+        "maintenance-recover": "maintenance_recover",
         "snapshot-create": "snapshot_create",
         "snapshot-inspect": "snapshot_inspect",
         "snapshot-list": "snapshot_list",
@@ -267,6 +291,8 @@ def parse_command(raw_args: str) -> tuple[str, dict]:
         and payload["request_id"] is None
     ):
         payload["request_id"] = str(uuid4())
+    if operation.startswith("maintenance_"):
+        return operation, validate_maintenance(operation, payload)
     if operation in {"snapshot_create", "snapshot_inspect", "snapshot_list", "snapshot_show"}:
         return operation, validate_snapshot(operation, payload)
     return operation, validate_request(operation, payload)
@@ -357,6 +383,8 @@ class LocalMemoryCommands:
                     "snapshot_show",
                 }:
                     result = snapshot(self._home, operation, payload)
+                elif operation.startswith("maintenance_"):
+                    result = maintain_store(self._home, operation, payload)
                 elif operation in {"index_status", "index_rebuild"}:
                     result = maintain(self._home, operation, payload)
                 else:

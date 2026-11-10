@@ -6,6 +6,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ## Unreleased
 
+- Add coordinated current-source local memory repack and durable interruption recovery; preserve old plaintext, require stopped legacy runtimes, and refuse historical restore.
+
 - Add a versioned explicit local Memory SDK facade with strict results, truthful unknown write outcomes and reusable synthetic adapter conformance; no loader, provider switch or complete E2.6 claim.
 
 - Add a pure bounded local-task projection into the shared Task wire shape, preserving terminal lifecycle and minimizing fields; no remote read, pagination or HTTP capability is enabled.
