@@ -40,7 +40,7 @@ Worker 探针在全新进程中运行，因为 bootstrap policy 必须在 runtim
 - 空值/不匹配/非 ASCII 令牌、空服务端令牌、损坏 JSON、不可用工具和耗尽预算均在执行 handler 前拒绝。仅已派发尝试消耗预算；被 hook 拒绝的尝试仍计一次，并由 `tool_errors_since` 记录。
 - 正常插件否决和 callback 失败会阻断嵌套调用。显式注入的外层 hook dispatcher 逃逸异常仍会进入 handler。经 RPC 嵌套不会修复已有失败边界。
 - 两个完全相同且通过令牌验证的数据包会执行两次。令牌、工具 allowlist 和调用预算都不是 ActionIntent 或幂等键。
-- 测试执行宿主生成的 `_UDS_TRANSPORT_HEADER` 客户端，仅替换连接建立。传输替身在真实服务端/default dispatch 完成**之后**丢弃第一次响应。一次性客户端抛出异常，独立观察到一次副作用；持久客户端重连、重复相同数据包，并在第二次副作用后返回。这是在内存传输上验证生成客户端重试的反例，不是真实 UDS/TCP 或完整 session-kernel 测试。Session kernel 自定义的当前 cell 权限重新绑定及远端文件系统轮询传输在此仍未验证。
+- 测试执行宿主生成的 `_UDS_TRANSPORT_HEADER` 客户端，仅替换连接建立。传输替身在真实服务端/default dispatch 完成**之后**丢弃第一次响应。一次性客户端抛出异常，独立观察到一次副作用；持久客户端重连、重复相同数据包，并在第二次副作用后返回。这是在内存传输上验证生成客户端重试的反例，不是真实 UDS/TCP 或完整 session-kernel 测试。本地 session-kernel 当前 cell 权限由第 2.9 节单独覆盖；远端文件系统轮询仍未验证。
 
 ### 2.2 MCP 准入与声明式只读行为
 
@@ -171,6 +171,24 @@ Worker 探针在全新进程中运行，因为 bootstrap policy 必须在 runtim
 | `concurrent_connector_timeout_retry` | `test_native_concurrent_timeout_late_effect_and_retry`（允许/撤权重试） |
 
 三个断言均在主代理与构造出的委派子代理上下文运行。完整委派调度、后台生命周期、其他 execute-code 路由与生产操作级授权仍需独立验收。全部受控写入发布路径仍保持阻塞。
+
+### 2.9 持久本地 kernel 的 cell 权限
+
+十个[kernel 权限用例](../tests/contracts/test_kernel_authority_enforcement.py)在固定 host 上保留真实 `CellAuthority`、`_rpc_forever`、RPC 准入/默认模型调度、已加载插件 hook、`_run_cell`、结果处理与退役逻辑。wire 以及已创建进程的 stdin/响应队列是合成端点；不启动 socket、进程或 sandbox，提交的代码从不执行。
+
+- 同一持久 wire 从无权限切换到 cell 一、已退役 cell 一、cell 二与已退役 cell 二。只有两个活跃 cell 产生独立夹具效果；每次记录捕获的 ContextVar 与 task ID。调用方上下文被恢复。这验证当前 cell 重绑定，不是经过身份验证的 owner 身份。
+- 当前 cell RPC 保留插件否决，以及回调 exception/SystemExit 在 handler 前拒绝的行为。原生 RPC 尝试计数包含权限拒绝。
+- `_run_cell` 在成功、报告的 cell 异常、stdin 失败、超时及中断后退役权限。后续 RPC 被拒绝，不再产生效果。stdin 失败/超时/中断会触达合成进程拆卸端点；这不验证真实进程终止。首次 spawn 失败仍不在本矩阵内。
+- 真实工作线程从 callback B 开始，使用捕获 callback A 及调用方 ContextVar/task 的权限调度，随后恢复 B 和原 ContextVar。夹具仅观察 callback 身份，不调用批准或特权操作。不替换准入/上下文/退役实现。
+
+| 清单契约 ID | 可执行断言 |
+| --- | --- |
+| `kernel_current_cell_authority` | `test_persistent_rpc_current_authority_and_retirement` |
+| `kernel_cell_plugin_veto` | `test_current_cell_rpc_preserves_plugin_veto` |
+| `kernel_cell_retirement` | `test_run_cell_retires_authority_on_normal_and_error_exit` |
+| `kernel_thread_context_restore` | `test_cell_captures_calling_context_and_restores_rpc_thread_callbacks` |
+
+远端文件系统轮询、逐调用 fallback、真实子进程/sandbox 隔离、完整委派/后台生命周期与生产操作级权限仍未验证。退役会阻止后续调度，但不撤回已准入效果。全部受控写入门禁仍保持阻塞。
 
 ## 3. 受控写发布清单
 

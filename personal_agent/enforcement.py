@@ -81,13 +81,18 @@ _WRITE_PATHS = (
         "pinned_host_boundary_contract",
         "Native RPC token/allow-list/budget and default nested dispatch are exercised over "
         "an in-memory wire. Persistent client response loss can replay an effect. No sandbox, "
-        "remote poll transport or session-kernel authority-rebinding contract is claimed.",
+        "remote poll transport or fallback containment is claimed. Local persistent-kernel "
+        "current-cell context/callback rebinding and selected retirement exits are tested.",
         (
             "rpc_token_allowlist_budget",
             "rpc_nested_hook_failure",
             "rpc_outer_dispatcher_failure",
             "rpc_duplicate_request",
             "rpc_persistent_client_response_loss",
+            "kernel_current_cell_authority",
+            "kernel_cell_plugin_veto",
+            "kernel_cell_retirement",
+            "kernel_thread_context_restore",
         ),
     ),
     WritePath(
