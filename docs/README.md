@@ -142,3 +142,5 @@ See [79. Explicit consistent local memory snapshots](79-local-memory-snapshots.m
 [Local backend acceptance candidate](81-local-memory-acceptance.md): finite original #44 scope mapping and truthful search freshness.
 
 82. [Shared client API alignment](82-shared-client-api.md): canonical cross-backend contract, fixtures and unavailable Hermes diagnostics; no HTTP release.
+
+84. [Packaged Gateway lifecycle acceptance](84-packaged-gateway-live.md): manual-only production-install and real transport/restart acceptance candidate; no model calls.

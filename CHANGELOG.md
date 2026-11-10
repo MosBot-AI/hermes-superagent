@@ -67,6 +67,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Add a manual-only installed-runtime Gateway task lifecycle acceptance candidate, with real ticket/WebSocket commands and restart readback; live execution remains separately gated.
+
 - Added a versioned shared Hermes/DSH client API schema and conformance fixtures, plus fail-closed local diagnostics. No domain HTTP endpoint or remote permission is enabled.
 
 
