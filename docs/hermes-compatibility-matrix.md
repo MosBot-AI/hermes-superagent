@@ -22,6 +22,12 @@ The [write-path evidence](13-enforcement-contracts.md) adds actual RPC server/de
 
 These 21 focused cases test synthetic effects, not a shell/browser sandbox, real socket transport, connector batch, live worker or production account. Every controlled-write release gate remains blocked. Exact aggregate results belong to [Issue #12](https://github.com/MosBot-AI/hermes-superagent/issues/12) and its linked PR; this does not replace historical counts below or complete E0.4.
 
+## E0.4 actual-package exposure scope (22811165)
+
+[Production-exposure contracts](../tests/contracts/test_production_exposure.py) cold load the actual installed-shaped package, with staged module-origin checks and no repository import fallback. They verify default/read-only negative model/registry dispatch, real ordinary-managed/config-only frozen configuration, safe-bootstrap omission, unsupported text-worker refusal and native blueprint consumers. Independent storage and endpoint-call oracles accompany paired loading/opt-in controls; real providers, scheduled jobs and external effects are not invoked.
+
+The [boundary matrix](13-enforcement-contracts.md#27-actual-production-package-exposure-and-fallback) separates unavailable verified-owner/controlled-effect adapters from explicitly enabled local features and ordinary native planning-blueprint scheduling. `read_only` does not override `planning_blueprint: true`, restrict its native delivery destinations or stop pre-existing jobs. A clean-host `llm.text_worker` consent setting is not a granted capability or fallback permission. Concurrent/alternate execution routes, full lifecycle and actual containment remain separate gates. Exact aggregate evidence belongs to [Issue #12](https://github.com/MosBot-AI/hermes-superagent/issues/12), not the historical counts below.
+
 ## E0.5 synthetic MCP fixture scope (22811165)
 
 The [offline synthetic connector harness](74-synthetic-connector-fixtures.md) targets the current exact host without changing `compatibility.json`. Its [native contracts](../tests/contracts/test_synthetic_connectors.py) use real MCP discovery, registry/model dispatch and SDK stdio sessions with a durable fake remote. Tests cover lost responses after commit, restart reconciliation, and declaration-driven retry of a deliberately dishonest read-only tool. The session-expiry error is injected after a real stdio RPC; it is not evidence of actual HTTP session expiry.

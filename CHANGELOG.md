@@ -13,6 +13,8 @@ This file distinguishes design work, development changes, and released capabilit
 - Run runtime artifact acceptance on exact pull-request heads with read-only credentials; keep downloadable artifact publication push-only.
 ### Changed
 
+- Verify the actual production package under default/read-only, frozen-worker and safe bootstrap modes using real negative dispatch and blueprint consumers. Preserve explicit local/native-scheduling opt-ins and unsupported text-worker refusal; no controlled-write authority or host-wide sandbox is added.
+
 - Verify current SQLite policy and revocation inside a synthetic protected read handler under native frozen worker configuration, including direct dispatch, contention and audit failures. Reuse existing internal coordinators; no production write authority is added.
 
 - Extend E0.4 boundary evidence to pinned terminal/browser and batched tool execution, preserving all controlled-write release blocks and distinguishing synthetic endpoints from real account, containment and revocation acceptance.

@@ -21,17 +21,28 @@ class WritePath:
 _WRITE_PATHS = (
     WritePath(
         "native_dispatch",
-        "synthetic_contract",
+        "pinned_host_boundary_contract",
         "Callback failures block, but an escaping dispatcher failure can continue execution. "
-        "Operation-level authorization is not integrated.",
-        ("hook_callback_failure", "hook_timeout", "outer_dispatcher_failure"),
+        "Actual default package exposure and negative dispatch are tested; this is not "
+        "production operation-level authority or host-wide enforcement.",
+        (
+            "hook_callback_failure",
+            "hook_timeout",
+            "outer_dispatcher_failure",
+            "production_default_exposure",
+        ),
     ),
     WritePath(
         "direct_registry",
-        "synthetic_contract",
+        "pinned_host_boundary_contract",
         "Direct registry dispatch does not invoke pre_tool_call hooks. "
-        "Handlers must enforce their own operation-level authorization.",
-        ("direct_registry_without_hooks",),
+        "Actual package tools are absent by default; opted-in local handlers refuse "
+        "without a live activated turn. This is not verified-owner write authority.",
+        (
+            "direct_registry_without_hooks",
+            "production_default_exposure",
+            "production_worker_unsupported",
+        ),
     ),
     WritePath(
         "mcp",
@@ -101,14 +112,16 @@ _WRITE_PATHS = (
         "pinned_host_boundary_contract",
         "Native child construction narrows requested toolsets to the parent's selection; "
         "its real loop retains tested local-batch gates. No delegate_task scheduler, "
-        "background lifecycle, production per-action grants or persistent revocation is verified.",
-        ("delegated_child_toolset_and_batch_admission",),
+        "background lifecycle, production per-action grants or persistent revocation is verified. "
+        "The actual package's unsupported text-worker opt-in does not fall back to generic launch.",
+        ("delegated_child_toolset_and_batch_admission", "production_worker_unsupported"),
     ),
     WritePath(
         "managed_worker",
         "pinned_host_boundary_contract",
         "Fresh native worker binding retains frozen config while a synthetic read handler "
         "rechecks current SQLite policy and revocation on both dispatch routes. "
+        "Actual package frozen-config exposure and safe-bootstrap omission are also tested. "
         "No production authority, write grant or complete managed-worker lifecycle is integrated.",
         (
             "managed_worker_frozen_config",
@@ -120,12 +133,17 @@ _WRITE_PATHS = (
             "worker_admission_before_revoke",
             "worker_revoke_before_admission",
             "worker_one_shot_cross_path",
+            "production_frozen_configuration",
+            "production_safe_bootstrap",
         ),
     ),
     WritePath(
         "scheduled_job",
-        "not_tested",
-        "No scheduled-job authorization, cancellation, delivery, or reconciliation contract yet.",
+        "pinned_host_boundary_contract",
+        "Actual package blueprint absence and explicit opt-in are tested through native "
+        "consumers at inert creation endpoints. Opt-in ordinary jobs are not controlled "
+        "actions; no authorization, cancellation, delivery or reconciliation guarantee is added.",
+        ("production_blueprint_consumers",),
     ),
 )
 
