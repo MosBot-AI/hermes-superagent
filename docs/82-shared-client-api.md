@@ -46,3 +46,22 @@ DSH vendors the exact bytes and records an immutable source commit separately. C
 ## Verification limits
 
 Unit tests validate both backends' shared fixture shapes, negative fixtures, artifact digests and fail-closed Hermes diagnostics even when local task tools are enabled. They establish neither a deployed HTTP endpoint nor production authentication, native-mobile callbacks or full functional parity. Existing client API design remains useful for future operation semantics; this shared wire baseline takes precedence only for the explicitly defined common discovery/error/task-page shapes.
+
+## Local task projection foundation
+
+`personal_agent.client_tasks.project_local_task` now provides a pure, unwired mapping from an already-admitted **current** `TaskStore` record into the canonical `Task` shape. It does not open a store, admit a caller, register a route, generate cursors or enable `tasks.list`. Successful projection is not proof of freshness, owner/profile scope or permission to disclose a title. Future adapters must obtain a fresh authorized read and preserve its revocation/consistency boundary through response publication. Legacy saved receipts lacking current fields are rejected; read the current task instead of filling defaults or presenting an old receipt as current state.
+
+| Local lifecycle | Local progress | Shared state | Shared wait reason |
+|---|---|---|---|
+| `captured` | `ready` | `queued` | `null` |
+| `captured` | `in_progress` | `running` | `null` |
+| `captured` | `waiting` | `waiting` | `local_waiting` |
+| `captured` | `blocked` | `waiting` | `local_blocked` |
+| `done` | Any valid historical progress | `completed` | `null` |
+| `cancelled` | Any valid historical progress | `cancelled` | `null` |
+
+These states represent the **local task record**, not execution telemetry: `queued` does not mean dispatched, `running` does not prove a live worker, and local completion/cancellation does not establish external completion/cancellation. Native observations, notes, source text and client-provided authority cannot override lifecycle. An unsupported lifecycle/progress value is rejected, never guessed as success or cancellation. Terminal lifecycle wins over retained historical waiting/blocker labels.
+
+Only `id`, `title`, decimal-string `revision`, `state` and fixed `wait_reason` are returned in a fresh mapping. Private details, progress/resolution notes, timestamps, project/source and native observations are not copied. Input must be a plain dictionary with a canonical UUID-v4 ID, a nonblank native title of at most 240 characters with the existing native prohibited control categories excluded, an exact integer revision in `1..2**63-1`, and recognized lifecycle/progress strings. Booleans, scalar/container subclasses, missing fields and malformed/oversized values fail with a fixed redacted error; values are not truncated or coerced. The wire schema remains version 0.1.0 with unchanged artifacts.
+
+Tests exercise current records produced by the actual local store, all 12 lifecycle/progress combinations, terminal precedence, canonical schema conformance, invalid inputs, strict bounds and field minimization. This is reusable projection groundwork, not a pageable read adapter, HTTP admission, end-to-end client acceptance or completion of #29/#30.

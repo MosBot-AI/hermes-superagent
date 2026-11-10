@@ -6,6 +6,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ## Unreleased
 
+- Add a pure bounded local-task projection into the shared Task wire shape, preserving terminal lifecycle and minimizing fields; no remote read, pagination or HTTP capability is enabled.
+
 - Refuse stale FTS document/current-query coverage instead of reporting false freshness; add deterministic rebuild/forget contention and a finite #44 local acceptance candidate ledger.
 
 - Add digest-bound operator-only snapshot list/show for bounded historical memory inspection, with later-forgotten text warnings and no restore or automatic recall.
