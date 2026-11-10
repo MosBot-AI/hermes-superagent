@@ -7,12 +7,16 @@ local batch expansion, segment planning, admission, hooks and registry dispatch
 run unchanged. Retries are explicitly emitted by the synthetic model endpoint,
 not selected by a real model. The connector-only case substitutes a gateway
 client endpoint while preserving native availability and per-item admission.
+Concurrent cases also retain the native planner/executor for multiple pure connector
+wrappers, with synthetic endpoints proving overlap and timeout/late-effect boundaries.
 No remote account or external write is exercised.
 """
 
 import json
 import shutil
 import socket
+import threading
+import time
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -92,7 +96,7 @@ def runtime(tmp_path, monkeypatch, request):
         model="test/model",
         api_key="synthetic-not-a-credential",
         base_url="http://127.0.0.1:1/v1",
-        enabled_toolsets=["batch_worker_probe"],
+        enabled_toolsets=["batch_worker_probe", "connections"],
         quiet_mode=True,
         skip_context_files=True,
         skip_memory=True,
@@ -106,7 +110,7 @@ def runtime(tmp_path, monkeypatch, request):
             task_index=0,
             goal="Run synthetic fixture calls",
             context=None,
-            toolsets=["batch_worker_probe", "terminal"],
+            toolsets=["batch_worker_probe", "connections", "terminal"],
             model=None,
             max_iterations=4,
             task_count=1,
@@ -286,3 +290,179 @@ def test_connector_only_batch_veto_partial_result_and_explicit_retry(runtime, mo
         assert result["results"][0]["response"] == {"effect": "first"}
         assert "synthetic item veto" in result["results"][1]["error"]["message"]
         assert result["results"][2]["error"]["code"] == "PROVIDER_ERROR"
+
+
+def connector_batch(item, call_id):
+    call = batch([{"item": item}], call_id)
+    call.function.arguments = json.dumps(
+        {"calls": [{"name": "connectors__batchfixture__effect", "arguments": {"item": item}}]}
+    )
+    return call
+
+
+def test_native_concurrent_batches_overlap_and_veto_each_item(runtime, monkeypatch):
+    """Two endpoints must rendezvous: serialized dispatch cannot satisfy this oracle."""
+    from agent.tool_dispatch_helpers import _plan_tool_batch_segments
+
+    agent, probe = runtime
+    rendezvous = threading.Barrier(2, timeout=10)
+    effects = []
+    workers = []
+
+    class OfflineClient:
+        def schemas(self, _names):
+            return {"schemas": {}}
+
+        def execute(self, plans, **_kwargs):
+            item = plans[0].arguments["item"]
+            workers.append(threading.get_ident())
+            rendezvous.wait()
+            effects.append(item)
+            return [{"data": {"effect": item}}]
+
+    monkeypatch.setattr(
+        "tools.connectors.gateway.bridge._default_client_factory", lambda _call: OfflineClient()
+    )
+    calls = [connector_batch(item, item) for item in ("first", "denied", "last")]
+    assert [kind for kind, _ in _plan_tool_batch_segments(calls)] == ["parallel"]
+    agent.client.chat.completions.create.side_effect = [response(calls), response()]
+    result = agent.run_conversation("Exercise offline concurrent per-item admission")
+    assert sorted(effects) == ["first", "last"]
+    assert len(set(workers)) == 2
+    assert sorted(args["item"] for args, _ in probe.HOOKS) == ["denied", "first", "last"]
+    tool_messages = [message for message in result["messages"] if message["role"] == "tool"]
+    assert [message["tool_call_id"] for message in tool_messages] == ["first", "denied", "last"]
+    assert "synthetic item veto" in tool_messages[1]["content"]
+
+
+@pytest.mark.parametrize("revoke", [False, True], ids=["retry-allowed", "retry-revoked"])
+def test_native_concurrent_timeout_late_effect_and_retry(runtime, monkeypatch, revoke):
+    """Timeout is an uncertain outcome, not cancellation of an entered endpoint."""
+    agent, probe = runtime
+    monkeypatch.setenv("HERMES_CONCURRENT_TOOL_TIMEOUT_S", "3")
+    entered = threading.Barrier(2, timeout=10)
+    release = threading.Event()
+    effects = []
+    acquired = []
+    observed = []
+
+    class OfflineClient:
+        def schemas(self, _names):
+            return {"schemas": {}}
+
+        def execute(self, plans, **_kwargs):
+            item = plans[0].arguments["item"]
+            acquired.append(item)
+            if not release.is_set():
+                entered.wait()
+                assert release.wait(10), "test must release abandoned endpoint workers"
+            effects.append(item)
+            return [{"data": {"effect": item}}]
+
+    monkeypatch.setattr(
+        "tools.connectors.gateway.bridge._default_client_factory", lambda _call: OfflineClient()
+    )
+    initial = [connector_batch(item, item) for item in ("late", "peer")]
+    for call in initial:
+        payload = json.loads(call.function.arguments)
+        payload["calls"].append(
+            {"name": "connectors__batchfixture__effect", "arguments": {"item": "unstarted"}}
+        )
+        call.function.arguments = json.dumps(payload)
+    rounds = iter([0, 1, 2])
+
+    def model(**kwargs):
+        turn = next(rounds)
+        if turn == 0:
+            return response(initial)
+        if turn == 1:
+            observed.extend(
+                dict(message) for message in kwargs["messages"] if message["role"] == "tool"
+            )
+            assert sorted(acquired) == ["late", "peer"]
+            assert effects == []
+            if revoke:
+                probe.DENIED.add("late")
+            release.set()
+            deadline = time.monotonic() + 10
+            while agent._tool_worker_threads and time.monotonic() < deadline:
+                threading.Event().wait(0.01)
+            assert not agent._tool_worker_threads, "late workers must drain before retry/teardown"
+            assert sorted(effects) == ["late", "peer"]
+            return response([connector_batch("late", "retry")])
+        return response()
+
+    agent.client.chat.completions.create.side_effect = model
+    try:
+        result = agent.run_conversation("Exercise synthetic timeout, late completion and retry")
+    finally:
+        release.set()
+        deadline = time.monotonic() + 10
+        while agent._tool_worker_threads and time.monotonic() < deadline:
+            threading.Event().wait(0.01)
+        assert not agent._tool_worker_threads
+    assert len(observed) == 2
+    assert all("timed out" in message["content"] for message in observed)
+    assert effects.count("late") == (1 if revoke else 2)
+    assert "unstarted" not in acquired
+    assert [args["item"] for args, _ in probe.HOOKS].count("late") == 2
+    messages = [message for message in result["messages"] if message["role"] == "tool"]
+    assert [message["tool_call_id"] for message in messages] == ["late", "peer", "retry"]
+    assert all(message["effect_disposition"] == "unknown" for message in messages[:2])
+    assert [m["content"] for m in messages[:2]] == [m["content"] for m in observed]
+    if revoke:
+        assert "synthetic item veto" in messages[-1]["content"]
+
+
+def test_native_concurrent_batch_rechecks_policy_between_items(runtime, monkeypatch):
+    """Changing the fixture policy does not revoke an already entered endpoint."""
+    agent, probe = runtime
+    entered = threading.Event()
+    revoked = threading.Event()
+    effects = []
+    acquired = []
+
+    class OfflineClient:
+        def schemas(self, _names):
+            return {"schemas": {}}
+
+        def execute(self, plans, **_kwargs):
+            item = plans[0].arguments["item"]
+            acquired.append(item)
+            if item == "admitted":
+                entered.set()
+                assert revoked.wait(10)
+            elif item == "revoker":
+                assert entered.wait(10)
+                probe.DENIED.update({"admitted", "next"})
+                revoked.set()
+            effects.append(item)
+            return [{"data": {"effect": item}}]
+
+    monkeypatch.setattr(
+        "tools.connectors.gateway.bridge._default_client_factory", lambda _call: OfflineClient()
+    )
+    first = connector_batch("admitted", "first")
+    payload = json.loads(first.function.arguments)
+    payload["calls"].append(
+        {"name": "connectors__batchfixture__effect", "arguments": {"item": "next"}}
+    )
+    first.function.arguments = json.dumps(payload)
+    agent.client.chat.completions.create.side_effect = [
+        response([first, connector_batch("revoker", "second")]),
+        response(),
+    ]
+    try:
+        result = agent.run_conversation("Exercise offline mid-flight fixture policy change")
+    finally:
+        revoked.set()
+        deadline = time.monotonic() + 10
+        while agent._tool_worker_threads and time.monotonic() < deadline:
+            threading.Event().wait(0.01)
+        assert not agent._tool_worker_threads
+    assert entered.is_set() and revoked.is_set()
+    assert sorted(effects) == ["admitted", "revoker"]
+    assert "next" not in acquired
+    assert "next" in [args["item"] for args, _ in probe.HOOKS]
+    messages = [message for message in result["messages"] if message["role"] == "tool"]
+    assert "synthetic item veto" in messages[0]["content"]

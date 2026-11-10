@@ -155,6 +155,23 @@ The fixture substitutes pointer width during `croniter` import and disables `url
 | `production_worker_unsupported` | `test_production_worker_unsupported` |
 | `production_blueprint_consumers` | `test_production_blueprint_consumers` |
 
+### 2.8 Native concurrent connector wrappers and timeout boundaries
+
+Eight additional parameterized [batch/worker cases](../tests/contracts/test_batch_worker_enforcement.py) run the real primary and constructed-child conversation loops on the pinned host. The model endpoint emits multiple pure-connector `tool_call` wrappers. Native planning admits them to the concurrent executor; each wrapper still dispatches its own items sequentially. A two-party barrier and distinct endpoint thread IDs prove overlap, rather than treating batch syntax as concurrency. Gateway client endpoints remain offline synthetic doubles; no transport, credentials or production authority are exercised.
+
+- Per-item plugin veto prevents endpoint execution/effects for the denied item while allowed concurrent siblings complete and result pairing retains model order.
+- An entered endpoint waits while its concurrent sibling changes fixture policy. It still completes, but the next item in its wrapper rechecks the hook and is denied. This is in-memory callback rechecking, not durable revocation or cancellation of already-admitted work.
+- With the official concurrent timeout configured, endpoints remain held until the scripted model receives timeout results. The independent effect ledger is empty then; releasing the workers produces late effects. Unstarted subsequent entries do not enter endpoint execution. Recorded timeout outcomes retain `effect_disposition: unknown` and are not overwritten by late completion.
+- After late workers drain, an explicit scripted retry can repeat the effect; revoking fixture policy before that retry denies it. The executor does not establish exactly-once effects or gateway/server deduplication. Thread release and drain precede fixture teardown.
+
+| Inventory contract ID | Executable assertion |
+| --- | --- |
+| `concurrent_connector_item_veto` | `test_native_concurrent_batches_overlap_and_veto_each_item` |
+| `concurrent_connector_policy_recheck` | `test_native_concurrent_batch_rechecks_policy_between_items` |
+| `concurrent_connector_timeout_retry` | `test_native_concurrent_timeout_late_effect_and_retry` (allowed/revoked retry) |
+
+All three assertions run under primary and constructed delegated-child contexts. Full delegation scheduling, background lifecycle, alternate execute-code routes and production operation-level authorization remain separate gates. All controlled-write release paths stay blocked.
+
 ## 3. Controlled-write release inventory
 
 | Path | Evidence in this slice | Release status |
@@ -187,7 +204,7 @@ No mode or configuration toggle in this slice enables controlled external-effect
 
 - Current target: Hermes `2281116525106e3c109993ccb5dc74d02bfc1427`, Linux, Python 3.14, isolated test homes and no account credentials, as recorded in [compatibility.json](../compatibility.json). The original slice used `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`; historical results remain separate from current exact-revision runs.
 - The checker now runs every file under `tests/contracts` through the official per-file Hermes runner, in addition to unit tests, Ruff, ty, and bilingual document checks.
-- Observed dispatcher failure applies to the tested `model_tools` wrapper, including default nested RPC dispatch. MCP observations cover the real stdio fixture and native trust wrapper, not all server transports or account policies. Terminal/browser observations stop at inert execution endpoints. Connector-only observations stop at an offline gateway client. Local-batch and constructed-child loops do not establish delegated scheduling or background lifecycle, and no concurrent batch executor is exercised. Current durable policy is now exercised inside a synthetic read handler under native worker binding. Actual-package exposure/fallback is bounded in §2.7. Actual containment, authenticated effects and complete managed-worker lifecycle remain separate evidence gaps. Earlier config/safe-mode probes alone did not establish those guarantees.
+- Observed dispatcher failure applies to the tested `model_tools` wrapper, including default nested RPC dispatch. MCP observations cover the real stdio fixture and native trust wrapper, not all server transports or account policies. Terminal/browser observations stop at inert execution endpoints. Connector-only observations stop at an offline gateway client. Local-batch and constructed-child loops do not establish delegated scheduling or background lifecycle, while §2.8 separately exercises the native concurrent executor at synthetic connector endpoints. Current durable policy is now exercised inside a synthetic read handler under native worker binding. Actual-package exposure/fallback is bounded in §2.7. Actual containment, authenticated effects and complete managed-worker lifecycle remain separate evidence gaps. Earlier config/safe-mode probes alone did not establish those guarantees.
 - No production account, API key, live model request, external send, or real connector write was needed. Future online tests need a separate scoped test setup and secure credential handoff; credentials must not enter chat, logs, or the repository.
 - The later [E0.2–E0.3 lifecycle contracts](75-native-lifecycle-contracts.md) add bounded Project/Kanban/cron operator evidence and document missing supported plugin CRUD APIs; they enable no production capability. Untested E0.4 paths, E1-dependent write admission, E3 orchestration and E4 controlled scheduling remain separate gates. Passing this slice does not complete M0 or permit those write features to ship.
 
