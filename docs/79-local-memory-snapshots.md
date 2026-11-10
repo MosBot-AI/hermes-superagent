@@ -12,7 +12,7 @@ English | [简体中文](79-local-memory-snapshots-zh.md)
 
 These explicit native local commands require the existing `mode: local_tasks`, `local_conversation: true`, `local_memory: true` configuration and current trusted-profile/session admission. They are not model tools, automatic exports, remote-owner access or a new provider. Disabled/foreign origins refuse before snapshot storage. Loading/help do not create a database. This #44 slice does not complete general import/migration or source-level suppression.
 
-Names are 1–64 ASCII letters/digits/underscores/hyphens, beginning with a letter/digit. The only destination is `memory/snapshots/NAME.sqlite3` beneath the current profile's private plugin-data directory. No arbitrary path, overwrite, upload, list/delete command or automatic cleanup is provided. Existing names refuse; inspect that name after an uncertain create rather than assuming a new name is the same retry.
+Names are 1–64 ASCII letters/digits/underscores/hyphens, beginning with a letter/digit. The only destination is `memory/snapshots/NAME.sqlite3` beneath the current profile's private plugin-data directory. No arbitrary path, overwrite, upload, snapshot-name listing/deletion or automatic cleanup is provided. Existing names refuse; inspect that name after an uncertain create rather than assuming a new name is the same retry.
 
 Create returns schema version, namespace, event watermark, record/active/tombstone counts, byte length and SHA-256. `active_records` counts status-active rows, including expired records not yet forgotten; it is not the currently recallable count. Inspect returns the same metadata from the named historical file without returning private record bodies. It works without a live records.sqlite3, never creates/migrates that store, and rejects snapshots from a different profile namespace.
 
@@ -45,3 +45,20 @@ Controlled snapshot inspectors now share a process-local non-reentrant gate from
 A synthetic two-inspector regression holds the first read at digest completion, rejects a deadline-limited second read, and verifies with a real separate-process writer that commit remains blocked until the first read finishes. This covers ordinary overlapping plugin inspections, not coordination with arbitrary unmanaged same-process SQLite connections on snapshot files or hostile same-UID access. No restore, authority, schema or release gate changes.
 
 Schema-11 source suppression retains historical snapshot inspection for exact known schema 10 and 11 files, without migrating or changing their bytes. Namespace, DELETE-journal, integrity and strict-schema gates still apply; ordinary read-only recall remains current-schema only. See [source suppression](80-exact-memory-source-suppression.md).
+
+## Digest-bound historical record browsing
+
+```text
+/personal-memory snapshot-list before-change --sha256 DIGEST --limit 10
+/personal-memory snapshot-show before-change RECORD_ID --sha256 DIGEST
+```
+
+Use the exact SHA256 returned by create/inspect. These explicit operator-only commands validate the digest **before reading record fields**, within the same serialized SQLite read transaction and descriptor lifetime. A changed file returns `snapshot_changed`; inspect deliberately before choosing its new digest. They require current profile/config admission even if the live memory database is missing. They do not create directories, migrate snapshots, query live records or select a provider.
+
+`list` returns newest-created-first canonical record summaries: ID, revision, stored status, topic, creation/update timestamps and stored expiry. Use `--after RECORD_ID` from the returned `next_cursor`; default limit is 10, maximum 20. `show` additionally returns the selected record's content. Neither returns source/session identifiers, candidate quotes, receipts or source-lineage/suppression tables. Missing records return `snapshot_record_not_found`; a missing cursor returns `invalid_cursor`. No current `expired` flag is calculated from historical data. Forgotten tombstones in the snapshot return null content/topic/expiry. Both exact known schemas 10 and 11 remain readable without changing bytes.
+
+**Historical output may contain text later corrected, forgotten or suppressed, and can enter ordinary host conversation history.** It is untrusted historical data, not current state, current validity, verified authorship or authority. Current canonical recall/source suppression remains unchanged. There is no model-tool or automatic-recall action, restore, copy-back or effect replay. Topic summaries can themselves contain private text.
+
+Before selected text is materialized, SQL measures its stored byte size: at most 12,000 bytes per selected row and a conservative worst-case ASCII JSON estimate of 80,000 characters for the selection plus overhead. A final JSON bound is also checked. The conservative estimate can reject an otherwise compact result; lower `--limit` rather than expecting truncation. Malformed IDs/status/revisions/timestamps/payloads are refused without partial output. The existing 128 MiB file limit and cooperative deadline still apply, not a hard interrupt of OS calls.
+
+Synthetic tests cover paging, malformed/oversized rows, mismatched digest before reader invocation, schema-10 byte preservation, historical reads after current forgetting and source suppression, failure cleanup, and a real separate-process writer blocked throughout record reading. Native contracts exercise these explicit commands and disabled/model refusals; no private real data or model calls are used.
