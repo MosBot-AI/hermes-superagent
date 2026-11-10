@@ -4,7 +4,7 @@ English | [简体中文](13-enforcement-contracts-zh.md)
 
 This page records the earlier E0 slice and its bounded RPC/MCP, terminal/browser, local-batch, persistent worker-policy and production-exposure follow-ons for [Issue #12](https://github.com/MosBot-AI/hermes-superagent/issues/12). See [16](16-local-task-inbox.md) for the newer opt-in local task inbox; it does not enable the native/external controlled-write paths described here.
 
-This follow-on P0 slice advances E0.4 without enabling any controlled write capability. It adds reproducible failure-boundary tests and a machine-readable release inventory. The follow-ons exercise actual pinned RPC consumers/server dispatch, MCP admission, terminal/browser pre-execution guards and local batches in primary and delegated agent loops, and current durable policy checks in a protected synthetic read handler; they do not complete all alternate paths. E0.4, E0/M0, and E1 authorization remain incomplete.
+This follow-on P0 slice advances E0.4 without enabling any controlled write capability. It adds reproducible failure-boundary tests and a machine-readable release inventory. The follow-ons exercise actual pinned RPC consumers/server dispatch, MCP admission, terminal/browser pre-execution guards and local batches in primary and delegated agent loops, and current durable policy checks in a protected synthetic read handler; their limits and unsupported modes are explicit. The finite E0.4 boundary-evidence package is ready for acceptance, contingent on this ledger PR merging and final main CI verification linked on Issue #12. E0/M0 and E1 authorization are not completed by that acceptance.
 
 ## 1. What the implementation does
 
@@ -203,7 +203,7 @@ A failed response write leaves the request present: the next poll dispatches it 
 | `remote_poll_response_replay` | `test_remote_response_failure_can_replay_effect` |
 | `remote_fallback_selection` | `test_remote_kernel_fallback_selection` |
 
-No remote shell, filesystem, kernel, sandbox, model or credential is used. Actual per-call process lifecycle, transport ownership and containment remain unverified. All controlled-write gates remain blocked. Bounded delegated/background evidence is recorded in §2.11; the final finite ledger remains outstanding for #12.
+No remote shell, filesystem, kernel, sandbox, model or credential is used. Actual per-call process lifecycle, transport ownership and containment remain unverified. All controlled-write gates remain blocked. Bounded delegated/background evidence is recorded in §2.11; the finite ledger below completes the acceptance candidate for #12, subject to final merge verification.
 
 ### 2.11 Delegation routing, fallback and stop boundaries
 
@@ -214,7 +214,7 @@ No remote shell, filesystem, kernel, sandbox, model or credential is used. Actua
 - `delegation_detached_stop`: the native submitted runner sets `honor_parent_interrupt=False`; its cancellation callback signals every child through the native cooperative-stop helper. An already-recorded synthetic effect remains after the callback.
 - `delegation_parent_join_interrupt`: real daemon-worker joins over Event-controlled child endpoints return interrupted entries when the parent stops, before children finish. Those already-started children can subsequently record effects. Detached joins instead wait through the parent-turn stop and return completed results. Every test releases and joins its workers; no live daemon is left behind.
 
-Twelve cases use independent admission/effect records and child stop state, not result prose alone. They establish routing and cooperative-stop limits, not durable revocation, production authority, full background lifecycle or OS isolation. The final finite path ledger remains outstanding; all controlled-write gates remain blocked.
+Twelve cases use independent admission/effect records and child stop state, not result prose alone. They establish routing and cooperative-stop limits, not durable revocation, production authority, full background lifecycle or OS isolation. The finite path ledger is recorded below; acceptance remains contingent on final merge verification. All controlled-write gates remain blocked.
 
 ## 3. Controlled-write release inventory
 
@@ -233,6 +233,20 @@ Twelve cases use independent admission/effect records and child stop state, not 
 | `scheduled_job` | Actual project blueprint absence/opt-in through native consumers at inert create endpoints | Blocked; no controlled authorization/cancel/delivery/reconciliation contract |
 
 `synthetic_contract` and `pinned_host_boundary_contract` are bounded evidence labels, not full coverage of a named tool family. A successful in-memory probe does not prove shell, MCP, browser, external delivery, or real worker side effects are protected. The inventory is immutable internally and returns independent snapshots; mutating a report cannot grant a capability or change later reports.
+
+### 3.1 Finite acceptance ledger
+
+The [machine-readable ledger](enforcement-evidence-ledger.json) maps exactly 11 release paths and all 52 unique inventory contract IDs to native file/symbol entry points, actual test files/functions, independent effect oracles, unsupported/downstream limits and Hermes `2281116525106e3c109993ccb5dc74d02bfc1427`. Shared contract IDs are defined once and referenced by each relevant path. Its source/version is the ledger's repository revision; the final merged revision, full test counts and exact-head/main CI links belong on [Issue #12](https://github.com/MosBot-AI/hermes-superagent/issues/12), not an invented self-referential commit hash.
+
+`tests/unit/test_enforcement_ledger.py` validates inventory equality, unique IDs, actual test AST definitions and baseline equality, and rejects missing/extra/duplicate references and false enabled/verified claims. `tests/contracts/test_enforcement_ledger_native.py` additionally resolves native symbols against the exact pinned checkout. These are reference-integrity checks, not substitutes for executing the mapped behavioral contracts. Run the full `scripts/check.py --hermes ... --hermes-python ...` aggregate before acceptance. No runtime ledger parser or new capability is installed.
+
+Original #12 acceptance maps as follows:
+
+- Native/MCP/shell/browser/execute-code/RPC/batch/worker coverage: ledger rows identify the tested real boundaries, denial and bypass/replay/interruption counterexamples. Unexercised real process/transport modes are explicitly unsupported for project-controlled writes; production-package non-exposure is tested, not inferred from this report.
+- Hook errors, troubleshooting safe fallback and frozen configuration versus current policy: `hook_*`, `outer_dispatcher_failure`, `safe_worker_hook_suppression`, `worker_*` and the actual `production_*` contracts distinguish their different failure domains and independently observe effects/storage.
+- Code, integration/security counterexamples, recovery limits and compatibility: the mapped tests, pinned entry points and §2 record these artifacts. Response-loss retries, late effects and cooperative stop are limits, not recovery or authorization guarantees.
+
+This is an **acceptance candidate**, not a claim that a PR has merged. Close #12 only after independent review, all applicable tests, exact-head CI, merge and main CI verification. Do not close E0/M0 or downstream issues automatically. Keep `runtime_enforcement_verified: false`, all controlled-write gates blocked and all unknown routes unverified.
 
 ## 4. Requirements before writes can be enabled
 
@@ -292,10 +306,6 @@ E0.4 verifies boundaries, recovery limits and the bounded production exposure of
 
 Here a controlled external-effect route means a project-owned path that turns verified intent/approval into an admitted external send, modification or spend, including scheduling such an action. Its absence does not mean zero local mutation, no ordinary native scheduling, stopping existing jobs or host-wide containment. In particular, `planning_blueprint: true` is an independent opt-in even with `mode: read_only`; the native consumers can create an ordinary job, delivery is not restricted to `local`, and a configured provider can incur costs. See the [blueprint boundaries](25-native-planning-blueprint.md).
 
-Before closing Issue #12, the remaining bounded evidence must establish:
-
-1. Retain actual production-package exposure and negative-dispatch evidence under default/read-only, ordinary managed, config-only and troubleshooting safe bootstrap, as bounded in §2.7. A report-only inventory or absence of a test fixture tool is insufficient, and explicit ordinary native scheduling remains separate.
-2. Native concurrent batch admission and the remaining delegated/background and execute-code alternate routes: a behavioral boundary test, or an explicit unsupported seam plus verified non-exposure from the project-controlled mode. Inert shell/browser endpoints do not establish backend containment.
-3. A final finite ledger linking each path to its exact boundary, denial/non-exposure assertion, effect oracle and tested revision. Separate verified E0.4 boundaries, technically unavailable modes and downstream E1/E3/E4/E5 enablement work.
+The finite evidence obligations are mapped in §3.1: actual production-package exposure (§2.7), native concurrency (§2.8), local/remote alternate execution (§2.9–2.10), delegation routing/stop (§2.11), and the complete path/contract ledger. After final merge/main verification, these satisfy the scoped E0.4 verification package. No new production authorization or containment claim follows.
 
 This project can prove that its controlled-write adapter is unavailable while an independently configured Hermes host still exposes native tools. It must not describe that result as host-wide read-only enforcement. Any later claim to contain the host or a general-purpose worker requires corresponding tool, credential and OS/process isolation evidence.

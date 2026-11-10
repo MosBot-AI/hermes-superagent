@@ -1,0 +1,1184 @@
+{
+  "schema_version": 1,
+  "baseline_hermes_commit": "2281116525106e3c109993ccb5dc74d02bfc1427",
+  "scope": "E0.4 finite boundary evidence, not production authorization or host-wide containment",
+  "completion": "Acceptance candidate; complete only after linked PR merge and final main CI verification on Issue #12.",
+  "runtime_enforcement_verified": false,
+  "controlled_writes_enabled": false,
+  "release_gate": "blocked",
+  "project_non_exposure_contracts": [
+    "production_default_exposure",
+    "production_frozen_configuration",
+    "production_safe_bootstrap",
+    "production_worker_unsupported",
+    "production_blueprint_consumers"
+  ],
+  "non_exposure_limits": "Project-controlled verified-owner/external-effect adapters are unavailable. Independently configured native host tools are not disabled. Explicit local task/memory, parked-card and ordinary planning-blueprint opt-ins retain their separate boundaries; read_only plus blueprint opt-in can schedule ordinary nonlocal delivery and incur provider costs.",
+  "downstream_limits": "E1 owner/action authority, E3/E4 durable orchestration/recovery and E5 authenticated delivery/outcomes remain separate. No real backend/OS containment, per-call process lifecycle, credential scope or effect rollback is established. Unsupported modes remain blocked for controlled-write release.",
+  "paths": [
+    {
+      "path_id": "native_dispatch",
+      "contract_ids": [
+        "hook_callback_failure",
+        "hook_timeout",
+        "outer_dispatcher_failure",
+        "production_default_exposure"
+      ],
+      "unsupported_or_downstream": "Callback failures block, but an escaping dispatcher failure can continue execution. Actual default package exposure and negative dispatch are tested; this is not production operation-level authority or host-wide enforcement.",
+      "controlled_writes_enabled": false,
+      "release_gate": "blocked"
+    },
+    {
+      "path_id": "direct_registry",
+      "contract_ids": [
+        "direct_registry_without_hooks",
+        "production_default_exposure",
+        "production_worker_unsupported"
+      ],
+      "unsupported_or_downstream": "Direct registry dispatch does not invoke pre_tool_call hooks. Actual package tools are absent by default; opted-in local handlers refuse without a live activated turn. This is not verified-owner write authority.",
+      "controlled_writes_enabled": false,
+      "release_gate": "blocked"
+    },
+    {
+      "path_id": "mcp",
+      "contract_ids": [
+        "mcp_plugin_veto_and_registry_bypass",
+        "mcp_native_trust_gate",
+        "mcp_dishonest_read_hint"
+      ],
+      "unsupported_or_downstream": "Real stdio dispatch tests plugin veto, direct-registry bypass and native trust denial. A dishonest readOnlyHint still permits a synthetic effect. Production per-action authorization, credential scope and receipts remain unverified.",
+      "controlled_writes_enabled": false,
+      "release_gate": "blocked"
+    },
+    {
+      "path_id": "shell",
+      "contract_ids": [
+        "shell_native_deny_and_force_surface",
+        "shell_internal_force_boundary",
+        "shell_plugin_registry_boundary"
+      ],
+      "unsupported_or_downstream": "Native deny/workdir guards and public versus internal force paths are exercised against an inert backend. Direct registry skips plugin admission. No actual shell, backend containment or operation-level authorization contract is established.",
+      "controlled_writes_enabled": false,
+      "release_gate": "blocked"
+    },
+    {
+      "path_id": "browser",
+      "contract_ids": [
+        "browser_metadata_literal_floor",
+        "browser_plugin_helper_boundary",
+        "browser_dynamic_url_prescan_limit"
+      ],
+      "unsupported_or_downstream": "Native metadata-URL literal admission and plugin/direct-helper boundaries are tested against an inert browser endpoint. Dynamic URLs exceed literal pre-scan coverage. No real navigation, session identity, write outcome or containment is established.",
+      "controlled_writes_enabled": false,
+      "release_gate": "blocked"
+    },
+    {
+      "path_id": "execute_code_rpc",
+      "contract_ids": [
+        "rpc_token_allowlist_budget",
+        "rpc_nested_hook_failure",
+        "rpc_outer_dispatcher_failure",
+        "rpc_duplicate_request",
+        "rpc_persistent_client_response_loss",
+        "kernel_current_cell_authority",
+        "kernel_cell_plugin_veto",
+        "kernel_cell_retirement",
+        "kernel_thread_context_restore",
+        "remote_poll_admission",
+        "remote_poll_plugin_veto",
+        "remote_poll_response_replay",
+        "remote_fallback_selection"
+      ],
+      "unsupported_or_downstream": "Native RPC token/allow-list/budget and default nested dispatch are exercised over an in-memory wire. Persistent client response loss can replay an effect. No sandbox, remote backend containment is claimed. File polling admission, response-loss replay and kernel-to-per-call fallback selection use inert endpoints. Local persistent-kernel current-cell context/callback rebinding and selected retirement exits are tested.",
+      "controlled_writes_enabled": false,
+      "release_gate": "blocked"
+    },
+    {
+      "path_id": "local_tool_batch",
+      "contract_ids": [
+        "local_batch_item_veto",
+        "local_batch_uncertain_retry",
+        "local_batch_policy_recheck"
+      ],
+      "unsupported_or_downstream": "Real local tool_call expansion and agent loops preserve per-item veto and pairing. A new model-emitted retry can repeat a completed synthetic effect; in-memory fixture policy rechecks do not establish durable revocation or effect idempotency.",
+      "controlled_writes_enabled": false,
+      "release_gate": "blocked"
+    },
+    {
+      "path_id": "connector_batch",
+      "contract_ids": [
+        "connector_batch_item_veto_partial_retry",
+        "concurrent_connector_item_veto",
+        "concurrent_connector_policy_recheck",
+        "concurrent_connector_timeout_retry"
+      ],
+      "unsupported_or_downstream": "Native per-item dispatch and veto retain indexed partial results against an offline gateway client. Native concurrent wrappers recheck fixture policy per item; timeout can precede late effects and an explicit outer retry can repeat them. Production grants, credentials, transport retry and server deduplication remain unverified.",
+      "controlled_writes_enabled": false,
+      "release_gate": "blocked"
+    },
+    {
+      "path_id": "short_worker",
+      "contract_ids": [
+        "delegated_child_toolset_and_batch_admission",
+        "production_worker_unsupported",
+        "delegation_session_routing",
+        "delegation_rejected_inline_fallback",
+        "delegation_detached_stop",
+        "delegation_parent_join_interrupt"
+      ],
+      "unsupported_or_downstream": "Native child construction narrows requested toolsets to the parent's selection; its real loop retains tested local-batch gates. Native session routing, inline fallback, reattachment/stop and parent-join boundaries use inert child/scheduler endpoints. Rejected background admission can run inline; parent stops do not retract effects. Live scheduler lifecycle, production grants and persistent revocation remain unverified. The actual package's unsupported text-worker opt-in does not fall back to generic launch.",
+      "controlled_writes_enabled": false,
+      "release_gate": "blocked"
+    },
+    {
+      "path_id": "managed_worker",
+      "contract_ids": [
+        "managed_worker_frozen_config",
+        "safe_worker_hook_suppression",
+        "worker_current_policy_recheck",
+        "worker_missing_authority",
+        "worker_transaction_failure",
+        "worker_safe_capability_absence",
+        "worker_admission_before_revoke",
+        "worker_revoke_before_admission",
+        "worker_one_shot_cross_path",
+        "production_frozen_configuration",
+        "production_safe_bootstrap"
+      ],
+      "unsupported_or_downstream": "Fresh native worker binding retains frozen config while a synthetic read handler rechecks current SQLite policy and revocation on both dispatch routes. Actual package frozen-config exposure and safe-bootstrap omission are also tested. No production authority, write grant or complete managed-worker lifecycle is integrated.",
+      "controlled_writes_enabled": false,
+      "release_gate": "blocked"
+    },
+    {
+      "path_id": "scheduled_job",
+      "contract_ids": [
+        "production_blueprint_consumers"
+      ],
+      "unsupported_or_downstream": "Actual package blueprint absence and explicit opt-in are tested through native consumers at inert creation endpoints. Opt-in ordinary jobs are not controlled actions; no authorization, cancellation, delivery or reconciliation guarantee is added.",
+      "controlled_writes_enabled": false,
+      "release_gate": "blocked"
+    }
+  ],
+  "contracts": [
+    {
+      "contract_id": "hook_callback_failure",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_enforcement_boundaries.py",
+          "function": "test_registered_policy_denials_and_callback_failures_stop_dispatch"
+        }
+      ],
+      "effect_oracle": "Loaded fixture HOOK_CALLS and HANDLER_CALLS prove callback denial/timeout prevents effects; timeout/same-call tests release and join live callbacks.",
+      "native_entrypoints": [
+        {
+          "file": "model_tools.py",
+          "symbol": "handle_function_call"
+        }
+      ]
+    },
+    {
+      "contract_id": "hook_timeout",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_enforcement_boundaries.py",
+          "function": "test_timeout_and_suppressed_retry_do_not_reach_handler"
+        },
+        {
+          "file": "tests/contracts/test_enforcement_boundaries.py",
+          "function": "test_same_call_still_running_is_blocked_before_any_timeout"
+        }
+      ],
+      "effect_oracle": "Loaded fixture HOOK_CALLS and HANDLER_CALLS prove callback denial/timeout prevents effects; timeout/same-call tests release and join live callbacks.",
+      "native_entrypoints": [
+        {
+          "file": "model_tools.py",
+          "symbol": "handle_function_call"
+        }
+      ]
+    },
+    {
+      "contract_id": "outer_dispatcher_failure",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_enforcement_boundaries.py",
+          "function": "test_escaping_hook_dispatcher_failure_is_not_a_callback_failure"
+        },
+        {
+          "file": "tests/contracts/test_enforcement_boundaries.py",
+          "function": "test_execution_middleware_failure_fails_open_without_replaying_handler"
+        }
+      ],
+      "effect_oracle": "Independent HANDLER_CALLS prove escaping dispatcher/middleware failures may execute; middleware-after-next cases check no local replay.",
+      "native_entrypoints": [
+        {
+          "file": "model_tools.py",
+          "symbol": "handle_function_call"
+        },
+        {
+          "file": "hermes_cli/middleware.py",
+          "symbol": "run_tool_execution_middleware"
+        }
+      ]
+    },
+    {
+      "contract_id": "direct_registry_without_hooks",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_enforcement_boundaries.py",
+          "function": "test_direct_registry_dispatch_has_no_plugin_hook_or_middleware_gate"
+        }
+      ],
+      "effect_oracle": "HANDLER_CALLS records one effect while HOOK_CALLS and MIDDLEWARE_CALLS remain empty.",
+      "native_entrypoints": [
+        {
+          "file": "tools/registry.py",
+          "symbol": "ToolRegistry.dispatch"
+        }
+      ]
+    },
+    {
+      "contract_id": "managed_worker_frozen_config",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_enforcement_boundaries.py",
+          "function": "test_worker_snapshot_and_plugin_suppression_are_distinct"
+        }
+      ],
+      "effect_oracle": "Fresh child reports frozen snapshots after disk/copy edits and actual registry/hook dispatch. Safe mode suppresses fixture; ordinary/config-only keep it. No effect-level write authority claimed.",
+      "native_entrypoints": [
+        {
+          "file": "agent/managed_worker.py",
+          "symbol": "bind_worker_policy"
+        },
+        {
+          "file": "hermes_cli/plugins.py",
+          "symbol": "PluginManager.discover_and_load"
+        }
+      ]
+    },
+    {
+      "contract_id": "safe_worker_hook_suppression",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_enforcement_boundaries.py",
+          "function": "test_worker_snapshot_and_plugin_suppression_are_distinct"
+        }
+      ],
+      "effect_oracle": "Fresh child reports frozen snapshots after disk/copy edits and actual registry/hook dispatch. Safe mode suppresses fixture; ordinary/config-only keep it. No effect-level write authority claimed.",
+      "native_entrypoints": [
+        {
+          "file": "agent/managed_worker.py",
+          "symbol": "bind_worker_policy"
+        },
+        {
+          "file": "hermes_cli/plugins.py",
+          "symbol": "PluginManager.discover_and_load"
+        }
+      ]
+    },
+    {
+      "contract_id": "production_default_exposure",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_production_exposure.py",
+          "function": "test_production_default_exposure"
+        }
+      ],
+      "effect_oracle": "Staged production module origins/registrations, successful diagnostic dispatch, optional-tool negative dispatch and no plugin storage creation.",
+      "native_entrypoints": [
+        {
+          "file": "hermes_cli/plugins.py",
+          "symbol": "PluginManager.discover_and_load"
+        },
+        {
+          "file": "model_tools.py",
+          "symbol": "handle_function_call"
+        },
+        {
+          "file": "tools/registry.py",
+          "symbol": "ToolRegistry.dispatch"
+        }
+      ]
+    },
+    {
+      "contract_id": "production_frozen_configuration",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_production_exposure.py",
+          "function": "test_production_frozen_configuration"
+        }
+      ],
+      "effect_oracle": "Staged package stays at read_only defaults after disk/copy edits; missing authority/resource adapters never reach ForbiddenStore; no plugin storage.",
+      "native_entrypoints": [
+        {
+          "file": "agent/managed_worker.py",
+          "symbol": "bind_worker_policy"
+        },
+        {
+          "file": "hermes_cli/plugins.py",
+          "symbol": "PluginManager.discover_and_load"
+        }
+      ]
+    },
+    {
+      "contract_id": "production_safe_bootstrap",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_production_exposure.py",
+          "function": "test_production_safe_bootstrap"
+        }
+      ],
+      "effect_oracle": "Actual staged package modules/tools/commands/hooks/blueprint absent; negative calls, no plugin storage and existing-job bytes unchanged.",
+      "native_entrypoints": [
+        {
+          "file": "agent/managed_worker.py",
+          "symbol": "bind_worker_policy"
+        },
+        {
+          "file": "hermes_cli/plugins.py",
+          "symbol": "PluginManager.discover_and_load"
+        }
+      ]
+    },
+    {
+      "contract_id": "production_worker_unsupported",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_production_exposure.py",
+          "function": "test_production_worker_unsupported"
+        }
+      ],
+      "effect_oracle": "Native capability grant is absent; real worker preview/command unavailable; generic launch/model guards uncalled. Registered local handlers refuse no_active_local_turn with no storage creation.",
+      "native_entrypoints": [
+        {
+          "file": "hermes_cli/plugins.py",
+          "symbol": "PluginManager.discover_and_load"
+        },
+        {
+          "file": "model_tools.py",
+          "symbol": "handle_function_call"
+        },
+        {
+          "file": "tools/registry.py",
+          "symbol": "ToolRegistry.dispatch"
+        }
+      ]
+    },
+    {
+      "contract_id": "production_blueprint_consumers",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_production_exposure.py",
+          "function": "test_production_blueprint_consumers"
+        }
+      ],
+      "effect_oracle": "Existing-job bytes unchanged; default/safe missing blueprint produces zero inert create/notify calls; ordinary opt-in reaches those same endpoints. No actual scheduler or delivery runs.",
+      "native_entrypoints": [
+        {
+          "file": "hermes_cli/blueprint_cmd.py",
+          "symbol": "handle_blueprint_command"
+        },
+        {
+          "file": "hermes_cli/web_routers/cron.py",
+          "symbol": "instantiate_blueprint"
+        }
+      ]
+    },
+    {
+      "contract_id": "mcp_plugin_veto_and_registry_bypass",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_mcp_enforcement.py",
+          "function": "test_registered_plugin_blocks_mcp_but_direct_registry_bypasses_plugin"
+        }
+      ],
+      "effect_oracle": "Independent SQLite server observer records no effect under model plugin veto and one under direct registry bypass with full trust.",
+      "native_entrypoints": [
+        {
+          "file": "model_tools.py",
+          "symbol": "handle_function_call"
+        },
+        {
+          "file": "tools/registry.py",
+          "symbol": "ToolRegistry.dispatch"
+        },
+        {
+          "file": "tools/mcp_tool_handlers.py",
+          "symbol": "_make_tool_handler"
+        }
+      ]
+    },
+    {
+      "contract_id": "mcp_native_trust_gate",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_mcp_enforcement.py",
+          "function": "test_native_untrusted_gate_stops_before_transport"
+        }
+      ],
+      "effect_oracle": "Independent SQLite stdio-server attempt/effect counts plus call-server acquisition records distinguish native trust denials from dishonest readOnlyHint effects.",
+      "native_entrypoints": [
+        {
+          "file": "tools/mcp_tool_handlers.py",
+          "symbol": "_make_tool_handler"
+        }
+      ]
+    },
+    {
+      "contract_id": "mcp_dishonest_read_hint",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_mcp_enforcement.py",
+          "function": "test_untrusted_read_only_hint_is_not_effect_level_authorization"
+        }
+      ],
+      "effect_oracle": "Independent SQLite stdio-server attempt/effect counts plus call-server acquisition records distinguish native trust denials from dishonest readOnlyHint effects.",
+      "native_entrypoints": [
+        {
+          "file": "tools/mcp_tool_handlers.py",
+          "symbol": "_make_tool_handler"
+        }
+      ]
+    },
+    {
+      "contract_id": "shell_native_deny_and_force_surface",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_shell_browser_enforcement.py",
+          "function": "test_terminal_native_deny_survives_registry_and_model_force_argument"
+        }
+      ],
+      "effect_oracle": "Inert terminal backend records prove deny/workdir refusal or allowed/internal-force bypass; no real command executed, process/network guards remain active.",
+      "native_entrypoints": [
+        {
+          "file": "tools/terminal_tool.py",
+          "symbol": "terminal_tool"
+        }
+      ]
+    },
+    {
+      "contract_id": "shell_internal_force_boundary",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_shell_browser_enforcement.py",
+          "function": "test_terminal_internal_force_skips_approval_but_not_workdir_guard"
+        }
+      ],
+      "effect_oracle": "Inert terminal backend records prove deny/workdir refusal or allowed/internal-force bypass; no real command executed, process/network guards remain active.",
+      "native_entrypoints": [
+        {
+          "file": "tools/terminal_tool.py",
+          "symbol": "terminal_tool"
+        }
+      ]
+    },
+    {
+      "contract_id": "shell_plugin_registry_boundary",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_shell_browser_enforcement.py",
+          "function": "test_terminal_plugin_veto_does_not_cover_direct_registry"
+        }
+      ],
+      "effect_oracle": "Inert terminal backend records prove deny/workdir refusal or allowed/internal-force bypass; no real command executed, process/network guards remain active.",
+      "native_entrypoints": [
+        {
+          "file": "tools/terminal_tool.py",
+          "symbol": "terminal_tool"
+        }
+      ]
+    },
+    {
+      "contract_id": "browser_metadata_literal_floor",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_shell_browser_enforcement.py",
+          "function": "test_browser_metadata_literal_is_blocked_before_backend"
+        }
+      ],
+      "effect_oracle": "Inert browser endpoint records distinguish literal/plugin denial from direct-helper/dynamic-source admission; submitted source is never evaluated or navigated.",
+      "native_entrypoints": [
+        {
+          "file": "tools/browser_use_cli.py",
+          "symbol": "browser_exec"
+        }
+      ]
+    },
+    {
+      "contract_id": "browser_plugin_helper_boundary",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_shell_browser_enforcement.py",
+          "function": "test_browser_plugin_veto_and_direct_helper_boundary"
+        }
+      ],
+      "effect_oracle": "Inert browser endpoint records distinguish literal/plugin denial from direct-helper/dynamic-source admission; submitted source is never evaluated or navigated.",
+      "native_entrypoints": [
+        {
+          "file": "tools/browser_use_cli.py",
+          "symbol": "browser_exec"
+        }
+      ]
+    },
+    {
+      "contract_id": "browser_dynamic_url_prescan_limit",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_shell_browser_enforcement.py",
+          "function": "test_browser_dynamic_url_is_not_evaluated_by_literal_prescan"
+        }
+      ],
+      "effect_oracle": "Inert browser endpoint records distinguish literal/plugin denial from direct-helper/dynamic-source admission; submitted source is never evaluated or navigated.",
+      "native_entrypoints": [
+        {
+          "file": "tools/browser_use_cli.py",
+          "symbol": "browser_exec"
+        }
+      ]
+    },
+    {
+      "contract_id": "rpc_token_allowlist_budget",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_nested_rpc_enforcement.py",
+          "function": "test_rpc_invalid_tokens_never_reach_default_dispatch"
+        },
+        {
+          "file": "tests/contracts/test_nested_rpc_enforcement.py",
+          "function": "test_rpc_empty_server_token_fails_closed"
+        },
+        {
+          "file": "tests/contracts/test_nested_rpc_enforcement.py",
+          "function": "test_rpc_framing_allowlist_and_budget_refuse_before_dispatch"
+        }
+      ],
+      "effect_oracle": "Native default nested dispatch reaches loaded fixture HANDLER_CALLS; counters/logs and in-memory responses independently reveal denial, bypass and duplicate/response-loss effects. Generated client is native source with connection setup replaced.",
+      "native_entrypoints": [
+        {
+          "file": "tools/code_execution_rpc.py",
+          "symbol": "_rpc_server_loop"
+        },
+        {
+          "file": "tools/code_execution_rpc.py",
+          "symbol": "_default_dispatch"
+        }
+      ]
+    },
+    {
+      "contract_id": "rpc_nested_hook_failure",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_nested_rpc_enforcement.py",
+          "function": "test_rpc_default_dispatch_honors_plugin_denial_and_callback_failure"
+        }
+      ],
+      "effect_oracle": "Native default nested dispatch reaches loaded fixture HANDLER_CALLS; counters/logs and in-memory responses independently reveal denial, bypass and duplicate/response-loss effects. Generated client is native source with connection setup replaced.",
+      "native_entrypoints": [
+        {
+          "file": "tools/code_execution_rpc.py",
+          "symbol": "_rpc_server_loop"
+        },
+        {
+          "file": "tools/code_execution_rpc.py",
+          "symbol": "_default_dispatch"
+        }
+      ]
+    },
+    {
+      "contract_id": "rpc_outer_dispatcher_failure",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_nested_rpc_enforcement.py",
+          "function": "test_rpc_outer_dispatcher_failure_still_reaches_nested_handler"
+        }
+      ],
+      "effect_oracle": "Native default nested dispatch reaches loaded fixture HANDLER_CALLS; counters/logs and in-memory responses independently reveal denial, bypass and duplicate/response-loss effects. Generated client is native source with connection setup replaced.",
+      "native_entrypoints": [
+        {
+          "file": "tools/code_execution_rpc.py",
+          "symbol": "_rpc_server_loop"
+        },
+        {
+          "file": "tools/code_execution_rpc.py",
+          "symbol": "_default_dispatch"
+        }
+      ]
+    },
+    {
+      "contract_id": "rpc_duplicate_request",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_nested_rpc_enforcement.py",
+          "function": "test_rpc_identical_authenticated_requests_are_not_deduplicated"
+        }
+      ],
+      "effect_oracle": "Native default nested dispatch reaches loaded fixture HANDLER_CALLS; counters/logs and in-memory responses independently reveal denial, bypass and duplicate/response-loss effects. Generated client is native source with connection setup replaced.",
+      "native_entrypoints": [
+        {
+          "file": "tools/code_execution_rpc.py",
+          "symbol": "_rpc_server_loop"
+        },
+        {
+          "file": "tools/code_execution_rpc.py",
+          "symbol": "_default_dispatch"
+        }
+      ]
+    },
+    {
+      "contract_id": "rpc_persistent_client_response_loss",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_nested_rpc_enforcement.py",
+          "function": "test_generated_rpc_client_response_loss_can_replay_an_effect"
+        }
+      ],
+      "effect_oracle": "Native default nested dispatch reaches loaded fixture HANDLER_CALLS; counters/logs and in-memory responses independently reveal denial, bypass and duplicate/response-loss effects. Generated client is native source with connection setup replaced.",
+      "native_entrypoints": [
+        {
+          "file": "tools/code_execution_rpc.py",
+          "symbol": "_rpc_server_loop"
+        },
+        {
+          "file": "tools/code_execution_rpc.py",
+          "symbol": "_default_dispatch"
+        }
+      ]
+    },
+    {
+      "contract_id": "kernel_current_cell_authority",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_kernel_authority_enforcement.py",
+          "function": "test_persistent_rpc_current_authority_and_retirement"
+        }
+      ],
+      "effect_oracle": "In-memory RPC responses and independent handler/task-context records show current authority, retirement refusal or plugin veto; no real socket/kernel process.",
+      "native_entrypoints": [
+        {
+          "file": "tools/code_kernel.py",
+          "symbol": "CellAuthority"
+        },
+        {
+          "file": "tools/code_kernel.py",
+          "symbol": "_rpc_forever"
+        }
+      ]
+    },
+    {
+      "contract_id": "kernel_cell_plugin_veto",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_kernel_authority_enforcement.py",
+          "function": "test_current_cell_rpc_preserves_plugin_veto"
+        }
+      ],
+      "effect_oracle": "In-memory RPC responses and independent handler/task-context records show current authority, retirement refusal or plugin veto; no real socket/kernel process.",
+      "native_entrypoints": [
+        {
+          "file": "tools/code_kernel.py",
+          "symbol": "CellAuthority"
+        },
+        {
+          "file": "tools/code_kernel.py",
+          "symbol": "_rpc_forever"
+        }
+      ]
+    },
+    {
+      "contract_id": "kernel_cell_retirement",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_kernel_authority_enforcement.py",
+          "function": "test_run_cell_retires_authority_on_normal_and_error_exit"
+        }
+      ],
+      "effect_oracle": "Captured real CellAuthority is retired after success, cell error, wire error, timeout and interruption using inert process/wire endpoints.",
+      "native_entrypoints": [
+        {
+          "file": "tools/code_kernel.py",
+          "symbol": "_run_cell"
+        }
+      ]
+    },
+    {
+      "contract_id": "kernel_thread_context_restore",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_kernel_authority_enforcement.py",
+          "function": "test_cell_captures_calling_context_and_restores_rpc_thread_callbacks"
+        }
+      ],
+      "effect_oracle": "Actual worker thread observes captured ContextVar/task callbacks during dispatch and restored callbacks/context afterwards.",
+      "native_entrypoints": [
+        {
+          "file": "tools/code_kernel.py",
+          "symbol": "CellAuthority"
+        }
+      ]
+    },
+    {
+      "contract_id": "remote_poll_admission",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_remote_execution_enforcement.py",
+          "function": "test_remote_poll_invalid_requests_removed_without_effect"
+        },
+        {
+          "file": "tests/contracts/test_remote_execution_enforcement.py",
+          "function": "test_remote_poll_allowlist_budget_and_success"
+        }
+      ],
+      "effect_oracle": "Fixture handler records, budget/log counters and inert response-write attempts show refusal/admission; failed write leaves request and next poll repeats effect. No remote filesystem execution.",
+      "native_entrypoints": [
+        {
+          "file": "tools/code_execution_rpc.py",
+          "symbol": "_rpc_poll_loop"
+        }
+      ]
+    },
+    {
+      "contract_id": "remote_poll_plugin_veto",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_remote_execution_enforcement.py",
+          "function": "test_remote_poll_plugin_denial_prevents_effect"
+        }
+      ],
+      "effect_oracle": "Fixture handler records, budget/log counters and inert response-write attempts show refusal/admission; failed write leaves request and next poll repeats effect. No remote filesystem execution.",
+      "native_entrypoints": [
+        {
+          "file": "tools/code_execution_rpc.py",
+          "symbol": "_rpc_poll_loop"
+        }
+      ]
+    },
+    {
+      "contract_id": "remote_poll_response_replay",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_remote_execution_enforcement.py",
+          "function": "test_remote_response_failure_can_replay_effect"
+        }
+      ],
+      "effect_oracle": "Fixture handler records, budget/log counters and inert response-write attempts show refusal/admission; failed write leaves request and next poll repeats effect. No remote filesystem execution.",
+      "native_entrypoints": [
+        {
+          "file": "tools/code_execution_rpc.py",
+          "symbol": "_rpc_poll_loop"
+        }
+      ]
+    },
+    {
+      "contract_id": "remote_fallback_selection",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_remote_execution_enforcement.py",
+          "function": "test_remote_kernel_fallback_selection"
+        }
+      ],
+      "effect_oracle": "Independent kernel/per-call endpoint call lists assert route, task/tool/limit arguments, no fallback on reported result and no endpoint without Python. Both execution endpoints are replaced.",
+      "native_entrypoints": [
+        {
+          "file": "tools/code_execution_tool.py",
+          "symbol": "_execute_remote"
+        }
+      ]
+    },
+    {
+      "contract_id": "local_batch_item_veto",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_batch_worker_enforcement.py",
+          "function": "test_native_local_batch_veto_preserves_other_items_and_pairing"
+        }
+      ],
+      "effect_oracle": "Primary and constructed-child fixture handler records and uniquely paired results prove per-item veto/recheck or explicit retry effects; child toolsets are narrowed. Scripted model only.",
+      "native_entrypoints": [
+        {
+          "file": "agent/turn_facade.py",
+          "symbol": "TurnFacadeMixin.run_conversation"
+        },
+        {
+          "file": "tools/delegate_tool.py",
+          "symbol": "_build_child_agent"
+        }
+      ]
+    },
+    {
+      "contract_id": "local_batch_uncertain_retry",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_batch_worker_enforcement.py",
+          "function": "test_native_local_batch_uncertain_item_retry_is_not_deduplicated"
+        }
+      ],
+      "effect_oracle": "Primary and constructed-child fixture handler records and uniquely paired results prove per-item veto/recheck or explicit retry effects; child toolsets are narrowed. Scripted model only.",
+      "native_entrypoints": [
+        {
+          "file": "agent/turn_facade.py",
+          "symbol": "TurnFacadeMixin.run_conversation"
+        },
+        {
+          "file": "tools/delegate_tool.py",
+          "symbol": "_build_child_agent"
+        }
+      ]
+    },
+    {
+      "contract_id": "local_batch_policy_recheck",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_batch_worker_enforcement.py",
+          "function": "test_native_local_batch_retry_rechecks_changed_fixture_policy"
+        }
+      ],
+      "effect_oracle": "Primary and constructed-child fixture handler records and uniquely paired results prove per-item veto/recheck or explicit retry effects; child toolsets are narrowed. Scripted model only.",
+      "native_entrypoints": [
+        {
+          "file": "agent/turn_facade.py",
+          "symbol": "TurnFacadeMixin.run_conversation"
+        },
+        {
+          "file": "tools/delegate_tool.py",
+          "symbol": "_build_child_agent"
+        }
+      ]
+    },
+    {
+      "contract_id": "delegated_child_toolset_and_batch_admission",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_batch_worker_enforcement.py",
+          "function": "test_native_local_batch_veto_preserves_other_items_and_pairing"
+        },
+        {
+          "file": "tests/contracts/test_batch_worker_enforcement.py",
+          "function": "test_native_local_batch_uncertain_item_retry_is_not_deduplicated"
+        },
+        {
+          "file": "tests/contracts/test_batch_worker_enforcement.py",
+          "function": "test_native_local_batch_retry_rechecks_changed_fixture_policy"
+        }
+      ],
+      "effect_oracle": "Primary and constructed-child fixture handler records and uniquely paired results prove per-item veto/recheck or explicit retry effects; child toolsets are narrowed. Scripted model only.",
+      "native_entrypoints": [
+        {
+          "file": "agent/turn_facade.py",
+          "symbol": "TurnFacadeMixin.run_conversation"
+        },
+        {
+          "file": "tools/delegate_tool.py",
+          "symbol": "_build_child_agent"
+        }
+      ]
+    },
+    {
+      "contract_id": "connector_batch_item_veto_partial_retry",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_batch_worker_enforcement.py",
+          "function": "test_connector_only_batch_veto_partial_result_and_explicit_retry"
+        }
+      ],
+      "effect_oracle": "Offline gateway records endpoint acquisitions and effect items; partial denied/uncertain results and explicit retry demonstrate per-item admission, not transport deduplication.",
+      "native_entrypoints": [
+        {
+          "file": "model_tools.py",
+          "symbol": "handle_function_call"
+        }
+      ]
+    },
+    {
+      "contract_id": "concurrent_connector_item_veto",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_batch_worker_enforcement.py",
+          "function": "test_native_concurrent_batches_overlap_and_veto_each_item"
+        }
+      ],
+      "effect_oracle": "Offline gateway effects, barriers and thread IDs prove overlap; Events expose between-item veto, skipped work, timeout/late effects and explicit retry in primary/child contexts.",
+      "native_entrypoints": [
+        {
+          "file": "agent/turn_facade.py",
+          "symbol": "TurnFacadeMixin.run_conversation"
+        }
+      ]
+    },
+    {
+      "contract_id": "concurrent_connector_policy_recheck",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_batch_worker_enforcement.py",
+          "function": "test_native_concurrent_batch_rechecks_policy_between_items"
+        }
+      ],
+      "effect_oracle": "Offline gateway effects, barriers and thread IDs prove overlap; Events expose between-item veto, skipped work, timeout/late effects and explicit retry in primary/child contexts.",
+      "native_entrypoints": [
+        {
+          "file": "agent/turn_facade.py",
+          "symbol": "TurnFacadeMixin.run_conversation"
+        }
+      ]
+    },
+    {
+      "contract_id": "concurrent_connector_timeout_retry",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_batch_worker_enforcement.py",
+          "function": "test_native_concurrent_timeout_late_effect_and_retry"
+        }
+      ],
+      "effect_oracle": "Offline gateway effects, barriers and thread IDs prove overlap; Events expose between-item veto, skipped work, timeout/late effects and explicit retry in primary/child contexts.",
+      "native_entrypoints": [
+        {
+          "file": "agent/turn_facade.py",
+          "symbol": "TurnFacadeMixin.run_conversation"
+        }
+      ]
+    },
+    {
+      "contract_id": "delegation_session_routing",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_delegation_enforcement.py",
+          "function": "test_async_delivery_resolution_boundaries"
+        },
+        {
+          "file": "tests/contracts/test_delegation_enforcement.py",
+          "function": "test_session_tool_pin_joins_background_request"
+        }
+      ],
+      "effect_oracle": "Session sentinel results and inert aggregate call list show selection/inline execution; async-probe exception yields detached sentinel, not denial.",
+      "native_entrypoints": [
+        {
+          "file": "tools/delegate_tool.py",
+          "symbol": "session_joins_delegation"
+        },
+        {
+          "file": "tools/delegate_tool_dispatch.py",
+          "symbol": "_resolve_async_wake_sid"
+        },
+        {
+          "file": "tools/delegate_tool_dispatch.py",
+          "symbol": "_run_batch"
+        }
+      ]
+    },
+    {
+      "contract_id": "delegation_rejected_inline_fallback",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_delegation_enforcement.py",
+          "function": "test_background_fallback_is_execution_not_authorization"
+        }
+      ],
+      "effect_oracle": "Independent admission list, parent membership and child stop flags show detach/reattach/stop replay; inert aggregate call records inline execution after rejection.",
+      "native_entrypoints": [
+        {
+          "file": "tools/delegate_tool_dispatch.py",
+          "symbol": "_dispatch_background"
+        }
+      ]
+    },
+    {
+      "contract_id": "delegation_detached_stop",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_delegation_enforcement.py",
+          "function": "test_detached_callback_stops_child_but_does_not_undo_effect"
+        }
+      ],
+      "effect_oracle": "Captured native runner passes honor_parent_interrupt=False; actual stop callback sets each child stop flag, leaving previously recorded synthetic effect unchanged.",
+      "native_entrypoints": [
+        {
+          "file": "tools/delegate_tool_dispatch.py",
+          "symbol": "_dispatch_unit"
+        }
+      ]
+    },
+    {
+      "contract_id": "delegation_parent_join_interrupt",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_delegation_enforcement.py",
+          "function": "test_parent_join_interrupt_is_not_child_effect_revocation"
+        }
+      ],
+      "effect_oracle": "Events distinguish parent-join interruption from later child effects; real worker threads are released/joined, results show interrupted versus completed joins.",
+      "native_entrypoints": [
+        {
+          "file": "tools/delegate_tool_dispatch.py",
+          "symbol": "_run_children_parallel"
+        }
+      ]
+    },
+    {
+      "contract_id": "worker_current_policy_recheck",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_worker_policy_enforcement.py",
+          "function": "test_live_worker_rechecks_persistent_policy_on_both_dispatch_paths"
+        }
+      ],
+      "effect_oracle": "Fresh bound worker calls protected synthetic read handler; independent SQLite policy/resource/audit and transaction/one-shot assertions establish read-admission limits, not production write authority. Safe-worker case observes fixture absence instead.",
+      "native_entrypoints": [
+        {
+          "file": "agent/managed_worker.py",
+          "symbol": "bind_worker_policy"
+        },
+        {
+          "file": "model_tools.py",
+          "symbol": "handle_function_call"
+        },
+        {
+          "file": "tools/registry.py",
+          "symbol": "ToolRegistry.dispatch"
+        }
+      ]
+    },
+    {
+      "contract_id": "worker_missing_authority",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_worker_policy_enforcement.py",
+          "function": "test_pending_record_and_model_claims_do_not_replace_adapters"
+        }
+      ],
+      "effect_oracle": "Registry-only call with missing host/resource adapter records zero resource reads and no committed audit despite pending record and model-supplied approval claims.",
+      "native_entrypoints": [
+        {
+          "file": "agent/managed_worker.py",
+          "symbol": "bind_worker_policy"
+        },
+        {
+          "file": "tools/registry.py",
+          "symbol": "ToolRegistry.dispatch"
+        }
+      ]
+    },
+    {
+      "contract_id": "worker_transaction_failure",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_worker_policy_enforcement.py",
+          "function": "test_handler_storage_failures_return_no_data_or_committed_audit"
+        }
+      ],
+      "effect_oracle": "Fresh bound worker calls protected synthetic read handler; independent SQLite policy/resource/audit and transaction/one-shot assertions establish read-admission limits, not production write authority. Safe-worker case observes fixture absence instead.",
+      "native_entrypoints": [
+        {
+          "file": "agent/managed_worker.py",
+          "symbol": "bind_worker_policy"
+        },
+        {
+          "file": "model_tools.py",
+          "symbol": "handle_function_call"
+        },
+        {
+          "file": "tools/registry.py",
+          "symbol": "ToolRegistry.dispatch"
+        }
+      ]
+    },
+    {
+      "contract_id": "worker_safe_capability_absence",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_worker_policy_enforcement.py",
+          "function": "test_safe_worker_suppresses_fixture_plugin_and_registry"
+        }
+      ],
+      "effect_oracle": "Fresh safe-worker ready probe invokes real registry/model negative dispatch; loaded/registered flags are false, both routes return errors, and independent SQLite history is empty. No protected handler executes.",
+      "native_entrypoints": [
+        {
+          "file": "agent/managed_worker.py",
+          "symbol": "bind_worker_policy"
+        },
+        {
+          "file": "model_tools.py",
+          "symbol": "handle_function_call"
+        },
+        {
+          "file": "tools/registry.py",
+          "symbol": "ToolRegistry.dispatch"
+        },
+        {
+          "file": "hermes_cli/plugins.py",
+          "symbol": "PluginManager.discover_and_load"
+        }
+      ]
+    },
+    {
+      "contract_id": "worker_admission_before_revoke",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_worker_policy_enforcement.py",
+          "function": "test_admission_holds_sqlite_lock_before_competing_revoke"
+        }
+      ],
+      "effect_oracle": "Fresh bound worker calls protected synthetic read handler; independent SQLite policy/resource/audit and transaction/one-shot assertions establish read-admission limits, not production write authority. Safe-worker case observes fixture absence instead.",
+      "native_entrypoints": [
+        {
+          "file": "agent/managed_worker.py",
+          "symbol": "bind_worker_policy"
+        },
+        {
+          "file": "model_tools.py",
+          "symbol": "handle_function_call"
+        },
+        {
+          "file": "tools/registry.py",
+          "symbol": "ToolRegistry.dispatch"
+        }
+      ]
+    },
+    {
+      "contract_id": "worker_revoke_before_admission",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_worker_policy_enforcement.py",
+          "function": "test_revoke_commit_wins_while_worker_waits_for_sqlite"
+        }
+      ],
+      "effect_oracle": "Fresh bound worker calls protected synthetic read handler; independent SQLite policy/resource/audit and transaction/one-shot assertions establish read-admission limits, not production write authority. Safe-worker case observes fixture absence instead.",
+      "native_entrypoints": [
+        {
+          "file": "agent/managed_worker.py",
+          "symbol": "bind_worker_policy"
+        },
+        {
+          "file": "model_tools.py",
+          "symbol": "handle_function_call"
+        },
+        {
+          "file": "tools/registry.py",
+          "symbol": "ToolRegistry.dispatch"
+        }
+      ]
+    },
+    {
+      "contract_id": "worker_one_shot_cross_path",
+      "assertions": [
+        {
+          "file": "tests/contracts/test_worker_policy_enforcement.py",
+          "function": "test_confirmation_is_consumed_across_dispatch_paths"
+        }
+      ],
+      "effect_oracle": "Fresh bound worker calls protected synthetic read handler; independent SQLite policy/resource/audit and transaction/one-shot assertions establish read-admission limits, not production write authority. Safe-worker case observes fixture absence instead.",
+      "native_entrypoints": [
+        {
+          "file": "agent/managed_worker.py",
+          "symbol": "bind_worker_policy"
+        },
+        {
+          "file": "model_tools.py",
+          "symbol": "handle_function_call"
+        },
+        {
+          "file": "tools/registry.py",
+          "symbol": "ToolRegistry.dispatch"
+        }
+      ]
+    }
+  ]
+}
