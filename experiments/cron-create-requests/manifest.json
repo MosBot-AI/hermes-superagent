@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "status": "Review-only, unsubmitted and not activated",
+  "base": "2281116525106e3c109993ccb5dc74d02bfc1427",
+  "staged_tree": "8a285b4146955049bbc266bcadee4f2539f2d066",
+  "patch_file": "cron-create-requests.patch",
+  "patch_sha256": "2f2e7eab9869d7b54fa26baca4570b3b35187bcc5b344b39e88a73e31799c60e",
+  "changed_files": 5,
+  "patch_files": [
+    "cron/create_requests.py",
+    "cron/jobs.py",
+    "cron/scheduler.py",
+    "tests/cron/test_jobs.py",
+    "tests/cron/test_jobs_shrink_merge.py"
+  ],
+  "source_hashes": {
+    "run_tests.py": "85b07a8e740b6add321acd148401c588d26ad688b93c0b016d0c2fbb60d76a32",
+    "test_create_requests.py": "9541e564981645721772f0ae0020422993894f2949f04300d7478d380acab351"
+  },
+  "artifact_files": [
+    "LICENSE.hermes-agent",
+    "README-zh.md",
+    "README.md",
+    "cron-create-requests.patch",
+    "manifest.json",
+    "run_tests.py",
+    "test_create_requests.py"
+  ],
+  "native_test_files": [
+    "tests/cron/test_jobs.py",
+    "tests/cron/test_jobs_crossprocess_lock.py",
+    "tests/cron/test_jobs_file_ownership.py",
+    "tests/cron/test_jobs_shrink_merge.py",
+    "tests/cron/test_scheduler_provider.py"
+  ],
+  "selected_suite": {
+    "proposal_passed": 42,
+    "native_passed": 164,
+    "passed": 206,
+    "failed": 0,
+    "skipped": 0,
+    "full_upstream_suite": false,
+    "native_expectation_changes": [
+      "replace=True refuses corrupt-store overwrite instead of discarding possible request bindings",
+      "non-JSON Infinity is refused even in legacy stores; other tested legacy counter repairs retained"
+    ]
+  },
+  "submitted_upstream": false,
+  "production_activated": false,
+  "live_model_calls": false,
+  "external_delivery": false
+}
