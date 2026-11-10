@@ -10,6 +10,7 @@ import importlib.util
 import json
 import os
 import shlex
+import signal
 import sqlite3
 import subprocess
 import sys
@@ -681,3 +682,191 @@ def test_packaged_waiting_followups_preserve_deadlines_and_restart(installed):
             "followup-postpone",
             "followup-done",
         }
+
+
+async def wait_for_committed_task_receipt(database, request_id, *, timeout=30):
+    """Independent read-only observer, not an application RPC response reader.
+
+    Visibility to a separate SQLite connection establishes committed state for
+    this process-death test, not filesystem power-loss durability certification.
+    """
+    deadline = asyncio.get_running_loop().time() + timeout
+    while asyncio.get_running_loop().time() < deadline:
+        if database.is_file():
+            try:
+                with closing(
+                    sqlite3.connect(database.as_uri() + "?mode=ro", uri=True, timeout=0.1)
+                ) as connection:
+                    if connection.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table' AND name='receipts'"
+                    ).fetchone():
+                        row = connection.execute(
+                            "SELECT receipt FROM receipts WHERE request_id=?", (request_id,)
+                        ).fetchone()
+                        if row is not None:
+                            return json.loads(row[0])
+            except sqlite3.OperationalError as error:
+                if error.sqlite_errorcode not in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED):
+                    raise
+        await asyncio.sleep(0.05)
+    raise AssertionError("Committed synthetic task receipt not observed within deadline")
+
+
+async def submit_unobserved_then_crash(ws, sid, raw, request_id, database, proc, live):
+    """Send normally, deliberately never consume this RPC's application reply.
+
+    The reply might already have reached the socket/library buffer. We do not
+    claim network packet loss or a crash before the database transaction commits.
+    """
+    await ws.send(
+        json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": "unobserved-" + request_id,
+                "method": "slash.exec",
+                "params": {"session_id": sid, "command": raw},
+            }
+        )
+    )
+    receipt = await wait_for_committed_task_receipt(database, request_id)
+    assert proc.poll() is None
+    # Official helper guards the PID with its process-start identity. Only this
+    # fixture's process is killed; no control files or canonical data are repaired.
+    live.hard_kill(proc)
+    assert proc.returncode == -signal.SIGKILL
+    return receipt
+
+
+def test_packaged_client_unobserved_create_and_update_survive_abrupt_gateway_death(installed):
+    home, env, live = installed
+    database = home / "plugin-data/hermes-personal-agent/tasks.sqlite3"
+    capture = (
+        'personal-tasks --json add "中文中断恢复验收" --project "中断恢复" '
+        "--request-id crash-capture"
+    )
+    sid = None
+    capture_receipt = None
+    update_receipt = None
+    update = None
+
+    async def command(ws, sid, raw):
+        result = await live.ok(ws, "slash.exec", session_id=sid, command=raw)
+        assert result["type"] == "exec", result
+        payload = json.loads(result["output"])
+        assert payload["schema_version"] == "personal.local-conversation-tasks.v1"
+        return payload
+
+    def oracle(revision, event_count, receipt_count):
+        with closing(sqlite3.connect(database.as_uri() + "?mode=ro", uri=True)) as connection:
+            assert connection.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+            assert connection.execute("SELECT id,revision FROM tasks").fetchall() == [
+                (capture_receipt["id"], revision)
+            ]
+            assert connection.execute("SELECT count(*) FROM events").fetchone() == (event_count,)
+            assert connection.execute("SELECT count(*) FROM receipts").fetchone() == (
+                receipt_count,
+            )
+            assert (
+                json.loads(
+                    connection.execute(
+                        "SELECT receipt FROM receipts WHERE request_id=?", ("crash-capture",)
+                    ).fetchone()[0]
+                )
+                == capture_receipt
+            )
+
+    async def first_capture(proc, desc):
+        nonlocal sid, capture_receipt
+        async with live.websocket(home, desc) as ws:
+            created = await live.ok(
+                ws,
+                "session.create",
+                request_id="crash-session",
+                source="cli",
+                cwd=str(home),
+                toolsets=[],
+            )
+            sid = created["session_id"]
+            await live.ok(ws, "session.resume", session_id=sid)
+            capture_receipt = await submit_unobserved_then_crash(
+                ws, sid, capture, "crash-capture", database, proc, live
+            )
+            assert capture_receipt["revision"] == 1
+
+    with live.daemon(home, env, "crash-capture.log") as (proc, first, _):
+        asyncio.run(first_capture(proc, first))
+        assert proc.poll() == -signal.SIGKILL
+    assert not live.port_open(live.api_port(first))
+    oracle(1, 1, 1)
+
+    async def recover_then_update(proc, desc):
+        nonlocal update, update_receipt
+        async with live.websocket(home, desc) as ws:
+            resumed = await live.ok(ws, "session.resume", session_id=sid)
+            assert resumed["session_id"] == sid
+            shown = await command(ws, sid, f"personal-tasks --json show {capture_receipt['id']}")
+            assert shown["status"] == "ok" and shown["data"] == capture_receipt
+            replay = await command(ws, sid, capture)
+            assert replay["replayed"] is True and replay["data"] == capture_receipt
+            conflict = await command(
+                ws, sid, capture.replace("中文中断恢复验收", "不能变更同键意图")
+            )
+            assert (
+                conflict["status"] == "error"
+                and conflict["error"]["code"] == "idempotency_conflict"
+            )
+            oracle(1, 1, 1)
+            update = (
+                f"personal-tasks --json update {capture_receipt['id']} "
+                '--expected-revision 1 --details "中断前已保存的中文细节" '
+                "--priority high --request-id crash-update"
+            )
+            update_receipt = await submit_unobserved_then_crash(
+                ws, sid, update, "crash-update", database, proc, live
+            )
+            assert update_receipt["revision"] == 2
+
+    with live.daemon(home, env, "crash-update.log") as (proc, second, _):
+        assert second["instance_id"] != first["instance_id"]
+        asyncio.run(recover_then_update(proc, second))
+        assert proc.poll() == -signal.SIGKILL
+    assert not live.port_open(live.api_port(second))
+    oracle(2, 2, 2)
+
+    async def final_readback(desc):
+        async with live.websocket(home, desc) as ws:
+            resumed = await live.ok(ws, "session.resume", session_id=sid)
+            assert resumed["session_id"] == sid
+            shown = await command(ws, sid, f"personal-tasks --json show {capture_receipt['id']}")
+            assert shown["status"] == "ok" and shown["data"] == update_receipt
+            assert shown["data"]["details"] == "中断前已保存的中文细节"
+            assert shown["data"]["priority"] == "high"
+            replay = await command(ws, sid, update)
+            assert replay["replayed"] is True and replay["data"] == update_receipt
+            # Capture's old receipt is historical, never reapplied over revision 2.
+            replay = await command(ws, sid, capture)
+            assert replay["replayed"] is True and replay["data"] == capture_receipt
+            conflict = await command(
+                ws, sid, update.replace("中断前已保存的中文细节", "不能更换意图")
+            )
+            assert (
+                conflict["status"] == "error"
+                and conflict["error"]["code"] == "idempotency_conflict"
+            )
+            stale = await command(ws, sid, update.replace("crash-update", "crash-stale"))
+            assert stale["status"] == "error" and stale["error"]["code"] == "revision_conflict"
+            current = await command(ws, sid, f"personal-tasks --json show {capture_receipt['id']}")
+            assert current["data"] == update_receipt
+            oracle(2, 2, 2)
+
+    with live.daemon(home, env, "crash-final.log") as (proc, third, _):
+        assert third["instance_id"] not in {first["instance_id"], second["instance_id"]}
+        asyncio.run(final_readback(third))
+        assert live.planned_stop(home, proc, third) == 0
+    assert live.control_absent(home)
+    assert not live.port_open(live.api_port(third))
+    oracle(2, 2, 2)
+    with closing(
+        sqlite3.connect((home / "state.db").as_uri() + "?mode=ro", uri=True)
+    ) as connection:
+        assert connection.execute("PRAGMA integrity_check").fetchone() == ("ok",)

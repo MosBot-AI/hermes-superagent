@@ -152,3 +152,5 @@ E9 已选定原生 worker 路由设计，并实现离线约束验证器和部分
 87. [显式本地任务优先级](87-local-task-priority-zh.md): 可见优先级及有界的下一件可做工作，不派发任务或改变共享 REST。
 
 88. [等待事项的显式跟进日期](88-local-task-followups-zh.md)：本地日历日期跟进工作台，不是自动提醒。
+
+89. [安装包 Gateway 崩溃恢复](89-packaged-gateway-crash-zh.md)：未观察回复与突然终止后的手动恢复验收。
