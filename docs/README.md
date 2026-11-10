@@ -132,3 +132,5 @@ E9 has a selected native worker-routing design, an offline constraint evaluator 
 - [Native plugin and scheduling lifecycle contracts](75-native-lifecycle-contracts.md): exact-pin operator Project/Kanban/cron probes, weak deduplication and truthful cancellation/history boundaries; no new production CRUD API or scheduling authority.
 
 - [Native memory provider contracts](76-native-memory-contracts.md): pinned discovery, builtin stores, history search, lifecycle/context and checkpoint boundaries; verification does not implement durable v2.
+
+See [78. Fenced enrollment ceremony evidence](78-enrollment-ceremony.md) for the unwired one-shot confirmation foundation and current-pin identity boundary; production owner authority remains unavailable.
