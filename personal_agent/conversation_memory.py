@@ -19,6 +19,8 @@ from .conversation_tasks import _supported_origin
 from .memory_backend import MemoryError, MemoryService, validate_request
 from .memory_index import maintain
 from .memory_presentation import render_memory_result
+from .memory_snapshot import snapshot
+from .memory_snapshot import validate as validate_snapshot
 from .memory_storage import open_memory_backend
 from .task_cli import current_profile_home
 
@@ -34,6 +36,8 @@ HELP = (
     "--expected-revision N "
     "[--request-id KEY]; forget ID --expected-revision N [--request-id KEY]; "
     "export [--limit N --after ID]. Use POSIX quotes. "
+    "snapshot-create NAME / snapshot-inspect NAME create/inspect a private consistent plaintext "
+    "database copy. Copies retain historical private memory after forgetting; no restore/import. "
     "edit-status; edit-new (--keep | --expires-at UTC) [--request-id KEY]; "
     "edit-create ID --expected-revision N [--request-id KEY]; edit-preview DRAFT; "
     "edit-apply DRAFT --expected-digest SHA256 [--request-id KEY]; edit-discard DRAFT. "
@@ -117,6 +121,9 @@ def parse_command(raw_args: str) -> tuple[str, dict]:
     remember.add_argument("--request-id")
     show = commands.add_parser("show")
     show.add_argument("record_id")
+    for operation in ("snapshot-create", "snapshot-inspect"):
+        command = commands.add_parser(operation)
+        command.add_argument("name")
     for operation in ("list", "search", "search-terms", "export"):
         reader = commands.add_parser(operation)
         if operation == "search":
@@ -208,6 +215,8 @@ def parse_command(raw_args: str) -> tuple[str, dict]:
         operation, operation
     )
     operation = {
+        "snapshot-create": "snapshot_create",
+        "snapshot-inspect": "snapshot_inspect",
         "edit-new": "edit_new",
         "expired-preview": "expired_preview",
         "forget-expired": "forget_expired",
@@ -242,6 +251,8 @@ def parse_command(raw_args: str) -> tuple[str, dict]:
         and payload["request_id"] is None
     ):
         payload["request_id"] = str(uuid4())
+    if operation in {"snapshot_create", "snapshot_inspect"}:
+        return operation, validate_snapshot(operation, payload)
     return operation, validate_request(operation, payload)
 
 
@@ -323,6 +334,8 @@ class LocalMemoryCommands:
                 request_id = payload.get("request_id")
                 if operation == "help":
                     result = {"data": {"help": HELP}, "replayed": False}
+                elif operation in {"snapshot_create", "snapshot_inspect"}:
+                    result = snapshot(self._home, operation, payload)
                 elif operation in {"index_status", "index_rebuild"}:
                     result = maintain(self._home, operation, payload)
                 else:
