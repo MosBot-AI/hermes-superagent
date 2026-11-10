@@ -1,0 +1,403 @@
+diff --git a/cron/create_requests.py b/cron/create_requests.py
+new file mode 100644
+index 00000000..58734113
+--- /dev/null
++++ b/cron/create_requests.py
+@@ -0,0 +1,209 @@
++"""Review-only, profile-local exact create requests. Not identity or delivery authority.
++
++All old runtimes must be stopped before adopting this envelope. Native execution,
++occurrence and delivery ownership is unchanged. No external provider reconciliation.
++"""
++
++import copy
++import hashlib
++import inspect
++import json
++import re
++import uuid
++from contextvars import ContextVar
++
++MAX_REQUESTS = 1024
++MAX_STORE_BYTES = 16 * 1024 * 1024
++MAX_ARGUMENT_BYTES = 65536
++_PENDING = ContextVar("cron_pending_create", default=None)
++
++
++class CreateRequestError(ValueError):
++    pass
++
++
++def _pairs(pairs):
++    result = {}
++    for key, value in pairs:
++        if key in result:
++            raise CreateRequestError("create_request_store_corrupt")
++        result[key] = value
++    return result
++
++
++def _constant(_value):
++    raise CreateRequestError("create_request_store_corrupt")
++
++
++def read_ledger(path):
++    if not path.exists():
++        return {}
++    # Bounded read; never salvage malformed JSON then silently lose tombstones.
++    with path.open("rb") as stream:
++        raw = stream.read(MAX_STORE_BYTES + 1)
++    if len(raw) > MAX_STORE_BYTES:
++        raise CreateRequestError("create_request_store_too_large")
++    try:
++        data = json.loads(raw, object_pairs_hook=_pairs, parse_constant=_constant)
++    except (ValueError, UnicodeError):
++        raise CreateRequestError("create_request_store_corrupt") from None
++    if not isinstance(data, dict):
++        return {}
++    if "create_requests" not in data:
++        if "create_request_version" in data:
++            raise CreateRequestError("create_request_store_corrupt")
++        return {}
++    ledger = data["create_requests"]
++    if (
++        type(data.get("create_request_version")) is not int
++        or data.get("create_request_version") != 1
++        or type(ledger) is not dict
++        or len(ledger) > MAX_REQUESTS
++        or type(data.get("jobs")) is not list
++    ):
++        raise CreateRequestError("create_request_store_corrupt")
++    ids = set()
++    for key, row in ledger.items():
++        if (
++            not re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", key)
++            or type(row) is not dict
++            or set(row) != {"digest", "job_id", "state"}
++            or type(row["digest"]) is not str
++            or not re.fullmatch(r"[a-f0-9]{64}", row["digest"])
++            or type(row["job_id"]) is not str
++            or not re.fullmatch(r"[a-f0-9]{12}", row["job_id"])
++            or row["state"] not in ("present", "removed")
++            or row["job_id"] in ids
++        ):
++            raise CreateRequestError("create_request_store_corrupt")
++        ids.add(row["job_id"])
++        matches = [
++            j for j in data["jobs"] if type(j) is dict and j.get("id") == row["job_id"]
++        ]
++        if len(matches) != (1 if row["state"] == "present" else 0):
++            raise CreateRequestError("create_request_store_corrupt")
++    return ledger
++
++
++def pending_job_id():
++    pending = _PENDING.get()
++    return pending[1]["job_id"] if pending else None
++
++
++def store_envelope(path, jobs):
++    ledger = copy.deepcopy(read_ledger(path))
++    pending = _PENDING.get()
++    if pending:
++        key, row = pending
++        if key in ledger and ledger[key] != row:
++            raise CreateRequestError("create_request_conflict")
++        ledger[key] = dict(row)
++    ids = {job.get("id") for job in jobs}
++    for row in ledger.values():
++        if row["state"] == "removed" and row["job_id"] in ids:
++            raise CreateRequestError("create_request_removed")
++        if row["job_id"] not in ids:
++            row["state"] = "removed"
++    result = {"jobs": jobs}
++    if ledger:
++        result.update(create_request_version=1, create_requests=ledger)
++    if len(json.dumps(result, ensure_ascii=False).encode()) > MAX_STORE_BYTES - 1024:
++        raise CreateRequestError("create_request_store_too_large")
++    return result
++
++
++def _arguments(kwargs, create):
++    try:
++        bound = inspect.signature(create).bind(**kwargs)
++        bound.apply_defaults()
++
++        # Strict JSON types: no objects with user-defined serialization or NaN.
++        def check(value):
++            if value is None or type(value) in (str, bool, int):
++                return
++            if type(value) is list:
++                for item in value:
++                    check(item)
++                return
++            if type(value) is dict and all(type(k) is str for k in value):
++                for item in value.values():
++                    check(item)
++                return
++            raise ValueError
++
++        check(bound.arguments)
++        payload = json.dumps(
++            bound.arguments,
++            sort_keys=True,
++            separators=(",", ":"),
++            ensure_ascii=False,
++            allow_nan=False,
++        ).encode()
++        if len(payload) > MAX_ARGUMENT_BYTES:
++            raise ValueError
++    except (ValueError, TypeError, RecursionError):
++        raise CreateRequestError("invalid_create_request") from None
++    return hashlib.sha256(b"cron-create-v1\0" + payload).hexdigest(), copy.deepcopy(
++        bound.arguments
++    )
++
++
++def create_once(*, request_key, **kwargs):
++    from cron import jobs
++
++    if type(request_key) is not str or not re.fullmatch(
++        r"[A-Za-z0-9_.:-]{1,128}", request_key
++    ):
++        raise CreateRequestError("invalid_request_key")
++    # No external registration call: its success/timeout cannot safely be replayed.
++    from hermes_cli.config import cfg_get, load_config
++
++    try:
++        configured = cfg_get(load_config(), "cron", "provider", default="builtin")
++    except Exception:
++        raise CreateRequestError("keyed_create_provider_unavailable") from None
++    if configured not in ("builtin", "", None):
++        raise CreateRequestError("keyed_create_provider_unsupported")
++    # Do not resolve a provider: a second config read could load external code
++    # and silently fall back. This snapshot admits builtin store ownership only.
++    digest, arguments = _arguments(kwargs, jobs.create_job)
++    with jobs._jobs_lock():
++        ledger = read_ledger(jobs._current_cron_store().jobs_file)
++        existing_jobs = (
++            jobs.load_jobs()
++        )  # Any legacy repair precedes the pending binding.
++        row = ledger.get(request_key)
++        replayed = row is not None
++        if row:
++            if row["digest"] != digest:
++                raise CreateRequestError("create_request_conflict")
++        else:
++            if len(ledger) >= MAX_REQUESTS:
++                raise CreateRequestError("create_request_capacity")
++            row = {
++                "digest": digest,
++                "job_id": uuid.uuid4().hex[:12],
++                "state": "present",
++            }
++            if any(j.get("id") == row["job_id"] for j in existing_jobs):
++                raise CreateRequestError("create_request_identifier_collision")
++            token = _PENDING.set((request_key, row))
++            try:
++                jobs.create_job(**arguments)
++            except (OSError, RuntimeError):
++                # The atomic replacement may already have committed. Same-key retry is safe.
++                raise CreateRequestError("create_outcome_unknown") from None
++            finally:
++                _PENDING.reset(token)
++        current = next(
++            (j for j in jobs.load_jobs() if j.get("id") == row["job_id"]), None
++        )
++        # Builtin registration is a no-op; never reset scheduling state on replay.
++        return {
++            "creation": dict(row),
++            "current_job": copy.deepcopy(current),
++            "replayed": replayed,
++            "registration": "builtin_store_owned",
++            "enabled": bool(current and current.get("enabled")),
++            "delivery_verified": False,
++        }
+diff --git a/cron/jobs.py b/cron/jobs.py
+index 1809214b..fc3772b1 100644
+--- a/cron/jobs.py
++++ b/cron/jobs.py
+@@ -296,10 +296,11 @@ def _jobs_lock():
+     threads) plus a cross-process flock on ``<cron dir>/.jobs.lock`` (gateway vs. CLI writes —
+     otherwise a `cron pause` could be clobbered and keep firing). Nested calls in one thread
+     reuse the held lock. Without a flock backend, or on flock timeout (logged loudly), it
+-    degrades to in-process-only locking: a briefly torn cross-process write beats a dead
+-    scheduler."""
++    fails closed. This proposal changes all writers, not only keyed creation."""
+     depth = getattr(_jobs_lock_state, "depth", 0)
+     if depth:
++        if _jobs_lock_state.home != str(_current_cron_store().jobs_file.resolve()):
++            raise RuntimeError("Cron nested store switch refused")
+         _jobs_lock_state.depth = depth + 1
+         try:
+             yield
+@@ -309,6 +310,7 @@ def _jobs_lock():
+ 
+     with _jobs_file_lock:
+         _jobs_lock_state.depth = 1
++        _jobs_lock_state.home = str(_current_cron_store().jobs_file.resolve())
+         # jobs.json stamp as of this section's load_jobs(): lets _save_jobs_unlocked skip the
+         # shrink-merge parse when the file provably hasn't changed. Reset on entry/exit so stale
+         # stamps from unlocked loads or prior sections can never suppress a needed merge.
+@@ -316,24 +318,19 @@ def _jobs_lock():
+         _jobs_lock_state.load_stamp = None
+         lock_fd = None
+         try:
++            ensure_dirs()
++            lock_fd = open(_jobs_lock_file(), "a+", encoding="utf-8-sig")
++            lock_fd.seek(0)
+             try:
+-                ensure_dirs()
+-                lock_fd = open(_jobs_lock_file(), "a+", encoding="utf-8-sig")
+-                lock_fd.seek(0)
+-                if _acquire_flock(lock_fd, _JOBS_LOCK_TIMEOUT_SECONDS) is False:
+-                    logger.error(
+-                        "Timed out after %.0fs waiting for the cron "
+-                        "jobs lock (%s) — another process is holding "
+-                        "it. Proceeding with in-process locking only "
+-                        "so the scheduler stays alive (#60703).",
+-                        _JOBS_LOCK_TIMEOUT_SECONDS, _jobs_lock_file())
+-                    with contextlib.suppress(OSError):
+-                        lock_fd.close()
+-                    lock_fd = None
+-            except OSError as e:
+-                # A locking failure must never take down cron writes — in-process lock still held.
+-                logger.warning("jobs.json cross-process lock unavailable (%s); "
+-                               "proceeding with in-process lock only", e)
++                acquired = _acquire_flock(lock_fd, _JOBS_LOCK_TIMEOUT_SECONDS)
++            except BaseException:
++                lock_fd.close()
++                lock_fd = None
++                raise
++            if acquired is not True:
++                lock_fd.close()
++                lock_fd = None
++                raise RuntimeError("Cron cross-process lock unavailable; refusing mutation")
+             try:
+                 yield
+             finally:
+@@ -1378,6 +1375,8 @@ def load_jobs() -> list[dict[str, Any]]:
+     """Load all jobs from storage."""
+     jobs_file = _current_cron_store().jobs_file
+     ensure_dirs()
++    from cron.create_requests import read_ledger
++    request_ledger = read_ledger(jobs_file)  # Never auto-repair away a request ledger.
+     # Stamp BEFORE reading (fail-safe, see _record_load_stamp): a racing write then forces the
+     # merge.
+     pre_read_stamp = _jobs_file_stamp(jobs_file)
+@@ -1446,6 +1445,8 @@ def load_jobs() -> list[dict[str, Any]]:
+             repair = repair or "invalid repeat.completed normalized"
+     # Persist even an empty result, or an all-junk store repeats the repair on every tick.
+     if repair:
++        if request_ledger:
++            raise RuntimeError("Keyed cron store requires explicit repair; refusing automatic changes")
+         if not getattr(_jobs_lock_state, "depth", 0):
+             # An unlocked snapshot may predate a locked writer's update to a job it already holds
+             # (the shrink-merge only restores missing ids), so re-read and repair under the lock.
+@@ -1555,12 +1556,15 @@ def _unlink_quiet(path: Optional[str]) -> None:
+ 
+ def _stage_jobs_payload(jobs_file: Path, jobs: list[dict[str, Any]]) -> str:
+     """Serialize the store payload to a fsynced temp file beside the resolved *jobs_file*; return its path."""
++    from cron.create_requests import store_envelope, MAX_STORE_BYTES, CreateRequestError
++    payload = {**store_envelope(jobs_file, jobs), "updated_at": _hermes_now().isoformat()}
++    serialized = json.dumps(payload, indent=2, ensure_ascii=False, allow_nan=False).encode("utf-8")
++    if len(serialized) > MAX_STORE_BYTES:
++        raise CreateRequestError("create_request_store_too_large")
+     fd, tmp_path = mkstemp_beside(jobs_file, suffix=".tmp", prefix=".jobs_")
+     try:
+-        with os.fdopen(fd, "w", encoding="utf-8") as f:
+-            json.dump(
+-                {"jobs": jobs, "updated_at": _hermes_now().isoformat()},
+-                f, indent=2, ensure_ascii=False)
++        with os.fdopen(fd, "wb") as f:
++            f.write(serialized)
+             f.flush()
+             os.fsync(f.fileno())
+     except BaseException:
+@@ -1863,7 +1867,8 @@ def create_job(
+         repeat = 1
+     if deliver is None:
+         deliver = "origin" if origin else "local"
+-    job_id = uuid.uuid4().hex[:12]
++    from cron.create_requests import pending_job_id
++    job_id = pending_job_id() or uuid.uuid4().hex[:12]
+     now = _hermes_now().isoformat()
+ 
+     raw = locals()
+diff --git a/cron/scheduler.py b/cron/scheduler.py
+index ff780ef6..d70a717e 100644
+--- a/cron/scheduler.py
++++ b/cron/scheduler.py
+@@ -4001,6 +4001,9 @@ def create_job_with_scheduler_registration(**kwargs) -> dict:
+     from cron.jobs import create_job
+     from cron.scheduler_provider import resolve_cron_scheduler
+ 
++    if "request_key" in kwargs:
++        from cron.create_requests import create_once
++        return create_once(**kwargs)
+     job = create_job(**kwargs)
+     if not job.get("enabled", True):
+         return job
+diff --git a/tests/cron/test_jobs.py b/tests/cron/test_jobs.py
+index 7b71e942..9e3adc29 100644
+--- a/tests/cron/test_jobs.py
++++ b/tests/cron/test_jobs.py
+@@ -439,7 +439,7 @@ class TestJobCRUD:
+             update_job(job["id"], {"repeat": "banana"})
+ 
+     def test_invalid_repeat_completed_is_normalized(self, tmp_cron_dir):
+-        """A hand-edited "completed" (null, string, float, negative, Infinity) must not kill
++        """A hand-edited "completed" (null, string, float, negative) must not kill
+         mark_job_run or the whole store, and must not be carried forward by update_job."""
+         import json
+         from cron.jobs import JOBS_FILE, get_job, mark_job_run, update_job
+@@ -459,12 +459,21 @@ class TestJobCRUD:
+         # Other hand-edited shapes: a string would crash ("2" + 1), a float would render "2.0/5",
+         # a negative count grants extra runs, and Infinity (json.dumps writes it) raised
+         # OverflowError out of load_jobs, freezing every job.
+-        for value, expected in (("2", 3), (1.0, 2), ("junk", 1), (-2, 1), (float("inf"), 1)):
++        for value, expected in (("2", 3), (1.0, 2), ("junk", 1), (-2, 1)):
+             set_completed(value)
+             mark_job_run(job["id"], success=True)
+             completed = get_job(job["id"])["repeat"]["completed"]
+             assert completed == expected and type(completed) is int
+ 
++        # Review proposal: non-JSON constants now refuse even in legacy stores.
++        # Never rewrite an unreadable file which could hide request bindings.
++        from cron.create_requests import CreateRequestError
++        set_completed(float("inf"))
++        before = JOBS_FILE.read_bytes()
++        with pytest.raises(CreateRequestError, match="store_corrupt"):
++            mark_job_run(job["id"], success=True)
++        assert JOBS_FILE.read_bytes() == before
++
+     def test_oneshot_turned_recurring_becomes_forever(self, tmp_cron_dir):
+         """A one-shot budget must not survive a schedule change to a recurring kind.
+ 
+diff --git a/tests/cron/test_jobs_shrink_merge.py b/tests/cron/test_jobs_shrink_merge.py
+index ba1893fc..84c0608f 100644
+--- a/tests/cron/test_jobs_shrink_merge.py
++++ b/tests/cron/test_jobs_shrink_merge.py
+@@ -172,7 +172,8 @@ def test_merge_does_not_mutate_caller_list(hermes_env):
+ def test_save_over_corrupt_store_fails_closed(hermes_env):
+     """A merging save over an unreadable jobs.json must refuse (the jobs in it
+     are unknown, so overwriting would drop them) and leave the bytes intact;
+-    ``replace=True`` stays available as the explicit recovery rewrite."""
++    ``replace=True`` must also refuse: an unreadable file may contain permanent
++    request bindings, which cannot safely be discarded."""
+     from cron import jobs
+     from cron.jobs import load_jobs, save_jobs
+ 
+@@ -184,8 +185,10 @@ def test_save_over_corrupt_store_fails_closed(hermes_env):
+         save_jobs([{"id": "aaaaaaaaaaaa", "name": "a"}])
+     assert jobs_file.read_bytes() == corrupt
+ 
+-    save_jobs([{"id": "aaaaaaaaaaaa", "name": "a"}], replace=True)
+-    assert [j["id"] for j in load_jobs()] == ["aaaaaaaaaaaa"]
++    from cron.create_requests import CreateRequestError
++    with pytest.raises(CreateRequestError, match="store_corrupt"):
++        save_jobs([{"id": "aaaaaaaaaaaa", "name": "a"}], replace=True)
++    assert jobs_file.read_bytes() == corrupt
+ 
+ 
+ def test_nested_create_survives_outer_stale_save(hermes_env):

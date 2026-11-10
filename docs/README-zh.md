@@ -156,3 +156,5 @@ E9 已选定原生 worker 路由设计，并实现离线约束验证器和部分
 89. [安装包 Gateway 崩溃恢复](89-packaged-gateway-crash-zh.md)：未观察回复与突然终止后的手动恢复验收。
 
 90. [原始本地 M1 验收](90-local-m1-acceptance-zh.md)：固定检查点证据与交付边界，不代表整个 Super Agent 完成。
+
+- [精确键 cron 宿主提案](../experiments/cron-create-requests/README-zh.md)：未激活的原生创建/重放基础，用于推进提醒，不是通知送达能力。

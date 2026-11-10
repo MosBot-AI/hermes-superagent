@@ -40,6 +40,16 @@ jobs:
           "$RUNNER_TEMP/hermes-test-venv/bin/python" scripts/check.py \
             --hermes "$RUNNER_TEMP/hermes" \
             --hermes-python "$RUNNER_TEMP/hermes-test-venv/bin/python"
+      - name: Verify exact-key cron creation on a disposable proposed host
+        shell: bash
+        run: |
+          set -euo pipefail
+          proposed="$RUNNER_TEMP/hermes-cron-create-proposal"
+          git -C "$RUNNER_TEMP/hermes" worktree add --detach "$proposed" 2281116525106e3c109993ccb5dc74d02bfc1427
+          git -C "$proposed" apply --check "$GITHUB_WORKSPACE/experiments/cron-create-requests/cron-create-requests.patch"
+          git -C "$proposed" apply --index "$GITHUB_WORKSPACE/experiments/cron-create-requests/cron-create-requests.patch"
+          "$RUNNER_TEMP/hermes-test-venv/bin/python" experiments/cron-create-requests/run_tests.py \
+            --checkout "$proposed" --python "$RUNNER_TEMP/hermes-test-venv/bin/python"
       - name: Verify gated worker on separate disposable proposed host
         shell: bash
         run: |

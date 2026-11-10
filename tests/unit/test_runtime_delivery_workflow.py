@@ -15,8 +15,14 @@ def test_runtime_acceptance_covers_pr_head_and_publication_is_push_only():
     expected = "${{ github.event.pull_request.head.sha || github.sha }}"
     assert f"          ref: {expected}\n" in workflow
     assert f"          EXPECTED_SOURCE_SHA: {expected}\n" in workflow
-    check, proposal, build, upload = workflow.split("      - name: ")[-4:]
+    check, cron_proposal, proposal, build, upload = workflow.split("      - name: ")[-5:]
     assert "scripts/check.py" in check
+    assert "worktree add --detach" in cron_proposal
+    assert "2281116525106e3c109993ccb5dc74d02bfc1427" in cron_proposal
+    assert "apply --check" in cron_proposal and "apply --index" in cron_proposal
+    assert "experiments/cron-create-requests/run_tests.py" in cron_proposal
+    assert "if: " not in cron_proposal and "continue-on-error" not in cron_proposal
+    assert "set -euo pipefail" in cron_proposal
     assert "worktree add --detach" in proposal
     assert "apply --check" in proposal and "apply --index" in proposal
     assert "--clean-checkout" in proposal and "--disposable-copy" in proposal

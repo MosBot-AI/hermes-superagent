@@ -6,6 +6,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ## Unreleased
 
+- Add a review-only pinned-host proposal for durable exact-key cron creation, retained deletion receipts and fail-closed locking; production scheduling, authorization and notification delivery remain unchanged.
+
 - Add a fixed-checkpoint original local M1 acceptance ledger, executable reference checks and explicit delivery limits; no new runtime capability is enabled.
 
 - Add manual packaged Gateway crash-recovery acceptance for durable writes whose client replies were not consumed; preserve exact scope and unknown-outcome guidance.
