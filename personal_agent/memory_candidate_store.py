@@ -6,6 +6,7 @@ import re
 from datetime import datetime, timedelta
 from uuid import uuid4
 
+from . import memory_sources
 from .memory_backend import MemoryError, _identifier, _text, validate_expiry
 
 OPERATIONS = frozenset(
@@ -14,6 +15,7 @@ OPERATIONS = frozenset(
         "candidate_list",
         "candidate_get",
         "candidate_discard",
+        "candidate_suppress_source",
         "candidate_accept",
         "candidate_purge_expired",
     }
@@ -70,6 +72,7 @@ def validate(operation, payload):
         "candidate_list": (set(), {"limit", "after"}),
         "candidate_get": ({"candidate_id"}, set()),
         "candidate_discard": ({"candidate_id", "expected_revision"}, set()),
+        "candidate_suppress_source": ({"candidate_id", "expected_revision"}, set()),
         "candidate_accept": ({"candidate_id", "expected_revision", "expires_at"}, set()),
         "candidate_purge_expired": (set(), set()),
     }
@@ -257,6 +260,7 @@ def execute(backend, conn, operation, request, now):
             if row["proposal_digest"] != identity:
                 raise MemoryError("idempotency_conflict")
             return {"data": metadata(row), "replayed": True}
+        memory_sources.check(conn, request["source_digest"])
         if conn.execute("SELECT count(*) FROM memory_candidates").fetchone()[0] >= 1000:
             raise MemoryError("candidate_limit")
         if (
@@ -345,7 +349,17 @@ def execute(backend, conn, operation, request, now):
     if row["revision"] != request["expected_revision"]:
         raise MemoryError("revision_conflict")
     receipt = {**metadata(row), "revision": 2, "state": "discarded"}
+    if operation == "candidate_suppress_source":
+        memory_sources.suppress(
+            conn,
+            row["source_digest"],
+            row["candidate_id"],
+            target=row["candidate_id"],
+            action=action,
+        )
+        return {"data": receipt, "replayed": False}
     if operation == "candidate_accept":
+        memory_sources.check(conn, row["source_digest"])
         key = "candidate.accept." + row["candidate_id"]
         if conn.execute("SELECT 1 FROM receipts WHERE request_id=?", (key,)).fetchone():
             raise MemoryError("idempotency_conflict")
@@ -359,6 +373,10 @@ def execute(backend, conn, operation, request, now):
                 "expires_at": request["expires_at"],
             },
             now,
+        )
+        conn.execute(
+            "INSERT INTO memory_source_lineage VALUES (?,?,?)",
+            (row["candidate_id"], remembered["data"]["record_id"], row["source_digest"]),
         )
         receipt.update(state="accepted", record=remembered["data"])
     terminal(conn, row, receipt["state"], action, receipt)

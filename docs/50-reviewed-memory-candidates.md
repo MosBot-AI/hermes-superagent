@@ -142,3 +142,5 @@ background retention enforcement, semantic/Chinese recall quality and remote
 owner identity remain open. Existing selected providers are unchanged. No
 installer, denied Gateway, live credentials or host patch is required for these
 offline contracts, and prior installation restrictions remain in force.
+
+See [exact source suppression](80-exact-memory-source-suppression.md) for schema-11 operator suppression and correction/forgetting of newly linked accepted sources; historical receipts are not current state.

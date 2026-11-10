@@ -140,7 +140,7 @@ def test_apply_uses_ordinary_terminal_forget_metadata_and_index_path(store):
         fresh.execute("INSERT INTO memory_fts(memory_fts) VALUES ('integrity-check')")
     for (receipt,) in c.execute("SELECT receipt FROM receipts"):
         assert "private" not in receipt and "needle" not in receipt
-    assert c.execute("PRAGMA user_version").fetchone()[0] == 10
+    assert c.execute("PRAGMA user_version").fetchone()[0] == 11
 
 
 def test_retry_before_selection_after_restart_clock_rollback_and_unknown_files(store, monkeypatch):

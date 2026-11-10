@@ -53,3 +53,5 @@
 不依赖宿主的 `tests/unit/test_memory_crash_recovery.py` 矩阵在记录/事件/回执写入后、候选关闭后以及事务 COMMIT 前后，通过 `os._exit` 突然终止独立 Python 进程。11 个用例验证 COMMIT 前完整回滚、COMMIT 后持久重放、数据库完整性、只创建一条正式记忆，以及遗忘并重新打开后不会复活。测试使用合成数据和 DELETE 日志，验证 SQLite 进程崩溃恢复，不证明断电持久性、物理擦除、真实 Gateway、provider、文件系统/设备故障或完整 E8 发布认证。可在项目 Python 3.14 环境运行 `python -m pytest tests/unit/test_memory_crash_recovery.py -q` 复现。关联 #21。
 
 这是实用的可选草稿审核流程，不是自动正式记忆提取。真实已配置模型的实用性、来源覆盖 checkpoint、后台保留期限执行、语义/中文召回质量与远程 owner 身份仍待完成。既有 provider 不变。离线契约不需要安装器、被拒 Gateway、真实凭据或宿主补丁；先前安装限制继续有效。
+
+schema 11 操作人员抑制及新关联接受来源的更正/遗忘参见[精确来源抑制](80-exact-memory-source-suppression-zh.md)；历史回执不是当前状态。
