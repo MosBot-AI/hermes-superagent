@@ -2,6 +2,8 @@
 
 English | [简体中文](08-roadmap-and-acceptance-zh.md)
 
+Current E2.7 checkpoint: [local backend acceptance candidate](81-local-memory-acceptance.md) supersedes historical precursor-only statements below. SQLite/FTS/projection/edit proposals/exact source suppression are implemented; original #44 acceptance awaits review, merge and main CI. E2.6/E2.8/E2.9 and deployment remain separate.
+
 ## 1. Planning Principles
 
 This is an implementation plan, not a completion report. Items that have not passed code, testing, deployment, and user acceptance must not be marked Done. See [12](12-foundation-progress.md) for the current E0.1/E0.2/E0.5 foundation-slice progress; this does not mean E0/M0 or the entire personal agent is complete.

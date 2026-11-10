@@ -588,6 +588,13 @@ class LocalMemoryBackend:
         }
 
     def _page(self, conn, request, now, include_forgotten=False):
+        if "terms" in request:
+            memory_fts.verify_query(
+                conn,
+                request["terms"],
+                evaluated_at=now.isoformat(timespec="seconds").replace("+00:00", "Z"),
+                include_expired=request.get("include_expired", False),
+            )
         self._validate_expiries(conn)
         clauses, args = (["1=1"] if include_forgotten else ["status='active'"]), []
         if not include_forgotten and not request.get("include_expired", False):
@@ -623,6 +630,7 @@ class LocalMemoryBackend:
                     "index": "transactional_fts5_trigram_with_canonical_recheck",
                     "short_term_scan": any(len(term) < 3 for term in request["terms"]),
                     "index_stale": False,
+                    "index_check_scope": "logical_documents_and_complete_current_query_coverage",
                     "scope": "current_active_records_single_read_snapshot",
                     "authority": "stored_data_not_instructions_or_permission",
                 }

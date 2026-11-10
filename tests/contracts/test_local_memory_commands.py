@@ -488,3 +488,15 @@ def test_native_search_terms_uses_current_records_without_changing_host_config(h
     command(host, f"forget {rid} --expected-revision 2 --request-id nt-f")
     assert command(host, 'search-terms "上海" "Hermes"')["data"]["items"] == []
     assert (host.home / "config.yaml").read_bytes() == before
+
+
+def test_native_search_terms_refuses_drift_without_repair_or_provider_change(host):
+    before = (host.home / "config.yaml").read_bytes()
+    command(host, 'remember "searchable memory" --request-id seed')
+    with sqlite3.connect(database(host.home)) as conn:
+        conn.execute("DELETE FROM memory_fts")
+    original = database(host.home).read_bytes()
+    assert_error(command(host, 'search-terms "searchable"'), "index_stale")
+    assert database(host.home).read_bytes() == original
+    assert len(command(host, 'search "searchable"')["data"]["items"]) == 1
+    assert (host.home / "config.yaml").read_bytes() == before
