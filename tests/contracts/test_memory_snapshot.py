@@ -51,12 +51,20 @@ def test_native_disabled_and_remote_request_cannot_create_snapshots(host):
     assert not directory(host.home).exists()
 
 
-def test_native_foreign_controller_denied_before_snapshot_storage(host):
+@pytest.mark.parametrize(
+    "text",
+    [
+        "snapshot-create foreign",
+        "snapshot-list before --sha256 " + "a" * 64,
+        "snapshot-show before 00000000-0000-4000-8000-000000000000 --sha256 " + "a" * 64,
+    ],
+)
+def test_native_foreign_controller_denied_before_snapshot_storage(host, text):
     from hermes_state_runtime import RuntimeStoreError
 
     host.connection.actor = replace(host.connection.actor, subject="foreign")
     with pytest.raises(RuntimeStoreError):
-        memory.command(host, "snapshot-create foreign")
+        memory.command(host, text)
     assert not directory(host.home).exists()
 
 
@@ -69,6 +77,51 @@ def test_native_model_has_no_snapshot_actions(native, monkeypatch):
     host = local.make_host(home, manager)
     model.activate(host)
     with model.turn(host):
-        for action in ("snapshot_create", "snapshot_inspect"):
+        for action in ("snapshot_create", "snapshot_inspect", "snapshot_list", "snapshot_show"):
             assert model.call(host, {"action": action})["error"]["code"] == "invalid_request"
     assert not directory(home).exists()
+
+
+def test_native_historical_browse_after_forget_has_no_current_effect(host):
+    before = (host.home / "config.yaml").read_bytes()
+    saved = memory.command(host, 'remember "old private memory" --request-id old')["data"]
+    snap = memory.command(host, "snapshot-create before")["data"]
+    memory.command(host, f"forget {saved['record_id']} --expected-revision 1 --request-id forget")
+    digest = snap["sha256"]
+    listing = memory.command(host, f"snapshot-list before --sha256 {digest}")
+    assert listing["status"] == "ok", listing
+    assert "content" not in listing["data"]["historical_records"]["items"][0]
+    shown = memory.command(host, f"snapshot-show before {saved['record_id']} --sha256 {digest}")
+    assert shown["status"] == "ok", shown
+    assert shown["data"]["historical_records"]["record"]["content"] == "old private memory"
+    assert "host history" in shown["data"]["notice"]
+    assert memory.command(host, "list")["data"]["items"] == []
+    assert (host.home / "config.yaml").read_bytes() == before
+
+
+@pytest.mark.parametrize(
+    "operation",
+    ["snapshot-list before", "snapshot-show before 00000000-0000-4000-8000-000000000000"],
+)
+def test_native_historical_browse_disabled_before_storage(host, operation):
+    memory.configure(host.home, local_memory=False)
+    result = memory.command(host, operation + " --sha256 " + "a" * 64)
+    memory.assert_error(result, "local_memory_disabled")
+    assert not directory(host.home).exists()
+
+
+@pytest.mark.parametrize(
+    "operation",
+    ["snapshot-list before", "snapshot-show before 00000000-0000-4000-8000-000000000000"],
+)
+def test_native_remote_historical_browse_refused_before_storage(host, operation):
+    value = json.loads(
+        memory.handler(host)(
+            "--json " + operation + " --sha256 " + "a" * 64,
+            platform="telegram",
+            session_id="remote",
+            session_key="remote",
+        )
+    )
+    memory.assert_error(value, "unsupported_origin")
+    assert not directory(host.home).exists()

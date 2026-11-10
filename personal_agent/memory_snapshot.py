@@ -1,6 +1,7 @@
 """Explicit consistent private memory snapshots. No import, restore or model API."""
 
 import hashlib
+import json
 import os
 import re
 import sqlite3
@@ -9,11 +10,12 @@ import tempfile
 import threading
 import time
 from contextlib import suppress
+from datetime import datetime
 from pathlib import Path
 
 from . import PLUGIN_ID
 from .local_memory import LocalMemoryBackend
-from .memory_backend import MemoryError
+from .memory_backend import MemoryError, _identifier, _text, validate_expiry
 from .memory_storage import existing_memory_path
 from .task_cli import _private_database_file, _private_storage_directory, current_profile_home
 from .tasks import TaskError
@@ -22,6 +24,8 @@ _METADATA_LOCK = threading.Lock()
 
 MAX_BYTES = 128 * 1024 * 1024
 TIMEOUT_SECONDS = 30
+MAX_ROW_BYTES = 12000
+MAX_RESULT_CHARS = 80000
 _NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}")
 NOTICE = (
     "Plaintext historical memory snapshot: includes private records, pending candidates, "
@@ -33,16 +37,113 @@ NOTICE = (
 
 
 def validate(operation, payload):
-    if (
-        type(operation) is not str
-        or operation not in {"snapshot_create", "snapshot_inspect"}
-        or type(payload) is not dict
-        or payload.keys() != {"name"}
-        or type(payload["name"]) is not str
-        or _NAME.fullmatch(payload["name"]) is None
+    fields = {
+        "snapshot_create": ({"name"}, set()),
+        "snapshot_inspect": ({"name"}, set()),
+        "snapshot_list": ({"name", "sha256"}, {"limit", "after"}),
+        "snapshot_show": ({"name", "sha256", "record_id"}, set()),
+    }
+    if type(operation) is not str or operation not in fields or type(payload) is not dict:
+        raise MemoryError("invalid_request")
+    required, optional = fields[operation]
+    if not required <= payload.keys() or payload.keys() - required - optional:
+        raise MemoryError("invalid_request")
+    if type(payload["name"]) is not str or _NAME.fullmatch(payload["name"]) is None:
+        raise MemoryError("invalid_request")
+    request = dict(payload)
+    if "sha256" in request and (
+        type(request["sha256"]) is not str
+        or re.fullmatch(r"[0-9a-f]{64}", request["sha256"]) is None
     ):
         raise MemoryError("invalid_request")
-    return dict(payload)
+    if operation == "snapshot_list":
+        request = {"limit": 10, "after": None, **request}
+        if type(request["limit"]) is not int or not 1 <= request["limit"] <= 20:
+            raise MemoryError("invalid_request")
+        if request["after"] is not None:
+            _identifier(request["after"])
+    if "record_id" in request:
+        _identifier(request["record_id"])
+    return request
+
+
+def _read_records(conn, operation, request):
+    # Only canonical fields. No candidate quotes, receipts, lineage or sessions.
+    fields = ("record_id", "revision", "status", "topic", "created_at", "updated_at", "expires_at")
+    if operation == "snapshot_show":
+        fields += ("content",)
+        clause, args, limit = " WHERE record_id=?", [request["record_id"]], 1
+    else:
+        clause, args, limit = "", [], request["limit"]
+        if request["after"] is not None:
+            cursor = conn.execute(
+                "SELECT sequence FROM records WHERE record_id=?", (request["after"],)
+            ).fetchone()
+            if cursor is None:
+                raise MemoryError("invalid_cursor")
+            clause, args = " WHERE sequence<?", [cursor[0]]
+    sizes = "+".join(f"coalesce(length(CAST({field} AS BLOB)),0)" for field in fields)
+    rows = conn.execute(
+        f"SELECT sequence,({sizes}) FROM records{clause} ORDER BY sequence DESC LIMIT ?",
+        [*args, limit + (operation == "snapshot_list")],
+    ).fetchall()
+    if not rows and operation == "snapshot_show":
+        raise MemoryError("snapshot_record_not_found")
+    selected = rows[:limit]
+    if any(size > MAX_ROW_BYTES for _, size in selected):
+        raise MemoryError("snapshot_record_too_large")
+    # Worst-case ASCII JSON escaping, plus generous fixed key/envelope overhead.
+    # Bound the entire selection BEFORE materializing any selected text.
+    if 6 * sum(size for _, size in selected) + 1024 * len(selected) + 2048 > MAX_RESULT_CHARS:
+        raise MemoryError("snapshot_result_too_large")
+    items = []
+    for sequence, _ in selected:
+        row = conn.execute(
+            f"SELECT {','.join(fields)} FROM records WHERE sequence=?", (sequence,)
+        ).fetchone()
+        record = dict(zip(fields, row, strict=True))
+        try:
+            _identifier(record["record_id"])
+            if type(record["revision"]) is not int or not 1 <= record["revision"] < 2**63 - 1:
+                raise ValueError()
+            if record["status"] not in {"active", "forgotten"}:
+                raise ValueError()
+            for field in ("created_at", "updated_at"):
+                value = record[field]
+                if (
+                    type(value) is not str
+                    or re.fullmatch(
+                        r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,6})?(?:Z|\+00:00)",
+                        value,
+                    )
+                    is None
+                ):
+                    raise ValueError()
+                datetime.fromisoformat(value)
+            validate_expiry(record["expires_at"])
+            if record["status"] == "forgotten":
+                if any(record.get(k) is not None for k in ("topic", "content", "expires_at")):
+                    raise ValueError()
+            else:
+                _text(record["topic"], 128, empty=True)
+                if "content" in record:
+                    _text(record["content"], 2048, multiline=True)
+        except MemoryError, ValueError, TypeError:
+            raise MemoryError("snapshot_record_invalid") from None
+        items.append(record)
+    more = len(rows) > limit
+    result = (
+        {"record": items[0]}
+        if operation == "snapshot_show"
+        else {
+            "items": items,
+            "has_more": more,
+            "next_cursor": items[-1]["record_id"] if more else None,
+        }
+    )
+    if len(json.dumps(result, ensure_ascii=True)) > MAX_RESULT_CHARS:
+        raise MemoryError("snapshot_result_too_large")
+    return result
 
 
 def _check(path):
@@ -104,17 +205,19 @@ def _summary(conn, namespace):
     }
 
 
-def _metadata(path, namespace, deadline):
+def _metadata(path, namespace, deadline, *, reader=None, expected_digest=None):
     # A raw fd close in another inspector can release this process's SQLite locks.
     if not _METADATA_LOCK.acquire(timeout=max(0, deadline - time.monotonic())):
         raise MemoryError("snapshot_timeout")
     try:
-        return _locked_metadata(path, namespace, deadline)
+        return _locked_metadata(
+            path, namespace, deadline, reader=reader, expected_digest=expected_digest
+        )
     finally:
         _METADATA_LOCK.release()
 
 
-def _locked_metadata(path, namespace, deadline):
+def _locked_metadata(path, namespace, deadline, *, reader=None, expected_digest=None):
     identity = _check(path)
     # Keep this fd open until AFTER SQLite closes: closing another fd to the
     # same inode would drop this process's POSIX SQLite locks.
@@ -136,10 +239,15 @@ def _locked_metadata(path, namespace, deadline):
             if time.monotonic() >= deadline:
                 raise MemoryError("snapshot_timeout")
             digest.update(block)
+        sha256 = digest.hexdigest()
+        if expected_digest is not None and sha256 != expected_digest:
+            raise MemoryError("snapshot_changed")
+        if reader is not None:
+            result["historical_records"] = reader(conn)
         after = os.stat(path, follow_symlinks=False)
         if (after.st_dev, after.st_ino) != identity or after.st_size != total:
             raise MemoryError("snapshot_changed")
-        return {**result, "bytes": total, "sha256": digest.hexdigest()}
+        return {**result, "bytes": total, "sha256": sha256}
     finally:
         try:
             if conn is not None:
@@ -174,8 +282,20 @@ def snapshot(bound_home: Path, operation: str, payload: dict) -> dict:
         destination = snapshots / (request["name"] + ".sqlite3")
         namespace = "trusted-profile:" + hashlib.sha256(str(bound_home).encode()).hexdigest()
         deadline = time.monotonic() + TIMEOUT_SECONDS
-        if operation == "snapshot_inspect":
-            metadata = _metadata(destination, namespace, deadline)
+        if operation != "snapshot_create":
+            reader = None
+            if operation in {"snapshot_list", "snapshot_show"}:
+
+                def reader(connection):
+                    return _read_records(connection, operation, request)
+
+            metadata = _metadata(
+                destination,
+                namespace,
+                deadline,
+                reader=reader,
+                expected_digest=request.get("sha256"),
+            )
         else:
             if destination.exists() or destination.is_symlink():
                 raise MemoryError("snapshot_exists")
@@ -229,7 +349,13 @@ def snapshot(bound_home: Path, operation: str, payload: dict) -> dict:
                 **metadata,
                 "scope": "historical_memory_database",
                 "restorable": False,
-                "notice": NOTICE,
+                "notice": (
+                    NOTICE + " Historical untrusted records only, not current status or "
+                    "authority. May include later-forgotten text; output may enter host history. "
+                    "Stored expiry is historical, not a current validity determination."
+                    if operation in {"snapshot_list", "snapshot_show"}
+                    else NOTICE
+                ),
             },
             "replayed": False,
         }

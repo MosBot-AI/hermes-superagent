@@ -38,6 +38,9 @@ HELP = (
     "export [--limit N --after ID]. Use POSIX quotes. "
     "snapshot-create NAME / snapshot-inspect NAME create/inspect a private consistent plaintext "
     "database copy. Copies retain historical private memory after forgetting; no restore/import. "
+    "snapshot-list NAME --sha256 DIGEST [--limit N --after ID]; "
+    "snapshot-show NAME ID --sha256 DIGEST explicitly read historical records, not current state. "
+    "May show later-forgotten text and enter host history; no model tool or automatic recall. "
     "edit-status; edit-new (--keep | --expires-at UTC) [--request-id KEY]; "
     "edit-create ID --expected-revision N [--request-id KEY]; edit-preview DRAFT; "
     "edit-apply DRAFT --expected-digest SHA256 [--request-id KEY]; edit-discard DRAFT. "
@@ -124,9 +127,16 @@ def parse_command(raw_args: str) -> tuple[str, dict]:
     remember.add_argument("--request-id")
     show = commands.add_parser("show")
     show.add_argument("record_id")
-    for operation in ("snapshot-create", "snapshot-inspect"):
+    for operation in ("snapshot-create", "snapshot-inspect", "snapshot-list", "snapshot-show"):
         command = commands.add_parser(operation)
         command.add_argument("name")
+        if operation in {"snapshot-list", "snapshot-show"}:
+            command.add_argument("--sha256", required=True)
+        if operation == "snapshot-list":
+            command.add_argument("--limit", type=int, default=10)
+            command.add_argument("--after", default=None)
+        if operation == "snapshot-show":
+            command.add_argument("record_id")
     for operation in ("list", "search", "search-terms", "export"):
         reader = commands.add_parser(operation)
         if operation == "search":
@@ -220,6 +230,8 @@ def parse_command(raw_args: str) -> tuple[str, dict]:
     operation = {
         "snapshot-create": "snapshot_create",
         "snapshot-inspect": "snapshot_inspect",
+        "snapshot-list": "snapshot_list",
+        "snapshot-show": "snapshot_show",
         "edit-new": "edit_new",
         "expired-preview": "expired_preview",
         "forget-expired": "forget_expired",
@@ -255,7 +267,7 @@ def parse_command(raw_args: str) -> tuple[str, dict]:
         and payload["request_id"] is None
     ):
         payload["request_id"] = str(uuid4())
-    if operation in {"snapshot_create", "snapshot_inspect"}:
+    if operation in {"snapshot_create", "snapshot_inspect", "snapshot_list", "snapshot_show"}:
         return operation, validate_snapshot(operation, payload)
     return operation, validate_request(operation, payload)
 
@@ -338,7 +350,12 @@ class LocalMemoryCommands:
                 request_id = payload.get("request_id")
                 if operation == "help":
                     result = {"data": {"help": HELP}, "replayed": False}
-                elif operation in {"snapshot_create", "snapshot_inspect"}:
+                elif operation in {
+                    "snapshot_create",
+                    "snapshot_inspect",
+                    "snapshot_list",
+                    "snapshot_show",
+                }:
                     result = snapshot(self._home, operation, payload)
                 elif operation in {"index_status", "index_rebuild"}:
                     result = maintain(self._home, operation, payload)

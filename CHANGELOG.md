@@ -6,6 +6,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ## Unreleased
 
+- Add digest-bound operator-only snapshot list/show for bounded historical memory inspection, with later-forgotten text warnings and no restore or automatic recall.
+
 - Add exact-input candidate source suppression and schema-11 accepted-source lineage; correction/forgetting blocks new same-input candidate effects, without semantic erasure or resurrecting historical receipts.
 
 - Fix task/memory snapshot POSIX lock lifetime across hashing and historical reads; serialize controlled inspectors and preserve live-source locks, with real process contention regressions (#94).

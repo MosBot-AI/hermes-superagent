@@ -12,7 +12,7 @@
 
 这些显式原生本地命令需要已有 `mode: local_tasks`、`local_conversation: true`、`local_memory: true` 配置及当前可信 profile/session 准入。它们不是模型工具、自动导出、remote-owner 访问或新 provider。停用/外部来源在快照存储前拒绝。加载/help 不创建数据库。本 #44 切片不完成一般导入/迁移或来源级抑制。
 
-名称为 1–64 个 ASCII 字母/数字/下划线/连字符，以字母/数字开头。唯一目标是当前 profile 私密 plugin-data 目录下的 `memory/snapshots/NAME.sqlite3`。不提供任意路径、覆盖、上传、列出/删除命令或自动清理。同名已存在则拒绝；创建结果不确定后应检查该名称，不要以为新名称等同于同一次重试。
+名称为 1–64 个 ASCII 字母/数字/下划线/连字符，以字母/数字开头。唯一目标是当前 profile 私密 plugin-data 目录下的 `memory/snapshots/NAME.sqlite3`。不提供任意路径、覆盖、上传、快照名称列举/删除或自动清理。同名已存在则拒绝；创建结果不确定后应检查该名称，不要以为新名称等同于同一次重试。
 
 Create 返回 schema version、namespace、事件水位、record/active/tombstone 计数、字节长度及 SHA-256。`active_records` 统计 status-active 行，包括已过期但尚未遗忘的记录；不等于当前可召回数量。Inspect 从指定历史文件返回同样的元数据，不返回私密记录正文。它可在 live records.sqlite3 缺失时工作，从不创建/迁移该存储，并拒绝不同 profile namespace 的快照。
 
@@ -45,3 +45,20 @@ Create 返回 schema version、namespace、事件水位、record/active/tombston
 合成双检查回归在摘要完成时保持首个读取，拒绝受截止时间约束的第二个读取，并通过真实独立进程写者验证：首个读取结束前提交仍被阻止。这覆盖普通重叠插件检查，而非协调同进程中在快照文件上任意打开的非托管 SQLite 连接，也不防御恶意同 UID 访问。不改变恢复、权限、schema 或发布门禁。
 
 schema 11 来源抑制仍允许检查精确已知 schema 10 和 11 历史快照，不迁移或改变其字节。namespace、DELETE 日志、完整性及严格 schema 门禁继续适用；普通只读召回仍仅接受当前 schema。参见[来源抑制](80-exact-memory-source-suppression-zh.md)。
+
+## 绑定摘要的历史记录浏览
+
+```text
+/personal-memory snapshot-list before-change --sha256 DIGEST --limit 10
+/personal-memory snapshot-show before-change RECORD_ID --sha256 DIGEST
+```
+
+使用 create/inspect 返回的精确 SHA256。这些操作人员专用命令在同一串行化 SQLite 读事务及描述符生命周期内，**先验证摘要，再读取记录字段**。文件变化返回 `snapshot_changed`；应先有意检查文件，再选择新摘要。即使实时记忆数据库不存在，仍要求当前 profile/config 准入。不创建目录、不迁移快照、不查询实时记录、不选择 provider。
+
+`list` 按创建顺序从新到旧返回 canonical 记录摘要：ID、revision、已存状态、topic、创建/更新时间及已存过期时间。使用返回的 `next_cursor` 作为 `--after RECORD_ID`；默认 limit 为 10，最大为 20。`show` 另外返回所选记录正文。两者都不返回 source/session 标识、候选引用、回执或来源关联/抑制表。缺失记录返回 `snapshot_record_not_found`；缺失游标返回 `invalid_cursor`。不根据历史数据计算当前 `expired` 标志。快照中的已遗忘墓碑返回 null content/topic/expiry。精确已知 schema 10 和 11 均可读取而不改变字节。
+
+**历史输出可能含后来更正、遗忘或抑制的文本，并可进入普通宿主对话历史。** 它是不可信历史数据，不是当前状态、当前有效性、已验证作者身份或权限。当前 canonical 召回和来源抑制保持不变。不提供模型工具或自动召回动作、恢复、复制回写或效果重放。topic 摘要本身也可能含私有文本。
+
+读取所选正文前，SQL 先测量存储字节数：每条所选行最多 12,000 字节，选择集及开销的保守最坏情况 ASCII JSON 估算最多 80,000 字符。还会执行最终 JSON 上限检查。保守估算可能拒绝实际较紧凑的结果；应降低 `--limit`，而不是期待截断。畸形 ID、状态、revision、时间或正文会被拒绝，不返回部分结果。已有 128 MiB 文件上限和协作式截止时间仍适用，并非对操作系统调用的强制中断。
+
+合成测试覆盖分页、畸形/超大行、调用 reader 前摘要不匹配、schema 10 字节保留、当前遗忘及来源抑制后的历史读取、失败清理，以及记录读取全过程被阻止提交的真实独立进程写者。原生合同覆盖这些显式命令及禁用/模型拒绝；不使用真实私有数据或模型调用。
