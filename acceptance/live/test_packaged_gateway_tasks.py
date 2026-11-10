@@ -9,6 +9,7 @@ import asyncio
 import importlib.util
 import json
 import os
+import shlex
 import sqlite3
 import subprocess
 import sys
@@ -74,7 +75,11 @@ def installed(tmp_path):
             "isolation": "in_process",
             "entries": {
                 "hermes-personal-agent": {
-                    "settings": {"mode": "local_tasks", "local_conversation": True}
+                    "settings": {
+                        "mode": "local_tasks",
+                        "local_conversation": True,
+                        "local_model_tools": True,
+                    }
                 }
             },
         },
@@ -207,3 +212,227 @@ def test_packaged_task_commands_survive_real_gateway_restart(installed):
         assert db.execute("SELECT id, revision, title FROM tasks").fetchall() == [
             (task_id, 2, "Updated synthetic task")
         ]
+
+
+def project_plan_command():
+    """Synthetic explicit plan, including forward references; not model output."""
+    tasks = [
+        {"title": "审核中文草稿", "depends_on": [2]},
+        {"title": "整理中文草稿", "details": "合成验收数据，不发送外部消息"},
+        {"title": "确认项目记录", "depends_on": [1, 2]},
+    ]
+    return (
+        'personal-tasks --json plan --project "中文项目验收" --request-id live-project-plan '
+        "--tasks-json " + shlex.quote(json.dumps(tasks, ensure_ascii=False))
+    )
+
+
+def test_packaged_project_plan_dependencies_focus_and_restart(installed):
+    home, env, live = installed
+    project = "中文项目验收"
+    plan = project_plan_command()
+    initial_receipt = None
+    completed_receipts = {}
+
+    async def slash(ws, sid, raw, *, tools=False):
+        result = await live.ok(ws, "slash.exec", session_id=sid, command=raw)
+        assert result["type"] == "exec", result
+        payload = json.loads(result["output"])
+        expected = (
+            "personal.session-task-tools.v1" if tools else "personal.local-conversation-tasks.v1"
+        )
+        assert payload["schema_version"] == expected
+        return payload
+
+    async def ready(ws, sid):
+        result = await slash(ws, sid, f'personal-tasks --json ready --project "{project}"')
+        assert result["status"] == "ok", result
+        return [item["id"] for item in result["data"]["items"]]
+
+    async def create(desc):
+        nonlocal initial_receipt
+        async with live.websocket(home, desc) as ws:
+            created = await live.ok(
+                ws,
+                "session.create",
+                request_id="live-plan-session",
+                source="cli",
+                cwd=str(home),
+                toolsets=[],
+            )
+            sid = created["session_id"]
+            await live.ok(ws, "session.resume", session_id=sid)
+            captured = await slash(ws, sid, plan)
+            assert captured["status"] == "ok", captured
+            initial_receipt = captured["data"]
+            review, draft, publish = initial_receipt["items"]
+            assert [item["title"] for item in (review, draft, publish)] == [
+                "审核中文草稿",
+                "整理中文草稿",
+                "确认项目记录",
+            ]
+            assert all(
+                item["revision"] == 1 and item["project"] == project
+                for item in (review, draft, publish)
+            )
+            assert review["dependencies"] == [
+                {"task_id": draft["id"], "revision": 1, "state": "captured"}
+            ]
+            assert {item["task_id"] for item in publish["dependencies"]} == {
+                review["id"],
+                draft["id"],
+            }
+            assert draft["dependencies"] == []
+            assert await ready(ws, sid) == [draft["id"]]
+            projects = await slash(ws, sid, "personal-tasks --json projects")
+            assert projects["data"]["items"] == [
+                {"project": project, "captured": 3, "done": 0, "cancelled": 0, "total": 3}
+            ]
+            listed = await slash(ws, sid, f'personal-tasks --json list --project "{project}"')
+            assert {item["id"] for item in listed["data"]["items"]} == {
+                item["id"] for item in initial_receipt["items"]
+            }
+            replay = await slash(ws, sid, plan)
+            assert replay["replayed"] is True and replay["data"] == initial_receipt
+            conflicting = await slash(ws, sid, plan.replace("审核中文草稿", "改变后的草稿"))
+            assert conflicting["error"]["code"] == "idempotency_conflict"
+
+            enabled = await slash(ws, sid, "personal-tools enable-read", tools=True)
+            assert enabled["status"] == "ok" and enabled["data"]["access"] == "read"
+            selected = await slash(ws, sid, f"personal-tools focus {review['id']}", tools=True)
+            assert selected["data"]["focus_task_id"] == review["id"]
+            assert selected["data"]["revision_at_selection"] == 1
+            # Selection is checked; no model turn/context injection is claimed.
+            updated = await slash(
+                ws,
+                sid,
+                f"personal-tasks --json update {draft['id']} "
+                '--expected-revision 1 --details "补充中文验收细节" '
+                "--request-id live-plan-edit",
+            )
+            assert updated["status"] == "ok" and updated["data"]["revision"] == 2
+            assert updated["data"]["details"] == "补充中文验收细节"
+            stale = await slash(
+                ws,
+                sid,
+                f"personal-tasks --json update {draft['id']} "
+                '--expected-revision 1 --details "不得覆盖更新" --request-id live-plan-stale',
+            )
+            assert stale["status"] == "error" and stale["error"]["code"] == "revision_conflict"
+            unchanged = await slash(ws, sid, f"personal-tasks --json show {draft['id']}")
+            assert unchanged["data"] == updated["data"]
+            for task in (review, publish):
+                refused = await slash(
+                    ws,
+                    sid,
+                    f"personal-tasks --json done {task['id']} "
+                    '--expected-revision 1 --note "不得提前完成" '
+                    f"--request-id blocked-{task['id']}",
+                )
+                assert refused["status"] == "error"
+                assert refused["error"]["code"] == "dependencies_unsatisfied"
+                current = await slash(ws, sid, f"personal-tasks --json show {task['id']}")
+                assert current["data"]["state"] == "captured" and current["data"]["revision"] == 1
+
+            for task, revision, expected_ready in (
+                (draft, 2, [review["id"]]),
+                (review, 1, [publish["id"]]),
+                (publish, 1, []),
+            ):
+                raw = (
+                    f"personal-tasks --json done {task['id']} --expected-revision {revision} "
+                    f"--note 已核对合成记录 --request-id done-{task['id']}"
+                )
+                completed = await slash(ws, sid, raw)
+                assert completed["status"] == "ok", completed
+                assert completed["data"]["state"] == "done"
+                assert completed["data"]["revision"] == revision + 1
+                completed_receipts[task["id"]] = (raw, completed["data"])
+                assert await ready(ws, sid) == expected_ready
+            disabled = await slash(ws, sid, "personal-tools disable", tools=True)
+            assert disabled["status"] == "ok" and disabled["data"]["access"] == "disabled"
+            status = await slash(ws, sid, "personal-tools status", tools=True)
+            assert status["data"]["access"] == "disabled"
+            assert status["data"]["focus_task_id"] is None
+            # This verifies operator metadata only, not model-tool refusal.
+            enabled = await slash(ws, sid, "personal-tools enable-read", tools=True)
+            assert enabled["data"]["access"] == "read"
+            focused = await slash(ws, sid, f"personal-tools focus {publish['id']}", tools=True)
+            assert focused["data"]["focus_task_id"] == publish["id"]
+            assert focused["data"]["revision_at_selection"] == 2
+            status = await slash(ws, sid, "personal-tools status", tools=True)
+            assert status["data"]["access"] == "read"
+            assert status["data"]["focus_task_id"] == publish["id"]
+            return sid
+
+    with live.daemon(home, env, "project-first.log") as (proc, first, _):
+        sid = asyncio.run(create(first))
+        assert live.planned_stop(home, proc, first) == 0
+    assert live.control_absent(home)
+    assert not live.port_open(live.api_port(first))
+
+    async def resume(desc):
+        async with live.websocket(home, desc) as ws:
+            snapshot = await live.ok(ws, "session.resume", session_id=sid)
+            assert snapshot["session_id"] == sid
+            state = await slash(ws, sid, "personal-tools status", tools=True)
+            assert state["data"]["access"] == "disabled"
+            assert state["data"]["focus_task_id"] is None
+            # Restart clears activation/focus. This does not prove a model-tool
+            # invocation was refused: this test intentionally submits no prompt.
+            assert await ready(ws, sid) == []
+            projects = await slash(ws, sid, "personal-tasks --json projects")
+            assert projects["data"]["items"] == [
+                {"project": project, "captured": 0, "done": 3, "cancelled": 0, "total": 3}
+            ]
+            for task_id, (raw, receipt) in completed_receipts.items():
+                current = await slash(ws, sid, f"personal-tasks --json show {task_id}")
+                assert current["data"]["state"] == "done"
+                assert current["data"]["revision"] == receipt["revision"]
+                assert current["data"]["dependencies_satisfied"] is True
+                replay = await slash(ws, sid, raw)
+                assert replay["replayed"] is True and replay["data"] == receipt
+            plan_replay = await slash(ws, sid, plan)
+            assert plan_replay["replayed"] is True and plan_replay["data"] == initial_receipt
+            assert all(
+                item["state"] == "captured" and item["revision"] == 1
+                for item in plan_replay["data"]["items"]
+            )
+            listed = await slash(
+                ws, sid, f'personal-tasks --json list --state all --project "{project}"'
+            )
+            assert {item["id"] for item in listed["data"]["items"]} == set(completed_receipts)
+
+    with live.daemon(home, env, "project-second.log") as (proc, second, _):
+        assert second["instance_id"] != first["instance_id"]
+        asyncio.run(resume(second))
+        assert live.planned_stop(home, proc, second) == 0
+    assert live.control_absent(home)
+    assert not live.port_open(live.api_port(second))
+    task_db = home / "plugin-data/hermes-personal-agent/tasks.sqlite3"
+    for database in (home / "state.db", task_db):
+        with closing(sqlite3.connect(database.as_uri() + "?mode=ro", uri=True)) as db:
+            assert db.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+    with closing(sqlite3.connect(task_db.as_uri() + "?mode=ro", uri=True)) as db:
+        assert set(db.execute("SELECT id,revision,state FROM tasks").fetchall()) == {
+            (task_id, receipt["revision"], "done")
+            for task_id, (_, receipt) in completed_receipts.items()
+        }
+        review, draft, publish = initial_receipt["items"]
+        assert set(
+            db.execute("SELECT task_id,dependency_id FROM task_dependencies").fetchall()
+        ) == {
+            (review["id"], draft["id"]),
+            (publish["id"], review["id"]),
+            (publish["id"], draft["id"]),
+        }
+        assert {row[0] for row in db.execute("SELECT request_id FROM receipts")} == {
+            "live-project-plan",
+            "live-plan-edit",
+            *[f"done-{task_id}" for task_id in completed_receipts],
+        }
+        assert db.execute("SELECT count(*) FROM events").fetchone() == (7,)
+        assert db.execute("SELECT count(*) FROM receipts").fetchone() == (5,)
+        assert db.execute(
+            "SELECT count(*) FROM events WHERE operation='capture_plan'"
+        ).fetchone() == (3,)
