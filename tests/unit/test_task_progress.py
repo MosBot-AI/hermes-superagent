@@ -335,11 +335,12 @@ def test_exact_old_upgrade_preserves_receipts_events_order_and_supports_progress
         store = TaskStore(connection)
         store.initialize()
         after = snapshot(connection)
-        assert after["version"] == 6
+        assert after["version"] == 7
         for table in ("events", "receipts", "sqlite_sequence"):
             assert before[table] == after[table]
         assert after["tasks"] == [
-            (*row, *((None,) * (3 - version)), "ready", "", None) for row in before["tasks"]
+            (*row, *((None,) * (3 - version)), "ready", "", None, "normal")
+            for row in before["tasks"]
         ]
         for operation, args, receipt in history:
             assert store.run(operation, args) == {"data": receipt, "replayed": True}
@@ -358,7 +359,7 @@ def test_exact_old_upgrade_preserves_receipts_events_order_and_supports_progress
         "ALTER TABLE tasks ADD COLUMN work_status",
         "ALTER TABLE tasks ADD COLUMN progress_note",
         "ALTER TABLE tasks ADD COLUMN progress_updated_at",
-        "PRAGMA user_version = 6",
+        "PRAGMA user_version = 7",
         "COMMIT",
     ],
 )

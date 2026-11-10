@@ -260,7 +260,7 @@ def test_cli_reports_metadata_and_redacts_private_errors(home, monkeypatch, caps
     output = json.loads(capsys.readouterr().out)
     assert output["status"] == "ok" and "First" not in json.dumps(output)
 
-    def fail(*args):
+    def fail(*args, **kwargs):
         raise OSError("private path and text")
 
     monkeypatch.setattr(backup, "task_backup", fail)
@@ -281,9 +281,9 @@ def test_wal_snapshot_does_not_mix_a_concurrent_commit(home, monkeypatch):
     inspect = backup.inspect_task_snapshot
     calls = 0
 
-    def concurrent_commit(snapshot):
+    def concurrent_commit(snapshot, **kwargs):
         nonlocal calls
-        result = inspect(snapshot)
+        result = inspect(snapshot, **kwargs)
         calls += 1
         if calls == 1:
             store.run("capture", {"title": "Concurrent", "request_id": "concurrent"})
@@ -466,7 +466,7 @@ def test_metadata_failure_closes_connection_before_hash_descriptor(home, monkeyp
         events.append("descriptor")
         real_close(fd)
 
-    def fail(*args):
+    def fail(*args, **kwargs):
         raise TaskError("injected")
 
     monkeypatch.setattr(backup, "_connection", connect)

@@ -166,3 +166,42 @@ def normalize_plan_references(items):
     for position in range(1, len(items) + 1):
         visit(position)
     return graph
+
+
+def next_tasks(connection, request, get):
+    """Bounded top-N, not a cursor page or execution/authorization decision.
+
+    Scan eligible metadata in the caller's read snapshot for accurate totals;
+    only selected records materialize payload. Bounds are not CPU/SLA promises.
+    """
+    clauses, args = ["state='captured'", "work_status='ready'"], []
+    if "project" in request:
+        clauses.append("project=? COLLATE BINARY")
+        args.append(request["project"])
+    elif request.get("unassigned"):
+        clauses.append("project IS NULL")
+    rows = connection.execute(
+        "SELECT id,project,priority FROM tasks WHERE "
+        + " AND ".join(clauses)
+        + " ORDER BY CASE priority WHEN 'high' THEN 0 WHEN 'normal' THEN 1 ELSE 2 END,"
+        + " due_date IS NULL,due_date ASC,sequence ASC",
+        args,
+    )
+    total, selected = 0, []
+    for task_id, project, priority in rows:
+        if priority not in ("high", "normal", "low"):
+            _fail("storage_corrupt")
+        current = metadata(connection, {"id": task_id, "project": project})
+        if current["dependencies_satisfied"]:
+            total += 1
+            if len(selected) < request["limit"]:
+                selected.append(task_id)
+    return {
+        "items": [get(task_id) for task_id in selected],
+        "total": total,
+        "omitted": total - len(selected),
+        "limit": request["limit"],
+        "ordering": "priority_high_normal_low_then_due_date_undated_last_then_capture_order",
+        "scope": "active_manually_ready_dependency_satisfied",
+        "authority": "planning_data_not_permission_or_dispatch",
+    }

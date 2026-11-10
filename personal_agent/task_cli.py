@@ -23,6 +23,7 @@ def setup_tasks_cli(parent: argparse._SubParsersAction) -> None:
     capture.add_argument("--request-id", required=True)
     capture.add_argument("--due-date", default=argparse.SUPPRESS, help="Explicit YYYY-MM-DD date")
     capture.add_argument("--project", default=argparse.SUPPRESS)
+    capture.add_argument("--priority", choices=("high", "normal", "low"), default=argparse.SUPPRESS)
     plan = commands.add_parser("plan", help="Atomically capture 1-20 tasks under one project label")
     plan.add_argument("--project", required=True)
     plan.add_argument("--request-id", required=True)
@@ -91,6 +92,13 @@ def setup_tasks_cli(parent: argparse._SubParsersAction) -> None:
     ready_filters = ready.add_mutually_exclusive_group()
     ready_filters.add_argument("--project", default=argparse.SUPPRESS)
     ready_filters.add_argument("--unassigned", action="store_true", default=argparse.SUPPRESS)
+    next_tasks = commands.add_parser(
+        "next", help="Read explicitly prioritized eligible tasks; never dispatch work"
+    )
+    next_tasks.add_argument("--limit", type=int, default=5)
+    next_filters = next_tasks.add_mutually_exclusive_group()
+    next_filters.add_argument("--project", default=argparse.SUPPRESS)
+    next_filters.add_argument("--unassigned", action="store_true", default=argparse.SUPPRESS)
     dependencies = commands.add_parser("dependencies", help="Explicitly replace all prerequisites")
     dependencies.add_argument("task_id")
     dependencies.add_argument("--expected-revision", type=int, required=True)
@@ -132,6 +140,9 @@ def setup_tasks_cli(parent: argparse._SubParsersAction) -> None:
         command.add_argument("--request-id", required=True)
         if name == "update":
             command.add_argument("--title", default=argparse.SUPPRESS)
+            command.add_argument(
+                "--priority", choices=("high", "normal", "low"), default=argparse.SUPPRESS
+            )
             command.add_argument("--details", default=argparse.SUPPRESS)
             labels = command.add_mutually_exclusive_group()
             labels.add_argument("--project", default=argparse.SUPPRESS)
@@ -205,7 +216,8 @@ def command_request(args: argparse.Namespace) -> tuple[str, dict]:
         "reschedule_project": ("project", "days", "expected_snapshot", "request_id"),
         "project_rename_preview": ("project", "new_project"),
         "rename_project": ("project", "new_project", "expected_snapshot", "request_id"),
-        "capture": ("title", "details", "request_id", "due_date", "project"),
+        "capture": ("title", "details", "request_id", "due_date", "project", "priority"),
+        "next": ("limit", "project", "unassigned"),
         "get": ("task_id",),
         "ready": ("limit", "after", "project", "unassigned"),
         "set_dependencies": ("task_id", "expected_revision", "request_id", "dependency_ids"),
@@ -237,6 +249,7 @@ def command_request(args: argparse.Namespace) -> tuple[str, dict]:
             "request_id",
             "title",
             "details",
+            "priority",
             "due_date",
             "project",
         ),

@@ -436,3 +436,122 @@ def test_packaged_project_plan_dependencies_focus_and_restart(installed):
         assert db.execute(
             "SELECT count(*) FROM events WHERE operation='capture_plan'"
         ).fetchone() == (3,)
+
+
+def test_packaged_explicit_priorities_and_next_work_survive_restart(installed):
+    home, env, live = installed
+    tasks = [
+        {"title": "优先但待前置完成", "priority": "high", "depends_on": [2]},
+        {"title": "先完成前置", "priority": "low"},
+        {"title": "普通独立任务", "priority": "normal", "due_date": "2030-01-02"},
+    ]
+    plan = (
+        'personal-tasks --json plan --project "优先级验收" --request-id priority-plan '
+        "--tasks-json " + shlex.quote(json.dumps(tasks, ensure_ascii=False))
+    )
+    initial = None
+
+    async def command(ws, sid, raw):
+        result = await live.ok(ws, "slash.exec", session_id=sid, command=raw)
+        assert result["type"] == "exec", result
+        value = json.loads(result["output"])
+        assert value["schema_version"] == "personal.local-conversation-tasks.v1"
+        return value
+
+    async def next_ids(ws, sid):
+        result = await command(ws, sid, 'personal-tasks --json next --project "优先级验收"')
+        assert result["status"] == "ok", result
+        assert result["data"]["authority"] == "planning_data_not_permission_or_dispatch"
+        assert result["data"]["total"] == 2 and result["data"]["omitted"] == 0
+        return [item["id"] for item in result["data"]["items"]]
+
+    async def create(desc):
+        nonlocal initial
+        async with live.websocket(home, desc) as ws:
+            created = await live.ok(
+                ws,
+                "session.create",
+                request_id="priority-session",
+                source="cli",
+                cwd=str(home),
+                toolsets=[],
+            )
+            sid = created["session_id"]
+            await live.ok(ws, "session.resume", session_id=sid)
+            result = await command(ws, sid, plan)
+            assert result["status"] == "ok", result
+            initial = result["data"]
+            blocked, prerequisite, normal = initial["items"]
+            assert [item["priority"] for item in initial["items"]] == ["high", "low", "normal"]
+            assert await next_ids(ws, sid) == [normal["id"], prerequisite["id"]]
+            old_ready = await command(ws, sid, 'personal-tasks --json ready --project "优先级验收"')
+            assert [item["id"] for item in old_ready["data"]["items"]] == [
+                prerequisite["id"],
+                normal["id"],
+            ]
+            edit = await command(
+                ws,
+                sid,
+                f"personal-tasks --json update {prerequisite['id']} --priority high "
+                "--expected-revision 1 --request-id priority-edit",
+            )
+            assert edit["status"] == "ok" and edit["data"]["revision"] == 2
+            assert edit["data"]["priority"] == "high"
+            assert await next_ids(ws, sid) == [prerequisite["id"], normal["id"]]
+            stale = await command(
+                ws,
+                sid,
+                f"personal-tasks --json update {prerequisite['id']} --priority low "
+                "--expected-revision 1 --request-id priority-stale",
+            )
+            assert stale["error"]["code"] == "revision_conflict"
+            current = await command(ws, sid, f"personal-tasks --json show {prerequisite['id']}")
+            assert current["data"] == edit["data"]
+            finished = await command(
+                ws,
+                sid,
+                f"personal-tasks --json done {prerequisite['id']} "
+                '--expected-revision 2 --note "前置记录已核对" --request-id priority-done',
+            )
+            assert finished["status"] == "ok" and finished["data"]["revision"] == 3
+            assert await next_ids(ws, sid) == [blocked["id"], normal["id"]]
+            return sid
+
+    with live.daemon(home, env, "priority-first.log") as (proc, first, _):
+        sid = asyncio.run(create(first))
+        assert live.planned_stop(home, proc, first) == 0
+    assert live.control_absent(home) and not live.port_open(live.api_port(first))
+
+    async def resume(desc):
+        async with live.websocket(home, desc) as ws:
+            snapshot = await live.ok(ws, "session.resume", session_id=sid)
+            assert snapshot["session_id"] == sid
+            blocked, prerequisite, normal = initial["items"]
+            assert await next_ids(ws, sid) == [blocked["id"], normal["id"]]
+            current = await command(ws, sid, f"personal-tasks --json show {prerequisite['id']}")
+            assert current["data"]["priority"] == "high"
+            assert current["data"]["state"] == "done" and current["data"]["revision"] == 3
+            replay = await command(ws, sid, plan)
+            assert replay["replayed"] is True and replay["data"] == initial
+            assert replay["data"]["items"][1]["priority"] == "low"
+
+    with live.daemon(home, env, "priority-second.log") as (proc, second, _):
+        assert second["instance_id"] != first["instance_id"]
+        asyncio.run(resume(second))
+        assert live.planned_stop(home, proc, second) == 0
+    assert live.control_absent(home) and not live.port_open(live.api_port(second))
+    task_db = home / "plugin-data/hermes-personal-agent/tasks.sqlite3"
+    with closing(sqlite3.connect(task_db.as_uri() + "?mode=ro", uri=True)) as db:
+        assert db.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+        blocked, prerequisite, normal = initial["items"]
+        assert set(db.execute("SELECT id,priority,state,revision FROM tasks")) == {
+            (blocked["id"], "high", "captured", 1),
+            (prerequisite["id"], "high", "done", 3),
+            (normal["id"], "normal", "captured", 1),
+        }
+        assert db.execute("SELECT count(*) FROM events").fetchone() == (5,)
+        assert {row[0] for row in db.execute("SELECT request_id FROM receipts")} == {
+            "priority-plan",
+            "priority-edit",
+            "priority-done",
+        }

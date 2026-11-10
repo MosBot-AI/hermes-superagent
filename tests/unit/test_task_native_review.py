@@ -83,6 +83,7 @@ def test_categories_overlap_unique_counts_and_no_linkage_inference():
         "project",
         "due_date",
         "work_status",
+        "priority",
         "native_progress",
     }
     assert "PRIVATE DETAILS" not in json.dumps(data)

@@ -18,7 +18,7 @@ from .task_native_review import task_native_review
 from .task_review import task_review
 
 _APPLICATION_ID = 0x5041544B
-_SCHEMA_VERSION = 6
+_SCHEMA_VERSION = 7
 _COLUMNS = (
     "id",
     "title",
@@ -35,6 +35,7 @@ _COLUMNS = (
     "work_status",
     "progress_note",
     "progress_updated_at",
+    "priority",
 )
 _SCHEMA_V1 = {
     "tasks": """CREATE TABLE tasks (
@@ -70,7 +71,12 @@ _SCHEMA_V4 = {
 }
 
 _SCHEMA_V5 = {**_SCHEMA_V4, **dependencies.SCHEMA}
-_SCHEMA = {**_SCHEMA_V5, **native_sync.SCHEMA}
+_SCHEMA_V6 = {**_SCHEMA_V5, **native_sync.SCHEMA}
+_PRIORITIES = ("high", "normal", "low")
+_PRIORITY_COLUMN = (
+    "priority TEXT NOT NULL DEFAULT 'normal' CHECK(priority IN ('high','normal','low'))"
+)
+_SCHEMA = {**_SCHEMA_V6, "tasks": _SCHEMA_V6["tasks"][:-1] + ", " + _PRIORITY_COLUMN + ")"}
 
 
 class TaskError(Exception):
@@ -147,7 +153,8 @@ def validate_request(operation: str, payload: dict) -> dict:
             set(),
         ),
         "ready": (set(), {"project", "unassigned", "limit", "after"}),
-        "capture": ({"title", "request_id"}, {"details", "due_date", "project"}),
+        "next": (set(), {"project", "unassigned", "limit"}),
+        "capture": ({"title", "request_id"}, {"details", "due_date", "project", "priority"}),
         "recover_copy": (
             {"title", "request_id", "backup_sha256", "original_task_id"},
             {"details", "due_date", "project"},
@@ -156,7 +163,7 @@ def validate_request(operation: str, payload: dict) -> dict:
         "breakdown": ({"task_id", "expected_revision", "tasks", "request_id"}, set()),
         "update": (
             {"task_id", "expected_revision", "request_id"},
-            {"title", "details", "due_date", "project"},
+            {"title", "details", "due_date", "project", "priority"},
         ),
         "progress": ({"task_id", "expected_revision", "request_id", "work_status", "note"}, set()),
         "complete": ({"task_id", "expected_revision", "request_id", "note"}, set()),
@@ -191,7 +198,9 @@ def validate_request(operation: str, payload: dict) -> dict:
     result: dict = dict(payload)
     if operation in ("capture", "recover_copy"):
         result.setdefault("details", "")
-    if operation == "update" and not ({"title", "details", "due_date", "project"} & result.keys()):
+    if operation == "update" and not (
+        {"title", "details", "due_date", "project", "priority"} & result.keys()
+    ):
         raise TaskError("invalid_request")
     for key, maximum, needed, multiline in (
         ("title", 240, True, False),
@@ -223,6 +232,11 @@ def validate_request(operation: str, payload: dict) -> dict:
     if "expected_snapshot" in result:
         value = result["expected_snapshot"]
         if type(value) is not str or re.fullmatch(r"[0-9a-f]{64}", value) is None:
+            raise TaskError("invalid_request")
+    # Do not add a default to normalized intent: old omitted-field digests and
+    # receipt bytes must remain replayable across the schema upgrade.
+    if "priority" in result:
+        if type(result["priority"]) is not str or result["priority"] not in _PRIORITIES:
             raise TaskError("invalid_request")
     if "work_status" in result:
         if type(result["work_status"]) is not str or result["work_status"] not in _WORK_STATUSES:
@@ -265,6 +279,7 @@ def validate_request(operation: str, payload: dict) -> dict:
                 "details",
                 "due_date",
                 "depends_on",
+                "priority",
             }:
                 raise TaskError("invalid_request")
             task = validate_request(
@@ -310,6 +325,10 @@ def validate_request(operation: str, payload: dict) -> dict:
             date.fromisoformat(result["on"]) + timedelta(days=result["lookahead_days"])
         except OverflowError:
             raise TaskError("invalid_request") from None
+    if operation == "next":
+        result = {"limit": 5, **result}
+        if type(result["limit"]) is not int or not 1 <= result["limit"] <= 20:
+            raise TaskError("invalid_request")
     if operation == "history":
         result = {"limit": 20, "after_revision": 0, **result}
         if type(result["limit"]) is not int or not 1 <= result["limit"] <= 100:
@@ -346,7 +365,7 @@ def _database_error(error: sqlite3.Error) -> TaskError:
     return TaskError("storage_error")
 
 
-def inspect_task_snapshot(connection: sqlite3.Connection) -> dict:
+def inspect_task_snapshot(connection: sqlite3.Connection, *, historical=False) -> dict:
     """Validate the current owned schema without initializing or migrating it.
 
     Caller owns the read transaction. Returns counts only, never record payload.
@@ -359,10 +378,12 @@ def inspect_task_snapshot(connection: sqlite3.Connection) -> dict:
     rows = connection.execute(
         "SELECT name, sql FROM sqlite_master WHERE name NOT GLOB 'sqlite_*'"
     ).fetchall()
+    version = connection.execute("PRAGMA user_version").fetchone()[0]
+    expected = _SCHEMA_V6 if historical and version == 6 else _SCHEMA
     if (
-        connection.execute("PRAGMA user_version").fetchone()[0] != _SCHEMA_VERSION
-        or len(rows) != len(_SCHEMA)
-        or dict(rows) != _SCHEMA
+        version not in ((6, 7) if historical else (7,))
+        or len(rows) != len(expected)
+        or dict(rows) != expected
     ):
         raise TaskError("unsupported_schema")
     if connection.execute("PRAGMA integrity_check").fetchall() != [("ok",)]:
@@ -370,7 +391,7 @@ def inspect_task_snapshot(connection: sqlite3.Connection) -> dict:
     if connection.execute("PRAGMA foreign_key_check").fetchone() is not None:
         raise TaskError("storage_corrupt")
     return {
-        "database_version": _SCHEMA_VERSION,
+        "database_version": version,
         "counts": {
             name: connection.execute(f"SELECT count(*) FROM {name}").fetchone()[0]
             for name in ("tasks", "receipts", "events", "task_dependencies")
@@ -400,7 +421,7 @@ class TaskStore:
             pass
 
     def initialize(self) -> None:
-        """Create v6, atomically migrate exact owned v1-v5, or verify v6."""
+        """Create v7, atomically migrate exact owned v1-v6, or verify v7."""
         self._initialized = False
         began = False
         try:
@@ -419,13 +440,14 @@ class TaskStore:
                 conn.execute(f"PRAGMA user_version = {_SCHEMA_VERSION}")
             elif app_id != _APPLICATION_ID:
                 raise TaskError("foreign_database")
-            elif version in (1, 2, 3, 4, 5):
+            elif version in (1, 2, 3, 4, 5, 6):
                 legacy = {
                     1: _SCHEMA_V1,
                     2: _SCHEMA_V2,
                     3: _SCHEMA_V3,
                     4: _SCHEMA_V4,
                     5: _SCHEMA_V5,
+                    6: _SCHEMA_V6,
                 }[version]
                 if dict(rows) != legacy or len(rows) != len(legacy):
                     raise TaskError("unsupported_schema")
@@ -439,8 +461,10 @@ class TaskStore:
                 if version < 5:
                     for statement in dependencies.SCHEMA.values():
                         conn.execute(statement)
-                for statement in native_sync.SCHEMA.values():
-                    conn.execute(statement)
+                if version < 6:
+                    for statement in native_sync.SCHEMA.values():
+                        conn.execute(statement)
+                conn.execute("ALTER TABLE tasks ADD COLUMN " + _PRIORITY_COLUMN)
                 conn.execute(f"PRAGMA user_version = {_SCHEMA_VERSION}")
             elif version != _SCHEMA_VERSION:
                 raise TaskError("unsupported_schema")
@@ -469,6 +493,8 @@ class TaskStore:
         return self._metadata(dict(zip(_COLUMNS, row, strict=True)))
 
     def _metadata(self, task):
+        if task["priority"] not in _PRIORITIES:
+            raise TaskError("storage_corrupt")
         return native_sync.metadata(self._connection, dependencies.metadata(self._connection, task))
 
     def accept_native_review(self, request, observe_callback):
@@ -506,8 +532,8 @@ class TaskStore:
         task_id = str(uuid4())
         self._connection.execute(
             "INSERT INTO tasks (id,title,details,state,revision,"
-            "created_at,updated_at,source,due_date,project)"
-            " VALUES (?,?,?,'captured',1,?,?,'local_cli',?,?)",
+            "created_at,updated_at,source,due_date,project,priority)"
+            " VALUES (?,?,?,'captured',1,?,?,'local_cli',?,?,?)",
             (
                 task_id,
                 request["title"],
@@ -516,6 +542,7 @@ class TaskStore:
                 now,
                 request.get("due_date"),
                 request.get("project"),
+                request.get("priority", "normal"),
             ),
         )
         return self._get(task_id)
@@ -713,6 +740,7 @@ class TaskStore:
                 "review",
                 "native_review",
                 "ready",
+                "next",
                 "project_rename_preview",
                 "project_reschedule_preview",
             ):
@@ -728,6 +756,8 @@ class TaskStore:
                     data = task_review(self._connection, request)
                 elif operation == "native_review":
                     data = task_native_review(self._connection, request)
+                elif operation == "next":
+                    data = dependencies.next_tasks(self._connection, request, self._get)
                 elif operation == "ready":
                     data = dependencies.ready(self._connection, request, self._get)
                 elif operation == "projects":
@@ -803,7 +833,8 @@ class TaskStore:
                         raise TaskError("dependencies_unsatisfied")
                 state = {"complete": "done", "cancel": "cancelled"}.get(operation, "captured")
                 cursor = self._connection.execute(
-                    "UPDATE tasks SET title=?, details=?, due_date=?, project=?, state=?,"
+                    "UPDATE tasks SET title=?, details=?, due_date=?, project=?,"
+                    " priority=?, state=?,"
                     " work_status=?, progress_note=?, progress_updated_at=?, revision=revision+1,"
                     " updated_at=?, resolved_at=?, resolution_note=? WHERE id=? AND revision=?",
                     (
@@ -811,6 +842,7 @@ class TaskStore:
                         request.get("details", task["details"]),
                         request.get("due_date", task["due_date"]),
                         request.get("project", task["project"]),
+                        request.get("priority", task["priority"]),
                         state,
                         request["work_status"] if operation == "progress" else task["work_status"],
                         request["note"] if operation == "progress" else task["progress_note"],

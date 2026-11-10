@@ -6,6 +6,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ## Unreleased
 
+- Add explicit local task priorities and a bounded next-work view while preserving old ready ordering and historical retry receipts.
+
 - Extend manual packaged Gateway acceptance to a Chinese dependency-plan lifecycle and explicit session recovery, without model calls or broader MVP claims.
 
 - Add coordinated current-source local memory repack and durable interruption recovery; preserve old plaintext, require stopped legacy runtimes, and refuse historical restore.

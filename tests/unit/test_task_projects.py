@@ -169,11 +169,12 @@ def test_legacy_migration_receipts_sequences_and_reopen(tmp_path, version):
         store = TaskStore(conn)
         store.initialize()
         after = snapshot(conn)
-        assert after["version"] == 6
+        assert after["version"] == 7
         for table in ("receipts", "events", "sqlite_sequence"):
             assert after[table] == before[table]
         assert after["tasks"] == [
-            (*row, *((None,) * (3 - version)), "ready", "", None) for row in before["tasks"]
+            (*row, *((None,) * (3 - version)), "ready", "", None, "normal")
+            for row in before["tasks"]
         ]
         for operation, request, receipt in history:
             assert store.run(operation, request) == {"data": receipt, "replayed": True}
@@ -190,7 +191,7 @@ def test_legacy_migration_receipts_sequences_and_reopen(tmp_path, version):
 
 @pytest.mark.parametrize("version", [1, 2])
 @pytest.mark.parametrize(
-    "failure", ["ALTER TABLE tasks ADD COLUMN project", "PRAGMA user_version = 6", "COMMIT"]
+    "failure", ["ALTER TABLE tasks ADD COLUMN project", "PRAGMA user_version = 7", "COMMIT"]
 )
 def test_atomic_migration_failure(tmp_path, version, failure):
     path = tmp_path / "legacy.sqlite"
@@ -203,7 +204,7 @@ def test_atomic_migration_failure(tmp_path, version, failure):
         assert snapshot(conn) == before and path.read_bytes() == raw
         conn.fail_at = None
         TaskStore(conn).initialize()
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == 6
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == 7
 
 
 @pytest.mark.parametrize("version", [1, 2])

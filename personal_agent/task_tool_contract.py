@@ -17,6 +17,7 @@ _READ_ACTIONS = (
     "history",
     "review",
     "ready",
+    "next",
     "native_review",
 )
 _WRITE_ACTIONS = (
@@ -48,7 +49,9 @@ PERSONAL_TASKS_READ_SCHEMA = {
         "ready returns only captured tasks with recorded ready status and all prerequisites done, "
         "oldest first by creation sequence, not priority. It never dispatches work or proves "
         "execution. Cancelled prerequisites block; missing dependency fields in old receipts "
-        "mean unknown, not clear. "
+        "mean unknown, not clear. next returns top eligible tasks by explicit high/normal/low "
+        "priority, due date (undated last), then capture order. Default limit 5, maximum 20, "
+        "no after cursor. Ranking is planning data, not permission or dispatch. "
         "native_review requires explicit on and reads saved native observations only, never "
         "refreshes a board. It groups captured tasks by saved review status, saved done/archived "
         "status, identity issues and observations older than UTC midnight(on)-stale_after_days. "
@@ -80,7 +83,10 @@ PERSONAL_TASKS_READ_SCHEMA = {
                 "type": "integer",
                 "minimum": 1,
                 "maximum": 100,
-                "description": "list/search/projects/agenda/history/ready only; defaults to 20.",
+                "description": (
+                    "list/search/projects/agenda/history/ready default to 20; "
+                    "next defaults to 5 and permits at most 20."
+                ),
             },
             "after": {
                 "type": ["string", "null"],
@@ -103,7 +109,8 @@ PERSONAL_TASKS_READ_SCHEMA = {
                 "minLength": 1,
                 "maxLength": 80,
                 "description": (
-                    "list/search/agenda/review/ready/native_review: exact case-sensitive label, "
+                    "list/search/agenda/review/ready/next/native_review: "
+                    "exact case-sensitive label, "
                     "no outer whitespace. "
                     "Mutually exclusive with unassigned."
                 ),
@@ -111,7 +118,8 @@ PERSONAL_TASKS_READ_SCHEMA = {
             "unassigned": {
                 "type": "boolean",
                 "description": (
-                    "list/search/agenda/review/ready/native_review: true selects unlabeled tasks."
+                    "list/search/agenda/review/ready/next/native_review: "
+                    "true selects unlabeled tasks."
                 ),
             },
             "work_status": {
@@ -189,7 +197,7 @@ PERSONAL_TASKS_WRITE_SCHEMA = {
         "executed, and no aggregate completion happens automatically. One atomic receipt "
         "covers parent and steps; retry identical arguments/key, never separate captures. "
         "update requires "
-        "at least one of title/details/due_date/project. "
+        "at least one of title/details/due_date/project/priority. "
         "update/complete/cancel/progress/set_dependencies require "
         "task_id and expected_revision from a prior read for compare-and-swap (CAS); "
         "never invent IDs or revisions. On revision conflict, read and reconcile first. "
@@ -201,7 +209,9 @@ PERSONAL_TASKS_WRITE_SCHEMA = {
         "Target and prerequisites must share one non-null exact project, without cycles. "
         "Starting (in_progress) or completing requires all prerequisites done; cancelled blocks. "
         "No automatic advancement or dispatch. Projects are labels, not native Project entities. "
-        "Dates must be explicit."
+        "Dates and priority changes must be explicit. Priority is high/normal/low, "
+        "not permission, urgency inference or dispatch. Omit priority unless explicitly requested; "
+        "new tasks then store normal, not a parent-inherited value."
     ),
     "parameters": {
         "type": "object",
@@ -256,6 +266,7 @@ PERSONAL_TASKS_WRITE_SCHEMA = {
                     "properties": {
                         "title": {"type": "string", "minLength": 1, "maxLength": 240},
                         "details": {"type": "string", "maxLength": 5000},
+                        "priority": {"type": "string", "enum": ["high", "normal", "low"]},
                         "due_date": {"type": "string", "format": "date"},
                         "depends_on": {
                             "type": "array",
@@ -273,6 +284,11 @@ PERSONAL_TASKS_WRITE_SCHEMA = {
                 },
             },
             "details": {"type": "string", "maxLength": 5000},
+            "priority": {
+                "type": "string",
+                "enum": ["high", "normal", "low"],
+                "description": "capture/update only: explicitly requested local planning priority.",
+            },
             "due_date": {
                 "type": ["string", "null"],
                 "format": "date",

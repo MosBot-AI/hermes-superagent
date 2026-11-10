@@ -361,10 +361,12 @@ def test_migration_preserves_records_receipts_and_legacy_retries(tmp_path):
         store = TaskStore(conn)
         store.initialize()
         after = snapshot(conn)
-        assert after["version"] == 6 and after["app"] == APPLICATION_ID
+        assert after["version"] == 7 and after["app"] == APPLICATION_ID
         for table in ("events", "receipts", "sqlite_sequence"):
             assert after[table] == before[table]
-        assert after["tasks"] == [(*row, None, None, "ready", "", None) for row in before["tasks"]]
+        assert after["tasks"] == [
+            (*row, None, None, "ready", "", None, "normal") for row in before["tasks"]
+        ]
         assert "due_date" not in validate_request(
             "capture", {"title": "Synthetic", "request_id": "omitted"}
         )
@@ -388,6 +390,7 @@ def test_migration_preserves_records_receipts_and_legacy_retries(tmp_path):
             "dependencies_satisfied": True,
             "unsatisfied_dependency_count": 0,
             "native_progress": None,
+            "priority": "normal",
         }
         change(store, task, due_date="2024-02-29")
         with sqlite3.connect(":memory:") as fresh:
@@ -409,7 +412,7 @@ class MigrationFailure(sqlite3.Connection):
         return super().execute(sql, parameters)
 
 
-@pytest.mark.parametrize("fail_at", ["ALTER TABLE", "PRAGMA user_version = 6", "COMMIT"])
+@pytest.mark.parametrize("fail_at", ["ALTER TABLE", "PRAGMA user_version = 7", "COMMIT"])
 def test_migration_failure_atomic_retry(tmp_path, fail_at):
     path = tmp_path / "failure.sqlite"
     with sqlite3.connect(path, factory=MigrationFailure) as conn:
@@ -426,7 +429,7 @@ def test_migration_failure_atomic_retry(tmp_path, fail_at):
         expect_error("not_initialized", lambda: store.run("agenda", {"on": "2024-02-29"}))
         conn.fail_at = None
         store.initialize()
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == 6
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == 7
         assert store.run("capture", history[0][1])["replayed"]
 
 
@@ -472,9 +475,9 @@ def test_concurrent_migration_runs_once(tmp_path):
             return sum(sql.startswith("ALTER TABLE") for sql in traced)
 
     with ThreadPoolExecutor(max_workers=2) as pool:
-        assert sum(pool.map(initialize, range(2))) == 5
+        assert sum(pool.map(initialize, range(2))) == 6
     with sqlite3.connect(path) as conn:
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == 6
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == 7
         assert conn.execute("SELECT count(*) FROM receipts").fetchone()[0] == len(history)
 
 

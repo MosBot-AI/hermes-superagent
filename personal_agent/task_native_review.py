@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from .task_native_sync import FAILURES, validate_observation
 
 BUCKETS = ("awaiting_review", "board_closed", "identity_issue", "stale")
-_COLUMNS = ("id", "title", "revision", "project", "due_date", "work_status")
+_COLUMNS = ("id", "title", "revision", "project", "due_date", "work_status", "priority")
 
 
 def _size(data):
