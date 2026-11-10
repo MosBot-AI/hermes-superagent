@@ -154,3 +154,5 @@ E9 已选定原生 worker 路由设计，并实现离线约束验证器和部分
 88. [等待事项的显式跟进日期](88-local-task-followups-zh.md)：本地日历日期跟进工作台，不是自动提醒。
 
 89. [安装包 Gateway 崩溃恢复](89-packaged-gateway-crash-zh.md)：未观察回复与突然终止后的手动恢复验收。
+
+90. [原始本地 M1 验收](90-local-m1-acceptance-zh.md)：固定检查点证据与交付边界，不代表整个 Super Agent 完成。

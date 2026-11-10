@@ -71,8 +71,10 @@ archive and verifies it again against the committed source before testing.
 
 The unchanged pinned host's official `plugin_guard` scans the entire extracted
 package. Its full findings are retained; only `safe` proceeds to package loading.
-A safe verdict is **not zero findings**: the protective SQLite header/journal
-bytes currently produce one medium obfuscation finding. No finding is suppressed,
+A safe verdict is **not zero findings**. The fixed `ed6bcdc15d883dc429f2dbb0559a62204965ab04`
+artifact has six medium obfuscation findings: three Chinese Unicode-range patterns
+and three SQLite header/journal byte patterns. Read the actual `VALIDATION.json`;
+other revisions can have different findings. No finding is suppressed,
 no scanner rule is changed, and CAUTION cannot be overridden by this workflow.
 This direct static scan is not the installer's catalog, consent or PM admission.
 The original full-repository install refusal remains a separate unresolved event.
@@ -122,5 +124,98 @@ model tools and worker registration remain disabled.
 
 This additional gate tests the artifact's conversation entry point. It is not an
 installation, login, real transport, CLI/TUI or model-provider acceptance result;
-those #40 release gates remain open. The validation report records this separately
+their exact-checkpoint evidence must be checked separately; the original #40
+local-conversation scope has since closed, without accepting the whole product. The validation report records this separately
 as `conversation_acceptance`, and any failure prevents a passing package report.
+
+## Fixed-checkpoint operator entry
+
+The verified development artifact for source `ed6bcdc15d883dc429f2dbb0559a62204965ab04`
+(tree `24bae909c2caf97e11620a1d9a660cba22272670`) is
+[`hermes-personal-agent-runtime-ed6bcdc15d883dc429f2dbb0559a62204965ab04`](https://github.com/MosBot-AI/hermes-superagent/actions/runs/42859787656/artifacts/13785725174).
+It belongs to successful main [Foundation run 42859787656](https://github.com/MosBot-AI/hermes-superagent/actions/runs/42859787656),
+artifact ID `13785725174`, and expires **2026-12-10 17:04:08 UTC**. Download may require
+GitHub sign-in. This is a 30-day CI artifact, not a published release or permanent
+update channel. Do not substitute a later artifact without a new review.
+
+The downloaded ZIP SHA-256 is
+`cf4fa2b3fdf55a53b42d29b5aa51889b42f5c46abe7d14ed6e6ce61a8bed9943`.
+The tarball SHA-256 is
+`e2be57dadc9cb4fedebb7b822d3a2553e8014b3b9ba25396a695da10d45a3e86`.
+Independent read-only verification matched the ZIP digest, both inner checksums,
+all 83 shipped source files against committed Git blobs, and the validation
+report's provenance. No installation or model call was performed by that audit.
+The report says `installation_performed: false`; real transport acceptance is
+separate in the [fixed local M1 ledger](90-local-m1-acceptance.md).
+
+### Verify, then stage a local Git source
+
+Use a trusted source checkout containing that exact commit and the pinned host
+`2281116525106e3c109993ccb5dc74d02bfc1427` with its officially prepared Python 3.14.9
+environment. The [development setup](../README.md#development-checks) prepares the
+host; it downloads dependencies, does not provision provider credentials, and is
+not a requirement to use your daily profile. Stop older runtimes before upgrading
+an existing memory store to the maintenance-lock-aware implementation.
+
+After checking the ZIP digest, unpack it into a new directory. In that directory:
+
+```bash
+sha256sum -c SHA256SUMS
+tar -xzf hermes-personal-agent.tar.gz
+```
+
+Set `SOURCE` to the absolute trusted source checkout and `RUNTIME` to the absolute
+extracted `hermes-personal-agent` directory. Run the verifier **before** creating
+`.git`: strict runtime verification intentionally rejects extra directories.
+
+```bash
+python "$SOURCE/scripts/build_runtime_distribution.py" --repo "$SOURCE" \
+  --source-commit ed6bcdc15d883dc429f2dbb0559a62204965ab04 \
+  --output-dir "$RUNTIME" --verify
+git -C "$RUNTIME" init -b main
+git -C "$RUNTIME" add .
+git -C "$RUNTIME" -c user.name=Acceptance -c user.email=acceptance@example.invalid \
+  commit -m 'test: stage verified runtime'
+PACKAGE_COMMIT="$(git -C "$RUNTIME" rev-parse HEAD)"
+```
+
+The official `file://` installer clones a Git repository, not a plain extracted
+folder. This local staging commit is distinct from the source commit recorded
+in `PROVENANCE.json`; do not pass the original source SHA as the staged repository's
+`--ref`. Keep `VALIDATION.json` and `SHA256SUMS` beside, not inside, the runtime tree.
+
+### Isolated install and deterministic use
+
+Use a fresh private profile and user home, never copy a daily `.env` or credentials.
+Set `HOST`, `HERMES_PYTHON`, `PROFILE`, `USER_HOME` and `RUNTIME_DIR` to absolute
+paths; create the last three as separate private directories. Run from `HOST`.
+For **each** installation and subsequent command, use this same clean environment:
+
+```bash
+cd "$HOST"
+env -i PATH="$PATH" HOME="$USER_HOME" LANG=C.UTF-8 \
+  HERMES_HOME="$PROFILE" HERMES_RUNTIME_DIR="$RUNTIME_DIR" \
+  "$HERMES_PYTHON" -m hermes_cli.main plugins install "file://$RUNTIME" \
+  --ref "$PACKAGE_COMMIT" --yes-deps --enable
+```
+
+`--yes-deps` explicitly consents to the installer's normal dependency preparation;
+`--enable` enables the reviewed plugin. Keep the official scan, catalog checks and
+capability consent. A refusal stops this path: no `--force`, `--allow-removed`,
+scanner edits or isolation downgrade. If dependency downloads need existing
+approved proxy/CA settings, preserve only those settings explicitly, not a whole
+daily environment; never disable TLS verification. The pinned tested lane is a
+new trusted single-user in-process profile, not a change to an existing hosted
+isolation policy. Other host versions require their own compatibility review.
+
+In that isolated profile, preserve installer-created configuration and set only
+this plugin's `mode: local_tasks` and `local_conversation: true` as shown in
+[the local session guide](28-profile-first-local-conversations.md#2-enable-the-existing-session-entry).
+Leave model tools, workers, memory, external connectors and providers off unless
+separately requested. Repeat the clean environment prefix with
+`"$HERMES_PYTHON" -m hermes_cli.main personal-agent tasks list` for deterministic
+CLI use. In an admitted native LOCAL session use `/personal-tasks help` and then
+`/personal-tasks add "Synthetic first task" --request-id first-task-1`.
+Use returned IDs/revisions and stable retry keys. The CLI does not need a model;
+the host's interactive UI may have separate prerequisites, and no provider is
+configured by these steps. Task text is plaintext and can enter host history.

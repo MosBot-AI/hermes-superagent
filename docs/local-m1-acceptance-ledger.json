@@ -1,0 +1,265 @@
+{
+  "schema_version": 1,
+  "issue": 115,
+  "status": "accepted_original_local_m1_scope",
+  "scope": "Original profile-first deterministic local M1 only; not the complete Hermes Super Agent goal.",
+  "baseline": {
+    "source_sha": "ed6bcdc15d883dc429f2dbb0559a62204965ab04",
+    "source_tree": "24bae909c2caf97e11620a1d9a660cba22272670",
+    "hermes_sha": "2281116525106e3c109993ccb5dc74d02bfc1427"
+  },
+  "standards": [
+    {
+      "path": "docs/01-product-and-scope.md",
+      "section": "5. End-to-End Flows Required in the First Version"
+    },
+    {
+      "path": "docs/08-roadmap-and-acceptance.md",
+      "section": "2. Milestones: M1 Profile-first local MVP"
+    }
+  ],
+  "evidence": {
+    "foundation": {
+      "run_id": 42859787656,
+      "source_sha": "ed6bcdc15d883dc429f2dbb0559a62204965ab04",
+      "url": "https://github.com/MosBot-AI/hermes-superagent/actions/runs/42859787656",
+      "status": "verified_success",
+      "scope": "Unit, pinned-host contracts, static checks and production runtime build/verification; not live transport."
+    },
+    "live": {
+      "run_id": 42862192600,
+      "source_sha": "ed6bcdc15d883dc429f2dbb0559a62204965ab04",
+      "url": "https://github.com/MosBot-AI/hermes-superagent/actions/runs/42862192600",
+      "status": "verified_success",
+      "scope": "Exact-checkpoint manual Gateway workflow: 3 upstream lifecycle tests and 5 packaged-plugin tests passed; the packaged crash test contains two hard kills. No real-provider natural-language acceptance."
+    }
+  },
+  "criteria": [
+    {
+      "id": "M1-1",
+      "criterion": "Explicit opt-in native LOCAL task commands and project labels; no Bot required.",
+      "tests": [
+        "tests/contracts/test_local_conversation_tasks.py::test_real_native_owner_command_sqlite_lifecycle",
+        "tests/contracts/test_local_conversation_tasks.py::test_disabled_by_default_and_read_only_has_no_command",
+        "acceptance/live/test_packaged_gateway_tasks.py::test_packaged_task_commands_survive_real_gateway_restart"
+      ],
+      "evidence": [
+        "foundation",
+        "live"
+      ]
+    },
+    {
+      "id": "M1-2",
+      "criterion": "Add/list/search/projects/show/update/done/cancel/agenda remain usable local operations.",
+      "tests": [
+        "tests/unit/test_conversation_tasks.py::test_read_project_agenda_search_and_mutation_workflow",
+        "tests/contracts/test_local_conversation_tasks.py::test_native_database_survives_plugin_reload_and_cancel",
+        "acceptance/live/test_packaged_gateway_tasks.py::test_packaged_project_plan_dependencies_focus_and_restart"
+      ],
+      "evidence": [
+        "foundation",
+        "live"
+      ]
+    },
+    {
+      "id": "M1-3",
+      "criterion": "Durable receipts, duplicate suppression, revision conflicts, invalid-input refusal and restart persistence.",
+      "tests": [
+        "tests/unit/test_conversation_tasks.py::test_cancel_and_idempotency_conflict",
+        "tests/unit/test_conversation_tasks.py::test_bad_arguments_are_redacted_and_never_open_store",
+        "tests/contracts/test_local_task_cli.py::test_task_lifecycle_survives_new_manager_and_replays_old_receipt",
+        "acceptance/live/test_packaged_gateway_tasks.py::test_packaged_task_commands_survive_real_gateway_restart"
+      ],
+      "evidence": [
+        "foundation",
+        "live"
+      ]
+    },
+    {
+      "id": "M1-4",
+      "criterion": "Existing host SessionAuthority admission and exact live-source checks precede private storage; no fabricated human identity.",
+      "tests": [
+        "tests/contracts/test_local_conversation_tasks.py::test_native_admission_refuses_before_plugin_storage",
+        "tests/contracts/test_local_conversation_tasks.py::test_real_inbound_dispatch_rejects_nonlocal_before_storage",
+        "tests/contracts/test_local_conversation_tasks.py::test_admitted_owner_and_operator_share_native_task_access",
+        "tests/contracts/test_local_conversation_tasks.py::test_host_producer_event_cannot_parse_slash_command"
+      ],
+      "evidence": [
+        "foundation"
+      ]
+    },
+    {
+      "id": "M1-5",
+      "criterion": "Default-off configuration, current configuration/unload refusal and profile separation.",
+      "tests": [
+        "tests/contracts/test_local_conversation_tasks.py::test_absent_opt_in_has_no_registration",
+        "tests/contracts/test_local_conversation_tasks.py::test_reload_unload_and_retained_callback_rechecks_config",
+        "tests/contracts/test_local_conversation_tasks.py::test_two_profile_native_dispatch_and_retained_callback_scope",
+        "tests/contracts/test_local_task_cli.py::test_loaded_handler_rechecks_live_configuration",
+        "tests/contracts/test_local_task_cli.py::test_missing_profile_is_not_recreated"
+      ],
+      "evidence": [
+        "foundation"
+      ]
+    },
+    {
+      "id": "M1-6",
+      "criterion": "Private owned local storage and failure paths refuse unsafe inputs without resetting foreign data.",
+      "tests": [
+        "tests/contracts/test_local_task_cli.py::test_unsafe_storage_is_refused_without_mutating_target",
+        "tests/contracts/test_local_task_cli.py::test_unrecognized_database_is_never_reset",
+        "tests/contracts/test_local_task_cli.py::test_unsafe_existing_sqlite_sidecar_is_refused_without_mutation",
+        "tests/unit/test_conversation_tasks.py::test_unknown_outcome_keeps_request_id_without_retry_or_error_leak"
+      ],
+      "evidence": [
+        "foundation"
+      ]
+    },
+    {
+      "id": "M1-7",
+      "criterion": "Supported local scope is disclosed; no new listener/auth issuer/remote or outbound capability is enabled.",
+      "tests": [
+        "tests/contracts/test_local_conversation_tasks.py::test_source_host_wire_record_requires_no_isolation_downgrade",
+        "tests/contracts/test_local_conversation_tasks.py::test_real_inbound_dispatch_rejects_nonlocal_before_storage",
+        "acceptance/live/test_packaged_gateway_tasks.py::test_packaged_task_commands_survive_real_gateway_restart"
+      ],
+      "evidence": [
+        "foundation",
+        "live"
+      ]
+    }
+  ],
+  "recovery_evidence": [
+    {
+      "id": "normal_gateway_restart",
+      "tests": [
+        "acceptance/live/test_packaged_gateway_tasks.py::test_packaged_task_commands_survive_real_gateway_restart"
+      ],
+      "evidence": [
+        "live"
+      ],
+      "scope": "Planned shutdown, fresh instance, new ticket, explicit session resume and canonical readback; not crash recovery."
+    },
+    {
+      "id": "taskstore_process_crash",
+      "tests": [
+        "tests/unit/test_task_process_recovery.py::test_task_transaction_survives_abrupt_process_exit"
+      ],
+      "evidence": [
+        "foundation"
+      ],
+      "cases": 88,
+      "scope": "Real child-process exits at SQL/commit boundaries in temporary DELETE/WAL databases; not Gateway crash or power loss."
+    },
+    {
+      "id": "additional_gateway_hard_kill",
+      "tests": [
+        "acceptance/live/test_packaged_gateway_tasks.py::test_packaged_client_unobserved_create_and_update_survive_abrupt_gateway_death"
+      ],
+      "evidence": [
+        "live"
+      ],
+      "hard_kills": 2,
+      "scope": "Additional #113 E8.2 evidence: client-unobserved create and update, hard kill, restart and reconciliation. Not a newly imposed original M1 exit criterion; not power loss or external exactly-once delivery."
+    }
+  ],
+  "additional_shipped_scenarios": {
+    "tests": [
+      "acceptance/live/test_packaged_gateway_tasks.py::test_packaged_explicit_priorities_and_next_work_survive_restart",
+      "acceptance/live/test_packaged_gateway_tasks.py::test_packaged_waiting_followups_preserve_deadlines_and_restart"
+    ],
+    "evidence": [
+      "live"
+    ],
+    "scope": "Priority and follow-up workbenches; no dispatch or scheduled reminder."
+  },
+  "separately_pending": [
+    {
+      "id": "E6.9",
+      "status": "outside_original_local_m1",
+      "scope": "Real natural-language/model acceptance; requires approved OpenCode Go deepseek-v4.1-flash connection."
+    },
+    {
+      "id": "issue-21",
+      "status": "separately_pending",
+      "scope": "Full identity/revocation/external delivery matrices, not closed by these local recovery observations."
+    },
+    {
+      "id": "issue-19",
+      "status": "separately_pending",
+      "scope": "Reliable reminders and delivery; follow-up dates do not schedule notifications."
+    },
+    {
+      "id": "remote-and-shared-rest",
+      "status": "outside_original_local_m1",
+      "scope": "Remote-owner identity, mobile/Bot admission and shared authenticated REST remain separate."
+    },
+    {
+      "id": "workers",
+      "status": "outside_original_local_m1",
+      "scope": "General controlled worker dispatch and external execution recovery remain separate."
+    },
+    {
+      "id": "memory",
+      "status": "outside_original_local_m1",
+      "scope": "Full adapter replacement, native memory lifecycle and cross-backend migration remain separate."
+    }
+  ],
+  "static_validation_limit": "The ledger test checks structure, references and consistent evidence declarations only. It does not rerun tests, contact GitHub or certify CI outcomes.",
+  "entry_prerequisites": [
+    {
+      "id": "E0.1",
+      "scope": "Exact supported host/runtime/workflow pin for the local slice; not a broad host-version support promise.",
+      "tests": [
+        "tests/unit/test_compatibility_pin.py::test_current_pin_matches_runtime_and_workflow",
+        "tests/contracts/test_native_plugin.py::test_imports_come_from_exact_pinned_hermes_checkout"
+      ],
+      "evidence": [
+        "foundation"
+      ]
+    },
+    {
+      "id": "E0.2",
+      "scope": "Native discovery, registration, configuration, reload/unload and profile storage contracts used by local tasks; no invented host API.",
+      "tests": [
+        "tests/contracts/test_native_plugin.py::test_real_discovery_tool_dispatch_and_cli",
+        "tests/contracts/test_native_plugin.py::test_host_enable_and_disable_gate_is_respected",
+        "tests/contracts/test_native_plugin.py::test_invalid_mode_registers_no_tools_or_commands",
+        "tests/contracts/test_native_plugin.py::test_force_reload_and_unload_do_not_leave_tools",
+        "tests/contracts/test_native_plugin.py::test_public_storage_helper_tracks_profile_scope_and_rejects_traversal"
+      ],
+      "evidence": [
+        "foundation"
+      ]
+    },
+    {
+      "id": "E0.4",
+      "scope": "Applicable project non-exposure/default-denial boundaries only. Explicit local task opt-in retains its own admission; independently configured host tools are not disabled. Optional planning blueprint can schedule ordinary host delivery and incur costs even in read_only mode; it is not enabled by this local M1 acceptance. No host-wide read-only or generic controlled-write containment claim.",
+      "tests": [
+        "tests/contracts/test_production_exposure.py::test_production_default_exposure",
+        "tests/contracts/test_production_exposure.py::test_production_frozen_configuration",
+        "tests/contracts/test_production_exposure.py::test_production_safe_bootstrap",
+        "tests/contracts/test_production_exposure.py::test_production_worker_unsupported",
+        "tests/contracts/test_production_exposure.py::test_production_blueprint_consumers",
+        "tests/unit/test_enforcement_ledger.py::test_finite_ledger_matches_inventory_and_real_test_functions"
+      ],
+      "reference": "docs/enforcement-evidence-ledger.json",
+      "evidence": [
+        "foundation"
+      ]
+    },
+    {
+      "id": "E0.5",
+      "scope": "Offline synthetic corpus, account separation, source/authority counterexamples and runtime exclusion. Fixture outcomes do not prove real connector authentication, delivery or real-account access.",
+      "tests": [
+        "tests/unit/test_synthetic_connectors.py::test_bounded_corpus_has_stable_provenance_and_separate_accounts",
+        "tests/unit/test_synthetic_connectors.py::test_source_prose_cannot_establish_owner_or_production_authority",
+        "tests/unit/test_synthetic_connectors.py::test_fixture_binding_is_not_action_intent_or_authorization",
+        "tests/unit/test_synthetic_connectors.py::test_runtime_allowlist_and_imports_exclude_fixture_package"
+      ],
+      "evidence": [
+        "foundation"
+      ]
+    }
+  ]
+}

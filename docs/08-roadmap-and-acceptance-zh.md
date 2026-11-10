@@ -20,6 +20,8 @@
 | M3 连接与语音 | 最小读写 MCP 集合、手机语音消息、可选实时语音验证及 E9 有界模型路由 | M2 + connector 风险评审；路由另需 E9.5/E9.6 gate | 语音关键字段确认、身份与费用可控；路由质量/隐私/预算门槛通过 |
 | M4 发布硬化 | 恢复、备份、升级、回滚、安全评测和文档 | 核心场景完成 | 发布门禁全部满足，没有未处理 P0 |
 
+原始 profile-first 确定性本地 M1 验收记录于 [90](90-local-m1-acceptance-zh.md) 的固定检查点，包含精确源码的 Foundation 与真实 Gateway 证据。这不验收 E6.9 自然语言使用、完整 E4 提醒、远程/共享 REST 或整个 Super Agent 目标。上方进入与退出门槛保持不变。
+
 ## 3. Epics 与工作包
 
 ### E0. 核验上游兼容契约（P0，M0）
@@ -125,7 +127,7 @@ E0.9 已 Done，证据为 [Issue #42 完成记录](https://github.com/MosBot-AI/
 
 验收：重复触发、进程中断、发送超时、重启与取消不会导致盲目重复外发；无变化可静默；accepted 不冒充 delivered。
 
-原生 E0.3/E4.2 先导：[计划 blueprint](25-native-planning-blueprint-zh.md)在 Hermes 现有目录中注册可选模板。它不创建或管理 job、不读取本地收件箱，也不实现领域授权/outbox/对账。用户创建的原生 job 在移除插件后仍存在；E4 与 M1 尚未完成。
+原生 E0.3/E4.2 先导：[计划 blueprint](25-native-planning-blueprint-zh.md)在 Hermes 现有目录中注册可选模板。它不创建或管理 job、不读取本地收件箱，也不实现领域授权/outbox/对账。用户创建的原生 job 在移除插件后仍存在；E4 尚未完成，与确定性本地 M1 验收分开。
 
 ### E5. 治理 MCP 与插件（P1，M2–M3）
 
