@@ -23,7 +23,7 @@ Results contain whole canonical records with IDs, revisions, source-route metada
 
 Schema v7 maintains the index in the same SQLite writer transaction as records, metadata events and idempotency receipts. Remember, correct, forget and reviewed candidate acceptance share this path. Failed index changes roll back the canonical mutation; exact retries return the original metadata receipt without reinserting historical content. Forgotten records are terminal. Search joins candidate row IDs to current canonical records and rechecks status, expiry and every term in one read snapshot.
 
-There is no delayed index job, background publication or second writable authority in this slice. `index_stale: false` describes this synchronous supported-write path, not a forensic corruption detector or protection against same-process/same-UID database tampering. A read already admitted before a concurrent forget may return its older snapshot; later fresh reads cannot retrieve the forgotten record. Prior model context, history, exports and backups cannot be retracted.
+There is no delayed index job, background publication or second writable authority in this slice. `index_stale: false` now requires logical document correspondence and complete current-query coverage inside the read snapshot. It is not a global forensic corruption detector or protection against hostile same-UID database tampering. A read already admitted before a concurrent forget may return its older snapshot; later fresh reads cannot retrieve the forgotten record. Prior model context, history, exports and backups cannot be retracted.
 
 Both SQLite `PRAGMA secure_delete` and the separate FTS5 `secure-delete` setting are required. Correction/removal deletes obsolete indexed text rather than merely retaining FTS deletion markers. This remains logical local removal, not a physical-media, filesystem snapshot or backup erasure guarantee. Expired active records remain stored/indexed and are filtered at read time. The store is plaintext and is not a secret vault.
 
@@ -36,3 +36,5 @@ SQLite must provide FTS5, the trigram tokenizer and FTS secure-delete (SQLite 3.
 ## Acceptance scope
 
 Synthetic unit and pinned-host contracts cover mixed Chinese/English terms, short strings, punctuation/query injection, paging, expiry, mutation and candidate rollback, restart/replay after forgetting, namespace rejection, non-migrating read-only access and existing native permission gates. They are not a live personal-data benchmark, user acceptance or production deployment. Markdown projection, adapter migration, automatic extraction and complete E2.7 remain separate work.
+
+Current search freshness now fails closed with `index_stale` on logical document or current-query coverage drift, within one read transaction and before pagination. No partial results or automatic repair. See [acceptance evidence](81-local-memory-acceptance.md).

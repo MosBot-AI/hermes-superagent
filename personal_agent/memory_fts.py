@@ -77,3 +77,45 @@ def term_filter(terms: list[str]) -> tuple[list[str], list[str]]:
         clauses.append("(instr(content, ?) > 0 OR instr(topic, ?) > 0)")
         args.extend([term, term])
     return clauses, args
+
+
+def verify_query(connection, terms, *, evaluated_at, include_expired):
+    """Read-only logical documents and complete current-query coverage, not forensic health.
+
+    Caller holds the same read snapshot through payload selection. Never repair or
+    load private text solely to diagnose drift. Pagination cannot hide omissions.
+    """
+    for table in ("records", "memory_fts_content"):
+        if len(connection.execute(f"SELECT 1 FROM {table} LIMIT 1001").fetchall()) > 1000:
+            raise MemoryError("record_limit" if table == "records" else "index_stale")
+    if (
+        connection.execute(
+            "SELECT 1 FROM records r LEFT JOIN memory_fts_content f ON f.id=r.sequence "
+            "WHERE r.status='active' AND "
+            "(f.id IS NULL OR f.c0 IS NOT r.content OR f.c1 IS NOT r.topic) "
+            "LIMIT 1"
+        ).fetchone()
+        or connection.execute(
+            "SELECT 1 FROM memory_fts_content f LEFT JOIN records r ON r.sequence=f.id "
+            "WHERE r.sequence IS NULL OR r.status!='active' LIMIT 1"
+        ).fetchone()
+    ):
+        raise MemoryError("index_stale")
+    scope, scope_args = ["status='active'"], []
+    if not include_expired:
+        scope.append("(expires_at IS NULL OR expires_at>?)")
+        scope_args.append(evaluated_at)
+    indexed, indexed_args = term_filter(terms)
+    literal = ["(instr(content, ?) > 0 OR instr(topic, ?) > 0)" for _ in terms]
+    literal_args = [part for term in terms for part in (term, term)]
+
+    def ids(clauses, args):
+        return set(
+            connection.execute(
+                f"SELECT sequence FROM records WHERE {' AND '.join(scope + clauses)} LIMIT 1001",
+                [*scope_args, *args],
+            ).fetchall()
+        )
+
+    if ids(literal, literal_args) != ids(indexed, indexed_args):
+        raise MemoryError("index_stale")

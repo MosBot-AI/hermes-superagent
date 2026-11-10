@@ -7,6 +7,11 @@ import unicodedata
 from .memory_backend import _identifier
 
 _ERRORS = {
+    "index_stale": (
+        "Memory index differs from canonical records or misses current query matches. "
+        "Use /personal-memory index-status, then explicitly index-rebuild with its current "
+        "watermark. No partial search results or automatic repair were performed."
+    ),
     "retention_preview_too_large": (
         "The complete preview exceeds 64000 ASCII JSON characters. Reduce --limit and review "
         "the complete smaller batch; nothing was forgotten."

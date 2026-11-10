@@ -2,6 +2,8 @@
 
 [English](08-roadmap-and-acceptance.md) | 简体中文
 
+当前 E2.7 检查点：[本地后端验收候选](81-local-memory-acceptance-zh.md)取代下文历史性“仅先导切片”状态。SQLite/FTS/投影/编辑提案/精确来源抑制已经实现；原始 #44 验收等待审查、合并及 main CI。E2.6/E2.8/E2.9 与部署仍独立。
+
 ## 1. 规划原则
 
 这是实现计划，不是完成报告。未经过代码、测试、部署和用户验收的项不得标 Done。当前 E0.1/E0.2/E0.5 的基础切片进度见 [12](12-foundation-progress-zh.md)；这不等于 E0/M0 或整个 personal agent 完成。

@@ -138,3 +138,5 @@ See [78. Fenced enrollment ceremony evidence](78-enrollment-ceremony.md) for the
 See [79. Explicit consistent local memory snapshots](79-local-memory-snapshots.md) for private snapshot creation/inspection. Snapshots retain historical plaintext; there is no restore/import.
 
 [Exact memory source suppression](80-exact-memory-source-suppression.md): operator review, exact-input fingerprints and schema-11 lineage.
+
+[Local backend acceptance candidate](81-local-memory-acceptance.md): finite original #44 scope mapping and truthful search freshness.

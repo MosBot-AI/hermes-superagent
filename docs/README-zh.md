@@ -138,3 +138,5 @@ E9 已选定原生 worker 路由设计，并实现离线约束验证器和部分
 参见 [79. 显式一致的本地记忆快照](79-local-memory-snapshots-zh.md)，了解私密快照创建/检查。快照保留历史明文，不提供恢复/导入。
 
 [精确记忆来源抑制](80-exact-memory-source-suppression-zh.md)：操作人员审核、精确输入指纹和 schema 11 关联。
+
+[本地后端验收候选](81-local-memory-acceptance-zh.md)：有限原始 #44 范围映射及真实搜索新鲜度。

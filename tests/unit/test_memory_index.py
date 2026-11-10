@@ -292,10 +292,11 @@ memory_index.maintain(home,'index_rebuild',{'expected_watermark':1})
 def test_writer_fence_serializes_rebuild_and_forget_without_resurrection(store, monkeypatch):
     s, c, _, home = store
     rid = remember(s)
-    entered, release, started = Event(), Event(), Event()
+    entered, release, ready, go, attempted = (Event() for _ in range(5))
     real = memory_index.memory_fts.create_index
 
     def paused(conn):
+        # maintain() has already read canonical payload under BEGIN IMMEDIATE.
         entered.set()
         assert release.wait(5)
         return real(conn)
@@ -305,7 +306,11 @@ def test_writer_fence_serializes_rebuild_and_forget_without_resurrection(store, 
     def forgetting():
         local, conn, _ = opened(home)
         try:
-            started.set()
+            ready.set()
+            assert go.wait(5)
+            conn.set_trace_callback(
+                lambda sql: attempted.set() if sql == "BEGIN IMMEDIATE" else None
+            )
             return local.execute(
                 "forget", {"record_id": rid, "expected_revision": 1, "request_id": "forget"}
             )
@@ -314,17 +319,71 @@ def test_writer_fence_serializes_rebuild_and_forget_without_resurrection(store, 
             conn.close()
 
     with ThreadPoolExecutor(2) as pool:
-        index_future = pool.submit(rebuild, home, 1)
-        assert entered.wait(5)
         forget_future = pool.submit(forgetting)
-        # The opener itself acquires the canonical writer fence before mutation.
-        assert not forget_future.done()
-        release.set()
+        assert ready.wait(5)
+        index_future = pool.submit(rebuild, home, 1)
+        try:
+            assert entered.wait(5)
+            go.set()
+            assert attempted.wait(5)
+            with pytest.raises(TimeoutError):
+                forget_future.result(timeout=0.1)
+        finally:
+            go.set()
+            release.set()
         assert index_future.result(timeout=10)["data"]["index_current"]
         forget_future.result(timeout=10)
     assert check(home)["indexed_record_count"] == 0
     assert c.execute("SELECT content FROM records").fetchall() == [(None,)]
     error("watermark_conflict", lambda: rebuild(home, 1))
+
+
+def test_forget_commits_before_waiting_rebuild_rechecks_watermark(store, monkeypatch):
+    s, c, _, home = store
+    rid = remember(s)
+    ready, release, attempted = Event(), Event(), Event()
+    real_connect = sqlite3.connect
+
+    def connected(*args, **kwargs):
+        conn = real_connect(*args, **kwargs)
+        if kwargs.get("uri"):
+            conn.set_trace_callback(
+                lambda sql: attempted.set() if sql == "BEGIN IMMEDIATE" else None
+            )
+        return conn
+
+    monkeypatch.setattr(memory_index.sqlite3, "connect", connected)
+
+    def forgetting():
+        local, conn, _ = opened(home)
+        try:
+
+            def trace(sql):
+                if sql == "COMMIT":
+                    ready.set()
+                    assert release.wait(5)
+
+            conn.set_trace_callback(trace)
+            return local.execute(
+                "forget", {"record_id": rid, "expected_revision": 1, "request_id": "forget-first"}
+            )
+        finally:
+            conn.close()
+
+    with ThreadPoolExecutor(2) as pool:
+        forget = pool.submit(forgetting)
+        try:
+            assert ready.wait(5)
+            rebuilding = pool.submit(rebuild, home, 1)
+            assert attempted.wait(5)
+            with pytest.raises(TimeoutError):
+                rebuilding.result(timeout=0.1)
+        finally:
+            release.set()
+        forget.result(timeout=10)
+        with pytest.raises(MemoryError, match="watermark_conflict"):
+            rebuilding.result(timeout=10)
+    assert check(home)["indexed_record_count"] == 0
 
 
 def test_old_reader_config_cache_never_used_for_diagnosis(store):

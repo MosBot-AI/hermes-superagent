@@ -6,6 +6,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ## Unreleased
 
+- Refuse stale FTS document/current-query coverage instead of reporting false freshness; add deterministic rebuild/forget contention and a finite #44 local acceptance candidate ledger.
+
 - Add digest-bound operator-only snapshot list/show for bounded historical memory inspection, with later-forgotten text warnings and no restore or automatic recall.
 
 - Add exact-input candidate source suppression and schema-11 accepted-source lineage; correction/forgetting blocks new same-input candidate effects, without semantic erasure or resurrecting historical receipts.

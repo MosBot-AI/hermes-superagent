@@ -1,0 +1,120 @@
+{
+  "schema_version": 1,
+  "issue": 44,
+  "status": "acceptance_candidate_pending_merge_main_ci",
+  "scope": "Original E2.7 local backend scope only; no production deployment or all-E2 certification.",
+  "controlled_writes_enabled": false,
+  "criteria": [
+    {
+      "id": "S1",
+      "criterion": "SQLite canonical; atomic Markdown projection/export with visible revision/watermark, never a second writable authority.",
+      "tests": [
+        "tests/unit/test_memory_projection.py::test_explicit_enable_private_snapshot_and_status_do_not_change_canonical",
+        "tests/unit/test_memory_projection.py::test_correction_forget_and_idempotent_replay_cannot_restore_file"
+      ]
+    },
+    {
+      "id": "S2",
+      "criterion": "Canonical mutation, event/receipt and projection state persist transactionally; stale Markdown/FTS rebuild after crash without reversing committed facts.",
+      "tests": [
+        "tests/unit/test_memory_projection.py::test_candidate_accept_invalidates_projection_in_same_transaction",
+        "tests/unit/test_memory_projection.py::test_publication_process_crash_recovers_without_resurrecting_forgotten_text",
+        "tests/unit/test_memory_projection.py::test_repeated_refresh_recovers_renamed_file_before_previous_metadata_commit"
+      ]
+    },
+    {
+      "id": "S3",
+      "criterion": "Bounded explicit local record/search/show/correct/forget under opt-in current trust scope; no install-time history ingestion.",
+      "tests": [
+        "tests/contracts/test_local_memory_commands.py::test_native_memory_lifecycle_and_durable_receipts",
+        "tests/contracts/test_local_memory_commands.py::test_load_help_preserve_native_memory_and_do_not_create_store",
+        "tests/contracts/test_local_memory_commands.py::test_native_admission_denies_before_memory_storage"
+      ]
+    },
+    {
+      "id": "S4",
+      "criterion": "Manual Markdown edits are explicit revision-based proposals with constrained roots/types/sizes and source labels.",
+      "tests": [
+        "tests/unit/test_memory_edits.py::test_complete_edit_preserves_expiry_and_receipts_never_retain_body",
+        "tests/unit/test_memory_edits.py::test_format_rejects_metadata_replacement_and_invalid_fields",
+        "tests/unit/test_memory_edits.py::test_safe_oversized_managed_paste_still_cleanable",
+        "tests/unit/test_memory_edits.py::test_actual_apply_serializes_with_competing_correction",
+        "tests/unit/test_memory_edits.py::test_unregistered_files_are_never_adopted_or_deleted"
+      ]
+    },
+    {
+      "id": "S5",
+      "criterion": "Structured lookup and FTS, tested Chinese short terms, conservative context budget, record/source refs, omission reasons and truthful stale-index information.",
+      "tests": [
+        "tests/unit/test_memory_search_freshness.py::test_stale_index_refuses_complete_query_before_pagination",
+        "tests/unit/test_memory_search_freshness.py::test_short_terms_check_documents_and_expired_active_rows",
+        "tests/unit/test_memory_search_freshness.py::test_readonly_healthy_query_and_pages_leave_bytes_unchanged",
+        "tests/unit/test_memory_recall.py::test_exact_two_record_budget_counts_unicode_quotes_and_list_separator",
+        "tests/unit/test_memory_recall.py::test_serialized_budget_skips_whole_record_then_tries_smaller_match",
+        "tests/unit/test_memory_fts.py::test_mixed_cjk_and_terms_and_literal_compatibility",
+        "tests/unit/test_memory_lifecycle.py::test_complete_envelope_budget_and_injection_stays_json_evidence",
+        "tests/unit/test_session_memory_recall.py::test_large_unicode_record_omitted_not_truncated",
+        "tests/unit/test_session_memory_recall.py::test_literal_chinese_character_and_whole_record_budget"
+      ]
+    },
+    {
+      "id": "S6",
+      "criterion": "Respect native MEMORY/USER ownership/capacity/approval for optional summary patch; never directly replace native files.",
+      "tests": [
+        "tests/contracts/test_local_memory_commands.py::test_load_help_preserve_native_memory_and_do_not_create_store",
+        "tests/contracts/test_local_memory_commands.py::test_native_recall_command_budget_and_provider_preservation"
+      ]
+    },
+    {
+      "id": "A1",
+      "criterion": "Crash/storage/retry/correction/delete/source-reextraction tests; stale projection/index publication cannot resurrect forgotten payload under shared writer fence.",
+      "tests": [
+        "tests/unit/test_memory_index.py::test_writer_fence_serializes_rebuild_and_forget_without_resurrection",
+        "tests/unit/test_memory_index.py::test_forget_commits_before_waiting_rebuild_rechecks_watermark",
+        "tests/unit/test_memory_index.py::test_rebuild_process_crash_then_current_watermark_retry",
+        "tests/unit/test_memory_projection.py::test_forget_after_prepare_fences_resumed_old_publication",
+        "tests/unit/test_memory_projection.py::test_publication_holds_writer_fence_until_replace_and_metadata_commit",
+        "tests/unit/test_memory_source_suppression.py::test_linked_mutation_suppresses_pending_but_not_already_accepted_sibling",
+        "tests/unit/test_memory_source_suppression.py::test_process_crash_suppression_commit_boundary",
+        "tests/unit/test_memory_crash_recovery.py::test_candidate_accept_abrupt_exit_is_atomic_and_retryable"
+      ]
+    },
+    {
+      "id": "A2",
+      "criterion": "Local CRUD/FTS uses no paid API, does not replace memory.provider and has no hidden remote fallback.",
+      "tests": [
+        "tests/contracts/test_local_memory_commands.py::test_native_search_terms_uses_current_records_without_changing_host_config",
+        "tests/contracts/test_local_memory_commands.py::test_native_search_terms_refuses_drift_without_repair_or_provider_change"
+      ]
+    },
+    {
+      "id": "A3",
+      "criterion": "Reject unauthorized profile/namespace queries and source-instruction promotion; bounded Chinese cost and correct correction/tombstone filtering.",
+      "tests": [
+        "tests/contracts/test_local_memory_commands.py::test_two_profile_native_dispatch_and_retained_callback_scope",
+        "tests/contracts/test_local_memory_commands.py::test_native_inbound_rejects_nonlocal_memory_before_storage",
+        "tests/unit/test_memory_projection.py::test_markdown_and_terminal_injection_stays_literal_data",
+        "tests/unit/test_memory_query.py::test_all_terms_remain_bounded_literal_data_even_for_instruction_text",
+        "tests/unit/test_memory_fts.py::test_mutation_replay_forget_and_restart_never_resurrect"
+      ]
+    },
+    {
+      "id": "A4",
+      "criterion": "Supported storage/journal modes, permissions, plaintext/encryption and redacted diagnostics; no WAL-portability/same-UID sandbox claim.",
+      "tests": [
+        "tests/unit/test_memory_reader.py::test_reader_refuses_unsafe_or_unready_store_without_repair",
+        "tests/unit/test_memory_reader.py::test_external_wal_transition_race_is_refused_before_record_reads",
+        "tests/unit/test_memory_reader.py::test_reader_rechecks_journal_mode_in_each_operation_snapshot",
+        "tests/unit/test_memory_commands.py::test_unsafe_storage_rejected_without_repair",
+        "tests/contracts/test_local_memory_commands.py::test_invalid_commands_redact_arguments_and_do_not_open_store"
+      ]
+    }
+  ],
+  "conditional_not_enabled": [
+    "Native MEMORY/USER summary patch",
+    "Vector or remote publication",
+    "General backend replacement/import/cutover",
+    "Automatic native history ingestion and transcript checkpoint coverage"
+  ],
+  "budget_boundary": "docs30 section10 permits conservative byte/character fallback. Explicit recall bounds complete ASCII JSON items; activated session recall separately bounds the full context envelope to a fixed 6000 ASCII characters, while lifecycle prefetch defaults to 6000 and permits 2048\u201312000, not the complete host prompt or provider tokens."
+}
