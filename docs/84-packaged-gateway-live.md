@@ -8,7 +8,7 @@ Issue #50 tracks the actual transport prerequisite for #40 and the profile-first
 
 The workflow builds the current committed production runtime with its provenance manifest, verifies it, and stages it as an isolated local Git source. The pinned official Hermes installer scans, installs and enables that package in a disposable private profile. A refused scan or failed installation fails the test; no bypass flags are used. Installation alone may use existing runner proxy/CA routing for official Python dependencies. No provider secrets are inherited, and the Gateway receives a smaller environment without proxy/provider configuration.
 
-The host pin remains `2281116525106e3c109993ccb5dc74d02bfc1427`. Only its real process/control/WebSocket helper functions are reused. The existing upstream lifecycle test uses a loopback fake model; **the separate packaged test does not reuse that model, its harness, or a fabricated runner**. It calls no `prompt.submit` and supplies no provider credentials.
+The host pin remains `2281116525106e3c109993ccb5dc74d02bfc1427`. Only its real process/control/WebSocket helper functions are reused. The existing upstream lifecycle test uses a loopback fake model; **the separate packaged test does not reuse that model, its harness, or a fabricated runner**. It calls no `prompt.submit` and supplies no provider credentials. The pinned host requires a non-empty model label to restore even a command-only session policy; the isolated config names `deepseek-v4.1-flash` as metadata only. No provider is configured or called.
 
 ## Acceptance chain
 
