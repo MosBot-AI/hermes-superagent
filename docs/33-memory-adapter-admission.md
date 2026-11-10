@@ -38,6 +38,8 @@ Run the ordinary aggregate checker, including the pinned-host contracts when tha
 python scripts/check.py --hermes ../hermes-agent --hermes-python ../hermes-test-venv/bin/python
 ```
 
-No new package is installed or selected, no production profile is modified, and no paid provider call is required. E2.6 gains a strict explicit-record contract and metadata-review precursor; it is not complete. The public loader/SDK, replacement activation/migration, source-bound extraction, native bridge, checkpoint durability, projections and external storage remain future work. Passing these tests is not permission to enable them.
+No new package is installed or selected, no production profile is modified, and no paid provider call is required. E2.6 gains a strict explicit-record contract and metadata-review precursor; it is not complete. The complete public SDK/loader and replacement activation/migration remain future work. Later local source, projection and checkpoint slices do not establish the full native lifecycle or external-storage contract. Passing these tests is not permission to enable them.
 
 [36](36-bounded-memory-recall.md) adds the optional `bounded_recall` capability for explicit, single-snapshot literal retrieval with a whole-record JSON budget. Missing capability fails closed; it does not enable automatic native recall.
+
+[85](85-local-memory-sdk.md) adds a separately invoked versioned local SDK facade and reusable standard-library conformance runner for reviewed explicit-record adapters. The ordinary plugin path described above remains unchanged; full E2.6 and loading/migration gates remain open.
