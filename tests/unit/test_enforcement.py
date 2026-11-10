@@ -45,7 +45,12 @@ def test_boundary_contracts_do_not_become_full_write_path_coverage():
     assert "browser_metadata_literal_floor" in rows["browser"]["contract_ids"]
     assert "local_batch_uncertain_retry" in rows["local_tool_batch"]["contract_ids"]
     assert "delegated_child_toolset_and_batch_admission" in rows["short_worker"]["contract_ids"]
-    assert "connector_batch_item_veto_partial_retry" in rows["connector_batch"]["contract_ids"]
+    assert {
+        "connector_batch_item_veto_partial_retry",
+        "concurrent_connector_item_veto",
+        "concurrent_connector_policy_recheck",
+        "concurrent_connector_timeout_retry",
+    } <= set(rows["connector_batch"]["contract_ids"])
     assert "worker_current_policy_recheck" in rows["managed_worker"]["contract_ids"]
     assert "worker_revoke_before_admission" in rows["managed_worker"]["contract_ids"]
     assert "production_default_exposure" in rows["native_dispatch"]["contract_ids"]

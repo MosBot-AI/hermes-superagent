@@ -155,6 +155,23 @@ Worker 探针在全新进程中运行，因为 bootstrap policy 必须在 runtim
 | `production_worker_unsupported` | `test_production_worker_unsupported` |
 | `production_blueprint_consumers` | `test_production_blueprint_consumers` |
 
+### 2.8 原生并发 connector wrapper 与超时边界
+
+新增八个参数化[批量/worker 用例](../tests/contracts/test_batch_worker_enforcement.py)，在固定 host 上运行真实主代理与构造出的子代理会话循环。模型端点发出多个纯 connector `tool_call` wrapper。原生规划器将其准入并发执行器；每个 wrapper 内部仍逐项串行调度。双参与方 barrier 与不同端点线程 ID 证明重叠，而不是将批量语法当作并发。gateway 客户端端点仍是离线合成替身；未执行传输、凭据或生产权限验证。
+
+- 逐项插件否决阻止被拒项进入端点执行或产生效果，允许的并发同伴正常完成，结果配对保留模型顺序。
+- 已进入的端点等待其并发同伴改变夹具策略。该端点仍会完成，但其 wrapper 的下一项重新检查 hook 后被拒绝。这是内存回调重检，不是持久撤权或取消已准入工作。
+- 配置官方并发超时后，端点保持阻塞，直到脚本化模型收到超时结果。此时独立效果账本为空；释放 worker 后出现晚到效果。尚未启动的后续项不会进入端点执行。已记录的超时结果保留 `effect_disposition: unknown`，不被晚到完成覆盖。
+- 晚到 worker 排空后，显式脚本化重试可重复产生效果；若重试前撤销夹具策略，则重试被拒绝。执行器不建立 exactly-once 副作用或 gateway/服务端去重保证。线程释放和排空先于夹具拆卸。
+
+| 清单契约 ID | 可执行断言 |
+| --- | --- |
+| `concurrent_connector_item_veto` | `test_native_concurrent_batches_overlap_and_veto_each_item` |
+| `concurrent_connector_policy_recheck` | `test_native_concurrent_batch_rechecks_policy_between_items` |
+| `concurrent_connector_timeout_retry` | `test_native_concurrent_timeout_late_effect_and_retry`（允许/撤权重试） |
+
+三个断言均在主代理与构造出的委派子代理上下文运行。完整委派调度、后台生命周期、其他 execute-code 路由与生产操作级授权仍需独立验收。全部受控写入发布路径仍保持阻塞。
+
 ## 3. 受控写发布清单
 
 | 路径 | 本切片证据 | 发布状态 |
@@ -187,7 +204,7 @@ Worker 探针在全新进程中运行，因为 bootstrap policy 必须在 runtim
 
 - 当前目标：[compatibility.json](../compatibility.json)记录的 Hermes `2281116525106e3c109993ccb5dc74d02bfc1427`、Linux、Python 3.14、隔离测试 home，无账号凭据。最初切片使用 `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`；历史结果与当前确切修订运行分开记录。
 - 检查脚本现在通过官方逐文件 Hermes runner 运行 `tests/contracts` 下全部文件，同时执行单元测试、Ruff、ty 和双语文档检查。
-- 实测 dispatcher 失败覆盖 `model_tools` wrapper，包括默认嵌套 RPC 调度。MCP 观察覆盖真实 stdio 夹具与原生 trust wrapper，不代表全部服务端传输或账号策略。终端/浏览器观察止于惰性执行端点。纯 connector 观察止于离线 gateway 客户端。本地批量及构造出的子循环不证明被委派调度或后台生命周期，且未执行并发批量执行器。现在已在原生 worker 绑定下的合成读 handler 内核验当前持久策略。真实生产包暴露面/fallback 的边界见第 2.7 节。真实隔离、身份绑定副作用及完整 managed-worker 生命周期仍是独立证据缺口。早期 config/safe-mode 探针本身并不建立这些保证。
+- 实测 dispatcher 失败覆盖 `model_tools` wrapper，包括默认嵌套 RPC 调度。MCP 观察覆盖真实 stdio 夹具与原生 trust wrapper，不代表全部服务端传输或账号策略。终端/浏览器观察止于惰性执行端点。纯 connector 观察止于离线 gateway 客户端。本地批量及构造出的子循环不证明被委派调度或后台生命周期，第 2.8 节另在合成 connector 端点处执行原生并发执行器。现在已在原生 worker 绑定下的合成读 handler 内核验当前持久策略。真实生产包暴露面/fallback 的边界见第 2.7 节。真实隔离、身份绑定副作用及完整 managed-worker 生命周期仍是独立证据缺口。早期 config/safe-mode 探针本身并不建立这些保证。
 - 无需生产账号、API key、在线模型调用、外发或真实 connector 写操作。未来在线测试需要独立、限定范围的测试配置与安全凭据交接；凭据不得进入聊天、日志或仓库。
 - 后续 [E0.2–E0.3 生命周期契约](75-native-lifecycle-contracts-zh.md)增加有界的 Project/Kanban/cron 操作入口证据，并记录缺失的受支持插件 CRUD API；不启用任何生产能力。E0.4 未测路径、依赖 E1 的写入准入、E3 编排与 E4 受控调度仍需独立验收。本切片通过不代表 M0 完成，也不允许这些写功能发布。
 

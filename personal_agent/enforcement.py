@@ -102,10 +102,16 @@ _WRITE_PATHS = (
         "connector_batch",
         "pinned_host_boundary_contract",
         "Native per-item dispatch and veto retain indexed partial results against an offline "
-        "gateway client. An explicit outer retry repeats completed synthetic effects. "
+        "gateway client. Native concurrent wrappers recheck fixture policy per item; timeout "
+        "can precede late effects and an explicit outer retry can repeat them. "
         "Production grants, credentials, transport retry and server deduplication "
         "remain unverified.",
-        ("connector_batch_item_veto_partial_retry",),
+        (
+            "connector_batch_item_veto_partial_retry",
+            "concurrent_connector_item_veto",
+            "concurrent_connector_policy_recheck",
+            "concurrent_connector_timeout_retry",
+        ),
     ),
     WritePath(
         "short_worker",
