@@ -203,7 +203,18 @@ Worker 探针在全新进程中运行，因为 bootstrap policy 必须在 runtim
 | `remote_poll_response_replay` | `test_remote_response_failure_can_replay_effect` |
 | `remote_fallback_selection` | `test_remote_kernel_fallback_selection` |
 
-不使用远程 shell、文件系统、kernel、sandbox、模型或凭据。实际逐次调用进程生命周期、传输所有权及隔离仍未经验证。所有受控写入门禁保持阻断；#12 的委派/后台边界及最终有限清单仍未完成。
+不使用远程 shell、文件系统、kernel、sandbox、模型或凭据。实际逐次调用进程生命周期、传输所有权及隔离仍未经验证。所有受控写入门禁保持阻断。§2.11 记录有限范围的委派/后台证据；#12 的最终有限清单仍未完成。
+
+### 2.11 委派路由、降级与停止边界
+
+[委派契约](../tests/contracts/test_delegation_enforcement.py) 执行固定版本原生 `_Batch`、会话路由、`_dispatch_background`、`_dispatch_unit`、子代理重新附加/停止及并行等待。子代理执行、异步提交和聚合持久化端点为惰性替身；这些不是实际调度器、模型、投递或进程隔离测试。
+
+- `delegation_session_routing`：有限/一次性及不支持的会话解析为同步投递；声明了历史消费者的会话保留其会话 ID。tools[] 固定的同步返回描述覆盖后台请求。**反例：** `async_delivery_supported()` 抛异常时解析为 detached push-route 标记，而不是同步拒绝。
+- `delegation_rejected_inline_fallback`：缺少异步投递时不提交后台任务而直接同步执行。容量拒绝和一般会话拒绝均重新附加子代理并执行一次同步降级。准入期间到达的父代理停止会传递给重新附加的子代理，但降级仍调用聚合执行端点。调度器拒绝不是动作授权否决。
+- `delegation_detached_stop`：原生提交的 runner 设置 `honor_parent_interrupt=False`；其取消 callback 通过原生协作停止 helper 向每个子代理发信号。已经记录的合成效果在 callback 后仍保留。
+- `delegation_parent_join_interrupt`：真实 daemon worker 对 Event 控制的子代理端点进行等待，父代理停止时在子代理完成前返回中断条目。这些已经启动的子代理之后仍可记录效果。detached 等待则跨越父轮次停止并返回完成结果。每个测试均释放并 join 自己的 worker，不遗留运行中的 daemon。
+
+十二个用例使用独立的准入/效果记录及子代理停止状态，而非仅依赖结果文字。它们证明路由与协作停止的限制，不证明持久撤销、生产授权、完整后台生命周期或 OS 隔离。最终有限路径账本仍待完成；全部受控写入门禁继续保持阻塞。
 
 ## 3. 受控写发布清单
 
@@ -217,7 +228,7 @@ Worker 探针在全新进程中运行，因为 bootstrap policy 必须在 runtim
 | `execute_code_rpc` | 惰性端点上的原生 RPC 调度/重试、当前 cell 权限（§2.9）与远端轮询/fallback 选择（§2.10） | 阻断；仍有重放反例；真实沙箱隔离与完整进程生命周期未经验证 |
 | `local_tool_batch` | 真实主/子循环、逐项否决、结果配对及显式重试反例 | 阻断；没有持久副作用幂等或持久撤权 |
 | `connector_batch` | 离线 gateway 客户端上的真实逐项模型调度、索引化部分结果及显式重试 | 阻断；生产 grant、凭据、传输重试及服务端幂等仍未验证 |
-| `short_worker` | 真实子 agent 构造/本地批量循环，以及真实生产包不支持 text-worker 时不回退的边界 | 阻断；调度器、后台生命周期及生产权限仍未验证 |
+| `short_worker` | 真实子 agent 构造/本地批量循环、包非暴露，以及惰性端点上的原生会话/降级/停止/等待边界 | 阻断；实际调度器、持久撤销及生产权限仍未验证 |
 | `managed_worker` | 原生绑定/当前 SQLite 读策略 fence，以及真实生产包冻结配置暴露面和安全启动省略 | 阻断；没有生产权限、写 grant 或完整 worker 生命周期 |
 | `scheduled_job` | 惰性创建端点前，经原生消费者验证真实项目 blueprint 缺席/显式启用 | 阻断；没有受控授权/取消/投递/对账契约 |
 

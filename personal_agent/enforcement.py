@@ -127,10 +127,19 @@ _WRITE_PATHS = (
         "short_worker",
         "pinned_host_boundary_contract",
         "Native child construction narrows requested toolsets to the parent's selection; "
-        "its real loop retains tested local-batch gates. No delegate_task scheduler, "
-        "background lifecycle, production per-action grants or persistent revocation is verified. "
+        "its real loop retains tested local-batch gates. Native session routing, inline fallback, "
+        "reattachment/stop and parent-join boundaries use inert child/scheduler endpoints. "
+        "Rejected background admission can run inline; parent stops do not retract effects. "
+        "Live scheduler lifecycle, production grants and persistent revocation remain unverified. "
         "The actual package's unsupported text-worker opt-in does not fall back to generic launch.",
-        ("delegated_child_toolset_and_batch_admission", "production_worker_unsupported"),
+        (
+            "delegated_child_toolset_and_batch_admission",
+            "production_worker_unsupported",
+            "delegation_session_routing",
+            "delegation_rejected_inline_fallback",
+            "delegation_detached_stop",
+            "delegation_parent_join_interrupt",
+        ),
     ),
     WritePath(
         "managed_worker",

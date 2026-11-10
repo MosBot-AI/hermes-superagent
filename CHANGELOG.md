@@ -6,6 +6,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ## Unreleased
 
+- Add bounded delegation routing, rejected-admission inline fallback and cooperative-stop counterexamples; parent interruption does not revoke already-started effects, and controlled writes remain blocked.
+
 - Add bounded remote file-RPC admission, response-loss replay and kernel fallback-selection contracts; inert endpoints do not establish backend containment or exactly-once effects.
 
 - Add bounded persistent-kernel contracts for current-cell context/callback rebinding, policy veto and retirement after normal/error/timeout/interruption exits; no sandbox containment or production write authority is enabled.
