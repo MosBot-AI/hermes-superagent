@@ -67,6 +67,8 @@
 
 ### 新增
 
+- 新增仅手动运行的已安装运行包 Gateway 任务生命周期验收候选，覆盖真实 ticket/WebSocket 命令和重启读回；真实执行仍需单独验收。
+
 - 增加版本化 Hermes/DSH 共享客户端 API schema、一致性 fixture 及失败关闭的本地诊断。未启用领域 HTTP 端点或远程权限。
 
 
