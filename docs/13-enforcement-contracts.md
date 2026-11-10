@@ -40,7 +40,7 @@ The tests are [native enforcement contracts](../tests/contracts/test_enforcement
 - Empty/mismatched/non-ASCII tokens, an empty server token, malformed JSON, an unavailable tool and an exhausted budget refuse before handler execution. Only dispatched attempts consume the budget; a hook-denied attempt still consumes one and is recorded by `tool_errors_since`.
 - Normal plugin veto and callback failures stop the nested call. An explicitly injected exception escaping the outer hook dispatcher still reaches the handler. Nesting through RPC does not repair that existing failure domain.
 - Two identical authenticated packets execute twice. The token, tool allow-list and call budget are neither an ActionIntent nor an idempotency key.
-- The test executes the host-generated `_UDS_TRANSPORT_HEADER` client unchanged except for connection setup. Its transport double drops the first response **after** the real server/default dispatch completes. A one-shot client raises with one observed effect; a persistent client reconnects, repeats the same packet and returns after a second effect. This is a generated-client retry counterexample over an in-memory wire, not a live UDS/TCP or complete session-kernel test. Local session-kernel current-cell authority is covered separately in §2.9; remote filesystem polling remains unverified.
+- The test executes the host-generated `_UDS_TRANSPORT_HEADER` client unchanged except for connection setup. Its transport double drops the first response **after** the real server/default dispatch completes. A one-shot client raises with one observed effect; a persistent client reconnects, repeats the same packet and returns after a second effect. This is a generated-client retry counterexample over an in-memory wire, not a live UDS/TCP or complete session-kernel test. Local session-kernel current-cell authority is covered separately in §2.9; remote filesystem polling and fallback selection are bounded separately in §2.10.
 
 ### 2.2 MCP admission versus declared read-only behavior
 
@@ -188,7 +188,22 @@ Ten [kernel authority cases](../tests/contracts/test_kernel_authority_enforcemen
 | `kernel_cell_retirement` | `test_run_cell_retires_authority_on_normal_and_error_exit` |
 | `kernel_thread_context_restore` | `test_cell_captures_calling_context_and_restores_rpc_thread_callbacks` |
 
-Remote filesystem polling, per-call fallback, real subprocess/sandbox containment, full delegated/background lifecycle and operation-level production authority remain unverified. Retirement prevents subsequent dispatch; it does not retract an already-admitted effect. All controlled-write gates remain blocked.
+The remote polling/fallback-selection evidence is bounded separately in §2.10. Actual per-call execution, real subprocess/sandbox containment, full delegated/background lifecycle and operation-level production authority remain unverified. Retirement prevents subsequent dispatch; it does not retract an already-admitted effect. All controlled-write gates remain blocked.
+
+### 2.10 Remote polling and fallback selection
+
+Thirteen [remote execution cases](../tests/contracts/test_remote_execution_enforcement.py) retain pinned native `_rpc_poll_loop` parsing, token/sequence admission, allow-list/budget, default dispatch and loaded-plugin hooks, with an inert remote-filesystem endpoint. Invalid JSON, token and sequence requests are removed without a response or handler effect. Allowed requests use atomic response-write options; plugin veto and callback failures prevent effects. Independent fixture records, counters, logs and response attempts are asserted, not just returned prose.
+
+A failed response write leaves the request present: the next poll dispatches it again and produces a second synthetic effect. This is evidence against exactly-once execution, not a recovery guarantee. `_execute_remote` selection is tested separately: kernel `None` or an exception enters the substituted per-call endpoint with the same task, tool set and limits; a reported kernel success/error does not fall back; missing Python prevents either endpoint. Kernel creation and per-call execution are not exercised by this selector test.
+
+| Inventory contract ID | Executable assertion |
+| --- | --- |
+| `remote_poll_admission` | `test_remote_poll_invalid_requests_removed_without_effect`, `test_remote_poll_allowlist_budget_and_success` |
+| `remote_poll_plugin_veto` | `test_remote_poll_plugin_denial_prevents_effect` |
+| `remote_poll_response_replay` | `test_remote_response_failure_can_replay_effect` |
+| `remote_fallback_selection` | `test_remote_kernel_fallback_selection` |
+
+No remote shell, filesystem, kernel, sandbox, model or credential is used. Actual per-call process lifecycle, transport ownership and containment remain unverified. All controlled-write gates remain blocked; delegated/background boundaries and the final finite ledger remain outstanding for #12.
 
 ## 3. Controlled-write release inventory
 
@@ -199,7 +214,7 @@ Remote filesystem polling, per-call fallback, real subprocess/sandbox containmen
 | `mcp` | Actual SDK stdio plugin-veto/direct-registry and native trust-gate boundaries; dishonest read-only counterexample | Blocked; no production per-action authorization or credential/outcome contract |
 | `shell` | Native deny/workdir and public/internal force boundaries at an inert backend | Blocked; no real shell, containment or operation-level authority contract |
 | `browser` | Native metadata-URL literal pre-scan and plugin/direct-helper boundaries at an inert endpoint | Blocked; no real navigation, authenticated write or outcome contract |
-| `execute_code_rpc` | Native server/default nested dispatch and generated client retry over an in-memory wire | Blocked; replay counterexample, sandbox and current-cell authority remain unverified |
+| `execute_code_rpc` | Native RPC dispatch/retry, current-cell authority (§2.9) and remote polling/fallback selection (§2.10) over inert endpoints | Blocked; replay counterexamples remain; real sandbox containment and full process lifecycle are unverified |
 | `local_tool_batch` | Real primary/child loops, per-item veto, result pairing and explicit retry counterexample | Blocked; no durable effect idempotency or persistent revocation |
 | `connector_batch` | Real per-item model dispatch, indexed partial results and explicit retry at an offline gateway client | Blocked; production grants, credentials, transport retry and server deduplication remain unverified |
 | `short_worker` | Real child construction/local-batch loop and actual package unsupported text-worker no-fallback boundary | Blocked; scheduler, background lifecycle and production authority remain unverified |

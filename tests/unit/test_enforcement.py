@@ -56,6 +56,10 @@ def test_boundary_contracts_do_not_become_full_write_path_coverage():
         "kernel_cell_plugin_veto",
         "kernel_cell_retirement",
         "kernel_thread_context_restore",
+        "remote_poll_admission",
+        "remote_poll_plugin_veto",
+        "remote_poll_response_replay",
+        "remote_fallback_selection",
     } <= set(rows["execute_code_rpc"]["contract_ids"])
     assert "worker_current_policy_recheck" in rows["managed_worker"]["contract_ids"]
     assert "worker_revoke_before_admission" in rows["managed_worker"]["contract_ids"]
