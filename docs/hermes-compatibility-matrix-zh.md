@@ -22,6 +22,12 @@
 
 这 21 个聚焦用例测试合成副作用，不是 shell/browser 沙箱、真实 socket 传输、connector batch、线上 worker 或生产账号。所有受控写发布门禁仍阻断。准确聚合结果以 [Issue #12](https://github.com/MosBot-AI/hermes-superagent/issues/12)及关联 PR 为准；不替换下方历史计数，也不代表 E0.4 完成。
 
+## E0.4 真实生产包暴露面范围（22811165）
+
+[生产暴露面契约](../tests/contracts/test_production_exposure.py)冷加载真实的安装形态包，检查暂存模块来源且不允许回退到仓库导入。测试验证默认/只读负向模型/registry 调度、真实普通 managed/config-only 冻结配置、安全启动省略、不支持 text-worker 时的拒绝，以及原生 blueprint 消费者。独立存储及端点调用判据配合加载/opt-in 正向对照；不调用真实模型服务商、定时作业或外部副作用。
+
+[边界矩阵](13-enforcement-contracts-zh.md#27-真实生产包暴露面与降级)区分不可用的经验证 owner/受控副作用 adapter，与显式启用的本地功能及普通原生 planning-blueprint 调度。`read_only` 不覆盖 `planning_blueprint: true`，不限制其原生投递目标，也不停止既有作业。干净宿主上的 `llm.text_worker` 同意配置，不是获授能力或回退权限。并发/替代执行路径、完整生命周期及真实隔离仍需单独验收。确切聚合证据属于 [Issue #12](https://github.com/MosBot-AI/hermes-superagent/issues/12)，不更新下方历史计数。
+
 ## E0.5 合成 MCP 夹具范围（22811165）
 
 [离线合成连接器测试框架](74-synthetic-connector-fixtures-zh.md)以当前准确宿主版本为目标，不修改 `compatibility.json`。其[原生契约](../tests/contracts/test_synthetic_connectors.py)使用真实 MCP 发现、注册表/模型工具分发和 SDK stdio 会话，连接持久假远端。测试覆盖提交后响应丢失、重启对账，以及依据声明重试故意谎报只读的工具。会话过期错误在真实 stdio RPC 之后注入，不是真实 HTTP 会话过期的证据。

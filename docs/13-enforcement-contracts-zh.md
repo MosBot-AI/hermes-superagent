@@ -2,7 +2,7 @@
 
 [English](13-enforcement-contracts.md) | 简体中文
 
-此页记录较早的 E0 切片，以及针对 [Issue #12](https://github.com/MosBot-AI/hermes-superagent/issues/12) 的有界 RPC/MCP、终端/浏览器、本地批量及持久 worker 策略后续核验。当前新增的显式本地任务收件箱见 [16](16-local-task-inbox-zh.md)；它不启用这里列出的原生/外部受控写路径。
+此页记录较早的 E0 切片，以及针对 [Issue #12](https://github.com/MosBot-AI/hermes-superagent/issues/12) 的有界 RPC/MCP、终端/浏览器、本地批量、持久 worker 策略及生产暴露面后续核验。当前新增的显式本地任务收件箱见 [16](16-local-task-inbox-zh.md)；它不启用这里列出的原生/外部受控写路径。
 
 本次后续 P0 切片推进 E0.4，但不启用任何受控写能力。新增可复验的失败边界测试和机器可读发布清单。后续切片使用合成副作用核验固定宿主的真实 RPC 消费者/服务端调度、MCP 准入、终端/浏览器执行前守卫，主 agent 和被委派 agent 循环中的本地批量，以及受保护合成读 handler 中的当前持久策略检查；并未完成所有替代路径。E0.4、E0/M0 与 E1 授权仍未完成。
 
@@ -117,7 +117,7 @@ Worker 探针在全新进程中运行，因为 bootstrap policy 必须在 runtim
 - 准入优先顺序在有界合成读取期间持有真实 SQLite 写锁。独立零超时竞争者观察到 `SQLITE_BUSY`；预先初始化的另一撤权者尝试自己的 `BEGIN IMMEDIATE`，仅在已准入读完成后提交。读审计保留准入时的 epoch。撤权优先顺序将撤权事务保持在 COMMIT 处，同时 worker 尝试准入；撤权提交后不发生资源读取或审计。这些测试不承诺收回已准入的数据。
 - 缺少 authority/resource adapter 时，在访问资源前拒绝。已消耗的单次 handle 无法经另一调度路径重放。Dispatcher hook 不是该策略门禁：执行检查位于夹具 handler 对协调器的调用内部。
 - SQLite authorizer 故障注入分别拒绝 enrollment 读取、审计插入或 COMMIT。所有情形均不返回摘要，也不提交 prepared-read 审计。审计/COMMIT 失败发生在合成摘要已被读取之后；测试不宣称撤销该次读取。移除故障后，新独立 confirmation 可恢复成功。
-- Troubleshooting safe bootstrap 不加载该夹具插件/工具；真实 registry/模型尝试失败，且不增加读审计。这验证夹具能力缺失，不验证真实生产包 fallback 或宿主全局只读行为。仍需独立的生产暴露面测试。
+- Troubleshooting safe bootstrap 不加载该夹具插件/工具；真实 registry/模型尝试失败，且不增加读审计。这验证夹具能力缺失，不验证真实生产包 fallback 或宿主全局只读行为。独立的真实生产包证据记录于第 2.7 节。
 
 子进程环境使用显式 allowlist 并拒绝 socket 连接。共享测试控制读取器强制绝对整帧截止时间、字节数上限及完整 JSON object 分帧，覆盖部分帧、EOF、连续帧和超限回归用例；teardown 关闭流、join 策略修改线程并回收子进程。它是夹具协议，不是原生 owner/worker IPC，也不是新公开 API。
 
@@ -131,21 +131,45 @@ Worker 探针在全新进程中运行，因为 bootstrap policy 必须在 runtim
 | `worker_revoke_before_admission` | `test_revoke_commit_wins_while_worker_waits_for_sqlite` |
 | `worker_one_shot_cross_path` | `test_confirmation_is_consumed_across_dispatch_paths` |
 
+### 2.7 真实生产包暴露面与降级
+
+[生产暴露面契约](../tests/contracts/test_production_exposure.py)将未修改的 manifest、入口和模块放入隔离 profile，并在新进程中加载。模块来源必须位于该安装形态包内；子进程不能回退到仓库根目录导入。原生插件管理器、模型侧/直接 registry 调度、命令解析及 blueprint 消费者保持真实，不以执行控制夹具替代生产包。
+
+有限矩阵覆盖省略配置的默认值和显式 `read_only`、普通 managed 与 config-only 冻结配置、带有效 opt-in 的 troubleshooting-safe bootstrap、干净宿主上不受支持的 text-worker opt-in，以及三种 blueprint 消费者状态。适用用例内部同时执行两条调度路径。
+
+- Default/read-only 加载保留诊断状态工具、访问诊断和 CLI。两条调度路径实际拒绝可选 manifest 工具；任务 CLI 修改被禁用，伪造身份/批准声明不能获得受保护访问。成功调用状态工具是生产包加载的对照。
+- 普通 managed 和 config-only 在运行时导入前绑定。生产包仍可加载，但修改磁盘配置或返回的配置副本不能获得新 opt-in。命名空间内的生产读取准入服务缺少 authority/resource adapter 时，在访问存储前拒绝。这是配置/准入证据，不是配置编辑撤权或完整 worker 生命周期。
+- Safe bootstrap 省略真实生产包，包括已启用快照的工具、命令、hooks 和 blueprint。负向调用包括状态；缺席插件不会伪造降级诊断。不创建插件存储或 cron 作业，预先存在的合成作业字节保持不变。这一观察不代表停用原生内置工具或既有作业。
+- 在干净固定宿主上，即使 `plan_worker: true` 且满足本地前置条件并声明同意，仍报告 `unsupported_host`；对应命令和 preview 工具不可用。原生 capability registry 不授予未知的 `llm.text_worker` 能力。带守卫的通用 launch 和模型端点未观察到回退。显式启用的本地任务/记忆 handler 会拒绝缺少原生活跃轮次及激活的写形态调用，包括不经过 pre-tool 准入的直接 registry 调用。
+- 默认关闭和 safe-with-opt-in 下，blueprint 查询、原生 slash 内联创建及 dashboard 提交因模板缺失，在到达惰性创建/通知端点前拒绝。普通 `read_only` 加 `planning_blueprint: true` 的正向对照，以默认 local 投递到达同一端点。不执行作业或模型服务商调用。这保留普通原生调度的显式启用例外，不证明受控调度授权或取消。
+
+拒绝结果同时具有独立的存储及端点调用观察。测试子进程使用合成数据和带守卫的端点，不运行真实调度器、模型服务商、账号、凭据或外部副作用。不将可选本地功能及单独选择的原生记忆 provider 误称为不存在的模块；不可用的权限是经验证 owner/受控外部副作用准入。
+
+夹具在导入 `croniter` 时替换指针宽度，并禁用 `urllib3` 导入时的 IPv6 bind 探测。网络/进程/SQLite 入口、通用 worker launch 及全部四个插件 LLM completion facade 均有零调用拒绝判据。Blueprint 创建和通知端点仅在相应消费者用例中替换为惰性记录器。不替换原生准入和注册门禁，父进程对每个子进程限制运行时间并回收。
+
+| 契约 ID | 聚焦断言 |
+|---|---|
+| `production_default_exposure` | `test_production_default_exposure` |
+| `production_frozen_configuration` | `test_production_frozen_configuration` |
+| `production_safe_bootstrap` | `test_production_safe_bootstrap` |
+| `production_worker_unsupported` | `test_production_worker_unsupported` |
+| `production_blueprint_consumers` | `test_production_blueprint_consumers` |
+
 ## 3. 受控写发布清单
 
 | 路径 | 本切片证据 | 发布状态 |
 |---|---|---|
-| `native_dispatch` | 合成 hook 与外层 dispatcher 失败契约 | 阻断；尚未接入操作级授权 |
-| `direct_registry` | 合成跳过 hooks 契约 | 阻断；handler 需自行检查操作级权限 |
+| `native_dispatch` | Hook/外层 dispatcher 失败，以及真实生产包默认暴露面和负向调度 | 阻断；尚未接入生产操作级授权 |
+| `direct_registry` | Hook 绕过、真实生产包默认缺席和未激活本地 handler 拒绝 | 阻断；本地激活不等于经验证 owner 动作权限 |
 | `mcp` | 真实 SDK stdio 的插件否决/直接 registry 及原生 trust gate 边界；虚假只读反例 | 阻断；没有生产逐动作授权或凭据/结果合同 |
 | `shell` | 惰性 backend 上的原生 deny/workdir 与公开/内部 force 边界 | 阻断；没有真实 shell、隔离或操作级权限合同 |
 | `browser` | 惰性端点前的原生云元数据 URL 字面量预扫描及插件/直接 helper 边界 | 阻断；没有真实导航、身份绑定写入或结果合同 |
 | `execute_code_rpc` | 内存传输上的原生服务端/default 嵌套调度及生成客户端重试 | 阻断；存在重放反例，沙箱与当前 cell 权限仍未验证 |
 | `local_tool_batch` | 真实主/子循环、逐项否决、结果配对及显式重试反例 | 阻断；没有持久副作用幂等或持久撤权 |
 | `connector_batch` | 离线 gateway 客户端上的真实逐项模型调度、索引化部分结果及显式重试 | 阻断；生产 grant、凭据、传输重试及服务端幂等仍未验证 |
-| `short_worker` | 真实子 agent 构造/工具集限制与本地批量循环 | 阻断；调度器、后台生命周期及生产权限仍未验证 |
-| `managed_worker` | 真实 import 前 worker 绑定；合成读 handler 在两条调度路径内检查当前 SQLite 策略/撤权 | 阻断；没有生产 authority、write grant 或完整 worker 生命周期 |
-| `scheduled_job` | 无授权/取消/交付/对账合同 | 阻断 |
+| `short_worker` | 真实子 agent 构造/本地批量循环，以及真实生产包不支持 text-worker 时不回退的边界 | 阻断；调度器、后台生命周期及生产权限仍未验证 |
+| `managed_worker` | 原生绑定/当前 SQLite 读策略 fence，以及真实生产包冻结配置暴露面和安全启动省略 | 阻断；没有生产权限、写 grant 或完整 worker 生命周期 |
+| `scheduled_job` | 惰性创建端点前，经原生消费者验证真实项目 blueprint 缺席/显式启用 | 阻断；没有受控授权/取消/投递/对账契约 |
 
 `synthetic_contract` 和 `pinned_host_boundary_contract` 是有界证据标签，不等于完整覆盖某类工具。内存探针通过，不能证明 shell、MCP、browser、外发或真实 worker 副作用受保护。清单内部不可变，返回独立快照；修改报告不能授予能力，也不能改变后续报告。
 
@@ -157,13 +181,13 @@ Worker 探针在全新进程中运行，因为 bootstrap policy 必须在 runtim
 4. 验证每条启用路径，并缩减暴露工具、凭据和执行环境，防止未受保护的替代路径执行同一受控动作。
 5. 威胁需要 containment 时使用合适的 OS/进程隔离。进程内 hooks 和本清单不能替代隔离。
 
-本切片没有可启用写操作的 mode 或配置开关。独立配置的 Hermes host 仍可能暴露自己的工具，本插件不宣称控制这些工具。
+本切片没有可启用受控外部副作用准入的 mode 或配置开关。既有显式本地任务/记忆、停放 card 和普通 planning-blueprint opt-in 保留各自边界。独立配置的 Hermes host 仍可能暴露自己的工具，本插件不宣称控制这些工具。
 
 ## 5. 证据与限制
 
 - 当前目标：[compatibility.json](../compatibility.json)记录的 Hermes `2281116525106e3c109993ccb5dc74d02bfc1427`、Linux、Python 3.14、隔离测试 home，无账号凭据。最初切片使用 `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`；历史结果与当前确切修订运行分开记录。
 - 检查脚本现在通过官方逐文件 Hermes runner 运行 `tests/contracts` 下全部文件，同时执行单元测试、Ruff、ty 和双语文档检查。
-- 实测 dispatcher 失败覆盖 `model_tools` wrapper，包括默认嵌套 RPC 调度。MCP 观察覆盖真实 stdio 夹具与原生 trust wrapper，不代表全部服务端传输或账号策略。终端/浏览器观察止于惰性执行端点。纯 connector 观察止于离线 gateway 客户端。本地批量及构造出的子循环不证明被委派调度或后台生命周期，且未执行并发批量执行器。现在已在原生 worker 绑定下的合成读 handler 内核验当前持久策略。真实隔离、身份绑定副作用、生产包 safe-mode fallback 及完整 managed-worker 生命周期仍是独立证据缺口。早期 config/safe-mode 探针本身并不建立这些保证。
+- 实测 dispatcher 失败覆盖 `model_tools` wrapper，包括默认嵌套 RPC 调度。MCP 观察覆盖真实 stdio 夹具与原生 trust wrapper，不代表全部服务端传输或账号策略。终端/浏览器观察止于惰性执行端点。纯 connector 观察止于离线 gateway 客户端。本地批量及构造出的子循环不证明被委派调度或后台生命周期，且未执行并发批量执行器。现在已在原生 worker 绑定下的合成读 handler 内核验当前持久策略。真实生产包暴露面/fallback 的边界见第 2.7 节。真实隔离、身份绑定副作用及完整 managed-worker 生命周期仍是独立证据缺口。早期 config/safe-mode 探针本身并不建立这些保证。
 - 无需生产账号、API key、在线模型调用、外发或真实 connector 写操作。未来在线测试需要独立、限定范围的测试配置与安全凭据交接；凭据不得进入聊天、日志或仓库。
 - 后续 [E0.2–E0.3 生命周期契约](75-native-lifecycle-contracts-zh.md)增加有界的 Project/Kanban/cron 操作入口证据，并记录缺失的受支持插件 CRUD API；不启用任何生产能力。E0.4 未测路径、依赖 E1 的写入准入、E3 编排与 E4 受控调度仍需独立验收。本切片通过不代表 M0 完成，也不允许这些写功能发布。
 
@@ -177,6 +201,7 @@ bash /absolute/path/hermes-agent/scripts/run_tests.sh \
   /absolute/path/hermes-superagent/tests/contracts/test_shell_browser_enforcement.py \
   /absolute/path/hermes-superagent/tests/contracts/test_batch_worker_enforcement.py \
   /absolute/path/hermes-superagent/tests/contracts/test_worker_policy_enforcement.py \
+  /absolute/path/hermes-superagent/tests/contracts/test_production_exposure.py \
   --file-retries 0 -- \
   -o "pythonpath=/absolute/path/hermes-agent /absolute/path/hermes-superagent" -q --tb=short
 python scripts/check.py --hermes /absolute/path/hermes-agent \
@@ -202,11 +227,13 @@ python scripts/check.py --hermes /absolute/path/hermes-agent \
 
 ## 6. E0.4 完成条件与后续能力启用
 
-E0.4 验证边界、恢复限制，以及确实停用或只读的本项目受控能力面。E1 依赖 E0.4；不能将全部生产身份、批准与外部结果机制的实现反过来设为此验证包的循环前置条件。这些能力仍须在各自门禁通过前保持停用。
+E0.4 验证边界、恢复限制，以及各被测配置下有界的生产暴露面，包括默认不暴露、安全启动时省略，以及 handler 级拒绝。项目的经验证 owner 及受控外部副作用 adapter 仍不可用。显式启用的本地任务/记忆修改、停放原生 card 操作及普通宿主所有的 planning-blueprint 调度，保留各自单独记录的边界。E1 依赖 E0.4；不能将全部生产身份、批准与外部结果机制的实现反过来设为此验证包的循环前置条件。这些能力仍须在各自门禁通过前保持停用。
+
+此处的受控外部副作用路径，是指项目所有、将经验证意图/批准转化为获准外部发送、修改或支出的路径，包括安排此类动作。它的缺失不等于零本地修改、没有普通原生调度、停止既有作业或宿主全局隔离。特别是，即使 `mode: read_only`，`planning_blueprint: true` 仍是独立的显式启用项；原生消费者可以创建普通作业，投递不限定为 `local`，已配置的模型服务商也可能产生费用。参见 [blueprint 边界](25-native-planning-blueprint-zh.md)。
 
 关闭 Issue #12 前，剩余的有限证据须证明：
 
-1. Default/read-only、普通 managed、config-only 与 troubleshooting safe bootstrap 下真实生产包的暴露面及负向调度。仅报告用途的清单或测试夹具工具缺失并不足够。
+1. 保留第 2.7 节限定的 default/read-only、普通 managed、config-only 与 troubleshooting safe bootstrap 下真实生产包暴露面及负向调度证据。仅报告用途的清单或测试夹具工具缺失并不足够，显式普通原生调度仍须单独区分。
 2. 原生并发批量准入及其余委派/后台与 execute-code 替代路径：提供行为边界测试，或明确不支持的接缝并验证本项目受控模式不暴露它。惰性 shell/browser 端点不证明 backend 隔离。
 3. 最终有限清单将每条路径映射到确切边界、拒绝/不暴露断言、副作用判据及已测修订。分开列出已验证的 E0.4 边界、技术上不可用模式，以及下游 E1/E3/E4/E5 启用工作。
 

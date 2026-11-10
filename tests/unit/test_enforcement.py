@@ -22,8 +22,9 @@ def test_every_known_or_unlisted_write_path_remains_blocked():
 
 def test_boundary_contracts_do_not_become_full_write_path_coverage():
     rows = {row["path_id"]: row for row in build_enforcement_inventory()["paths"]}
-    assert rows["native_dispatch"]["evidence"] == "synthetic_contract"
     for path in (
+        "native_dispatch",
+        "direct_registry",
         "mcp",
         "execute_code_rpc",
         "shell",
@@ -32,6 +33,7 @@ def test_boundary_contracts_do_not_become_full_write_path_coverage():
         "connector_batch",
         "short_worker",
         "managed_worker",
+        "scheduled_job",
     ):
         assert rows[path]["evidence"] == "pinned_host_boundary_contract"
         assert rows[path]["contract_ids"]
@@ -46,9 +48,10 @@ def test_boundary_contracts_do_not_become_full_write_path_coverage():
     assert "connector_batch_item_veto_partial_retry" in rows["connector_batch"]["contract_ids"]
     assert "worker_current_policy_recheck" in rows["managed_worker"]["contract_ids"]
     assert "worker_revoke_before_admission" in rows["managed_worker"]["contract_ids"]
-    for path in ("scheduled_job",):
-        assert rows[path]["evidence"] == "not_tested"
-        assert rows[path]["contract_ids"] == []
+    assert "production_default_exposure" in rows["native_dispatch"]["contract_ids"]
+    assert "production_worker_unsupported" in rows["direct_registry"]["contract_ids"]
+    assert "production_safe_bootstrap" in rows["managed_worker"]["contract_ids"]
+    assert "production_blueprint_consumers" in rows["scheduled_job"]["contract_ids"]
 
 
 def test_mutating_a_returned_inventory_cannot_change_later_results():
