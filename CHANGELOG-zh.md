@@ -63,6 +63,9 @@
 
 ### 新增
 
+- 增加版本化 Hermes/DSH 共享客户端 API schema、一致性 fixture 及失败关闭的本地诊断。未启用领域 HTTP 端点或远程权限。
+
+
 - 新增[原生插件与调度生命周期契约](docs/75-native-lifecycle-contracts-zh.md)，覆盖固定版本的 Project/Kanban/cron 操作行为、弱去重、部分创建、取消请求、未知历史及一次性仅本地执行回执。测试与已记录缺口不启用生产调度或插件 CRUD 权限。
   Kanban 检查区分原生完整 SQLite 安全警告及观察到的 DELETE 回退与意外诊断，不改变宿主行为，也不强制 WAL。
 

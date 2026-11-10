@@ -63,6 +63,9 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Added a versioned shared Hermes/DSH client API schema and conformance fixtures, plus fail-closed local diagnostics. No domain HTTP endpoint or remote permission is enabled.
+
+
 - Add [native plugin and scheduling lifecycle contracts](docs/75-native-lifecycle-contracts.md) for exact-pin operator Project/Kanban/cron behavior, weak deduplication, partial creation, cancellation requests, uncertain history and a one-off local-only execution receipt. Tests and documented gaps do not enable production scheduling or plugin CRUD authority.
   Kanban checks distinguish the exact native SQLite safety warning and observed DELETE fallback from unexpected diagnostics, without changing host behavior or forcing WAL.
 
