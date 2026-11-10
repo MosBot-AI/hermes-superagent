@@ -37,6 +37,8 @@ This file distinguishes design work, development changes, and released capabilit
 - Run runtime artifact acceptance on exact pull-request heads with read-only credentials; keep downloadable artifact publication push-only.
 ### Changed
 
+- Reconcile original E2.7 local-memory acceptance with independent review and exact-main CI; broader memory adapters, lifecycle, migration and deployment remain open.
+
 - Verify the actual production package under default/read-only, frozen-worker and safe bootstrap modes using real negative dispatch and blueprint consumers. Preserve explicit local/native-scheduling opt-ins and unsupported text-worker refusal; no controlled-write authority or host-wide sandbox is added.
 
 - Verify current SQLite policy and revocation inside a synthetic protected read handler under native frozen worker configuration, including direct dispatch, contention and audit failures. Reuse existing internal coordinators; no production write authority is added.

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "issue": 44,
-  "status": "acceptance_candidate_pending_merge_main_ci",
+  "status": "accepted_original_local_backend_scope",
   "scope": "Original E2.7 local backend scope only; no production deployment or all-E2 certification.",
   "controlled_writes_enabled": false,
   "criteria": [
@@ -116,5 +116,10 @@
     "General backend replacement/import/cutover",
     "Automatic native history ingestion and transcript checkpoint coverage"
   ],
-  "budget_boundary": "docs30 section10 permits conservative byte/character fallback. Explicit recall bounds complete ASCII JSON items; activated session recall separately bounds the full context envelope to a fixed 6000 ASCII characters, while lifecycle prefetch defaults to 6000 and permits 2048\u201312000, not the complete host prompt or provider tokens."
+  "budget_boundary": "docs30 section10 permits conservative byte/character fallback. Explicit recall bounds complete ASCII JSON items; activated session recall separately bounds the full context envelope to a fixed 6000 ASCII characters, while lifecycle prefetch defaults to 6000 and permits 2048\u201312000, not the complete host prompt or provider tokens.",
+  "accepted_baseline": {
+    "commit": "15d690adbbd860f145cbc1405399d854d6bb32c4",
+    "main_ci": "https://github.com/MosBot-AI/hermes-superagent/actions/runs/42813558369",
+    "independent_memory_unit_tests": 1068
+  }
 }
