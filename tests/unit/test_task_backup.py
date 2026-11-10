@@ -341,3 +341,276 @@ b.task_backup(home, "create", "before-upgrade")
     # automatic recovery or acceptance of an arbitrary linked file.
     pending[0].unlink()
     assert backup.task_backup(home, "inspect", "before-upgrade")["integrity"] == "ok"
+
+
+def _competing_writer(database):
+    """Separate process: an independent OS-lock oracle, not another SQLite thread."""
+    import subprocess
+    import sys
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            """
+import sqlite3, sys
+c = sqlite3.connect(sys.argv[1], timeout=0.05, isolation_level=None)
+try:
+    c.execute('BEGIN IMMEDIATE')
+    c.execute("UPDATE tasks SET title='Concurrent mutation'")
+    c.execute('COMMIT')
+    print('committed')
+except sqlite3.OperationalError as e:
+    if 'locked' not in str(e): raise
+    print('locked')
+finally:
+    c.close()
+""",
+            str(database),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=5,
+        check=True,
+    )
+    return result.stdout.strip()
+
+
+@pytest.mark.parametrize("with_reader", [False, True])
+def test_metadata_retains_os_lock_through_digest_and_reader(home, monkeypatch, with_reader):
+    import hashlib
+    import time
+
+    connection, _, _ = source(home)
+    backup.task_backup(home, "create", "before-upgrade")
+    connection.close()
+    original = hashlib.sha256(path(home).read_bytes()).hexdigest()
+    real_sha = hashlib.sha256
+    events = []
+
+    class Digest:
+        def __init__(self):
+            self.inner = real_sha()
+
+        def update(self, block):
+            self.inner.update(block)
+
+        def hexdigest(self):
+            # In the old implementation the hash context has closed its fd here.
+            events.append("digest")
+            assert _competing_writer(path(home)) == "locked"
+            return self.inner.hexdigest()
+
+    def reader(conn):
+        events.append("reader")
+        assert _competing_writer(path(home)) == "locked"
+        return conn.execute("SELECT title FROM tasks ORDER BY sequence").fetchall()
+
+    monkeypatch.setattr(backup.hashlib, "sha256", Digest)
+    result = backup._metadata(
+        path(home),
+        time.monotonic() + 10,
+        reader=reader if with_reader else None,
+        expected_digest=original,
+    )
+    assert result["sha256"] == original
+    assert events == (["digest", "reader"] if with_reader else ["digest"])
+    if with_reader:
+        assert result["historical_tasks"] == [("First",), ("Second",)]
+    assert _competing_writer(path(home)) == "committed"
+
+
+def test_source_validation_does_not_drop_existing_process_read_lock(home):
+    connection, _, _ = source(home)
+    database = home / "plugin-data" / PLUGIN_ID / "tasks.sqlite3"
+    try:
+        connection.execute("BEGIN")
+        connection.execute("SELECT * FROM tasks").fetchall()
+        backup._check_file(database)
+        for suffix in ("-journal", "-wal", "-shm"):
+            backup._private_database_file(database.with_name(database.name + suffix), create=False)
+        assert _competing_writer(database) == "locked"
+        connection.rollback()
+        assert _competing_writer(database) == "committed"
+    finally:
+        connection.close()
+
+
+@pytest.mark.parametrize("failure", ["connection", "schema", "digest", "reader"])
+def test_metadata_failure_closes_connection_before_hash_descriptor(home, monkeypatch, failure):
+    import time
+
+    connection, _, _ = source(home)
+    backup.task_backup(home, "create", "before-upgrade")
+    connection.close()
+    real_connection, real_close = backup._connection, os.close
+    events = []
+
+    class Connection:
+        def __init__(self):
+            self.conn = real_connection(path(home), time.monotonic() + 10)
+
+        def __getattr__(self, name):
+            return getattr(self.conn, name)
+
+        def close(self):
+            events.append("connection")
+            self.conn.close()
+
+    def connect(*args):
+        if failure == "connection":
+            raise TaskError("injected")
+        return Connection()
+
+    def close(fd):
+        events.append("descriptor")
+        real_close(fd)
+
+    def fail(*args):
+        raise TaskError("injected")
+
+    monkeypatch.setattr(backup, "_connection", connect)
+    monkeypatch.setattr(backup.os, "close", close)
+    if failure == "schema":
+        monkeypatch.setattr(backup, "inspect_task_snapshot", fail)
+    with pytest.raises(TaskError):
+        backup._metadata(
+            path(home),
+            time.monotonic() + 10,
+            expected_digest="0" * 64 if failure == "digest" else None,
+            reader=fail if failure == "reader" else None,
+        )
+    assert events == (["descriptor"] if failure == "connection" else ["connection", "descriptor"])
+    assert _competing_writer(path(home)) == "committed"
+
+
+def test_metadata_serializes_controlled_readers_and_bounds_wait(home, monkeypatch):
+    import concurrent.futures
+    import threading
+    import time
+
+    connection, _, _ = source(home)
+    backup.task_backup(home, "create", "before-upgrade")
+    connection.close()
+    entered, release, waiting = threading.Event(), threading.Event(), threading.Event()
+    real = backup._locked_metadata
+
+    def locked(*args, **kwargs):
+        if threading.current_thread().name.startswith("first"):
+            entered.set()
+            assert release.wait(5)
+        else:
+            waiting.set()
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(backup, "_locked_metadata", locked)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="first") as pool:
+        future = pool.submit(backup._metadata, path(home), time.monotonic() + 10)
+        try:
+            assert entered.wait(5)
+            with pytest.raises(TaskError, match="backup_timeout"):
+                backup._metadata(path(home), time.monotonic() + 0.05)
+            assert not waiting.is_set()
+        finally:
+            release.set()
+        assert future.result(timeout=5)["counts"]["tasks"] == 2
+    assert backup._metadata(path(home), time.monotonic() + 5)["counts"]["tasks"] == 2
+    assert waiting.is_set()
+
+
+@pytest.mark.parametrize("module_name", ["task_backup", "memory_snapshot"])
+@pytest.mark.parametrize("stage", [1, 2, 3])
+def test_connection_setup_failure_explicitly_closes_before_raw_fd(
+    home, monkeypatch, module_name, stage
+):
+    import importlib
+    import time
+
+    module = importlib.import_module("personal_agent." + module_name)
+    connection, _, _ = source(home)
+    backup.task_backup(home, "create", "before-upgrade")
+    connection.close()
+    real_connect, real_close = sqlite3.connect, os.close
+    events = []
+
+    class Connection:
+        def __init__(self, *args, **kwargs):
+            self.conn = real_connect(*args, **kwargs)
+            self.calls = 0
+
+        def step(self):
+            self.calls += 1
+            if self.calls == stage:
+                raise RuntimeError("synthetic setup failure")
+
+        def execute(self, *args):
+            self.step()
+            return self.conn.execute(*args)
+
+        def set_progress_handler(self, *args):
+            self.step()
+            self.conn.set_progress_handler(*args)
+
+        def close(self):
+            events.append("connection")
+            self.conn.close()
+
+    def close(fd):
+        events.append("descriptor")
+        real_close(fd)
+
+    monkeypatch.setattr(module.sqlite3, "connect", Connection)
+    monkeypatch.setattr(module.os, "close", close)
+    with pytest.raises(RuntimeError, match="synthetic setup failure"):
+        if module_name == "task_backup":
+            module._metadata(path(home), time.monotonic() + 5)
+        else:
+            module._metadata(path(home), "synthetic", time.monotonic() + 5)
+    # Memory's precheck descriptor also closes before setup, but no SQLite lock
+    # has been established yet; its outer metadata gate excludes other inspectors.
+    assert events[-2:] == ["connection", "descriptor"]
+    assert not module._METADATA_LOCK.locked()
+
+
+@pytest.mark.parametrize("module_name", ["task_backup", "memory_snapshot"])
+def test_connection_close_failure_still_closes_descriptor_and_releases_gate(
+    home, monkeypatch, module_name
+):
+    import importlib
+    import time
+
+    module = importlib.import_module("personal_agent." + module_name)
+    connection, _, _ = source(home)
+    backup.task_backup(home, "create", "before-upgrade")
+    connection.close()
+    helper = "_connection" if module_name == "task_backup" else "_connect"
+    real_connect, real_close = getattr(module, helper), os.close
+    events = []
+
+    class Connection:
+        def __init__(self, *args):
+            self.conn = real_connect(*args)
+
+        def __getattr__(self, name):
+            return getattr(self.conn, name)
+
+        def close(self):
+            self.conn.close()
+            events.append("connection")
+            raise RuntimeError("synthetic close failure")
+
+    def close(fd):
+        events.append("descriptor")
+        real_close(fd)
+
+    monkeypatch.setattr(module, helper, Connection)
+    monkeypatch.setattr(module.os, "close", close)
+    if module_name == "memory_snapshot":
+        monkeypatch.setattr(module, "_summary", lambda *args: {})
+    with pytest.raises(RuntimeError, match="synthetic close failure"):
+        if module_name == "task_backup":
+            module._metadata(path(home), time.monotonic() + 5)
+        else:
+            module._metadata(path(home), "synthetic", time.monotonic() + 5)
+    assert events[-2:] == ["connection", "descriptor"]
+    assert not module._METADATA_LOCK.locked()

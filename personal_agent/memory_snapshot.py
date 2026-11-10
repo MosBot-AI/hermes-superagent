@@ -6,6 +6,7 @@ import re
 import sqlite3
 import stat
 import tempfile
+import threading
 import time
 from contextlib import suppress
 from pathlib import Path
@@ -16,6 +17,8 @@ from .memory_backend import MemoryError
 from .memory_storage import existing_memory_path
 from .task_cli import _private_database_file, _private_storage_directory, current_profile_home
 from .tasks import TaskError
+
+_METADATA_LOCK = threading.Lock()
 
 MAX_BYTES = 128 * 1024 * 1024
 TIMEOUT_SECONDS = 30
@@ -73,10 +76,14 @@ def _check(path):
 
 def _connect(path, deadline):
     conn = sqlite3.connect(path.as_uri() + "?mode=ro", uri=True, timeout=1, isolation_level=None)
-    conn.execute("PRAGMA trusted_schema=OFF")
-    conn.execute("PRAGMA query_only=ON")
-    conn.set_progress_handler(lambda: int(time.monotonic() >= deadline), 1000)
-    return conn
+    try:
+        conn.execute("PRAGMA trusted_schema=OFF")
+        conn.execute("PRAGMA query_only=ON")
+        conn.set_progress_handler(lambda: int(time.monotonic() >= deadline), 1000)
+        return conn
+    except BaseException:
+        conn.close()
+        raise
 
 
 def _summary(conn, namespace):
@@ -98,6 +105,16 @@ def _summary(conn, namespace):
 
 
 def _metadata(path, namespace, deadline):
+    # A raw fd close in another inspector can release this process's SQLite locks.
+    if not _METADATA_LOCK.acquire(timeout=max(0, deadline - time.monotonic())):
+        raise MemoryError("snapshot_timeout")
+    try:
+        return _locked_metadata(path, namespace, deadline)
+    finally:
+        _METADATA_LOCK.release()
+
+
+def _locked_metadata(path, namespace, deadline):
     identity = _check(path)
     # Keep this fd open until AFTER SQLite closes: closing another fd to the
     # same inode would drop this process's POSIX SQLite locks.
@@ -124,9 +141,11 @@ def _metadata(path, namespace, deadline):
             raise MemoryError("snapshot_changed")
         return {**result, "bytes": total, "sha256": digest.hexdigest()}
     finally:
-        if conn is not None:
-            conn.close()
-        os.close(fd)
+        try:
+            if conn is not None:
+                conn.close()
+        finally:
+            os.close(fd)
 
 
 def snapshot(bound_home: Path, operation: str, payload: dict) -> dict:
