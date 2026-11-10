@@ -7,7 +7,7 @@ from datetime import date, timedelta
 from .task_dependencies import metadata
 from .task_native_sync import metadata as native_metadata
 
-_SUMMARY_COLUMNS = ("id", "title", "project", "due_date", "revision", "work_status")
+_SUMMARY_COLUMNS = ("id", "title", "project", "due_date", "revision", "work_status", "priority")
 
 
 def task_review(connection: sqlite3.Connection, request: dict) -> dict:

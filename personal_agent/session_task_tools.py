@@ -24,6 +24,8 @@ LOCAL_CLIENTS = frozenset({"cli", "tui", "desktop"})
 HELP = (
     "enable-read: allow bounded task data into this session's configured model for 30 minutes. "
     "enable-write: additionally allow local task changes for 30 minutes. "
+    "Read access includes the next ranked local-work view; write access includes explicitly "
+    "requested priority changes. Ranking never grants execution authority. "
     "disable: revoke future tool admission; already admitted work may finish. "
     "status: inspect activation without task data. All model activity and admitted controllers "
     "in this session share access. No external actions. In-process native CLI/TUI/Desktop only; "

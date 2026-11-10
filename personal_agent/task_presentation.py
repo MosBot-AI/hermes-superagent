@@ -168,6 +168,7 @@ def _task_lines(task: dict, *, full: bool = False) -> list[str]:
     ]
     if task.get("project") is not None:
         lines.append("  Project: " + _quoted(task["project"]))
+    lines.append("  Priority: " + task.get("priority", "not recorded in this receipt"))
     lines.append("  Due: " + (task.get("due_date") or "not set"))
     if all(key in task for key in ("dependencies_satisfied", "unsatisfied_dependency_count")):
         lines.append(
@@ -233,6 +234,8 @@ def _help(prefix: str) -> str:
             "--expected-snapshot HASH --request-id KEY",
             "Rename includes terminal tasks and preserves edges; destination must be unused.",
             "Available: " + prefix + " ready [--project LABEL | --unassigned]",
+            "Prioritized: " + prefix + " next [--limit 5] [--project LABEL | --unassigned]",
+            "Capture/update accept --priority high|normal|low; plan/breakdown JSON items too.",
             "Dependencies: "
             + prefix
             + (
@@ -421,6 +424,18 @@ def _render(result: dict, *, operation: str, payload: dict, prefix: str) -> str:
     data = result["data"]
     if operation == "help":
         return _help(prefix)
+    if operation == "next":
+        lines = [
+            "Next eligible local tasks (explicit priority, due date, capture order)",
+            f"Total eligible: {data['total']} | omitted: {data['omitted']}",
+            "Captured, manually ready tasks with prerequisites done. "
+            "Planning data, not permission or dispatch; no pagination cursor.",
+        ]
+        for task in data["items"]:
+            lines.extend(_task_lines(task))
+        if not data["items"]:
+            lines.append("No eligible tasks for these filters.")
+        return "\n".join(lines)
     if operation in ("list", "search", "agenda", "ready"):
         lines = _page(data, operation, payload, prefix)
     elif operation in ("project_reschedule_preview", "reschedule_project"):

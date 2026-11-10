@@ -114,7 +114,7 @@ def _locked_metadata(path: Path, deadline: float, *, reader=None, expected_diges
         os.lseek(fd, 0, os.SEEK_SET)
         connection = _connection(path, deadline)
         connection.execute("BEGIN")
-        result = inspect_task_snapshot(connection)
+        result = inspect_task_snapshot(connection, historical=True)
         digest = hashlib.sha256()
         total = 0
         while block := os.read(fd, 1024 * 1024):
@@ -145,10 +145,13 @@ def _read_tasks(connection, operation, *, after, limit, task_id):
     # No receipts or native observations: historical task data is not execution
     # authority. Bound values in SQL before materializing potentially altered data.
     columns = (
-        ("id", "title", "state", "revision", "due_date", "project", "work_status")
+        ("id", "title", "state", "revision", "due_date", "project", "work_status", "priority")
         if operation == "tasks"
         else _COLUMNS
     )
+    legacy = connection.execute("PRAGMA user_version").fetchone()[0] == 6
+    if legacy:
+        columns = tuple(column for column in columns if column != "priority")
     args = []
     if operation == "show":
         clause = " WHERE id = ?"
@@ -178,7 +181,10 @@ def _read_tasks(connection, operation, *, after, limit, task_id):
         row = connection.execute(
             f"SELECT {','.join(columns)} FROM tasks WHERE sequence=?", (sequence,)
         ).fetchone()
-        items.append(dict(zip(columns, row, strict=True)))
+        item = dict(zip(columns, row, strict=True))
+        if legacy:
+            item["priority"] = "normal"
+        items.append(item)
     output = (
         {"items": items, "has_more": more, "next_cursor": items[-1]["id"] if more else None}
         if operation == "tasks"

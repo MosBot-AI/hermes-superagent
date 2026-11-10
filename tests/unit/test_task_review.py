@@ -76,6 +76,7 @@ def test_all_buckets_counts_date_edges_order_and_minimal_summaries(store):
             "due_date",
             "revision",
             "work_status",
+            "priority",
             "dependencies_satisfied",
             "unsatisfied_dependency_count",
             "native_progress",
@@ -287,5 +288,5 @@ def test_review_survives_legacy_upgrade_and_restart(tmp_path, version):
         store = TaskStore(connection)
         store.initialize()
         assert review(store) == before
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 6
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 7
     assert path.read_bytes() == raw

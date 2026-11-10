@@ -29,12 +29,14 @@ _SESSION = re.compile(r"[A-Za-z0-9._-]{1,128}")
 _WRITES = frozenset(("capture", "update", "complete", "cancel", "progress"))
 HELP = (
     'Use POSIX quotes: add "Title" [--details "Text"] [--project "Project"] '
-    "[--due-date YYYY-MM-DD]; list [--state all] [--project LABEL | --unassigned]; "
+    "[--priority high|normal|low] [--due-date YYYY-MM-DD]; "
+    "list [--state all] [--project LABEL | --unassigned]; "
     'search "Text"; show TASK_ID; projects; agenda --on YYYY-MM-DD; '
     'plan --project "Project" --task "First" --task "Second" --request-id KEY '
     "(1-20 tasks, one atomic write; a stable request ID is required); "
     "--tasks-json accepts explicit depends_on one-based positions in the same batch; "
-    "array order alone creates no prerequisites. "
+    "array order alone creates no prerequisites. JSON tasks may specify priority high|normal|low; "
+    "omitted priority is normal for new tasks, never inherited from a parent. "
     "breakdown TASK_ID --expected-revision N (--tasks-json JSON | --task TITLE [--task TITLE...]) "
     "--request-id KEY records explicit steps atomically in the parent's existing named project. "
     "The parent must be captured and not in_progress. Every step inherits all existing "
@@ -51,7 +53,8 @@ HELP = (
     "for active tasks. "
     'progress TASK_ID --expected-revision N --work-status STATUS --note "Progress or blocker"; '
     "update TASK_ID --expected-revision N [--title TITLE] [--details TEXT] "
-    "[--project LABEL | --clear-project] [--due-date YYYY-MM-DD | --clear-due]; "
+    "[--priority high|normal|low] [--project LABEL | --clear-project] "
+    "[--due-date YYYY-MM-DD | --clear-due]; "
     'done TASK_ID --expected-revision N --note "Reason"; '
     'cancel TASK_ID --expected-revision N --note "Reason". '
     "add is an alias for capture; done is an alias for complete. "
@@ -70,6 +73,10 @@ HELP = (
     "A stable explicit key is required. Starting or completing requires all prerequisites done; "
     "cancelled prerequisites block. ready [--project LABEL | --unassigned] lists captured "
     "tasks with recorded ready status and all prerequisites done, oldest first, not priority. "
+    "next [--limit N] [--project LABEL | --unassigned] returns the top eligible ready tasks "
+    "by explicit high/normal/low priority, due date (undated last), then capture order. "
+    "Default 5, maximum 20; no cursor or automatic selection/dispatch. "
+    "Priority is an explicit local planning label, not permission. "
     "Dependencies never start work or advance tasks automatically. "
     "For an uncertain outcome, reuse that exact "
     "key and identical command manually; a fresh key may duplicate capture. "

@@ -65,7 +65,7 @@ def test_history_is_chronological_metadata_only_and_durable(tmp_path, terminal, 
         assert [item["revision"] for item in data["items"]] == [1, 2]
         assert all(set(item) == {"revision", "operation", "timestamp"} for item in data["items"])
         assert snapshot(connection) == before
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 6
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 7
     raw = path.read_bytes()
     with sqlite3.connect(path) as connection:
         store = TaskStore(connection)
@@ -218,7 +218,7 @@ def test_history_reads_preexisting_events_after_migration(version):
         ).fetchall()
         history = store.run("history", {"task_id": task_id})["data"]
         assert [tuple(item.values()) for item in history["items"]] == expected
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 6
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 7
 
 
 @pytest.mark.parametrize(
