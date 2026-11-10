@@ -136,3 +136,5 @@ E9 has a selected native worker-routing design, an offline constraint evaluator 
 See [78. Fenced enrollment ceremony evidence](78-enrollment-ceremony.md) for the unwired one-shot confirmation foundation and current-pin identity boundary; production owner authority remains unavailable.
 
 See [79. Explicit consistent local memory snapshots](79-local-memory-snapshots.md) for private snapshot creation/inspection. Snapshots retain historical plaintext; there is no restore/import.
+
+[Exact memory source suppression](80-exact-memory-source-suppression.md): operator review, exact-input fingerprints and schema-11 lineage.

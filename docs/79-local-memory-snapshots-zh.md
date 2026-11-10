@@ -43,3 +43,5 @@ Create 返回 schema version、namespace、事件水位、record/active/tombston
 受控快照检查从私有文件及头部验证到 SQLite 和原始描述符清理，全程共享进程内不可重入门禁。第二个检查只在其协作式截止时间内等待，随后返回 `snapshot_timeout`；它不能通过关闭描述符释放首个检查的 POSIX 锁。任务与记忆连接辅助函数均会在 PRAGMA 或 progress 初始化失败时显式关闭连接。即使连接关闭抛错，清理仍关闭原始描述符并释放门禁。
 
 合成双检查回归在摘要完成时保持首个读取，拒绝受截止时间约束的第二个读取，并通过真实独立进程写者验证：首个读取结束前提交仍被阻止。这覆盖普通重叠插件检查，而非协调同进程中在快照文件上任意打开的非托管 SQLite 连接，也不防御恶意同 UID 访问。不改变恢复、权限、schema 或发布门禁。
+
+schema 11 来源抑制仍允许检查精确已知 schema 10 和 11 历史快照，不迁移或改变其字节。namespace、DELETE 日志、完整性及严格 schema 门禁继续适用；普通只读召回仍仅接受当前 schema。参见[来源抑制](80-exact-memory-source-suppression-zh.md)。

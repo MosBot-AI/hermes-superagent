@@ -59,7 +59,10 @@ HELP = (
     "Native views are readable by default; prefix --json for the original structured envelope. "
     "candidate-list [--limit N --after ID]; candidate-show ID; "
     "candidate-accept ID --expected-revision N (--keep | --expires-at UTC); "
-    "candidate-discard ID --expected-revision N; candidate-purge-expired. "
+    "candidate-discard ID --expected-revision N; candidate-purge-expired; "
+    "candidate-suppress-source ID --expected-revision N. Operator-only suppression discards "
+    "all pending candidates from the same full input and blocks new same-input proposals. "
+    "It does not delete already accepted records or match paraphrases; no unsuppress command. "
     "Candidates are untrusted model drafts with source quotes, not verified facts or grants. "
     "Review before accepting; --keep explicitly chooses no canonical expiry. "
     "Acceptance and canonical memory creation are one transaction; identical retries return "
@@ -152,7 +155,7 @@ def parse_command(raw_args: str) -> tuple[str, dict]:
     candidates.add_argument("--after", default=None)
     candidate_show = commands.add_parser("candidate-show")
     candidate_show.add_argument("candidate_id")
-    for operation in ("candidate-accept", "candidate-discard"):
+    for operation in ("candidate-accept", "candidate-discard", "candidate-suppress-source"):
         review = commands.add_parser(operation)
         review.add_argument("candidate_id")
         review.add_argument("--expected-revision", type=int, required=True)
@@ -235,6 +238,7 @@ def parse_command(raw_args: str) -> tuple[str, dict]:
         "candidate-show": "candidate_get",
         "candidate-accept": "candidate_accept",
         "candidate-discard": "candidate_discard",
+        "candidate-suppress-source": "candidate_suppress_source",
         "candidate-purge-expired": "candidate_purge_expired",
     }.get(operation, operation)
     if (

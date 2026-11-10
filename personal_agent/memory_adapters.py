@@ -18,6 +18,7 @@ _CAPABILITIES = frozenset(
         "private_markdown_projection",
         "private_edit_drafts",
         "review_candidates",
+        "exact_source_suppression",
         "record_expiry",
         "reviewed_expired_cleanup",
         "explicit_records",
@@ -113,6 +114,7 @@ for _candidate_operation in (
     "candidate_purge_expired",
 ):
     _OPERATION_CAPABILITIES[_candidate_operation] = {"review_candidates", "durable_write"}
+_OPERATION_CAPABILITIES["candidate_suppress_source"] = {"exact_source_suppression", "durable_write"}
 
 
 _RESERVED_IDS = frozenset({"local_sqlite", "builtin", "built-in", "default", "none"})

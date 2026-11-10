@@ -11,7 +11,14 @@ import sqlite3
 from datetime import datetime
 from uuid import uuid4
 
-from . import memory_edits, memory_expiry, memory_fts, memory_projection, memory_retention
+from . import (
+    memory_edits,
+    memory_expiry,
+    memory_fts,
+    memory_projection,
+    memory_retention,
+    memory_sources,
+)
 from .memory_backend import MemoryError, _text, validate_expiry, validate_request
 from .memory_candidate_store import SCHEMA as CANDIDATE_SCHEMA
 from .memory_candidate_store import execute as execute_candidate
@@ -19,7 +26,7 @@ from .memory_checkpoints import CHECKPOINT_SCHEMA, checkpoint_status, create_che
 from .memory_progress import PROGRESS_SCHEMA, advance_consumer, get_changes, get_consumer
 
 _APPLICATION_ID = 0x50414D45
-_SCHEMA_VERSION = 10
+_SCHEMA_VERSION = 11
 _SCHEMA_V1 = {
     "namespace": "CREATE TABLE namespace (id TEXT PRIMARY KEY NOT NULL)",
     "records": """CREATE TABLE records (
@@ -62,7 +69,8 @@ _SCHEMA_V6 = {**_SCHEMA_V5, **CANDIDATE_SCHEMA}
 _SCHEMA_V7 = {**_SCHEMA_V6, **memory_fts.SCHEMA}
 _SCHEMA_V8 = {**_SCHEMA_V7, **memory_projection.SCHEMA}
 _SCHEMA_V9 = {**_SCHEMA_V8, **memory_edits.SCHEMA_V9}
-_SCHEMA = {**_SCHEMA_V8, **memory_edits.SCHEMA}
+_SCHEMA_V10 = {**_SCHEMA_V8, **memory_edits.SCHEMA}
+_SCHEMA = {**_SCHEMA_V10, **memory_sources.SCHEMA}
 
 _COLUMNS = (
     "record_id",
@@ -110,6 +118,7 @@ class LocalMemoryBackend:
                 "private_markdown_projection",
                 "private_edit_drafts",
                 "review_candidates",
+                "exact_source_suppression",
                 "record_expiry",
                 "reviewed_expired_cleanup",
                 "explicit_records",
@@ -214,6 +223,7 @@ class LocalMemoryBackend:
                     **_SCHEMA_V6,
                     **memory_projection.SCHEMA,
                     **memory_edits.SCHEMA,
+                    **memory_sources.SCHEMA,
                 }.values():
                     connection.execute(sql)
                 memory_fts.create_index(connection)
@@ -262,6 +272,11 @@ class LocalMemoryBackend:
                 )
                 connection.execute("DROP TABLE memory_edits_v9")
                 connection.execute(f"PRAGMA user_version={_SCHEMA_VERSION}")
+            if 1 <= version <= 10:
+                for sql in memory_sources.SCHEMA.values():
+                    connection.execute(sql)
+                connection.execute(f"PRAGMA user_version={_SCHEMA_VERSION}")
+            memory_sources.validate(connection)
             memory_fts.validate_index_config(connection)
             connection.execute("COMMIT")
         except BaseException as error:
@@ -287,7 +302,8 @@ class LocalMemoryBackend:
             7: _SCHEMA_V7,
             8: _SCHEMA_V8,
             9: _SCHEMA_V9,
-            10: _SCHEMA,
+            10: _SCHEMA_V10,
+            11: _SCHEMA,
         }.get(version)
         return expected is not None and dict(rows) == expected and len(rows) == len(expected)
 
@@ -338,7 +354,7 @@ class LocalMemoryBackend:
         self._read_only = True
 
     @staticmethod
-    def _validate_readonly(connection, namespace_id):
+    def _validate_readonly(connection, namespace_id, *, historical_snapshot=False):
         """Caller owns a read transaction; establish its snapshot before mode admission."""
         if connection.execute("PRAGMA application_id").fetchone()[0] != _APPLICATION_ID:
             raise MemoryError("foreign_database")
@@ -348,7 +364,8 @@ class LocalMemoryBackend:
         rows = connection.execute(
             "SELECT name, sql FROM sqlite_master WHERE name NOT GLOB 'sqlite_*'"
         ).fetchall()
-        if version != _SCHEMA_VERSION or not LocalMemoryBackend._valid_schema(version, rows):
+        allowed = (10, 11) if historical_snapshot else (_SCHEMA_VERSION,)
+        if version not in allowed or not LocalMemoryBackend._valid_schema(version, rows):
             raise MemoryError("readonly_schema_unavailable")
         if connection.execute("SELECT id FROM namespace").fetchall() != [(namespace_id,)]:
             raise MemoryError("namespace_mismatch")
@@ -425,6 +442,7 @@ class LocalMemoryBackend:
             # sampling time so lock waits cannot admit an already expired row.
             conn.execute("SELECT id FROM namespace").fetchone()
             memory_fts.validate_index_config(conn)
+            memory_sources.validate(conn)
             now = datetime.fromisoformat(memory_expiry.utc_now())
             if operation in {"expired_preview", "forget_expired"}:
                 result = memory_retention.execute(self, conn, operation, request, now)
@@ -666,6 +684,7 @@ class LocalMemoryBackend:
                 raise MemoryError("record_forgotten")
             if current["revision"] != request["expected_revision"]:
                 raise MemoryError("revision_conflict")
+            memory_sources.suppress_record(conn, record_id)
             revision = current["revision"] + 1
             status = "forgotten" if operation == "forget" else "active"
             content = None if operation == "forget" else request.get("content", current["content"])

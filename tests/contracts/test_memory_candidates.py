@@ -466,3 +466,22 @@ def test_reused_request_key_on_distinct_actual_turn_is_not_old_candidate_replay(
     assert first["data"]["candidate_id"] != second["data"]["candidate_id"]
     assert len(command(host, "candidate-list")["data"]["items"]) == 2
     assert command(host, "list")["data"]["items"] == []
+
+
+def test_operator_suppresses_exact_input_across_new_native_turn(host):
+    config = (host.home / "config.yaml").read_bytes()
+    enable(host)
+    with turn(host):
+        before(host)
+        candidate = propose(host)["data"]["candidate_id"]
+    result = command(host, f"candidate-suppress-source {candidate} --expected-revision 1")
+    assert result["status"] == "ok", result
+    assert result["data"]["state"] == "discarded"
+    assert command(host, f"candidate-suppress-source {candidate} --expected-revision 1")["replayed"]
+    with turn(host):
+        before(host)
+        result = propose(host, request_id="new-native-turn")
+        assert result["status"] == "error"
+        assert result["error"]["code"] == "candidate_source_suppressed"
+        assert propose(host, action="suppress-source")["status"] == "error"
+    assert (host.home / "config.yaml").read_bytes() == config

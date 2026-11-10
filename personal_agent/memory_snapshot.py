@@ -87,7 +87,7 @@ def _connect(path, deadline):
 
 
 def _summary(conn, namespace):
-    LocalMemoryBackend._validate_readonly(conn, namespace)
+    LocalMemoryBackend._validate_readonly(conn, namespace, historical_snapshot=True)
     if conn.execute("PRAGMA integrity_check").fetchall() != [("ok",)]:
         raise MemoryError("snapshot_corrupt")
     return {

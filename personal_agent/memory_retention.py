@@ -1,6 +1,7 @@
 """Explicit whole-record review and atomic terminal forgetting of expired records.
 
-No timer, inferred retention, source suppression, capacity reset or physical erase.
+No timer, inferred retention, capacity reset or physical erase.
+Forgetting linked candidate records also suppresses their exact original input.
 The backend owns the transaction; managed files cannot roll back with SQLite.
 """
 

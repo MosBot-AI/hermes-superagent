@@ -136,3 +136,5 @@ E9 已选定原生 worker 路由设计，并实现离线约束验证器和部分
 参见 [78. 带栅栏的登记确认流程证据](78-enrollment-ceremony-zh.md)，了解未接线的一次性确认基础和当前 pin 身份边界；生产 owner authority 仍不可用。
 
 参见 [79. 显式一致的本地记忆快照](79-local-memory-snapshots-zh.md)，了解私密快照创建/检查。快照保留历史明文，不提供恢复/导入。
+
+[精确记忆来源抑制](80-exact-memory-source-suppression-zh.md)：操作人员审核、精确输入指纹和 schema 11 关联。
