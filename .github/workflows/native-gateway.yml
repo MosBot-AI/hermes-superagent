@@ -65,7 +65,7 @@ jobs:
           export HERMES_RUNTIME_PACKAGE="$RUNNER_TEMP/live-runtime"
           export HERMES_SOURCE_COMMIT="$GITHUB_SHA"
           "$RUNNER_TEMP/hermes-test-venv/bin/python" -m pytest -q \
-            tests/live/test_packaged_gateway_tasks.py \
+            acceptance/live/test_packaged_gateway_tasks.py \
             --junitxml="$RUNNER_TEMP/native-gateway-evidence/packaged-results.xml"
       - name: Upload synthetic native Gateway test receipt
         if: always()

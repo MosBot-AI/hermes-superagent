@@ -24,7 +24,7 @@ Only synthetic task text is used. The test's failure cleanup kills only its own 
 
 ## Running and limits
 
-Run the workflow explicitly from a reviewed branch/revision. It is never triggered on pushes or PRs. The test is outside default `tests/unit` collection and requires `HERMES_TEST_ROOT`, `HERMES_RUNTIME_PACKAGE` and `HERMES_SOURCE_COMMIT` from the workflow's verified build.
+Run the workflow explicitly from a reviewed branch/revision. It is never triggered on pushes or PRs. The test lives in `acceptance/live`, outside the offline `tests/conftest.py` network guard and default `tests/unit` collection and requires `HERMES_TEST_ROOT`, `HERMES_RUNTIME_PACKAGE` and `HERMES_SOURCE_COMMIT` from the workflow's verified build.
 
 Local cloud verification still encounters `EPERM` at `AF_UNIX` construction, including the supported elevated-review probe. No local Gateway start or policy workaround is attempted after that result. Successful GitHub-hosted execution would establish that runner's bounded acceptance, not repair the local cloud restriction or identify its kernel-policy cause.
 

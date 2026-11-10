@@ -24,7 +24,7 @@ Host 固定为 `2281116525106e3c109993ccb5dc74d02bfc1427`，只复用其真实�
 
 ## 运行与限制
 
-从已审查的分支/版本明确触发工作流，不在 push 或 PR 时运行。测试不属于默认 `tests/unit` 收集范围，所需的 `HERMES_TEST_ROOT`、`HERMES_RUNTIME_PACKAGE` 和 `HERMES_SOURCE_COMMIT` 由工作流已验证的构建提供。
+从已审查的分支/版本明确触发工作流，不在 push 或 PR 时运行。测试放在 `acceptance/live`，不受离线 `tests/conftest.py` 网络守卫影响，也不属于默认 `tests/unit` 收集范围，所需的 `HERMES_TEST_ROOT`、`HERMES_RUNTIME_PACKAGE` 和 `HERMES_SOURCE_COMMIT` 由工作流已验证的构建提供。
 
 本地云端在构造 `AF_UNIX` 时仍遇到 `EPERM`，通过受支持的提权审核探测也相同。取得该结果后不尝试本地 Gateway 启动或策略绕过。GitHub 托管执行即使成功，也只证明该 runner 的限定验收，不修复本地云端限制或确定其内核策略原因。
 

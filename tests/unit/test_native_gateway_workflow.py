@@ -33,9 +33,9 @@ def test_packaged_live_acceptance_does_not_enter_default_unit_suite():
     workflow = (ROOT / ".github/workflows/native-gateway.yml").read_text()
     assert 'scripts/build_runtime_distribution.py --source-commit "$GITHUB_SHA"' in workflow
     assert '--output-dir "$RUNNER_TEMP/live-runtime" --verify' in workflow
-    assert "tests/live/test_packaged_gateway_tasks.py" in workflow
+    assert "acceptance/live/test_packaged_gateway_tasks.py" in workflow
     assert 'export HERMES_SOURCE_COMMIT="$GITHUB_SHA"' in workflow
-    live = (ROOT / "tests/live/test_packaged_gateway_tasks.py").read_text()
+    live = (ROOT / "acceptance/live/test_packaged_gateway_tasks.py").read_text()
     assert '"--yes-deps",' in live and '"--enable",' in live
     assert '"prompt.submit"' not in live
     assert '"--force"' not in live and '"--allow-removed"' not in live
