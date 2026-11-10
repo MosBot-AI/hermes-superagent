@@ -51,6 +51,12 @@ def test_boundary_contracts_do_not_become_full_write_path_coverage():
         "concurrent_connector_policy_recheck",
         "concurrent_connector_timeout_retry",
     } <= set(rows["connector_batch"]["contract_ids"])
+    assert {
+        "kernel_current_cell_authority",
+        "kernel_cell_plugin_veto",
+        "kernel_cell_retirement",
+        "kernel_thread_context_restore",
+    } <= set(rows["execute_code_rpc"]["contract_ids"])
     assert "worker_current_policy_recheck" in rows["managed_worker"]["contract_ids"]
     assert "worker_revoke_before_admission" in rows["managed_worker"]["contract_ids"]
     assert "production_default_exposure" in rows["native_dispatch"]["contract_ids"]

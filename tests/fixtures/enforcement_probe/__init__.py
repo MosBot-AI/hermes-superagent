@@ -1,5 +1,6 @@
 """Test-only native plugin. Its sole tool records calls in memory, never external I/O."""
 
+import contextvars
 import json
 import threading
 
@@ -8,6 +9,9 @@ HOOK_MODE = "allow"
 MIDDLEWARE_MODE = "allow"
 HOOK_CALLS = []
 HANDLER_CALLS = []
+HANDLER_CONTEXTS = []
+HANDLER_APPROVAL_CALLBACKS = []
+CELL_CONTEXT = contextvars.ContextVar("synthetic_cell_context", default="unbound")
 MIDDLEWARE_CALLS = []
 HOOK_THREADS = []
 STARTED = threading.Event()
@@ -47,7 +51,11 @@ def execution(tool_name, args, next_call, **_context):
 
 
 def handler(args, **_context):
+    from tools.terminal_tool import _get_approval_callback
+
+    HANDLER_APPROVAL_CALLBACKS.append(_get_approval_callback())
     HANDLER_CALLS.append(dict(args))
+    HANDLER_CONTEXTS.append((CELL_CONTEXT.get(), _context.get("task_id")))
     return json.dumps({"ran": len(HANDLER_CALLS)})
 
 

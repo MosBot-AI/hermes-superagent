@@ -40,7 +40,7 @@ The tests are [native enforcement contracts](../tests/contracts/test_enforcement
 - Empty/mismatched/non-ASCII tokens, an empty server token, malformed JSON, an unavailable tool and an exhausted budget refuse before handler execution. Only dispatched attempts consume the budget; a hook-denied attempt still consumes one and is recorded by `tool_errors_since`.
 - Normal plugin veto and callback failures stop the nested call. An explicitly injected exception escaping the outer hook dispatcher still reaches the handler. Nesting through RPC does not repair that existing failure domain.
 - Two identical authenticated packets execute twice. The token, tool allow-list and call budget are neither an ActionIntent nor an idempotency key.
-- The test executes the host-generated `_UDS_TRANSPORT_HEADER` client unchanged except for connection setup. Its transport double drops the first response **after** the real server/default dispatch completes. A one-shot client raises with one observed effect; a persistent client reconnects, repeats the same packet and returns after a second effect. This is a generated-client retry counterexample over an in-memory wire, not a live UDS/TCP or complete session-kernel test. Session kernels' custom current-cell authority rebinding and the remote filesystem polling transport remain unverified here.
+- The test executes the host-generated `_UDS_TRANSPORT_HEADER` client unchanged except for connection setup. Its transport double drops the first response **after** the real server/default dispatch completes. A one-shot client raises with one observed effect; a persistent client reconnects, repeats the same packet and returns after a second effect. This is a generated-client retry counterexample over an in-memory wire, not a live UDS/TCP or complete session-kernel test. Local session-kernel current-cell authority is covered separately in §2.9; remote filesystem polling remains unverified.
 
 ### 2.2 MCP admission versus declared read-only behavior
 
@@ -171,6 +171,24 @@ Eight additional parameterized [batch/worker cases](../tests/contracts/test_batc
 | `concurrent_connector_timeout_retry` | `test_native_concurrent_timeout_late_effect_and_retry` (allowed/revoked retry) |
 
 All three assertions run under primary and constructed delegated-child contexts. Full delegation scheduling, background lifecycle, alternate execute-code routes and production operation-level authorization remain separate gates. All controlled-write release paths stay blocked.
+
+### 2.9 Persistent local kernel cell authority
+
+Ten [kernel authority cases](../tests/contracts/test_kernel_authority_enforcement.py) retain real `CellAuthority`, `_rpc_forever`, RPC admission/default model dispatch, loaded-plugin hooks, `_run_cell`, result handling and retirement against the pinned host. The wire and an already-created process's stdin/response queue are synthetic endpoints; no socket, process or sandbox is launched, and submitted code is never executed.
+
+- One persistent wire switches from absent authority to cell one, retired cell one, cell two and retired cell two. Only the two active cells produce independent fixture effects; each records its captured ContextVar and task ID. The calling context is restored. This tests current-cell rebinding, not an authenticated owner identity.
+- Current-cell RPC retains plugin veto and callback exception/SystemExit refusal before the handler. Native RPC attempt accounting includes authority denials.
+- `_run_cell` retires authority after success, a reported cell exception, stdin failure, timeout and interruption. A subsequent RPC refuses without another effect. The synthetic process teardown endpoint is reached on stdin failure/timeout/interruption; this does not verify real process termination. Initial spawn failure remains outside this matrix.
+- A real worker thread starts with callback B, dispatches under authority captured with callback A and the caller's ContextVar/task, then regains B and its original ContextVar. The fixture only observes callback identity; it invokes no approval or privileged operation. No admission/context/retirement implementation is replaced.
+
+| Inventory contract ID | Executable assertion |
+| --- | --- |
+| `kernel_current_cell_authority` | `test_persistent_rpc_current_authority_and_retirement` |
+| `kernel_cell_plugin_veto` | `test_current_cell_rpc_preserves_plugin_veto` |
+| `kernel_cell_retirement` | `test_run_cell_retires_authority_on_normal_and_error_exit` |
+| `kernel_thread_context_restore` | `test_cell_captures_calling_context_and_restores_rpc_thread_callbacks` |
+
+Remote filesystem polling, per-call fallback, real subprocess/sandbox containment, full delegated/background lifecycle and operation-level production authority remain unverified. Retirement prevents subsequent dispatch; it does not retract an already-admitted effect. All controlled-write gates remain blocked.
 
 ## 3. Controlled-write release inventory
 

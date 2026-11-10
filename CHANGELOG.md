@@ -6,6 +6,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ## Unreleased
 
+- Add bounded persistent-kernel contracts for current-cell context/callback rebinding, policy veto and retirement after normal/error/timeout/interruption exits; no sandbox containment or production write authority is enabled.
+
 - Add pinned-host concurrent connector contracts for per-item veto, mid-flight policy rechecks, timeout/late effects and explicit retry in primary and constructed-child loops; all controlled-write gates remain blocked.
 
 - Record bounded [live native task conversation acceptance](docs/65-live-task-acceptance.md), including real-provider mutation evidence and post-disable refusal; no runtime behavior change or full MVP claim.
