@@ -81,7 +81,8 @@ _WRITE_PATHS = (
         "pinned_host_boundary_contract",
         "Native RPC token/allow-list/budget and default nested dispatch are exercised over "
         "an in-memory wire. Persistent client response loss can replay an effect. No sandbox, "
-        "remote poll transport or fallback containment is claimed. Local persistent-kernel "
+        "remote backend containment is claimed. File polling admission, response-loss replay "
+        "and kernel-to-per-call fallback selection use inert endpoints. Local persistent-kernel "
         "current-cell context/callback rebinding and selected retirement exits are tested.",
         (
             "rpc_token_allowlist_budget",
@@ -93,6 +94,10 @@ _WRITE_PATHS = (
             "kernel_cell_plugin_veto",
             "kernel_cell_retirement",
             "kernel_thread_context_restore",
+            "remote_poll_admission",
+            "remote_poll_plugin_veto",
+            "remote_poll_response_replay",
+            "remote_fallback_selection",
         ),
     ),
     WritePath(

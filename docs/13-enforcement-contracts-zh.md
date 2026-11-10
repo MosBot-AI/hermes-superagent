@@ -40,7 +40,7 @@ Worker 探针在全新进程中运行，因为 bootstrap policy 必须在 runtim
 - 空值/不匹配/非 ASCII 令牌、空服务端令牌、损坏 JSON、不可用工具和耗尽预算均在执行 handler 前拒绝。仅已派发尝试消耗预算；被 hook 拒绝的尝试仍计一次，并由 `tool_errors_since` 记录。
 - 正常插件否决和 callback 失败会阻断嵌套调用。显式注入的外层 hook dispatcher 逃逸异常仍会进入 handler。经 RPC 嵌套不会修复已有失败边界。
 - 两个完全相同且通过令牌验证的数据包会执行两次。令牌、工具 allowlist 和调用预算都不是 ActionIntent 或幂等键。
-- 测试执行宿主生成的 `_UDS_TRANSPORT_HEADER` 客户端，仅替换连接建立。传输替身在真实服务端/default dispatch 完成**之后**丢弃第一次响应。一次性客户端抛出异常，独立观察到一次副作用；持久客户端重连、重复相同数据包，并在第二次副作用后返回。这是在内存传输上验证生成客户端重试的反例，不是真实 UDS/TCP 或完整 session-kernel 测试。本地 session-kernel 当前 cell 权限由第 2.9 节单独覆盖；远端文件系统轮询仍未验证。
+- 测试执行宿主生成的 `_UDS_TRANSPORT_HEADER` 客户端，仅替换连接建立。传输替身在真实服务端/default dispatch 完成**之后**丢弃第一次响应。一次性客户端抛出异常，独立观察到一次副作用；持久客户端重连、重复相同数据包，并在第二次副作用后返回。这是在内存传输上验证生成客户端重试的反例，不是真实 UDS/TCP 或完整 session-kernel 测试。本地 session-kernel 当前 cell 权限由第 2.9 节单独覆盖；远端文件系统轮询及 fallback 选择由第 2.10 节另行限定。
 
 ### 2.2 MCP 准入与声明式只读行为
 
@@ -188,7 +188,22 @@ Worker 探针在全新进程中运行，因为 bootstrap policy 必须在 runtim
 | `kernel_cell_retirement` | `test_run_cell_retires_authority_on_normal_and_error_exit` |
 | `kernel_thread_context_restore` | `test_cell_captures_calling_context_and_restores_rpc_thread_callbacks` |
 
-远端文件系统轮询、逐调用 fallback、真实子进程/sandbox 隔离、完整委派/后台生命周期与生产操作级权限仍未验证。退役会阻止后续调度，但不撤回已准入效果。全部受控写入门禁仍保持阻塞。
+远端轮询/fallback 选择的证据在 §2.10 中另行限定。实际逐调用执行、真实子进程/sandbox 隔离、完整委派/后台生命周期与生产操作级权限仍未验证。退役会阻止后续调度，但不撤回已准入效果。全部受控写入门禁仍保持阻塞。
+
+### 2.10 远程轮询与 fallback 选择
+
+十三个[远程执行用例](../tests/contracts/test_remote_execution_enforcement.py)保留固定版本原生 `_rpc_poll_loop` 解析、token/序号准入、允许列表/预算、默认调度和已加载插件 hook，远程文件系统端点为惰性替身。无效 JSON、token 和序号请求被移除，不产生响应或 handler 副作用。允许的请求使用原子响应写入选项；插件否决与回调失败阻止副作用。断言独立 fixture 记录、计数器、日志及响应尝试，而不仅检查返回文案。
+
+响应写入失败会保留请求：下一轮轮询再次调度，产生第二次合成副作用。这是否定恰好一次执行的证据，而非恢复保证。另行测试 `_execute_remote` 选择：kernel 返回 `None` 或抛出异常时，以相同任务、工具集和限制进入替代的逐次调用端点；kernel 报告成功/错误时不会 fallback；缺少 Python 时两个端点均不执行。此选择器测试不执行 kernel 创建或逐次调用代码。
+
+| 清单契约 ID | 可执行断言 |
+| --- | --- |
+| `remote_poll_admission` | `test_remote_poll_invalid_requests_removed_without_effect`, `test_remote_poll_allowlist_budget_and_success` |
+| `remote_poll_plugin_veto` | `test_remote_poll_plugin_denial_prevents_effect` |
+| `remote_poll_response_replay` | `test_remote_response_failure_can_replay_effect` |
+| `remote_fallback_selection` | `test_remote_kernel_fallback_selection` |
+
+不使用远程 shell、文件系统、kernel、sandbox、模型或凭据。实际逐次调用进程生命周期、传输所有权及隔离仍未经验证。所有受控写入门禁保持阻断；#12 的委派/后台边界及最终有限清单仍未完成。
 
 ## 3. 受控写发布清单
 
@@ -199,7 +214,7 @@ Worker 探针在全新进程中运行，因为 bootstrap policy 必须在 runtim
 | `mcp` | 真实 SDK stdio 的插件否决/直接 registry 及原生 trust gate 边界；虚假只读反例 | 阻断；没有生产逐动作授权或凭据/结果合同 |
 | `shell` | 惰性 backend 上的原生 deny/workdir 与公开/内部 force 边界 | 阻断；没有真实 shell、隔离或操作级权限合同 |
 | `browser` | 惰性端点前的原生云元数据 URL 字面量预扫描及插件/直接 helper 边界 | 阻断；没有真实导航、身份绑定写入或结果合同 |
-| `execute_code_rpc` | 内存传输上的原生服务端/default 嵌套调度及生成客户端重试 | 阻断；存在重放反例，沙箱与当前 cell 权限仍未验证 |
+| `execute_code_rpc` | 惰性端点上的原生 RPC 调度/重试、当前 cell 权限（§2.9）与远端轮询/fallback 选择（§2.10） | 阻断；仍有重放反例；真实沙箱隔离与完整进程生命周期未经验证 |
 | `local_tool_batch` | 真实主/子循环、逐项否决、结果配对及显式重试反例 | 阻断；没有持久副作用幂等或持久撤权 |
 | `connector_batch` | 离线 gateway 客户端上的真实逐项模型调度、索引化部分结果及显式重试 | 阻断；生产 grant、凭据、传输重试及服务端幂等仍未验证 |
 | `short_worker` | 真实子 agent 构造/本地批量循环，以及真实生产包不支持 text-worker 时不回退的边界 | 阻断；调度器、后台生命周期及生产权限仍未验证 |
