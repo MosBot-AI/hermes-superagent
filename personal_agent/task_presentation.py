@@ -12,6 +12,10 @@ _STATUS = {
     "blocked": "blocked",
 }
 _ERRORS = {
+    "follow_up_status_required": (
+        "A follow-up date requires an active waiting or blocked task. "
+        "Record that status explicitly, or clear the date."
+    ),
     "project_reschedule_limit": (
         "Project exceeds 100 members or the full 16,000-character review budget. Nothing changed."
     ),
@@ -169,6 +173,14 @@ def _task_lines(task: dict, *, full: bool = False) -> list[str]:
     if task.get("project") is not None:
         lines.append("  Project: " + _quoted(task["project"]))
     lines.append("  Priority: " + task.get("priority", "not recorded in this receipt"))
+    lines.append(
+        "  Follow-up: "
+        + (
+            (task["follow_up_on"] or "not set")
+            if "follow_up_on" in task
+            else "not recorded in this receipt"
+        )
+    )
     lines.append("  Due: " + (task.get("due_date") or "not set"))
     if all(key in task for key in ("dependencies_satisfied", "unsatisfied_dependency_count")):
         lines.append(
@@ -236,6 +248,9 @@ def _help(prefix: str) -> str:
             "Available: " + prefix + " ready [--project LABEL | --unassigned]",
             "Prioritized: " + prefix + " next [--limit 5] [--project LABEL | --unassigned]",
             "Capture/update accept --priority high|normal|low; plan/breakdown JSON items too.",
+            "Follow-ups: " + prefix + " followups --on YYYY-MM-DD [--limit 20]",
+            "Progress/update: --follow-up-on YYYY-MM-DD | --clear-follow-up-on. "
+            "Dates apply only to active waiting/blocked tasks, not reminders.",
             "Dependencies: "
             + prefix
             + (
@@ -424,6 +439,18 @@ def _render(result: dict, *, operation: str, payload: dict, prefix: str) -> str:
     data = result["data"]
     if operation == "help":
         return _help(prefix)
+    if operation == "followups":
+        lines = [
+            "Waiting/blocked follow-ups on or before " + data["on"],
+            f"Total due: {data['total']} | omitted: {data['omitted']}",
+            "Ordered by follow-up date, priority, then capture order. "
+            "Planning data, not reminders or outreach permission; no cursor.",
+        ]
+        for task in data["items"]:
+            lines.extend(_task_lines(task))
+        if not data["items"]:
+            lines.append("No due follow-ups for these filters.")
+        return "\n".join(lines)
     if operation == "next":
         lines = [
             "Next eligible local tasks (explicit priority, due date, capture order)",

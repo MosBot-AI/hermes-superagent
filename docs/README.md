@@ -150,3 +150,5 @@ See [79. Explicit consistent local memory snapshots](79-local-memory-snapshots.m
 86. [Fenced local memory repack](86-local-memory-maintenance.md): current-source compaction, controlled cutover and explicit interruption recovery; not historical restore.
 
 87. [Explicit local task priorities](87-local-task-priority.md): visible priority and bounded next eligible work, without dispatch or shared REST changes.
+
+88. [Explicit waiting-task follow-ups](88-local-task-followups.md): date-only local follow-up workbench, not automatic reminders.

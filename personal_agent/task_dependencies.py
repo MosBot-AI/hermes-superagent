@@ -205,3 +205,51 @@ def next_tasks(connection, request, get):
         "scope": "active_manually_ready_dependency_satisfied",
         "authority": "planning_data_not_permission_or_dispatch",
     }
+
+
+def followups(connection, request, get):
+    """Explicit-date follow-up view only; no clock, timer or delivery side effect."""
+    from .tasks import TaskError, _date
+
+    clauses = [
+        "state='captured'",
+        "work_status IN ('waiting','blocked')",
+        "follow_up_on IS NOT NULL",
+    ]
+    args = []
+    if "project" in request:
+        clauses.append("project=? COLLATE BINARY")
+        args.append(request["project"])
+    elif request.get("unassigned"):
+        clauses.append("project IS NULL")
+    # Validate selected scope's stored dates before lexical cutoff can hide bad
+    # values. Scan metadata only, materialize payload for at most limit records.
+    rows = connection.execute(
+        "SELECT id,follow_up_on,priority FROM tasks WHERE "
+        + " AND ".join(clauses)
+        + " ORDER BY follow_up_on ASC,CASE priority WHEN 'high' THEN 0 "
+        "WHEN 'normal' THEN 1 ELSE 2 END,sequence ASC",
+        args,
+    )
+    total, selected = 0, []
+    for task_id, follow_up_on, priority in rows:
+        try:
+            _date(follow_up_on)
+        except TaskError:
+            _fail("storage_corrupt")
+        if priority not in ("high", "normal", "low"):
+            _fail("storage_corrupt")
+        if follow_up_on <= request["on"]:
+            total += 1
+            if len(selected) < request["limit"]:
+                selected.append(task_id)
+    return {
+        "items": [get(task_id) for task_id in selected],
+        "total": total,
+        "omitted": total - len(selected),
+        "limit": request["limit"],
+        "on": request["on"],
+        "ordering": "follow_up_date_then_priority_high_normal_low_then_capture_order",
+        "scope": "active_waiting_or_blocked_due_followups",
+        "authority": "planning_data_not_reminder_or_dispatch",
+    }

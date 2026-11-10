@@ -221,7 +221,8 @@ def accept(store, request, observe_callback):
             _fail("native_result_unavailable")
         now = datetime.now(UTC).isoformat(timespec="microseconds")
         cursor = conn.execute(
-            "UPDATE tasks SET state='done',revision=revision+1,updated_at=?,resolved_at=?,"
+            "UPDATE tasks SET state='done',follow_up_on=NULL,revision=revision+1,"
+            "updated_at=?,resolved_at=?,"
             "resolution_note=? WHERE id=? AND revision=? AND state='captured'",
             (now, now, request["note"], task["id"], task["revision"]),
         )

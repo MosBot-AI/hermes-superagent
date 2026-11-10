@@ -19,6 +19,7 @@ CONTEXT_PREFIX = (
     "reuse write request IDs on uncertain retries and reconcile revision conflicts. "
     "Dependency readiness is derived from this read snapshot and can change without this "
     "task revision changing. Priority is an explicit planning label, not authority. "
+    "A follow-up date is planning data, not a scheduled reminder or outreach permission. "
     "Ready is not permission to act or proof of an outcome. "
     "For omitted fields use personal_tasks_read show.\n"
 )
@@ -53,6 +54,7 @@ def task_context(task: dict) -> str:
 
     # Historical callers may omit priority; never invent an old receipt value.
     data["task"]["priority"] = task.get("priority")
+    data["task"]["follow_up_on"] = task.get("follow_up_on", "not recorded")
 
     # Dependency IDs/states are bounded metadata, not prerequisite instructions.
     # Missing fields (for example an older caller) remain unknown, never "clear".

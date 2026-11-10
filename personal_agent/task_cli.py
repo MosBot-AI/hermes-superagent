@@ -99,6 +99,14 @@ def setup_tasks_cli(parent: argparse._SubParsersAction) -> None:
     next_filters = next_tasks.add_mutually_exclusive_group()
     next_filters.add_argument("--project", default=argparse.SUPPRESS)
     next_filters.add_argument("--unassigned", action="store_true", default=argparse.SUPPRESS)
+    followups = commands.add_parser(
+        "followups", help="Read waiting/blocked tasks due for explicit follow-up; no reminders"
+    )
+    followups.add_argument("--on", required=True, help="Explicit YYYY-MM-DD; no clock inference")
+    followups.add_argument("--limit", type=int, default=20)
+    followup_filters = followups.add_mutually_exclusive_group()
+    followup_filters.add_argument("--project", default=argparse.SUPPRESS)
+    followup_filters.add_argument("--unassigned", action="store_true", default=argparse.SUPPRESS)
     dependencies = commands.add_parser("dependencies", help="Explicitly replace all prerequisites")
     dependencies.add_argument("task_id")
     dependencies.add_argument("--expected-revision", type=int, required=True)
@@ -138,6 +146,16 @@ def setup_tasks_cli(parent: argparse._SubParsersAction) -> None:
         command.add_argument("task_id")
         command.add_argument("--expected-revision", type=int, required=True)
         command.add_argument("--request-id", required=True)
+        if name in ("update", "progress"):
+            followup = command.add_mutually_exclusive_group()
+            followup.add_argument("--follow-up-on", dest="follow_up_on", default=argparse.SUPPRESS)
+            followup.add_argument(
+                "--clear-follow-up-on",
+                dest="follow_up_on",
+                action="store_const",
+                const=None,
+                default=argparse.SUPPRESS,
+            )
         if name == "update":
             command.add_argument("--title", default=argparse.SUPPRESS)
             command.add_argument(
@@ -218,6 +236,7 @@ def command_request(args: argparse.Namespace) -> tuple[str, dict]:
         "rename_project": ("project", "new_project", "expected_snapshot", "request_id"),
         "capture": ("title", "details", "request_id", "due_date", "project", "priority"),
         "next": ("limit", "project", "unassigned"),
+        "followups": ("on", "limit", "project", "unassigned"),
         "get": ("task_id",),
         "ready": ("limit", "after", "project", "unassigned"),
         "set_dependencies": ("task_id", "expected_revision", "request_id", "dependency_ids"),
@@ -250,10 +269,18 @@ def command_request(args: argparse.Namespace) -> tuple[str, dict]:
             "title",
             "details",
             "priority",
+            "follow_up_on",
             "due_date",
             "project",
         ),
-        "progress": ("task_id", "expected_revision", "request_id", "work_status", "note"),
+        "progress": (
+            "task_id",
+            "expected_revision",
+            "request_id",
+            "work_status",
+            "note",
+            "follow_up_on",
+        ),
         "complete": ("task_id", "expected_revision", "request_id", "note"),
         "cancel": ("task_id", "expected_revision", "request_id", "note"),
     }

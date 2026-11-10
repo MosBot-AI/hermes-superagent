@@ -79,7 +79,7 @@ def test_forward_references_revision_one_and_live_readiness():
     assert [item["id"] for item in ready] == [items[1]["id"]]
     assert ready[0]["revision"] == 1
     assert s.run("capture_plan", request) == {**result, "replayed": True}
-    assert s._connection.execute("PRAGMA user_version").fetchone()[0] == 7
+    assert s._connection.execute("PRAGMA user_version").fetchone()[0] == 8
 
 
 @pytest.mark.parametrize(
