@@ -19,6 +19,7 @@ from .local_memory import (
 )
 from .memory_backend import MemoryError, _identifier, _text, validate_expiry
 from .memory_checkpoints import _state
+from .memory_coordination import memory_lock
 from .memory_storage import existing_memory_path
 
 
@@ -149,7 +150,7 @@ def _diagnose(conn):
     }
 
 
-def maintain(bound_home, operation, payload):
+def _maintain(bound_home, operation, payload):
     request = validate(operation, payload)
     path = existing_memory_path(bound_home, allow_journal=True)
     namespace = "trusted-profile:" + hashlib.sha256(str(bound_home).encode()).hexdigest()
@@ -202,3 +203,9 @@ def maintain(bound_home, operation, payload):
                     conn.execute("ROLLBACK")
             finally:
                 conn.close()
+
+
+def maintain(bound_home, operation, payload):
+    validate(operation, payload)
+    with memory_lock(bound_home):
+        return _maintain(bound_home, operation, payload)

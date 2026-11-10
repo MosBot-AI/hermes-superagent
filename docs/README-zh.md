@@ -146,3 +146,5 @@ E9 已选定原生 worker 路由设计，并实现离线约束验证器和部分
 84. [安装包 Gateway 生命周期验收](84-packaged-gateway-live-zh.md)：仅手动运行的生产安装与真实传输/重启验收候选，不调用模型。
 
 85. [版本化本地记忆 SDK](85-local-memory-sdk-zh.md)：显式已审查适配器、结果验证及可复用合成合规测试；不自动加载或切换 provider。
+
+86. [带停写栅栏的本地记忆重整](86-local-memory-maintenance-zh.md): 当前源压缩、受控切换和显式中断恢复；不是历史快照恢复。
