@@ -228,7 +228,7 @@ def test_exact_schema_migration_preserves_history(version):
     }
     s = TaskStore(conn)
     s.initialize()
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 7
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 8
     assert s.run("get", {"task_id": task_id})["data"]["native_progress"] is None
     for table in ("events", "receipts"):
         assert conn.execute(f"SELECT * FROM {table}").fetchall() == before[table]

@@ -23,7 +23,7 @@ def store():
     connection = sqlite3.connect(":memory:")
     result = TaskStore(connection)
     result.initialize()
-    assert connection.execute("PRAGMA user_version").fetchone()[0] == 7
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 8
     yield result
     connection.close()
 
@@ -245,6 +245,7 @@ def test_schemas_are_flat_closed_json_objects():
                 "review",
                 "ready",
                 "next",
+                "followups",
                 "native_review",
             ],
             ["action"],

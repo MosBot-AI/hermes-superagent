@@ -170,7 +170,7 @@ def test_exact_legacy_migration(version):
     }
     s = TaskStore(conn)
     s.initialize()
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 7
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 8
     assert s.run("get", {"task_id": task_id})["data"]["dependencies"] == []
     for table, rows in before.items():
         assert conn.execute(f"SELECT * FROM {table}").fetchall() == rows

@@ -18,6 +18,7 @@ _READ_ACTIONS = (
     "review",
     "ready",
     "next",
+    "followups",
     "native_review",
 )
 _WRITE_ACTIONS = (
@@ -52,6 +53,10 @@ PERSONAL_TASKS_READ_SCHEMA = {
         "mean unknown, not clear. next returns top eligible tasks by explicit high/normal/low "
         "priority, due date (undated last), then capture order. Default limit 5, maximum 20, "
         "no after cursor. Ranking is planning data, not permission or dispatch. "
+        "followups requires explicit on: returns active waiting/blocked tasks whose "
+        "follow_up_on is at or before it, ordered by follow-up date, priority, capture order. "
+        "Default limit 20, maximum 100, no after cursor. It never schedules reminders, "
+        "contacts anyone or changes task status. Do not infer today. "
         "native_review requires explicit on and reads saved native observations only, never "
         "refreshes a board. It groups captured tasks by saved review status, saved done/archived "
         "status, identity issues and observations older than UTC midnight(on)-stale_after_days. "
@@ -85,7 +90,8 @@ PERSONAL_TASKS_READ_SCHEMA = {
                 "maximum": 100,
                 "description": (
                     "list/search/projects/agenda/history/ready default to 20; "
-                    "next defaults to 5 and permits at most 20."
+                    "next defaults to 5 and permits at most 20; "
+                    "followups defaults to 20, maximum 100."
                 ),
             },
             "after": {
@@ -109,7 +115,7 @@ PERSONAL_TASKS_READ_SCHEMA = {
                 "minLength": 1,
                 "maxLength": 80,
                 "description": (
-                    "list/search/agenda/review/ready/next/native_review: "
+                    "list/search/agenda/review/ready/next/followups/native_review: "
                     "exact case-sensitive label, "
                     "no outer whitespace. "
                     "Mutually exclusive with unassigned."
@@ -118,7 +124,7 @@ PERSONAL_TASKS_READ_SCHEMA = {
             "unassigned": {
                 "type": "boolean",
                 "description": (
-                    "list/search/agenda/review/ready/next/native_review: "
+                    "list/search/agenda/review/ready/next/followups/native_review: "
                     "true selects unlabeled tasks."
                 ),
             },
@@ -162,7 +168,8 @@ PERSONAL_TASKS_READ_SCHEMA = {
                 "type": "string",
                 "format": "date",
                 "description": (
-                    "agenda/review/native_review: explicit YYYY-MM-DD date; do not infer a date."
+                    "agenda/review/native_review/followups: "
+                    "explicit YYYY-MM-DD date; never infer today."
                 ),
             },
         },
@@ -197,7 +204,7 @@ PERSONAL_TASKS_WRITE_SCHEMA = {
         "executed, and no aggregate completion happens automatically. One atomic receipt "
         "covers parent and steps; retry identical arguments/key, never separate captures. "
         "update requires "
-        "at least one of title/details/due_date/project/priority. "
+        "at least one of title/details/due_date/project/priority/follow_up_on. "
         "update/complete/cancel/progress/set_dependencies require "
         "task_id and expected_revision from a prior read for compare-and-swap (CAS); "
         "never invent IDs or revisions. On revision conflict, read and reconcile first. "
@@ -209,6 +216,9 @@ PERSONAL_TASKS_WRITE_SCHEMA = {
         "Target and prerequisites must share one non-null exact project, without cycles. "
         "Starting (in_progress) or completing requires all prerequisites done; cancelled blocks. "
         "No automatic advancement or dispatch. Projects are labels, not native Project entities. "
+        "update/progress may set follow_up_on only for active waiting/blocked tasks, or null "
+        "to clear it. It is separate from due_date; ready/in_progress/complete/cancel clear it. "
+        "Never pass it to capture, capture_plan or breakdown. No automatic reminder or outreach. "
         "Dates and priority changes must be explicit. Priority is high/normal/low, "
         "not permission, urgency inference or dispatch. Omit priority unless explicitly requested; "
         "new tasks then store normal, not a parent-inherited value."
@@ -284,6 +294,11 @@ PERSONAL_TASKS_WRITE_SCHEMA = {
                 },
             },
             "details": {"type": "string", "maxLength": 5000},
+            "follow_up_on": {
+                "type": ["string", "null"],
+                "format": "date",
+                "description": "update/progress only: explicit YYYY-MM-DD; null clears follow-up.",
+            },
             "priority": {
                 "type": "string",
                 "enum": ["high", "normal", "low"],

@@ -64,7 +64,7 @@ def test_plan_is_one_transaction_with_ordered_ids_and_independent_tasks(store): 
     assert store.run("capture_plan", request) == {"data": data, "replayed": True}
     assert store.run("get", {"task_id": first["id"]})["data"]["state"] == "done"
     assert counts(store) == [2, 3, 2]
-    assert store._connection.execute("PRAGMA user_version").fetchone()[0] == 7
+    assert store._connection.execute("PRAGMA user_version").fetchone()[0] == 8
 
 
 @pytest.mark.parametrize(

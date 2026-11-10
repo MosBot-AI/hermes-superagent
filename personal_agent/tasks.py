@@ -18,7 +18,7 @@ from .task_native_review import task_native_review
 from .task_review import task_review
 
 _APPLICATION_ID = 0x5041544B
-_SCHEMA_VERSION = 7
+_SCHEMA_VERSION = 8
 _COLUMNS = (
     "id",
     "title",
@@ -36,6 +36,7 @@ _COLUMNS = (
     "progress_note",
     "progress_updated_at",
     "priority",
+    "follow_up_on",
 )
 _SCHEMA_V1 = {
     "tasks": """CREATE TABLE tasks (
@@ -76,7 +77,8 @@ _PRIORITIES = ("high", "normal", "low")
 _PRIORITY_COLUMN = (
     "priority TEXT NOT NULL DEFAULT 'normal' CHECK(priority IN ('high','normal','low'))"
 )
-_SCHEMA = {**_SCHEMA_V6, "tasks": _SCHEMA_V6["tasks"][:-1] + ", " + _PRIORITY_COLUMN + ")"}
+_SCHEMA_V7 = {**_SCHEMA_V6, "tasks": _SCHEMA_V6["tasks"][:-1] + ", " + _PRIORITY_COLUMN + ")"}
+_SCHEMA = {**_SCHEMA_V7, "tasks": _SCHEMA_V7["tasks"][:-1] + ", follow_up_on TEXT)"}
 
 
 class TaskError(Exception):
@@ -154,6 +156,7 @@ def validate_request(operation: str, payload: dict) -> dict:
         ),
         "ready": (set(), {"project", "unassigned", "limit", "after"}),
         "next": (set(), {"project", "unassigned", "limit"}),
+        "followups": ({"on"}, {"project", "unassigned", "limit"}),
         "capture": ({"title", "request_id"}, {"details", "due_date", "project", "priority"}),
         "recover_copy": (
             {"title", "request_id", "backup_sha256", "original_task_id"},
@@ -163,9 +166,12 @@ def validate_request(operation: str, payload: dict) -> dict:
         "breakdown": ({"task_id", "expected_revision", "tasks", "request_id"}, set()),
         "update": (
             {"task_id", "expected_revision", "request_id"},
-            {"title", "details", "due_date", "project", "priority"},
+            {"title", "details", "due_date", "project", "priority", "follow_up_on"},
         ),
-        "progress": ({"task_id", "expected_revision", "request_id", "work_status", "note"}, set()),
+        "progress": (
+            {"task_id", "expected_revision", "request_id", "work_status", "note"},
+            {"follow_up_on"},
+        ),
         "complete": ({"task_id", "expected_revision", "request_id", "note"}, set()),
         "cancel": ({"task_id", "expected_revision", "request_id", "note"}, set()),
         "get": ({"task_id"}, set()),
@@ -199,7 +205,7 @@ def validate_request(operation: str, payload: dict) -> dict:
     if operation in ("capture", "recover_copy"):
         result.setdefault("details", "")
     if operation == "update" and not (
-        {"title", "details", "due_date", "project", "priority"} & result.keys()
+        {"title", "details", "due_date", "project", "priority", "follow_up_on"} & result.keys()
     ):
         raise TaskError("invalid_request")
     for key, maximum, needed, multiline in (
@@ -248,6 +254,8 @@ def validate_request(operation: str, payload: dict) -> dict:
             raise TaskError("invalid_request")
     if "due_date" in result and not (operation == "update" and result["due_date"] is None):
         result["due_date"] = _date(result["due_date"])
+    if "follow_up_on" in result and result["follow_up_on"] is not None:
+        result["follow_up_on"] = _date(result["follow_up_on"])
     if "on" in result:
         result["on"] = _date(result["on"])
     if "task_id" in result:
@@ -325,6 +333,10 @@ def validate_request(operation: str, payload: dict) -> dict:
             date.fromisoformat(result["on"]) + timedelta(days=result["lookahead_days"])
         except OverflowError:
             raise TaskError("invalid_request") from None
+    if operation == "followups":
+        result = {"limit": 20, **result}
+        if type(result["limit"]) is not int or not 1 <= result["limit"] <= 100:
+            raise TaskError("invalid_request")
     if operation == "next":
         result = {"limit": 5, **result}
         if type(result["limit"]) is not int or not 1 <= result["limit"] <= 20:
@@ -379,9 +391,9 @@ def inspect_task_snapshot(connection: sqlite3.Connection, *, historical=False) -
         "SELECT name, sql FROM sqlite_master WHERE name NOT GLOB 'sqlite_*'"
     ).fetchall()
     version = connection.execute("PRAGMA user_version").fetchone()[0]
-    expected = _SCHEMA_V6 if historical and version == 6 else _SCHEMA
+    expected = {6: _SCHEMA_V6, 7: _SCHEMA_V7}.get(version, _SCHEMA) if historical else _SCHEMA
     if (
-        version not in ((6, 7) if historical else (7,))
+        version not in ((6, 7, 8) if historical else (8,))
         or len(rows) != len(expected)
         or dict(rows) != expected
     ):
@@ -421,7 +433,7 @@ class TaskStore:
             pass
 
     def initialize(self) -> None:
-        """Create v7, atomically migrate exact owned v1-v6, or verify v7."""
+        """Create v8, atomically migrate exact owned v1-v7, or verify v8."""
         self._initialized = False
         began = False
         try:
@@ -440,7 +452,7 @@ class TaskStore:
                 conn.execute(f"PRAGMA user_version = {_SCHEMA_VERSION}")
             elif app_id != _APPLICATION_ID:
                 raise TaskError("foreign_database")
-            elif version in (1, 2, 3, 4, 5, 6):
+            elif version in (1, 2, 3, 4, 5, 6, 7):
                 legacy = {
                     1: _SCHEMA_V1,
                     2: _SCHEMA_V2,
@@ -448,6 +460,7 @@ class TaskStore:
                     4: _SCHEMA_V4,
                     5: _SCHEMA_V5,
                     6: _SCHEMA_V6,
+                    7: _SCHEMA_V7,
                 }[version]
                 if dict(rows) != legacy or len(rows) != len(legacy):
                     raise TaskError("unsupported_schema")
@@ -464,7 +477,9 @@ class TaskStore:
                 if version < 6:
                     for statement in native_sync.SCHEMA.values():
                         conn.execute(statement)
-                conn.execute("ALTER TABLE tasks ADD COLUMN " + _PRIORITY_COLUMN)
+                if version < 7:
+                    conn.execute("ALTER TABLE tasks ADD COLUMN " + _PRIORITY_COLUMN)
+                conn.execute("ALTER TABLE tasks ADD COLUMN follow_up_on TEXT")
                 conn.execute(f"PRAGMA user_version = {_SCHEMA_VERSION}")
             elif version != _SCHEMA_VERSION:
                 raise TaskError("unsupported_schema")
@@ -495,6 +510,13 @@ class TaskStore:
     def _metadata(self, task):
         if task["priority"] not in _PRIORITIES:
             raise TaskError("storage_corrupt")
+        if task["follow_up_on"] is not None:
+            try:
+                _date(task["follow_up_on"])
+            except TaskError:
+                raise TaskError("storage_corrupt") from None
+            if task["state"] != "captured" or task["work_status"] not in ("waiting", "blocked"):
+                raise TaskError("storage_corrupt")
         return native_sync.metadata(self._connection, dependencies.metadata(self._connection, task))
 
     def accept_native_review(self, request, observe_callback):
@@ -741,6 +763,7 @@ class TaskStore:
                 "native_review",
                 "ready",
                 "next",
+                "followups",
                 "project_rename_preview",
                 "project_reschedule_preview",
             ):
@@ -756,6 +779,8 @@ class TaskStore:
                     data = task_review(self._connection, request)
                 elif operation == "native_review":
                     data = task_native_review(self._connection, request)
+                elif operation == "followups":
+                    data = dependencies.followups(self._connection, request, self._get)
                 elif operation == "next":
                     data = dependencies.next_tasks(self._connection, request, self._get)
                 elif operation == "ready":
@@ -832,9 +857,18 @@ class TaskStore:
                     if not task["dependencies_satisfied"]:
                         raise TaskError("dependencies_unsatisfied")
                 state = {"complete": "done", "cancel": "cancelled"}.get(operation, "captured")
+                work_status = (
+                    request["work_status"] if operation == "progress" else task["work_status"]
+                )
+                follow_up_on = request.get("follow_up_on", task["follow_up_on"])
+                eligible_followup = state == "captured" and work_status in ("waiting", "blocked")
+                if request.get("follow_up_on") is not None and not eligible_followup:
+                    raise TaskError("follow_up_status_required")
+                if not eligible_followup:
+                    follow_up_on = None
                 cursor = self._connection.execute(
                     "UPDATE tasks SET title=?, details=?, due_date=?, project=?,"
-                    " priority=?, state=?,"
+                    " priority=?, state=?, follow_up_on=?,"
                     " work_status=?, progress_note=?, progress_updated_at=?, revision=revision+1,"
                     " updated_at=?, resolved_at=?, resolution_note=? WHERE id=? AND revision=?",
                     (
@@ -844,7 +878,8 @@ class TaskStore:
                         request.get("project", task["project"]),
                         request.get("priority", task["priority"]),
                         state,
-                        request["work_status"] if operation == "progress" else task["work_status"],
+                        follow_up_on,
+                        work_status,
                         request["note"] if operation == "progress" else task["progress_note"],
                         now if operation == "progress" else task["progress_updated_at"],
                         now,

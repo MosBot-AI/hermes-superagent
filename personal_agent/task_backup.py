@@ -145,11 +145,24 @@ def _read_tasks(connection, operation, *, after, limit, task_id):
     # No receipts or native observations: historical task data is not execution
     # authority. Bound values in SQL before materializing potentially altered data.
     columns = (
-        ("id", "title", "state", "revision", "due_date", "project", "work_status", "priority")
+        (
+            "id",
+            "title",
+            "state",
+            "revision",
+            "due_date",
+            "project",
+            "work_status",
+            "priority",
+            "follow_up_on",
+        )
         if operation == "tasks"
         else _COLUMNS
     )
-    legacy = connection.execute("PRAGMA user_version").fetchone()[0] == 6
+    version = connection.execute("PRAGMA user_version").fetchone()[0]
+    legacy = version == 6
+    if version < 8:
+        columns = tuple(column for column in columns if column != "follow_up_on")
     if legacy:
         columns = tuple(column for column in columns if column != "priority")
     args = []
@@ -182,6 +195,8 @@ def _read_tasks(connection, operation, *, after, limit, task_id):
             f"SELECT {','.join(columns)} FROM tasks WHERE sequence=?", (sequence,)
         ).fetchone()
         item = dict(zip(columns, row, strict=True))
+        if version < 8:
+            item["follow_up_on"] = None
         if legacy:
             item["priority"] = "normal"
         items.append(item)

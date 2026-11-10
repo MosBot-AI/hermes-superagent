@@ -191,7 +191,7 @@ def test_all_legacy_migrations_preserve_exact_receipt_and_omitted_digest(version
     before = connection.execute("SELECT * FROM receipts").fetchall()
     store = TaskStore(connection)
     store.initialize()
-    assert connection.execute("PRAGMA user_version").fetchone() == (7,)
+    assert connection.execute("PRAGMA user_version").fetchone() == (8,)
     assert connection.execute("SELECT * FROM receipts").fetchall() == before
     assert store.run("capture", request) == {"data": json.loads(receipt), "replayed": True}
     assert store.run("get", {"task_id": task_id})["data"]["priority"] == "normal"
@@ -223,7 +223,7 @@ def test_historical_v6_backup_read_is_nonmigrating(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "fail_at", ["ALTER TABLE tasks ADD COLUMN priority", "PRAGMA user_version = 7", "COMMIT"]
+    "fail_at", ["ALTER TABLE tasks ADD COLUMN priority", "PRAGMA user_version = 8", "COMMIT"]
 )
 def test_v6_upgrade_failure_rolls_back_exact_bytes(tmp_path, fail_at):
     class Failing(sqlite3.Connection):

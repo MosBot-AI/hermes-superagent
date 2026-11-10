@@ -555,3 +555,129 @@ def test_packaged_explicit_priorities_and_next_work_survive_restart(installed):
             "priority-edit",
             "priority-done",
         }
+
+
+def test_packaged_waiting_followups_preserve_deadlines_and_restart(installed):
+    home, env, live = installed
+    initial = None
+    waiting = None
+
+    async def command(ws, sid, raw):
+        result = await live.ok(ws, "slash.exec", session_id=sid, command=raw)
+        assert result["type"] == "exec", result
+        value = json.loads(result["output"])
+        assert value["schema_version"] == "personal.local-conversation-tasks.v1"
+        return value
+
+    async def due(ws, sid, on):
+        result = await command(ws, sid, f"personal-tasks --json followups --on {on}")
+        assert result["status"] == "ok", result
+        assert result["data"]["authority"] == "planning_data_not_reminder_or_dispatch"
+        assert result["data"]["omitted"] == 0
+        return result["data"]["items"]
+
+    async def create(desc):
+        nonlocal initial, waiting
+        async with live.websocket(home, desc) as ws:
+            created = await live.ok(
+                ws,
+                "session.create",
+                request_id="followup-session",
+                source="cli",
+                cwd=str(home),
+                toolsets=[],
+            )
+            sid = created["session_id"]
+            await live.ok(ws, "session.resume", session_id=sid)
+            captured = await command(
+                ws,
+                sid,
+                'personal-tasks --json add "等待合成回复" --due-date 2030-02-01 '
+                "--priority high --request-id followup-capture",
+            )
+            assert captured["status"] == "ok", captured
+            initial = captured["data"]
+            task_id = initial["id"]
+            assert initial["follow_up_on"] is None
+            waiting = (
+                f"personal-tasks --json progress {task_id} --work-status waiting "
+                '--note "等待回复后再核对" --follow-up-on 2030-01-10 '
+                "--expected-revision 1 --request-id followup-waiting"
+            )
+            result = await command(ws, sid, waiting)
+            assert result["status"] == "ok", result
+            assert result["data"]["follow_up_on"] == "2030-01-10"
+            assert result["data"]["due_date"] == "2030-02-01"
+            assert await due(ws, sid, "2030-01-09") == []
+            assert [item["id"] for item in await due(ws, sid, "2030-01-10")] == [task_id]
+            postponed = await command(
+                ws,
+                sid,
+                f"personal-tasks --json update {task_id} --follow-up-on 2030-01-12 "
+                "--expected-revision 2 --request-id followup-postpone",
+            )
+            assert postponed["status"] == "ok" and postponed["data"]["revision"] == 3
+            assert await due(ws, sid, "2030-01-10") == []
+            stale = await command(
+                ws,
+                sid,
+                f"personal-tasks --json update {task_id} --follow-up-on 2030-01-11 "
+                "--expected-revision 2 --request-id followup-stale",
+            )
+            assert stale["error"]["code"] == "revision_conflict"
+            current = await command(ws, sid, f"personal-tasks --json show {task_id}")
+            assert current["data"] == postponed["data"]
+            replay = await command(ws, sid, waiting)
+            assert replay["replayed"] is True
+            assert replay["data"]["follow_up_on"] == "2030-01-10"
+            assert await due(ws, sid, "2030-01-10") == []
+            return sid
+
+    with live.daemon(home, env, "followup-first.log") as (proc, first, _):
+        sid = asyncio.run(create(first))
+        assert live.planned_stop(home, proc, first) == 0
+    assert live.control_absent(home) and not live.port_open(live.api_port(first))
+
+    async def resume(desc):
+        async with live.websocket(home, desc) as ws:
+            restored = await live.ok(ws, "session.resume", session_id=sid)
+            assert restored["session_id"] == sid
+            task_id = initial["id"]
+            items = await due(ws, sid, "2030-01-12")
+            assert len(items) == 1 and items[0]["id"] == task_id
+            assert items[0]["follow_up_on"] == "2030-01-12"
+            assert items[0]["due_date"] == "2030-02-01" and items[0]["revision"] == 3
+            finished = await command(
+                ws,
+                sid,
+                f"personal-tasks --json done {task_id} --expected-revision 3 "
+                '--note "已核对合成回复" --request-id followup-done',
+            )
+            assert finished["status"] == "ok", finished
+            assert finished["data"]["follow_up_on"] is None
+            assert finished["data"]["state"] == "done" and finished["data"]["revision"] == 4
+            assert finished["data"]["due_date"] == "2030-02-01"
+            assert await due(ws, sid, "2030-02-01") == []
+            replay = await command(ws, sid, waiting)
+            assert replay["replayed"] is True
+            assert replay["data"]["follow_up_on"] == "2030-01-10"
+            assert await due(ws, sid, "2030-02-01") == []
+
+    with live.daemon(home, env, "followup-second.log") as (proc, second, _):
+        assert second["instance_id"] != first["instance_id"]
+        asyncio.run(resume(second))
+        assert live.planned_stop(home, proc, second) == 0
+    assert live.control_absent(home) and not live.port_open(live.api_port(second))
+    database = home / "plugin-data/hermes-personal-agent/tasks.sqlite3"
+    with closing(sqlite3.connect(database.as_uri() + "?mode=ro", uri=True)) as db:
+        assert db.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+        assert db.execute(
+            "SELECT id,state,revision,due_date,follow_up_on FROM tasks"
+        ).fetchall() == [(initial["id"], "done", 4, "2030-02-01", None)]
+        assert db.execute("SELECT count(*) FROM events").fetchone() == (4,)
+        assert {row[0] for row in db.execute("SELECT request_id FROM receipts")} == {
+            "followup-capture",
+            "followup-waiting",
+            "followup-postpone",
+            "followup-done",
+        }
