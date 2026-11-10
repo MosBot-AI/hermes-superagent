@@ -1,8 +1,8 @@
-# 81. Local Memory Backend Acceptance Candidate
+# 81. Local Memory Backend Acceptance
 
 English | [简体中文](81-local-memory-acceptance-zh.md)
 
-Status: **acceptance candidate, pending independent review, merge and successful main CI**. This maps the original #44 E2.7 Scope/Acceptance, not every capability in the wider memory design. The machine-readable [ledger](local-memory-acceptance-ledger.json) has exactly six scope entries and four acceptance entries, with exact test-file/function references. Its unit test checks references exist, not that a name proves behavior; execution, independent review and negative controls remain necessary.
+Status: **original E2.7 local-backend scope accepted at main `15d690a` (2026-11-10)**. This maps the original #44 E2.7 Scope/Acceptance, not every capability in the wider memory design. The machine-readable [ledger](local-memory-acceptance-ledger.json) has exactly six scope entries and four acceptance entries, with exact test-file/function references. Its unit test checks references exist, not that a name proves behavior; execution, independent review and negative controls remain necessary.
 
 ## Original criterion mapping
 
@@ -37,4 +37,10 @@ Two-connection contention evidence now opens the forget backend before the rebui
 
 The supported source suppression is namespace-local exact full-input fingerprinting for pending and newly linked accepted candidates. Legacy accepted digests cannot be reconstructed, changed input does not match, and already accepted siblings need separate forgetting. Snapshot browsing is explicit historical access, never current recall or restoration. These limits remain part of acceptance, not claims of global erasure.
 
-Closing #44 after verified merge/main CI can certify its original local backend package. It does not close #43's full adapter SDK/replacement contract, #45's native lifecycle/coverage work, #46's migration and recall validation, general portable backend migration or production/user-device acceptance. Runtime controlled-write gates remain blocked. Earlier comments describing these independent features as unfinished do not create circular new prerequisites for E2.7.
+The accepted original local backend package permits closing #44 after this reconciliation is merged and verified. It does not close #43's full adapter SDK/replacement contract, #45's native lifecycle/coverage work, #46's migration and recall validation, general portable backend migration or production/user-device acceptance. Runtime controlled-write gates remain blocked. Earlier comments describing these independent features as unfinished do not create circular new prerequisites for E2.7.
+
+## Final acceptance checkpoint
+
+PR #99 supplied the final freshness/fence corrections and criterion ledger; PRs #100–#102 did not change the memory implementation. Main `15d690adbbd860f145cbc1405399d854d6bb32c4` passed [CI 42813558369](https://github.com/MosBot-AI/hermes-superagent/actions/runs/42813558369), including pinned native contracts, worker/runtime-package checks and artifact validation. An independent source-and-test audit of all ten original criteria found no blocker; 1,068 memory unit tests passed in that audit. The ledger records this exact accepted baseline rather than automatically certifying future revisions. CI remains necessary for subsequent changes.
+
+This checkpoint reconciles already delivered behavior; it enables no feature, provider, remote access or deployment. The local boundary is a trusted single-user profile, not authenticated remote-owner isolation. Historical checkpoints in earlier documents describe their dates, not remaining dependencies added to this work package.

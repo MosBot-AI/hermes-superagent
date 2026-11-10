@@ -2,7 +2,7 @@
 
 English | [简体中文](08-roadmap-and-acceptance-zh.md)
 
-Current E2.7 checkpoint: [local backend acceptance candidate](81-local-memory-acceptance.md) supersedes historical precursor-only statements below. SQLite/FTS/projection/edit proposals/exact source suppression are implemented; original #44 acceptance awaits review, merge and main CI. E2.6/E2.8/E2.9 and deployment remain separate.
+Current E2.7 checkpoint: [original local backend scope accepted](81-local-memory-acceptance.md) at main `15d690a`, with independent source/test review and successful exact-main CI. SQLite/FTS/projection/edit proposals/exact source suppression are implemented. #44 closes after the acceptance reconciliation is merged and verified; E2.6/E2.8/E2.9 and deployment remain separate. Historical precursor-only statements below retain their original scope.
 
 ## 1. Planning Principles
 
