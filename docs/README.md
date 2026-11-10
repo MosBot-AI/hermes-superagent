@@ -134,3 +134,5 @@ E9 has a selected native worker-routing design, an offline constraint evaluator 
 - [Native memory provider contracts](76-native-memory-contracts.md): pinned discovery, builtin stores, history search, lifecycle/context and checkpoint boundaries; verification does not implement durable v2.
 
 See [78. Fenced enrollment ceremony evidence](78-enrollment-ceremony.md) for the unwired one-shot confirmation foundation and current-pin identity boundary; production owner authority remains unavailable.
+
+See [79. Explicit consistent local memory snapshots](79-local-memory-snapshots.md) for private snapshot creation/inspection. Snapshots retain historical plaintext; there is no restore/import.

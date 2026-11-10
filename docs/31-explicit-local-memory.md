@@ -77,3 +77,5 @@ Unit tests cover input bounds, Unicode/literal search, receipts, revision races,
 These checks use no real model, API Key, microphone, listener or personal accounts. They do not certify a live GUI/network transport, arbitrary custom adapters, MemoryProvider lifecycle, recall quality or remote identity. The historically restricted identity socket tests are untouched. Native command preservation does not complete E0.9's full provider lifecycle/checkpoint matrix.
 
 Next: complete the versioned SDK and conformance gates, bounded retrieval/context and user-reviewed candidate workflows, then opt-in native lifecycle integration. Markdown projections, full export/import and automatic memory exposure must pass their own deletion, source, privacy and recovery gates before enablement. E2.6/E2.7 are In Progress; the full memory system is not Done.
+
+See [79. Explicit consistent local memory snapshots](79-local-memory-snapshots.md) for private snapshot creation/inspection. Snapshots retain historical plaintext; there is no restore/import.

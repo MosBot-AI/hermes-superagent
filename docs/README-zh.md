@@ -134,3 +134,5 @@ E9 已选定原生 worker 路由设计，并实现离线约束验证器和部分
 - [原生记忆提供方契约](76-native-memory-contracts-zh.md): 固定版本发现、内置存储、历史检索、生命周期/上下文及检查点边界；核验不代表实现持久 v2。
 
 参见 [78. 带栅栏的登记确认流程证据](78-enrollment-ceremony-zh.md)，了解未接线的一次性确认基础和当前 pin 身份边界；生产 owner authority 仍不可用。
+
+参见 [79. 显式一致的本地记忆快照](79-local-memory-snapshots-zh.md)，了解私密快照创建/检查。快照保留历史明文，不提供恢复/导入。

@@ -6,6 +6,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ## Unreleased
 
+- Add explicit private consistent memory snapshot creation/inspection with bounded SQLite copying, historical plaintext retention notices and truthful publication/crash failure handling; no restore or model-tool access.
+
 - Add an unwired, default-denied enrollment ceremony and one-shot SQLite evidence with exact channel/session/policy fences and truthful cross-store failure semantics; no production authority or private reads are enabled.
 
 - Add a finite 11-path/52-contract E0.4 evidence ledger with executable reference-integrity and pinned-source checks; acceptance awaits final merge verification and does not enable controlled writes.
