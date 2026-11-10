@@ -65,6 +65,9 @@ def installed(tmp_path):
     )
     config = {
         "gateway": {"multiplex_profiles": False},
+        # Pinned host requires a non-empty model label in a restorable session
+        # policy even for command-only sessions. This is metadata, not a call.
+        "model": {"default": "deepseek-v4.1-flash"},
         "auxiliary": {"title_generation": {"enabled": False}},
         "platform_toolsets": {"cli": []},
         "plugins": {

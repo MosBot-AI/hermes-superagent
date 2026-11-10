@@ -8,7 +8,7 @@ Issue #50 跟踪 #40 和 profile-first 本地 MVP 的真实传输前提。本切
 
 工作流从当前已提交版本构建带来源清单的生产运行包，验证后将其准备成隔离的本地 Git 来源。固定版本的官方 Hermes 安装器在一次性私有 profile 中执行扫描、安装和启用。扫描拒绝或安装失败会让测试失败，不使用绕过标志。仅安装阶段可沿用 runner 现有代理/CA 路由下载官方 Python 依赖。不继承 provider 秘密，Gateway 接收更小的环境，不包含代理/provider 配置。
 
-Host 固定为 `2281116525106e3c109993ccb5dc74d02bfc1427`，只复用其真实进程/control/WebSocket 辅助函数。原有上游生命周期测试使用回环假模型；**独立的安装包测试不复用该模型、它的 harness 或伪造 runner**。测试不调用 `prompt.submit`，不提供 provider 凭据。
+Host 固定为 `2281116525106e3c109993ccb5dc74d02bfc1427`，只复用其真实进程/control/WebSocket 辅助函数。原有上游生命周期测试使用回环假模型；**独立的安装包测试不复用该模型、它的 harness 或伪造 runner**。测试不调用 `prompt.submit`，不提供 provider 凭据。固定 host 即使恢复纯命令 session 策略也要求非空模型名称；隔离配置仅以 `deepseek-v4.1-flash` 作为元数据，不配置或调用 provider。
 
 ## 验收链
 
