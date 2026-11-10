@@ -13,6 +13,7 @@
     "personal_agent/authorization.py",
     "personal_agent/blueprints.py",
     "personal_agent/checkpoint_evidence.py",
+    "personal_agent/client_api.py",
     "personal_agent/conversation_memory.py",
     "personal_agent/conversation_tasks.py",
     "personal_agent/enforcement.py",

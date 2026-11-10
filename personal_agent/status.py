@@ -4,6 +4,7 @@ import os
 import re
 
 from . import HERMES_BASELINE, PLUGIN_ID, VERSION
+from .client_api import build_client_capabilities
 from .enforcement import build_enforcement_summary
 
 
@@ -63,6 +64,7 @@ def build_status(
     local_tasks = mode == "local_tasks" and platform_supported
     return {
         "schema_version": "personal.status.v1",
+        "client_api": build_client_capabilities(),
         "status": "ok",
         "plugin": PLUGIN_ID,
         "version": VERSION,

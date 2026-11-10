@@ -140,3 +140,5 @@ E9 已选定原生 worker 路由设计，并实现离线约束验证器和部分
 [精确记忆来源抑制](80-exact-memory-source-suppression-zh.md)：操作人员审核、精确输入指纹和 schema 11 关联。
 
 [本地后端验收候选](81-local-memory-acceptance-zh.md)：有限原始 #44 范围映射及真实搜索新鲜度。
+
+82. [共享客户端 API 对齐](82-shared-client-api-zh.md)：跨后端权威契约、fixture 及不可用的 Hermes 诊断，不是 HTTP 发布。

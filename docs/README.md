@@ -140,3 +140,5 @@ See [79. Explicit consistent local memory snapshots](79-local-memory-snapshots.m
 [Exact memory source suppression](80-exact-memory-source-suppression.md): operator review, exact-input fingerprints and schema-11 lineage.
 
 [Local backend acceptance candidate](81-local-memory-acceptance.md): finite original #44 scope mapping and truthful search freshness.
+
+82. [Shared client API alignment](82-shared-client-api.md): canonical cross-backend contract, fixtures and unavailable Hermes diagnostics; no HTTP release.
