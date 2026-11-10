@@ -203,7 +203,18 @@ A failed response write leaves the request present: the next poll dispatches it 
 | `remote_poll_response_replay` | `test_remote_response_failure_can_replay_effect` |
 | `remote_fallback_selection` | `test_remote_kernel_fallback_selection` |
 
-No remote shell, filesystem, kernel, sandbox, model or credential is used. Actual per-call process lifecycle, transport ownership and containment remain unverified. All controlled-write gates remain blocked; delegated/background boundaries and the final finite ledger remain outstanding for #12.
+No remote shell, filesystem, kernel, sandbox, model or credential is used. Actual per-call process lifecycle, transport ownership and containment remain unverified. All controlled-write gates remain blocked. Bounded delegated/background evidence is recorded in §2.11; the final finite ledger remains outstanding for #12.
+
+### 2.11 Delegation routing, fallback and stop boundaries
+
+[Delegation contracts](../tests/contracts/test_delegation_enforcement.py) exercise the pinned native `_Batch`, session routing, `_dispatch_background`, `_dispatch_unit`, child reattachment/stop and parallel join. Child execution, async submission and aggregate persistence endpoints are inert; these are not live scheduler, model, delivery or process-containment tests.
+
+- `delegation_session_routing`: finite/one-shot and unsupported sessions resolve to synchronous delivery; declared history consumers preserve their session ID. A tools[]-pinned joined description overrides a background request. **Counterexample:** an exception from `async_delivery_supported()` resolves to the detached push-route sentinel, not synchronous refusal.
+- `delegation_rejected_inline_fallback`: missing async delivery executes inline without submitting. Both capacity and generic session rejection reattach the child and execute the inline fallback once. A parent stop arriving during admission is replayed to the reattached child, but fallback still calls the aggregate execution endpoint. Scheduler rejection is not an action-authorization veto.
+- `delegation_detached_stop`: the native submitted runner sets `honor_parent_interrupt=False`; its cancellation callback signals every child through the native cooperative-stop helper. An already-recorded synthetic effect remains after the callback.
+- `delegation_parent_join_interrupt`: real daemon-worker joins over Event-controlled child endpoints return interrupted entries when the parent stops, before children finish. Those already-started children can subsequently record effects. Detached joins instead wait through the parent-turn stop and return completed results. Every test releases and joins its workers; no live daemon is left behind.
+
+Twelve cases use independent admission/effect records and child stop state, not result prose alone. They establish routing and cooperative-stop limits, not durable revocation, production authority, full background lifecycle or OS isolation. The final finite path ledger remains outstanding; all controlled-write gates remain blocked.
 
 ## 3. Controlled-write release inventory
 
@@ -217,7 +228,7 @@ No remote shell, filesystem, kernel, sandbox, model or credential is used. Actua
 | `execute_code_rpc` | Native RPC dispatch/retry, current-cell authority (§2.9) and remote polling/fallback selection (§2.10) over inert endpoints | Blocked; replay counterexamples remain; real sandbox containment and full process lifecycle are unverified |
 | `local_tool_batch` | Real primary/child loops, per-item veto, result pairing and explicit retry counterexample | Blocked; no durable effect idempotency or persistent revocation |
 | `connector_batch` | Real per-item model dispatch, indexed partial results and explicit retry at an offline gateway client | Blocked; production grants, credentials, transport retry and server deduplication remain unverified |
-| `short_worker` | Real child construction/local-batch loop and actual package unsupported text-worker no-fallback boundary | Blocked; scheduler, background lifecycle and production authority remain unverified |
+| `short_worker` | Real child construction/local-batch loop, package non-exposure and native session/fallback/stop/join boundaries at inert endpoints | Blocked; live scheduler, durable revocation and production authority remain unverified |
 | `managed_worker` | Native binding/current SQLite read-policy fences plus actual package frozen-config exposure and safe-bootstrap omission | Blocked; no production authority, write grant or full worker lifecycle |
 | `scheduled_job` | Actual project blueprint absence/opt-in through native consumers at inert create endpoints | Blocked; no controlled authorization/cancel/delivery/reconciliation contract |
 

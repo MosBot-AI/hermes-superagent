@@ -61,6 +61,12 @@ def test_boundary_contracts_do_not_become_full_write_path_coverage():
         "remote_poll_response_replay",
         "remote_fallback_selection",
     } <= set(rows["execute_code_rpc"]["contract_ids"])
+    assert {
+        "delegation_session_routing",
+        "delegation_rejected_inline_fallback",
+        "delegation_detached_stop",
+        "delegation_parent_join_interrupt",
+    } <= set(rows["short_worker"]["contract_ids"])
     assert "worker_current_policy_recheck" in rows["managed_worker"]["contract_ids"]
     assert "worker_revoke_before_admission" in rows["managed_worker"]["contract_ids"]
     assert "production_default_exposure" in rows["native_dispatch"]["contract_ids"]
