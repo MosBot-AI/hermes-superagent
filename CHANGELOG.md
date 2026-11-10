@@ -6,6 +6,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ## Unreleased
 
+- Add a versioned explicit local Memory SDK facade with strict results, truthful unknown write outcomes and reusable synthetic adapter conformance; no loader, provider switch or complete E2.6 claim.
+
 - Add a pure bounded local-task projection into the shared Task wire shape, preserving terminal lifecycle and minimizing fields; no remote read, pagination or HTTP capability is enabled.
 
 - Refuse stale FTS document/current-query coverage instead of reporting false freshness; add deterministic rebuild/forget contention and a finite #44 local acceptance candidate ledger.
