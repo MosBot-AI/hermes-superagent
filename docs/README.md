@@ -154,3 +154,5 @@ See [79. Explicit consistent local memory snapshots](79-local-memory-snapshots.m
 88. [Explicit waiting-task follow-ups](88-local-task-followups.md): date-only local follow-up workbench, not automatic reminders.
 
 89. [Packaged Gateway crash recovery](89-packaged-gateway-crash.md): manual unobserved-reply and abrupt-process recovery acceptance.
+
+90. [Original local M1 acceptance](90-local-m1-acceptance.md): fixed-checkpoint evidence and delivery boundaries, not full Super Agent completion.

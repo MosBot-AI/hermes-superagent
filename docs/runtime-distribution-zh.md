@@ -53,8 +53,9 @@ GitHub 产物 ZIP 的摘要不同于内部 tar 包的 SHA-256。
 两份压缩归档必须逐字节相同。随后解包，测试前再次与已提交源码核对。
 
 固定宿主未修改的官方 `plugin_guard` 扫描完整解包内容，保留全部发现，只有
-`safe` 才继续加载。safe **不等于零发现**：目前用于防护的 SQLite 头和 journal
-字节产生一项中等混淆提示。不会隐藏发现、修改扫描规则，也无法在此流水线覆盖
+`safe` 才继续加载。safe **不等于零发现**。固定 `ed6bcdc15d883dc429f2dbb0559a62204965ab04`
+产物有六项中等混淆提示，其中三项为中文 Unicode 范围模式，三项为 SQLite
+header/journal 字节模式。应阅读实际 `VALIDATION.json`，其他修订的发现可能不同。不会隐藏发现、修改扫描规则，也无法在此流水线覆盖
 CAUTION。这项直接静态扫描不等于安装器的目录检查、同意或 PM 准入。
 原完整仓库安装拒绝仍是独立的未解决事项。
 
@@ -93,5 +94,89 @@ python scripts/check_runtime_distribution.py --repo SOURCE_CHECKOUT --source-com
 网络、监听器、子进程、模型工具及 worker 注册仍保持禁用。
 
 这项新增门槛验证制品的会话入口，不代表安装、登录、真实传输、CLI/TUI 或模型提供商验收；
-#40 的这些发布门槛仍未完成。验证报告通过 `conversation_acceptance` 单独记录结果，
+应另查对应精确检查点证据；原始 #40 本地会话范围后来已关闭，并不代表整个产品获验收。
+验证报告通过 `conversation_acceptance` 单独记录结果，
 任何失败都会阻止运行包报告被标记为通过。
+
+## 固定检查点操作者入口
+
+源码 `ed6bcdc15d883dc429f2dbb0559a62204965ab04`（树
+`24bae909c2caf97e11620a1d9a660cba22272670`）的已验证开发产物为
+[`hermes-personal-agent-runtime-ed6bcdc15d883dc429f2dbb0559a62204965ab04`](https://github.com/MosBot-AI/hermes-superagent/actions/runs/42859787656/artifacts/13785725174)。
+它来自成功的 main [Foundation 运行 42859787656](https://github.com/MosBot-AI/hermes-superagent/actions/runs/42859787656)，
+产物 ID 为 `13785725174`，到期时间为 **2026-12-10 17:04:08 UTC**。下载可能要求
+登录 GitHub。这是保留 30 天的 CI 产物，不是已发布 release 或永久更新渠道。
+不得在未经重新审查时换成其他后续产物。
+
+下载 ZIP 的 SHA-256 为
+`cf4fa2b3fdf55a53b42d29b5aa51889b42f5c46abe7d14ed6e6ce61a8bed9943`。
+内部 tarball 的 SHA-256 为
+`e2be57dadc9cb4fedebb7b822d3a2553e8014b3b9ba25396a695da10d45a3e86`。
+独立只读核对确认 ZIP 摘要、两个内部校验和、全部 83 个分发源文件与已提交 Git
+对象逐字节一致，且验证报告的 provenance 一致。该审查没有安装或调用模型。
+报告注明 `installation_performed: false`；真实传输验收另见[固定本地 M1 ledger](90-local-m1-acceptance-zh.md)。
+
+### 先验证，再暂存为本地 Git 源
+
+使用包含该精确提交的可信源码 checkout，以及固定宿主
+`2281116525106e3c109993ccb5dc74d02bfc1427` 和通过官方流程准备的 Python 3.14.9
+环境。[开发环境说明](../README-zh.md#开发验证)提供宿主准备步骤；会下载依赖，
+但不提供 provider 凭据，也不要求使用日常 profile。若升级已有记忆存储到支持
+维护锁的实现，应先停止旧 runtime。
+
+核对 ZIP 摘要后，将它解压到新目录。在该目录执行：
+
+```bash
+sha256sum -c SHA256SUMS
+tar -xzf hermes-personal-agent.tar.gz
+```
+
+将 `SOURCE` 设为可信源码 checkout 的绝对路径，`RUNTIME` 设为解压所得
+`hermes-personal-agent` 目录的绝对路径。必须**先验证，再创建 `.git`**：
+严格运行包校验会有意拒绝额外目录。
+
+```bash
+python "$SOURCE/scripts/build_runtime_distribution.py" --repo "$SOURCE" \
+  --source-commit ed6bcdc15d883dc429f2dbb0559a62204965ab04 \
+  --output-dir "$RUNTIME" --verify
+git -C "$RUNTIME" init -b main
+git -C "$RUNTIME" add .
+git -C "$RUNTIME" -c user.name=Acceptance -c user.email=acceptance@example.invalid \
+  commit -m 'test: stage verified runtime'
+PACKAGE_COMMIT="$(git -C "$RUNTIME" rev-parse HEAD)"
+```
+
+官方 `file://` 安装器克隆的是 Git 仓库，不是普通解压目录。该本地暂存提交与
+`PROVENANCE.json` 记录的源码提交不同；不要将原源码 SHA 作为暂存仓库的 `--ref`。
+将 `VALIDATION.json` 和 `SHA256SUMS` 留在运行包旁边，而非包内。
+
+### 隔离安装与确定性使用
+
+使用全新的私密 profile 与用户 home，不复制日常 `.env` 或凭据。
+将 `HOST`、`HERMES_PYTHON`、`PROFILE`、`USER_HOME` 和 `RUNTIME_DIR` 设为绝对路径；
+后三者应创建为彼此独立的私密目录。从 `HOST` 执行。
+**每次**安装和后续命令均使用相同的干净环境：
+
+```bash
+cd "$HOST"
+env -i PATH="$PATH" HOME="$USER_HOME" LANG=C.UTF-8 \
+  HERMES_HOME="$PROFILE" HERMES_RUNTIME_DIR="$RUNTIME_DIR" \
+  "$HERMES_PYTHON" -m hermes_cli.main plugins install "file://$RUNTIME" \
+  --ref "$PACKAGE_COMMIT" --yes-deps --enable
+```
+
+`--yes-deps` 明确同意安装器正常的依赖准备，`--enable` 启用已审查的插件。
+保留官方扫描、catalog 检查和 capability 同意流程。遇到拒绝即停止，不使用
+`--force`、`--allow-removed`，不修改扫描器或降低隔离。若依赖下载需要已有且获准
+的代理/CA 设置，只显式保留这些设置，不继承整份日常环境；绝不禁用 TLS 验证。
+固定已测路径是新的可信单用户进程内 profile，不是修改现有 hosted 隔离策略。
+其他宿主版本需要单独兼容性审查。
+
+在该隔离 profile 保留安装器生成的配置，仅设置本插件的 `mode: local_tasks`
+和 `local_conversation: true`，见[本地会话指南](28-profile-first-local-conversations-zh.md)。
+没有另外请求时，保持模型工具、worker、记忆、外部连接器和 provider 关闭。
+重复上述干净环境前缀，使用 `"$HERMES_PYTHON" -m hermes_cli.main personal-agent tasks list`
+进行确定性 CLI 操作。在已获准的原生 LOCAL 会话中使用 `/personal-tasks help`，
+再执行 `/personal-tasks add "Synthetic first task" --request-id first-task-1`。
+使用实际返回的 ID/revision 和稳定重试键。CLI 不需要模型；宿主交互 UI 可能另有
+前提，这些步骤不会配置 provider。任务文本是明文，并可能进入宿主历史。

@@ -20,6 +20,8 @@ Complete a safe, reliable vertical slice first, then add connectors, entry point
 | M3 Connections and voice | Minimal read/write MCP set, mobile voice messages, optional real-time voice validation and E9 bounded model routing | M2 + connector risk review; routing also requires E9.5/E9.6 gates | Confirmation of critical voice fields, identity, and costs are controlled; routing quality/privacy/budget gates pass |
 | M4 Release hardening | Recovery, backup, upgrades, rollback, security evaluations, and documentation | Core scenarios are complete | All release gates pass, with no unresolved P0 issues |
 
+Original profile-first deterministic local M1 acceptance is recorded at the fixed checkpoint in [90](90-local-m1-acceptance.md), with exact-source Foundation and live Gateway evidence. This does not accept E6.9 natural-language use, full E4 reminders, remote/shared REST, or the entire Super Agent goal. The entry and exit criteria above are unchanged.
+
 ## 3. Epics and Work Packages
 
 ### E0. Verify Upstream Compatibility Contracts (P0, M0)
@@ -123,7 +125,7 @@ Depends on E0.3, E1.1–E1.5, and E2.1.
 
 Acceptance: Duplicate triggers, process interruption, send timeouts, restarts, and cancellation do not cause blind duplicate outbound sends; no change may remain silent; accepted is not presented as delivered.
 
-Native E0.3/E4.2 precursor: [the planning blueprint](25-native-planning-blueprint.md) registers an optional template in Hermes’s existing catalog. It does not create or manage jobs, read the local inbox, or implement domain authorization/outbox/reconciliation. User-created native jobs outlive plugin removal; E4 and M1 remain incomplete.
+Native E0.3/E4.2 precursor: [the planning blueprint](25-native-planning-blueprint.md) registers an optional template in Hermes’s existing catalog. It does not create or manage jobs, read the local inbox, or implement domain authorization/outbox/reconciliation. User-created native jobs outlive plugin removal; E4 remains incomplete and is separate from the deterministic local M1 acceptance.
 
 ### E5. Govern MCP and Plugins (P1, M2–M3)
 

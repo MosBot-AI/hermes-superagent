@@ -124,7 +124,9 @@ cd ../hermes-superagent
 
 ## 在隔离 Hermes 中试用
 
-最近一次官方完整仓库安装被未修改的安全扫描器阻断（CAUTION，50 条发现），插件未安装或启用。不要覆盖该拒绝。[离线运行时分发构建器](docs/runtime-distribution-zh.md)生成保留原始字节及来源证明的包，但不会扫描、安装或授权再次尝试。下文是后续单独审阅后的安装说明，不代表验收通过。
+最近一次官方完整仓库安装被未修改的安全扫描器阻断（CAUTION，50 条发现），插件未安装或启用。不要覆盖该拒绝。[离线运行时分发构建器](docs/runtime-distribution-zh.md)生成保留原始字节及来源证明的包，但不会扫描、安装或授权再次尝试。该完整仓库拒绝不得绕过。另行构建、逐字节验证的运行包有独立的官方安装与 Gateway
+验收路径，并非被拒绝的完整仓库目录。请使用[固定检查点运行包操作者入口](docs/runtime-distribution-zh.md#固定检查点操作者入口)，
+不要安装分支最新的完整仓库。精确验收状态见[本地 M1 ledger](docs/90-local-m1-acceptance-zh.md)；说明本身不证明已部署。
 
 这不是生产安装建议。使用固定、已测试的 Hermes checkout 和临时 profile，按该版本 `hermes plugins install --help` 安装经审阅的**完整 40 字符 commit SHA**；`--ref` 不接受分支名，GitHub tree 分支 URL 也不能替代 pin。然后显式启用插件，插件标识为 `hermes-personal-agent`。
 

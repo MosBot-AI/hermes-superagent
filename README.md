@@ -124,7 +124,12 @@ Successful push builds now attach a [verified offline runtime package](docs/runt
 
 ## Try it in an isolated Hermes profile
 
-The latest official full-repository installation attempt stopped at the unchanged security scanner (CAUTION, 50 findings); the plugin was not installed or enabled. Do not override that refusal. The [offline runtime distribution builder](docs/runtime-distribution.md) produces a byte-preserving package with source provenance, but does not scan, install or authorize another attempt. The instructions below describe a future separately reviewed installation, not a passed acceptance test.
+The latest official full-repository installation attempt stopped at the unchanged security scanner (CAUTION, 50 findings); the plugin was not installed or enabled. Do not override that refusal. The [offline runtime distribution builder](docs/runtime-distribution.md) produces a byte-preserving package with source provenance, but does not scan, install or authorize another attempt. That full-repository refusal must not be bypassed. Separately built, byte-verified
+runtime packages have their own official installation and Gateway acceptance lane;
+they are not the refused full-repository tree. Use the [fixed-checkpoint runtime
+operator entry](docs/runtime-distribution.md#fixed-checkpoint-operator-entry),
+not a branch-tip full-repository installation. See the [local M1 ledger](docs/90-local-m1-acceptance.md)
+for the exact acceptance status; these instructions do not themselves prove deployment.
 
 This is not a production installation recommendation. Use the pinned, tested Hermes checkout and a temporary profile. Consult that version's `hermes plugins install --help` and install a reviewed **full 40-character commit SHA**. `--ref` does not accept branch names, and a GitHub tree URL is not a replacement for the pin. Explicitly enable the plugin afterward. Its ID is `hermes-personal-agent`.
 

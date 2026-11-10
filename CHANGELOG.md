@@ -6,6 +6,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ## Unreleased
 
+- Add a fixed-checkpoint original local M1 acceptance ledger, executable reference checks and explicit delivery limits; no new runtime capability is enabled.
+
 - Add manual packaged Gateway crash-recovery acceptance for durable writes whose client replies were not consumed; preserve exact scope and unknown-outcome guidance.
 
 - Add explicit waiting-task follow-up dates and a due workbench, independent from deadlines and without automatic reminder delivery.
