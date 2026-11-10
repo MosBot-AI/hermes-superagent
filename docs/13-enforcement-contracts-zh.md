@@ -4,7 +4,7 @@
 
 此页记录较早的 E0 切片，以及针对 [Issue #12](https://github.com/MosBot-AI/hermes-superagent/issues/12) 的有界 RPC/MCP、终端/浏览器、本地批量、持久 worker 策略及生产暴露面后续核验。当前新增的显式本地任务收件箱见 [16](16-local-task-inbox-zh.md)；它不启用这里列出的原生/外部受控写路径。
 
-本次后续 P0 切片推进 E0.4，但不启用任何受控写能力。新增可复验的失败边界测试和机器可读发布清单。后续切片使用合成副作用核验固定宿主的真实 RPC 消费者/服务端调度、MCP 准入、终端/浏览器执行前守卫，主 agent 和被委派 agent 循环中的本地批量，以及受保护合成读 handler 中的当前持久策略检查；并未完成所有替代路径。E0.4、E0/M0 与 E1 授权仍未完成。
+本次后续 P0 切片推进 E0.4，但不启用任何受控写能力。新增可复验的失败边界测试和机器可读发布清单。后续切片使用合成副作用核验固定宿主的真实 RPC 消费者/服务端调度、MCP 准入、终端/浏览器执行前守卫，主 agent 和被委派 agent 循环中的本地批量，以及受保护合成读 handler 中的当前持久策略检查；其限制与不支持的模式均明确列出。有限 E0.4 边界证据包已准备好验收，但以账本 PR 合并及 Issue #12 链接的最终 main CI 验证为条件。该验收不代表 E0/M0 或 E1 授权完成。
 
 ## 1. 实现了什么
 
@@ -203,7 +203,7 @@ Worker 探针在全新进程中运行，因为 bootstrap policy 必须在 runtim
 | `remote_poll_response_replay` | `test_remote_response_failure_can_replay_effect` |
 | `remote_fallback_selection` | `test_remote_kernel_fallback_selection` |
 
-不使用远程 shell、文件系统、kernel、sandbox、模型或凭据。实际逐次调用进程生命周期、传输所有权及隔离仍未经验证。所有受控写入门禁保持阻断。§2.11 记录有限范围的委派/后台证据；#12 的最终有限清单仍未完成。
+不使用远程 shell、文件系统、kernel、sandbox、模型或凭据。实际逐次调用进程生命周期、传输所有权及隔离仍未经验证。所有受控写入门禁保持阻断。§2.11 记录有限范围的委派/后台证据；下方有限清单构成 #12 的验收候选，仍以最终合并验证为条件。
 
 ### 2.11 委派路由、降级与停止边界
 
@@ -214,7 +214,7 @@ Worker 探针在全新进程中运行，因为 bootstrap policy 必须在 runtim
 - `delegation_detached_stop`：原生提交的 runner 设置 `honor_parent_interrupt=False`；其取消 callback 通过原生协作停止 helper 向每个子代理发信号。已经记录的合成效果在 callback 后仍保留。
 - `delegation_parent_join_interrupt`：真实 daemon worker 对 Event 控制的子代理端点进行等待，父代理停止时在子代理完成前返回中断条目。这些已经启动的子代理之后仍可记录效果。detached 等待则跨越父轮次停止并返回完成结果。每个测试均释放并 join 自己的 worker，不遗留运行中的 daemon。
 
-十二个用例使用独立的准入/效果记录及子代理停止状态，而非仅依赖结果文字。它们证明路由与协作停止的限制，不证明持久撤销、生产授权、完整后台生命周期或 OS 隔离。最终有限路径账本仍待完成；全部受控写入门禁继续保持阻塞。
+十二个用例使用独立的准入/效果记录及子代理停止状态，而非仅依赖结果文字。它们证明路由与协作停止的限制，不证明持久撤销、生产授权、完整后台生命周期或 OS 隔离。下方记录有限路径账本；验收仍以最终合并验证为条件。全部受控写入门禁继续保持阻塞。
 
 ## 3. 受控写发布清单
 
@@ -233,6 +233,20 @@ Worker 探针在全新进程中运行，因为 bootstrap policy 必须在 runtim
 | `scheduled_job` | 惰性创建端点前，经原生消费者验证真实项目 blueprint 缺席/显式启用 | 阻断；没有受控授权/取消/投递/对账契约 |
 
 `synthetic_contract` 和 `pinned_host_boundary_contract` 是有界证据标签，不等于完整覆盖某类工具。内存探针通过，不能证明 shell、MCP、browser、外发或真实 worker 副作用受保护。清单内部不可变，返回独立快照；修改报告不能授予能力，也不能改变后续报告。
+
+### 3.1 有限验收账本
+
+[机器可读账本](enforcement-evidence-ledger.json) 将恰好 11 条发布路径及全部 52 个唯一清单契约 ID 映射到原生文件/符号入口、实际测试文件/函数、独立副作用判据、不支持/下游限制，以及 Hermes `2281116525106e3c109993ccb5dc74d02bfc1427`。共享契约 ID 仅定义一次，由相关路径引用。账本自身的源码版本就是其所在仓库修订；最终合并修订、完整测试数量及精确 head/main CI 链接记录在 [Issue #12](https://github.com/MosBot-AI/hermes-superagent/issues/12)，而非虚构自引用提交哈希。
+
+`tests/unit/test_enforcement_ledger.py` 验证清单完全相等、ID 唯一、实际测试 AST 定义和基线一致，并拒绝缺失/额外/重复引用以及虚假的启用/已验证声明。`tests/contracts/test_enforcement_ledger_native.py` 进一步在精确固定 checkout 中解析原生符号。这些是引用完整性检查，不能替代映射行为契约的实际运行。验收前运行完整 `scripts/check.py --hermes ... --hermes-python ...` 聚合检查。不向运行时安装账本解析器或新增能力。
+
+#12 原始验收映射如下：
+
+- Native/MCP/shell/browser/execute-code/RPC/batch/worker 覆盖：各账本行列出已测真实边界、拒绝，以及绕过/重放/中断反例。未执行的真实进程/传输模式明确不受项目受控写入支持；生产包不暴露证据来自测试，而非这份报告的推断。
+- Hook 错误、故障排除安全降级及冻结配置与当前策略：`hook_*`、`outer_dispatcher_failure`、`safe_worker_hook_suppression`、`worker_*` 和真实 `production_*` 契约区分各失败域，并独立观测效果/存储。
+- 代码、集成/安全反例、恢复限制及兼容性：映射测试、固定入口和 §2 记录这些产物。响应丢失重试、晚到效果和协作停止是限制，不是恢复或授权保证。
+
+这是一份**验收候选**，不是 PR 已合并的声明。仅在独立审查、全部适用测试、精确 head CI、合并及 main CI 验证完成后关闭 #12。不要自动关闭 E0/M0 或下游 Issue。保持 `runtime_enforcement_verified: false`、全部受控写入门禁阻断，以及全部未知路径未验证。
 
 ## 4. 启用写操作前的要求
 
@@ -292,10 +306,6 @@ E0.4 验证边界、恢复限制，以及各被测配置下有界的生产暴露
 
 此处的受控外部副作用路径，是指项目所有、将经验证意图/批准转化为获准外部发送、修改或支出的路径，包括安排此类动作。它的缺失不等于零本地修改、没有普通原生调度、停止既有作业或宿主全局隔离。特别是，即使 `mode: read_only`，`planning_blueprint: true` 仍是独立的显式启用项；原生消费者可以创建普通作业，投递不限定为 `local`，已配置的模型服务商也可能产生费用。参见 [blueprint 边界](25-native-planning-blueprint-zh.md)。
 
-关闭 Issue #12 前，剩余的有限证据须证明：
-
-1. 保留第 2.7 节限定的 default/read-only、普通 managed、config-only 与 troubleshooting safe bootstrap 下真实生产包暴露面及负向调度证据。仅报告用途的清单或测试夹具工具缺失并不足够，显式普通原生调度仍须单独区分。
-2. 原生并发批量准入及其余委派/后台与 execute-code 替代路径：提供行为边界测试，或明确不支持的接缝并验证本项目受控模式不暴露它。惰性 shell/browser 端点不证明 backend 隔离。
-3. 最终有限清单将每条路径映射到确切边界、拒绝/不暴露断言、副作用判据及已测修订。分开列出已验证的 E0.4 边界、技术上不可用模式，以及下游 E1/E3/E4/E5 启用工作。
+有限证据义务已映射到 §3.1：真实生产包暴露面（§2.7）、原生并发（§2.8）、本地/远程替代执行（§2.9–2.10）、委派路由/停止（§2.11），以及完整路径/契约账本。最终合并/main 验证后，这些证据满足范围明确的 E0.4 验证包，但不产生新的生产授权或隔离主张。
 
 本项目可以证明自身受控写 adapter 不可用，同时独立配置的 Hermes 宿主仍暴露原生工具；不能将此描述为宿主全局只读执行约束。未来任何隔离宿主或通用 worker 的主张，都需要相应工具、凭据及 OS/进程隔离证据。

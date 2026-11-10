@@ -6,6 +6,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ## Unreleased
 
+- Add a finite 11-path/52-contract E0.4 evidence ledger with executable reference-integrity and pinned-source checks; acceptance awaits final merge verification and does not enable controlled writes.
+
 - Add bounded delegation routing, rejected-admission inline fallback and cooperative-stop counterexamples; parent interruption does not revoke already-started effects, and controlled writes remain blocked.
 
 - Add bounded remote file-RPC admission, response-loss replay and kernel fallback-selection contracts; inert endpoints do not establish backend containment or exactly-once effects.
