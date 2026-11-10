@@ -17,6 +17,7 @@
     "personal_agent/conversation_tasks.py",
     "personal_agent/enforcement.py",
     "personal_agent/enrollment.py",
+    "personal_agent/enrollment_ceremony.py",
     "personal_agent/enrollment_storage.py",
     "personal_agent/identity.py",
     "personal_agent/kanban_handoff.py",

@@ -49,6 +49,14 @@ def source(tmp_path):
     return repo, commit(repo)
 
 
+def test_runtime_spec_exactly_covers_current_personal_agent_modules():
+    files = json.loads((ROOT / builder.SPEC).read_text())["files"]
+    listed = [name for name in files if name.startswith("personal_agent/")]
+    current = {path.relative_to(ROOT).as_posix() for path in (ROOT / "personal_agent").glob("*.py")}
+    assert len(listed) == len(set(listed)), "duplicate runtime module entry"
+    assert set(listed) == current, "update explicit runtime spec for added/removed modules"
+
+
 def test_reproducible_and_uncommitted_ignored(source, tmp_path):
     repo, sha = source
     (repo / "plugin.yaml").write_text("uncommitted tampering")
