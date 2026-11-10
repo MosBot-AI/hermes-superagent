@@ -83,7 +83,7 @@ def test_search_literal_pages_state_and_reload(native, capsys):
     finally:
         restarted.unload()
     with sqlite3.connect(path) as conn:
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == 6
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == 7
         assert conn.execute("SELECT count(*) FROM receipts").fetchone()[0] == 4
 
 
