@@ -4,6 +4,8 @@ English | [简体中文](69-chinese-automatic-recall-zh.md)
 
 Implemented local development slice of #45, with synthetic evaluation toward #46. It improves unspaced Chinese questions in the existing [session recall](49-session-memory-recall.md) and optional [native provider](41-native-memory-recall.md). It does not select a provider, deploy the plugin or complete either work package.
 
+For the current syntax-aware literal-slot extension and its separate evaluation, see [document 103](103-automatic-recall-slots.md). The behavior and fixed comparison below describe this original slice; its historical evidence is unchanged.
+
 ## Query and selection behavior
 
 Only the current original plain-text input is used. Existing admission, profile/session scope, configuration, activation and revocation gates remain unchanged. No history, sender claims or tool output becomes a query. No model request, network access, vector model, recalled-payload cache, automatic write, extraction or schema migration is added.
