@@ -66,8 +66,21 @@ def check_context(raw, records, clock):
     require(memory["max_chars"] == 4976, "changed record budget")
     if "automatic_filter" in memory:
         filtering = memory["automatic_filter"]
+        required = filtering.get("required_query_indices")
+        if required is not None:
+            require(
+                type(required) is list
+                and 2 <= len(required) <= 8
+                and required == list(range(len(required)))
+                and all(
+                    all(index in item["matched_queries"] for index in required)
+                    for item in memory["items"]
+                ),
+                "incorrect required-query metadata",
+            )
         require(
-            filtering["minimum_matched_terms"] == 2 and filtering["refilled"] is False,
+            filtering["minimum_matched_terms"] == (len(required) if required is not None else 2)
+            and filtering["refilled"] is False,
             "incorrect filter metadata",
         )
         require(

@@ -77,10 +77,81 @@ _RUNS = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff]+|[^\u3400-\u4dbf\u4e00-\u9fff]
 _HAN = re.compile(r"^[\u3400-\u4dbf\u4e00-\u9fff]+$")
 
 
+# Recognize whole, single-clause questions before the legacy character splitter.
+# Slots stay verbatim; these are grammatical markers, never domain/name aliases.
+_QUESTION_END = r"(?:[？?！!。]+)?"
+_WHO = re.compile(r"(.+?)\s*(?:由)?谁\s*([^\W_]+)" + _QUESTION_END + r"$")
+_CHOICE = re.compile(
+    r"(.+?)(?:喜欢|想要)(?:哪种|哪类|什么类型的)\s*([^\W_]+)" + _QUESTION_END + r"$"
+)
+_ATTRIBUTE = re.compile(
+    r"(.+?)(?:现在|目前)?(?:是|在|为|有)?"
+    r"(?:什么时候|哪一天|哪天|哪里|哪儿|多少|什么|谁|哪个|哪些)"
+    r"(?:呢|吗)?" + _QUESTION_END + r"$"
+)
+_PREFIX = re.compile(r"^(?:请问|请告诉我|告诉我|我想知道)\s*")
+_SINGLE_CLAUSE = re.compile(r"^[\w\s?？!！。-]+$")
+
+
+def _slot_terms(slot):
+    """Keep Han names/attributes whole, separating only script/word boundaries."""
+    return [
+        part
+        for chunk in _CHUNKS.findall(slot)
+        for run in _RUNS.findall(chunk)
+        for part in ([run] if _HAN.fullmatch(run) else _CHUNKS.findall(run))
+    ]
+
+
+def _question_terms(query):
+    """Return required literal slots only for bounded, recognizable syntax.
+
+    This is not a general parser. In particular, arbitrary Chinese subject/verb
+    compounds and multi-clause prompts continue through the historical planner.
+    Requiring all slots prevents two words of an entity from replacing evidence
+    for its requested attribute. Subject names are never character-stopword split.
+    """
+    text = _PREFIX.sub("", query.strip(), count=1)
+    if not _SINGLE_CLAUSE.fullmatch(text):
+        return None
+    match = _WHO.fullmatch(text)
+    if match:
+        subject, attribute = match.groups()
+        subject = subject.rstrip().removesuffix("的").rstrip()
+    else:
+        match = _CHOICE.fullmatch(text)
+        if match:
+            subject, attribute = match.groups()
+        else:
+            match = _ATTRIBUTE.fullmatch(text)
+            if not match:
+                return None
+            body = match[1].strip()
+            if "的" in body:
+                subject, attribute = body.split("的", 1)
+            elif re.search(r"(?:现在|目前)", text[len(body) :]) or " " in body:
+                subject, attribute = "", body
+            else:
+                return None
+    subject, attribute = subject.strip(), attribute.strip()
+    if subject == "我":
+        subject = ""
+    if not attribute:
+        return None
+    parts = _slot_terms(subject) + _slot_terms(attribute)
+    # A recognized question that exceeds the limit cannot silently discard its
+    # late attribute/subject and turn into a broader entity-only lookup.
+    terms = list(dict.fromkeys(parts))
+    if len(terms) > 8 or any(not term or len(term) > 128 or term not in query for term in terms):
+        return []
+    return terms
+
+
 def automatic_recall_terms(query):
     """At most eight distinct, case-sensitive literal terms from <=2048 chars.
 
-    Only Chinese runs gain question-boundary splitting. Other scripts retain
+    Recognized questions preserve literal subject/attribute slots. Otherwise
+    only Chinese runs gain question-boundary splitting. Other scripts retain
     the existing literal chunk behavior. This is intentionally not a tokenizer,
     synonym dictionary, name resolver, answer generator or injection detector.
     """
@@ -90,6 +161,9 @@ def automatic_recall_terms(query):
         _text(query, 2048, empty=True, multiline=True)
     except MemoryError:
         return []
+    planned = _question_terms(query)
+    if planned is not None:
+        return planned
     terms = []
     for chunk in _CHUNKS.findall(query):
         for run in _RUNS.findall(chunk):
@@ -105,27 +179,41 @@ def automatic_recall_terms(query):
 def filter_automatic_recall(data, query, terms):
     """Conservatively filter one bounded pack; never query again or widen budgets.
 
-    Only changed Han query plans with multiple terms need two literal matches.
-    Existing explicit/unsplit lookup semantics remain unchanged. Counts refer to
+    Recognized multi-slot questions require every slot. Other changed Han plans
+    retain the historical two-match rule. Counts refer to
     the backend's original literal-match snapshot; removed records are omitted,
     not asserted absent. This is a relevance heuristic, not identity resolution.
     """
+    planned = _question_terms(query)
+    required = list(range(len(terms))) if planned == terms and len(terms) >= 2 else None
     original = []
     for chunk in _CHUNKS.findall(query):
         if len(chunk) <= 128 and chunk not in original:
             original.append(chunk)
             if len(original) == 8:
                 break
-    if len(terms) < 2 or terms == original or not re.search(r"[\u3400-\u4dbf\u4e00-\u9fff]", query):
+    if required is None and (
+        len(terms) < 2 or terms == original or not re.search(r"[\u3400-\u4dbf\u4e00-\u9fff]", query)
+    ):
         return data
     result = dict(data)
-    result["items"] = [r for r in data["items"] if len(r["matched_queries"]) >= 2]
+    result["items"] = [
+        record
+        for record in data["items"]
+        if (
+            all(index in record["matched_queries"] for index in required)
+            if required is not None
+            else len(record["matched_queries"]) >= 2
+        )
+    ]
     removed = len(data["items"]) - len(result["items"])
     result["omitted_records"] += removed
     result["items_json_chars"] = len(json.dumps(result["items"], ensure_ascii=True, sort_keys=True))
     result["automatic_filter"] = {
-        "minimum_matched_terms": 2,
+        "minimum_matched_terms": len(required) if required is not None else 2,
         "filtered_returned_records": removed,
         "refilled": False,
     }
+    if required is not None:
+        result["automatic_filter"]["required_query_indices"] = required
     return result

@@ -18,6 +18,7 @@ from personal_agent import (
     session_memory_tools,
 )
 from personal_agent import session_task_tools as admission
+from personal_agent.memory_backend import MemoryService
 from personal_agent.tasks import TaskError
 
 
@@ -367,3 +368,43 @@ def test_failed_activation_commands_do_not_reset_existing_selection(access, monk
     assert command("enable-write", session_key="wrong")["error"]["code"] == "unsupported_origin"
     assert command("status")["data"]["recall_enabled"]
     assert "renewal or downgrade" in command("help")["data"]["help"]
+
+
+def test_required_slots_are_fresh_single_read_and_do_not_change_explicit_recall(
+    access, monkeypatch
+):
+    _, command, recall, write, _, state, home, _ = access
+    monkeypatch.setattr(memory_expiry, "utc_now", lambda: "2030-01-01T00:00:00Z")
+    target = write(content="Comet delivery 的管理人为景明", request_id="slots-target")
+    write(content="Comet delivery 的标识为圆形", request_id="slots-logo")
+    write(content="Comet staging 的管理人为秋叶", request_id="slots-other")
+    write(
+        content="Comet delivery 的管理人为过去值",
+        request_id="slots-expired",
+        expires_at="2000-01-01T00:00:00Z",
+    )
+    enable(command)
+    before = files(home)
+    data = json.loads(recall("Comet delivery 谁管理")["context"])["memory"]
+    assert [item["record_id"] for item in data["items"]] == [target["record_id"]]
+    assert data["automatic_filter"]["required_query_indices"] == [0, 1, 2]
+    assert state["reads"] == 1 and files(home) == before
+    with memory_storage.open_existing_memory_reader(home, "operator") as backend:
+        explicit = MemoryService(backend).execute(
+            "recall", {"queries": ["Comet", "delivery", "谁管理"], "limit": 6, "max_chars": 4976}
+        )["data"]
+    assert len(explicit["items"]) == 3 and "automatic_filter" not in explicit
+    write(
+        "correct",
+        record_id=target["record_id"],
+        expected_revision=1,
+        request_id="slots-correct",
+        content="Comet delivery 的管理人为秋叶",
+    )
+    corrected = json.loads(recall("Comet delivery 谁管理")["context"])["memory"]["items"]
+    assert len(corrected) == 1 and corrected[0]["revision"] == 2
+    assert "景明" not in corrected[0]["content"]
+    write("forget", record_id=target["record_id"], expected_revision=2, request_id="slots-forget")
+    assert recall("Comet delivery 谁管理") is None
+    assert recall("Comet unknown 谁管理") is None
+    assert state["reads"] == 4

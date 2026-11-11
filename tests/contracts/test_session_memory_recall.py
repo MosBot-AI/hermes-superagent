@@ -407,3 +407,25 @@ def test_native_chinese_multiterm_filter_avoids_unrelated_private_attributes(hos
     # Explicit literal OR recall remains available and unchanged for deliberate inspection.
     explicit = memory.command(host, 'recall "王明" "生日"')["data"]
     assert len(explicit["items"]) == 3 and "automatic_filter" not in explicit
+
+
+def test_native_required_attribute_slots_preserve_explicit_literal_recall(host):
+    target = save(host, "Comet delivery 的管理人为景明", key="slot-target")
+    logo = save(host, "Comet delivery 标识是圆形", key="slot-logo")
+    other = save(host, "Comet staging 的管理人为秋叶", key="slot-other")
+    enable(host)
+    before = memory.database(host.home).read_bytes()
+    with turn(host):
+        data = json.loads(collect(host, "Comet delivery 谁管理"))["memory"]
+        unknown = collect(host, "Comet unknown 谁管理")
+    assert [item["record_id"] for item in data["items"]] == [target["record_id"]]
+    assert data["automatic_filter"]["required_query_indices"] == [0, 1, 2]
+    assert unknown == ""
+    assert memory.database(host.home).read_bytes() == before
+    explicit = memory.command(host, 'recall "Comet" "delivery" "谁管理"')["data"]
+    assert {item["record_id"] for item in explicit["items"]} == {
+        target["record_id"],
+        logo["record_id"],
+        other["record_id"],
+    }
+    assert "automatic_filter" not in explicit

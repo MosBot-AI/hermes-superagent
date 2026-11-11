@@ -180,3 +180,23 @@ def test_negative_control_native_collector_logs_swallowed_exception():
     with pytest.raises(AssertionError, match="swallowed recall failure"):
         with observe_errors("synthetic_production."):
             logging.getLogger("agent.turn_context").warning("pre_llm_call hook failed: synthetic")
+
+
+@pytest.mark.parametrize(
+    "required,matches,minimum", [([0, 2], [0, 2], 2), ([0, 1], [0], 2), ([0, 1], [0, 1], 3)]
+)
+def test_required_slot_filter_metadata_counterexamples(required, matches, minimum):
+    record, context = sample()
+    item = context["memory"]["items"][0]
+    item["matched_queries"] = matches
+    context["memory"]["items_json_chars"] = len(
+        json.dumps([item], ensure_ascii=True, sort_keys=True)
+    )
+    context["memory"]["automatic_filter"] = {
+        "required_query_indices": required,
+        "minimum_matched_terms": minimum,
+        "filtered_returned_records": 0,
+        "refilled": False,
+    }
+    with pytest.raises(AssertionError, match="incorrect .*metadata"):
+        check_context(json.dumps(context), {"record-one": record}, "2030-01-01T00:00:00Z")

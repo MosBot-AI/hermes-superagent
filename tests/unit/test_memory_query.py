@@ -78,6 +78,7 @@ def test_changed_multiterm_chinese_pack_filter_is_bounded_and_truthful():
         "minimum_matched_terms": 2,
         "filtered_returned_records": 1,
         "refilled": False,
+        "required_query_indices": [0, 1],
     }
     assert data == before
 
