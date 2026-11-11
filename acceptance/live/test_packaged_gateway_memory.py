@@ -17,13 +17,21 @@ import pytest
 from test_packaged_gateway_tasks import checked, installed  # noqa: F401
 
 
+def enable_installed_memory(home):
+    """Preserve the installer's YAML fields while enabling this test's opt-in."""
+    from ruamel.yaml import YAML
+
+    path = home / "config.yaml"
+    yaml = YAML()
+    config = yaml.load(path)
+    config["plugins"]["entries"]["hermes-personal-agent"]["settings"]["local_memory"] = True
+    yaml.dump(config, path)
+
+
 @pytest.fixture
 def installed_memory(installed):
     home, env, live = installed
-    path = home / "config.yaml"
-    config = json.loads(path.read_text())
-    config["plugins"]["entries"]["hermes-personal-agent"]["settings"]["local_memory"] = True
-    path.write_text(json.dumps(config))
+    enable_installed_memory(home)
     return home, env, live
 
 
