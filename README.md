@@ -177,3 +177,5 @@ Added [saved native attention review](docs/54-saved-native-attention.md): local 
 [Review-only source receipt recovery](docs/93-source-receipt-recovery.md) adds a durable metadata journal for interrupted consumer accounting; it does not enable production capture or memory checkpoints.
 
 [Review-only receipt-bound source reads](docs/94-receipt-source-reads.md) return original rows and validity in one bounded native snapshot; deletion affects fresh reads, without enabling memory acceptance or checkpoint-v2.
+
+[Explicit observed-source retention](docs/98-observed-source-retention.md) imports reviewed original native rows into canonical memory through explicit LOCAL preview/retain commands, with metadata recovery independent of native text; it enables no automatic ingestion, model tool or HTTP surface.

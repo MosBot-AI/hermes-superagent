@@ -4,6 +4,8 @@ English | [简体中文](96-retained-source-acceptance-zh.md)
 
 ## Implemented boundary
 
+The follow-on [explicit observed-source retention](98-observed-source-retention.md) adds native LOCAL commands and schema-13 migration with separate, honestly tagged `observed_native_snapshot` provenance. The account below describes the #133 receipt path and shared acceptance protocol; its legacy provenance, digests and historical outputs remain unchanged. “Not a native command” describes the original #133 slice, not the added #137 commands.
+
 [Issue #133](https://github.com/MosBot-AI/hermes-superagent/issues/133) adds actual canonical SQLite acceptance of an explicitly retained original native source. This is an optional API-v1 Memory SDK operation family, with schema-12 writable migration and an isolated runnable consumer of the [receipt-bound source proposal](94-receipt-source-reads.md). It is not automatic ingestion, a new model tool, a native command, an HTTP route, host adoption, installation or production activation. The host compatibility pin remains `2281116525106e3c109993ccb5dc74d02bfc1427`.
 
 The trusted local operator must separately authorize retaining the selected source as an independent snapshot and choose canonical retention: an explicit `expires_at` timestamp or explicit null. The required `retention: independent_snapshot` field records these import semantics; it does not authenticate a user or turn a model payload into permission. Both the SDK binding and canonical writer require the existing `explicit_local_operator` route. Model-bound and read-only writers cannot borrow this authority. Reviewed in-process Python remains trusted code, not a sandbox against fabricated sources or forged bindings.

@@ -11,7 +11,7 @@ import re
 import stat
 from pathlib import Path
 
-from .memory_backend import MemoryError
+from .memory_backend import MemoryError, _identifier
 from .native_source_resolution import MAX_SOURCE_ROWS, _revision, _rows
 
 OPERATIONS = frozenset({"source_list", "source_show"})
@@ -96,7 +96,7 @@ def _metadata(item):
     }
 
 
-def inspect_sources(db, *, session_id, binding, operation, payload):
+def inspect_sources(db, *, session_id, binding, operation, payload, capture=False):
     """One complete bounded observation, using a caller-owned read-only handle.
 
     The native decoder can allocate each stored row before our payload bounds
@@ -104,6 +104,8 @@ def inspect_sources(db, *, session_id, binding, operation, payload):
     ``binding`` is a trusted opener's transient scope marker, not user input.
     """
     payload = validate(operation, payload)
+    if type(capture) is not bool or (capture and operation != "source_show"):
+        raise MemoryError("invalid_request")
     if (
         type(session_id) is not str
         or re.fullmatch(r"[A-Za-z0-9._-]{1,128}", session_id) is None
@@ -117,6 +119,12 @@ def inspect_sources(db, *, session_id, binding, operation, payload):
     with db.transcript_read_snapshot() as consistent:
         if not callable(consistent) or type(consistent.pinned) is not bool:
             raise MemoryError("source_read_failed")
+        store_id = None
+        if capture:
+            try:
+                store_id = _identifier(db.get_meta("store_instance_id"))
+            except Exception:
+                raise MemoryError("source_store_identity_unavailable") from None
         session = db.get_session(session_id)
         if type(session) is not dict or session.get("id") != session_id:
             raise MemoryError("source_not_found")
@@ -189,12 +197,24 @@ def inspect_sources(db, *, session_id, binding, operation, payload):
                 "content": eligible[pos].content,
                 "absorbed_message_uids": list(eligible[pos].absorbed_message_uids),
             }
+        if capture:
+            data["retained_source"] = {
+                "kind": "observed_native_snapshot",
+                "identity": _hash(
+                    ["native_original_v1", store_id, session_id, payload["message_uid"]]
+                ),
+                "fingerprint": data["item"]["content_sha256"],
+                "role": data["item"]["role"],
+                "observation_id": _hash(
+                    ["personal.native-retention-observation.v1", snapshot, store_id]
+                ),
+            }
         if consistent() is not True:
             raise MemoryError("source_generation_changed")
     return {"data": data, "replayed": False}
 
 
-def run(home, session_id, operation, payload):
+def run(home, session_id, operation, payload, *, capture=False):
     """Supported command-only reader; never creates or migrates either store."""
     payload = validate(operation, payload)
     try:
@@ -208,6 +228,7 @@ def run(home, session_id, operation, payload):
                 binding=(str(home), *identity),
                 operation=operation,
                 payload=payload,
+                capture=capture,
             )
             if _binding(home) != (path, identity):
                 raise MemoryError("source_generation_changed")

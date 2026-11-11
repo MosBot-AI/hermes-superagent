@@ -56,6 +56,7 @@
     "personal_agent/native_memory_provider.py",
     "personal_agent/native_source_resolution.py",
     "personal_agent/native_source_workbench.py",
+    "personal_agent/observed_source_retention.py",
     "personal_agent/plugin.py",
     "personal_agent/read_admission.py",
     "personal_agent/retained_sources.py",

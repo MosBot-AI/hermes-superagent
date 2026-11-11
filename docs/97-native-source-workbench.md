@@ -4,6 +4,8 @@ English | [简体中文](97-native-source-workbench-zh.md)
 
 ## Implemented boundary
 
+The follow-on [explicit observed-source retention](98-observed-source-retention.md) now connects canonical acceptance through separate preview/retain commands, with actual host UUID, observed provenance and explicit retention authority. This document’s read-only and unconnected-acceptance statements apply only to `source-list`/`source-show`; those operations still do not write canonical memory, create receipts or advance cursors.
+
 [Issue #135](https://github.com/MosBot-AI/hermes-superagent/issues/135) adds `source-list` and `source-show` to the production plugin's `/personal-memory` command. They review original transcript rows through the published `hermes_state.SessionDB` read API, without a host patch. The compatibility target remains Hermes `2281116525106e3c109993ccb5dc74d02bfc1427`. Production-package code is not evidence of installation, production deployment or live personal-data acceptance.
 
 The existing explicit local-memory configuration and origin gates remain required: `mode: local_tasks`, `local_conversation: true`, `local_memory: true`, the admitted current profile and the exact current Gateway-backed LOCAL session binding. The reader opens only that profile's existing fixed `state.db` with `read_only=True`. Requests cannot choose a path, profile or session, search other stores, or include ancestors, inactive or compacted rows. Missing, unsafe or malformed stores are refused rather than created, migrated, repaired or chmodded. Profile selection is not verified user identity, and trusted in-process Python is not a security sandbox.

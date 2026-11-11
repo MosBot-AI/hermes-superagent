@@ -6,6 +6,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ## Unreleased
 
+- Add explicit LOCAL source preview/retain and metadata status/cursor/discard commands, connecting canonical acceptance with actual host UUID and observed provenance; schema-13 preserves legacy receipt history and supports recovery after source loss, without automatic ingestion (#137).
+
 - Add explicit native `source-list`/`source-show` commands for bounded current-session original-row review with metadata-only listing and snapshot-bound selection; no native/canonical writes, source receipts or automatic ingestion (#135).
 
 - Add optional digest-bound canonical mutation receipt inspection through the local Memory SDK, separating historical outcomes from current record metadata without replaying payloads, writing cursors or enabling source acceptance (#131).

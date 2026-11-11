@@ -16,7 +16,7 @@ OPERATIONS = frozenset(
     {"source_stage", "source_accept", "source_discard", "source_status", "source_cursor"}
 )
 WRITES = frozenset({"source_stage", "source_accept", "source_discard"})
-SCHEMA = {
+SCHEMA_V12 = {
     "retained_source_decisions": """CREATE TABLE retained_source_decisions (
         request_id TEXT PRIMARY KEY NOT NULL,
         consumer_id TEXT NOT NULL, source_sequence INTEGER NOT NULL CHECK(source_sequence>=1),
@@ -30,6 +30,26 @@ SCHEMA = {
         CHECK((state='accepted' AND record_id IS NOT NULL AND receipt IS NOT NULL)
             OR (state!='accepted' AND record_id IS NULL AND receipt IS NULL)))"""
 }
+# Keep the historical definition exact: schema admission compares sqlite_master SQL.
+SCHEMA = {
+    "retained_source_decisions": SCHEMA_V12["retained_source_decisions"]
+    .replace(
+        "source_receipt TEXT NOT NULL,",
+        """source_receipt TEXT,
+        source_kind TEXT NOT NULL,
+        source_observation TEXT,
+        """,
+    )
+    .replace(
+        "UNIQUE(consumer_id,source_sequence),",
+        """UNIQUE(consumer_id,source_sequence),
+        CHECK((source_kind='retained_native_snapshot' AND source_receipt IS NOT NULL
+            AND source_observation IS NULL)
+            OR (source_kind='observed_native_snapshot' AND source_receipt IS NULL
+            AND source_observation IS NOT NULL)),""",
+    )
+}
+
 COLUMNS = (
     "request_id",
     "consumer_id",
@@ -39,6 +59,8 @@ COLUMNS = (
     "source_fingerprint",
     "source_role",
     "source_receipt",
+    "source_kind",
+    "source_observation",
     "state",
     "record_id",
     "receipt",
@@ -97,21 +119,29 @@ def validate(operation, payload):
         if request["retention"] != "independent_snapshot":
             raise MemoryError("invalid_request")
         source = request["source"]
-        if type(source) is not dict or set(source) != {
-            "identity",
-            "fingerprint",
-            "role",
-            "receipt_id",
-        }:
-            raise MemoryError("invalid_request")
-        for key in ("identity", "fingerprint", "receipt_id"):
-            _digest(source[key])
-        if type(source["role"]) is not str or source["role"] not in {"user", "assistant"}:
-            raise MemoryError("invalid_request")
+        _validate_source(source, output=False)
         if source["fingerprint"] != hashlib.sha256(request["content"].encode()).hexdigest():
             raise MemoryError("invalid_request")
         request["source"] = dict(source)
     return request
+
+
+def _validate_source(source, *, output):
+    if type(source) is not dict:
+        raise MemoryError("invalid_request")
+    observed = source.get("kind") == "observed_native_snapshot"
+    provenance = "observation_id" if observed else "receipt_id"
+    fields = {"identity", "fingerprint", "role", provenance}
+    if output or observed:
+        fields.add("kind")
+    if set(source) != fields:
+        raise MemoryError("invalid_request")
+    if output and not observed and source["kind"] != "retained_native_snapshot":
+        raise MemoryError("invalid_request")
+    for key in ("identity", "fingerprint", provenance):
+        _digest(source[key])
+    if type(source["role"]) is not str or source["role"] not in {"user", "assistant"}:
+        raise MemoryError("invalid_request")
 
 
 def source_request_identity(payload):
@@ -139,14 +169,7 @@ def _decision(value):
     _require(_sequence(value["source_sequence"]) >= 1)
     _require(type(value["state"]) is str and value["state"] in {"pending", "accepted", "discarded"})
     source = value["source"]
-    _require(
-        type(source) is dict
-        and set(source) == {"kind", "identity", "fingerprint", "role", "receipt_id"}
-    )
-    _require(source["kind"] == "retained_native_snapshot")
-    for key in ("identity", "fingerprint", "receipt_id"):
-        _digest(source[key])
-    _require(type(source["role"]) is str and source["role"] in {"user", "assistant"})
+    _validate_source(source, output=True)
     if value["state"] == "accepted":
         receipt_valid(value["record"])
         _require(value["record"]["operation"] == "remember")
@@ -222,11 +245,15 @@ def _metadata(row):
         "source_sequence": row["source_sequence"],
         "state": row["state"],
         "source": {
-            "kind": "retained_native_snapshot",
+            "kind": row["source_kind"],
             "identity": row["source_identity"],
             "fingerprint": row["source_fingerprint"],
             "role": row["source_role"],
-            "receipt_id": row["source_receipt"],
+            **(
+                {"receipt_id": row["source_receipt"]}
+                if row["source_kind"] == "retained_native_snapshot"
+                else {"observation_id": row["source_observation"]}
+            ),
         },
         "record": json.loads(row["receipt"], object_pairs_hook=_unique_object)
         if row["receipt"] is not None
@@ -260,7 +287,7 @@ def _current(conn, record_id, now):
 def validate_store(conn, now):
     """Bounded metadata-only validation. Never reads candidates or record payloads."""
     try:
-        maxima = (128, 64, None, 64, 64, 64, 9, 64, 9, 36, 2048, None)
+        maxima = (128, 64, None, 64, 64, 64, 9, 64, 24, 64, 9, 36, 2048, None)
         columns = [
             name
             if limit is None
@@ -278,6 +305,18 @@ def validate_store(conn, now):
         rows, cursors, identities, records = {}, {}, set(), set()
         for values in raw:
             row = dict(zip(COLUMNS, values, strict=True))
+            _require(
+                (
+                    row["source_kind"] == "retained_native_snapshot"
+                    and row["source_receipt"] is not None
+                    and row["source_observation"] is None
+                )
+                or (
+                    row["source_kind"] == "observed_native_snapshot"
+                    and row["source_receipt"] is None
+                    and row["source_observation"] is not None
+                )
+            )
             metadata = _metadata(row)
             _decision(metadata)
             _digest(row["request_digest"])
@@ -425,7 +464,8 @@ def execute(backend, conn, operation, request, now):
         if not cursor and len(cursors) >= 64:
             raise MemoryError("source_consumer_limit")
         conn.execute(
-            "INSERT INTO retained_source_decisions VALUES (?,?,?,?,?,?,?,?,'pending',NULL,NULL,0)",
+            "INSERT INTO retained_source_decisions VALUES "
+            "(?,?,?,?,?,?,?,?,?,?,'pending',NULL,NULL,0)",
             (
                 request["request_id"],
                 request["consumer_id"],
@@ -434,7 +474,9 @@ def execute(backend, conn, operation, request, now):
                 request["source"]["identity"],
                 request["source"]["fingerprint"],
                 request["source"]["role"],
-                request["source"]["receipt_id"],
+                request["source"].get("receipt_id"),
+                request["source"].get("kind", "retained_native_snapshot"),
+                request["source"].get("observation_id"),
             ),
         )
         rows, _ = validate_store(conn, now)

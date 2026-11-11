@@ -27,6 +27,9 @@ from .memory_storage import open_memory_backend
 from .native_source_workbench import OPERATIONS as SOURCE_REVIEW_OPERATIONS
 from .native_source_workbench import run as review_native_sources
 from .native_source_workbench import validate as validate_source_review
+from .observed_source_retention import OPERATIONS as SOURCE_RETENTION_OPERATIONS
+from .observed_source_retention import run as retain_native_source
+from .observed_source_retention import validate as validate_source_retention
 from .task_cli import current_profile_home
 
 HELP = (
@@ -38,7 +41,17 @@ HELP = (
     "16384 characters per row and 65536 total; row decoding happens before these payload limits. "
     "Observation digests are not native receipts, authorization or durable checkpoints. "
     "Review can expose private source text in client/history; later deletion cannot retract it. "
-    "No canonical acceptance or retention is performed. "
+    "List/show perform no canonical acceptance or retention. "
+    "source-preview UID --expected-snapshot SHA256 --consumer-id ID --expected-sequence N "
+    "--request-id KEY --retention independent_snapshot (--keep | --expires-at UTC) "
+    "[--topic LABEL]; source-retain SAME_ARGUMENTS --expected-digest SHA256. "
+    "Preview the complete row, provenance and retention, and save the exact request ID/digest "
+    "before explicit retain. Retention copies one untrusted source independently to canonical "
+    "memory; native deletion does not forget it. At most 2048 content characters; no truncation. "
+    "source-status KEY --expected-digest SHA256; source-discard KEY --expected-digest SHA256; "
+    "source-cursor --consumer-id ID. Status/cursor never open native text or migrate memory. "
+    "After any uncertain write, inspect the saved exact key/digest before doing anything else. "
+    "Discard terminally suppresses the exact pending source; it does not forget accepted records. "
     'remember "Text" [--topic LABEL] [--expires-at UTC] [--request-id KEY]; '
     "list [--include-expired --limit N --after ID]; "
     'search "Text" [--include-expired --limit N --after ID]; show ID; '
@@ -152,6 +165,32 @@ def parse_command(raw_args: str) -> tuple[str, dict]:
     source_show = commands.add_parser("source-show")
     source_show.add_argument("message_uid")
     source_show.add_argument("--expected-snapshot", required=True)
+    for operation in ("source-preview", "source-retain"):
+        command = commands.add_parser(operation)
+        command.add_argument("message_uid")
+        command.add_argument("--expected-snapshot", required=True)
+        command.add_argument("--consumer-id", required=True)
+        command.add_argument("--expected-sequence", type=int, required=True)
+        command.add_argument("--request-id", required=True)
+        command.add_argument("--retention", choices=["independent_snapshot"], required=True)
+        command.add_argument("--topic", default="")
+        expiry = command.add_mutually_exclusive_group(required=True)
+        expiry.add_argument("--expires-at", default=argparse.SUPPRESS)
+        expiry.add_argument(
+            "--keep",
+            dest="expires_at",
+            action="store_const",
+            const=None,
+            default=argparse.SUPPRESS,
+        )
+        if operation == "source-retain":
+            command.add_argument("--expected-digest", required=True)
+    for operation in ("source-status", "source-discard"):
+        command = commands.add_parser(operation)
+        command.add_argument("request_id")
+        command.add_argument("--expected-digest", required=True)
+    cursor = commands.add_parser("source-cursor")
+    cursor.add_argument("--consumer-id", required=True)
     show = commands.add_parser("show")
     show.add_argument("record_id")
     commands.add_parser("maintenance-preview")
@@ -291,6 +330,11 @@ def parse_command(raw_args: str) -> tuple[str, dict]:
         "search-terms": "search_terms",
         "source-list": "source_list",
         "source-show": "source_show",
+        "source-preview": "source_preview",
+        "source-retain": "source_retain",
+        "source-status": "source_status",
+        "source-discard": "source_discard",
+        "source-cursor": "source_cursor",
         "candidate-list": "candidate_list",
         "candidate-show": "candidate_get",
         "candidate-accept": "candidate_accept",
@@ -312,6 +356,8 @@ def parse_command(raw_args: str) -> tuple[str, dict]:
         and payload["request_id"] is None
     ):
         payload["request_id"] = str(uuid4())
+    if operation in SOURCE_RETENTION_OPERATIONS:
+        return operation, validate_source_retention(operation, payload)
     if operation in SOURCE_REVIEW_OPERATIONS:
         return operation, validate_source_review(operation, payload)
     if operation.startswith("maintenance_"):
@@ -399,6 +445,8 @@ class LocalMemoryCommands:
                 request_id = payload.get("request_id")
                 if operation == "help":
                     result = {"data": {"help": HELP}, "replayed": False}
+                elif operation in SOURCE_RETENTION_OPERATIONS:
+                    result = retain_native_source(self._home, session_id, operation, payload)
                 elif operation in SOURCE_REVIEW_OPERATIONS:
                     result = review_native_sources(self._home, session_id, operation, payload)
                 elif operation in {

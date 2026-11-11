@@ -174,3 +174,5 @@ plugins:
 [仅供审查的来源回执恢复](docs/93-source-receipt-recovery-zh.md)为中断的消费者记账加入持久元数据日志，不启用生产捕获或记忆检查点。
 
 [仅供审阅的回执绑定来源读取](docs/94-receipt-source-reads-zh.md)在一个有界原生快照内返回原始行与有效性；删除影响后续读取，不启用记忆接受或 checkpoint-v2。
+
+[显式保留观察来源](docs/98-observed-source-retention-zh.md)将已审阅的原生原始行通过显式 LOCAL 预览/保留命令导入规范记忆，提供不依赖原生文本的元数据恢复；不启用自动摄取、模型工具或 HTTP。

@@ -4,6 +4,8 @@
 
 ## 已实现的边界
 
+后续的[显式保留观察来源](98-observed-source-retention-zh.md)已通过独立的预览/保留命令连接规范接受，并加入真实宿主 UUID、观察来源标记及显式保留授权。本文的只读和未连接接受声明仅适用于 `source-list`/`source-show`；它们本身仍不写规范记忆、不创建回执，也不推进游标。
+
 [Issue #135](https://github.com/MosBot-AI/hermes-superagent/issues/135) 在生产插件的 `/personal-memory` 命令中新增 `source-list` 和 `source-show`。它们通过公开的 `hermes_state.SessionDB` 读取 API 审阅原始会话行，无需宿主补丁。兼容性目标仍为 Hermes `2281116525106e3c109993ccb5dc74d02bfc1427`。代码进入生产包不代表已经安装、生产部署或完成真实个人数据验收。
 
 仍须满足既有的显式本地记忆配置与来源门禁：`mode: local_tasks`、`local_conversation: true`、`local_memory: true`、已经准入的当前配置档，以及准确的当前 Gateway 支持的 LOCAL 会话绑定。读取器仅以 `read_only=True` 打开该配置档已有的固定 `state.db`。请求不能选择路径、配置档或会话，不能搜索其他存储，也不包含祖先会话、非活动行或已压缩行。缺失、不安全或畸形的存储会被拒绝，不会被创建、迁移、修复或修改权限。配置档选择不是经过验证的用户身份，可信进程内 Python 也不是安全沙箱。

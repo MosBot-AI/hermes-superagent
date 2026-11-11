@@ -21,8 +21,8 @@
     "test_recovery.py": "aec695c126f6d4d0e92f5861511cb1ba61c2f0d977612a91793a60426713fd80",
     "test_source_reads.py": "37b9331d1321d545265399e819bebe7f7dc17af3283f683d78400ba30978d8e5",
     "test_acceptance.py": "6e9a50439828c1c6fa16246a68a5a37adbf8c45c01b8e87f588542ed85e2a50c",
-    "../../personal_agent/local_memory.py": "fbe83f4ce85763e39fb92ff5f62e9ca4cb5f557501cd1d79ada1670cc403ddde",
-    "../../personal_agent/retained_sources.py": "84a9bc8a85d50154c4f83e7b27478dc612be9d46148fa8449c49ecbb805eacb9",
+    "../../personal_agent/local_memory.py": "63ee7096643385d9a4926422df96291f9a8c65da4f619ec079e482f4822be291",
+    "../../personal_agent/retained_sources.py": "f02501bbb3399569fd7e62bf6f7df25d756985007aad17359f2f953b73b871bf",
     "../../personal_agent/memory_sources.py": "aee6ed1a3bbfbc157902154149748614dfd6b22113acdd24e748b3b3aea82b6a",
     "../../personal_agent/memory_sdk.py": "1f44853f9626d933683a14dd41ef26962d34203880f2e2f75430c61e74835248",
     "../../personal_agent/memory_adapters.py": "47c416950aa95f7cbd75064c27f7758eb3a33ea879aee4417be62bf5069875b5",
@@ -63,5 +63,5 @@
   "production_activated": false,
   "live_model_calls": false,
   "external_delivery": false,
-  "project_source_base": "a1bd7352652b1226a77c1d36cb44de40cdb2a671"
+  "project_source_base": "9ddb633e89ffbcc8a33094a5d4ec774907ef7a0f"
 }
