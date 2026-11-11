@@ -232,3 +232,126 @@ def run_progress_conformance(factory, *, isolated_synthetic: bool = False) -> Co
             "independent_consumers",
         ),
     )
+
+
+def run_checkpoint_conformance(factory, *, isolated_synthetic: bool = False) -> ConformanceReport:
+    """Optional metadata-checkpoint suite on a separate fresh synthetic store.
+
+    Uses the same trusted-opener/isolation requirements as run_conformance.
+    Receipts are historical metadata, never payload backups or native checkpoints.
+    """
+    if isolated_synthetic is not True:
+        raise MemoryError("synthetic_store_required")
+    with factory() as service:
+        page = service.execute("export", {"limit": 1})["data"]
+        if page["items"] or page["has_more"] or page["watermark"] != 0:
+            raise MemoryError("empty_store_required")
+        request = {"expected_watermark": 0, "request_id": "checkpoint-empty"}
+        empty = service.execute("checkpoint_create", request)
+        empty_id = empty["data"]["checkpoint_id"]
+        _check(empty["data"]["event_count"] == empty["data"]["record_count"] == 0)
+        _check(
+            service.execute("checkpoint_status", {"checkpoint_id": empty_id})["data"]["is_current"]
+        )
+        created = service.execute(
+            "remember", {"content": "synthetic checkpoint secret", "request_id": "checkpoint-r"}
+        )["data"]
+        rid = created["record_id"]
+        first_request = {
+            "expected_watermark": created["event_sequence"],
+            "request_id": "checkpoint-first",
+        }
+        first = service.execute("checkpoint_create", first_request)
+        _check(first["data"]["active_count"] == first["data"]["record_count"] == 1)
+        _check(first["data"]["forgotten_count"] == 0)
+        corrected = service.execute(
+            "correct",
+            {
+                "record_id": rid,
+                "expected_revision": 1,
+                "content": "synthetic replacement secret",
+                "request_id": "checkpoint-c",
+            },
+        )["data"]
+        _check(
+            not service.execute(
+                "checkpoint_status",
+                {
+                    "checkpoint_id": first["data"]["checkpoint_id"],
+                },
+            )["data"]["is_current"]
+        )
+        _reject(
+            service,
+            "checkpoint_create",
+            {
+                **first_request,
+                "request_id": "checkpoint-stale",
+            },
+            "watermark_conflict",
+        )
+        _reject(
+            service,
+            "checkpoint_create",
+            {
+                "expected_watermark": corrected["event_sequence"] + 1,
+                "request_id": "checkpoint-future",
+            },
+            "watermark_conflict",
+        )
+        forgotten = service.execute(
+            "forget",
+            {
+                "record_id": rid,
+                "expected_revision": 2,
+                "request_id": "checkpoint-f",
+            },
+        )["data"]
+        final_request = {
+            "expected_watermark": forgotten["event_sequence"],
+            "request_id": "checkpoint-final",
+        }
+        final = service.execute("checkpoint_create", final_request)
+        _check(final["data"]["event_count"] == 3)
+        _check(final["data"]["record_count"] == final["data"]["forgotten_count"] == 1)
+        _check(final["data"]["active_count"] == 0)
+    with factory() as service:
+        for payload, receipt in ((request, empty), (first_request, first), (final_request, final)):
+            _check(
+                service.execute("checkpoint_create", payload)
+                == {
+                    "data": receipt["data"],
+                    "replayed": True,
+                }
+            )
+        _reject(
+            service,
+            "checkpoint_create",
+            {
+                **request,
+                "expected_watermark": forgotten["event_sequence"],
+            },
+            "idempotency_conflict",
+        )
+        status = service.execute(
+            "checkpoint_status",
+            {
+                "checkpoint_id": final["data"]["checkpoint_id"],
+            },
+        )["data"]
+        _check(status["is_current"] and status["checkpoint"] == final["data"])
+        old = service.execute("checkpoint_status", {"checkpoint_id": empty_id})["data"]
+        _check(not old["is_current"] and old["current_watermark"] == forgotten["event_sequence"])
+        record = service.execute("get", {"record_id": rid})["data"]
+        _check(record["status"] == "forgotten" and record["content"] is None)
+    return ConformanceReport(
+        1,
+        (
+            "empty_checkpoint",
+            "current_and_stale",
+            "checkpoint_reopen",
+            "checkpoint_idempotency",
+            "watermark_fence",
+            "historical_replay_after_forget",
+        ),
+    )

@@ -64,6 +64,18 @@ with TemporaryDirectory() as directory:
 
 适配器作者可以在**另一个全新的合成存储**上，单独运行 `personal_agent.memory_conformance` 中的 `run_progress_conformance(factory, isolated_synthetic=True)`。该可选套件检查贯穿更正与遗忘的有界/固定上界分页、重开后游标持久保留、精确重试、同键变更载荷冲突、过期 CAS、倒退/未来拒绝、独立消费者及不倒退进度的旧回执重放。它要求这些可选能力，不会静默跳过不支持的适配器。独立 CRUD 示例不声称支持进度。基于 SQLite 的测试还注入无效元数据/回执和确认丢失。这些属于离线观察，不是生产、断电或原生生命周期验收。
 
+## 可选本地元数据检查点扩展
+
+新增的 API-v1 操作 `checkpoint_create`（`expected_watermark`、`request_id`）和 `checkpoint_status`（`checkpoint_id`）通过 SDK 暴露已有的 [39](39-local-memory-checkpoints-zh.md) 本地元数据契约。两者均要求 `local_metadata_checkpoint`；创建还要求 `durable_write`、`cas` 和 `idempotency`。缺少能力时在分发前失败，不通过模拟提供替代。创建要求 SDK 绑定具有 `explicit_local_operator` 来源，并在任何后端分发前检查，包括精确回执重放。可信打开方仍须正确绑定实际存储；绑定不是身份认证。仅支持 CRUD 的适配器、现有 CRUD/进度操作及运行器均保持不变。
+
+请求和响应使用精确键集合。验证拒绝额外字段、无效标识符和类型、超出边界的计数或水位、不一致的计数关系、格式错误的元数据哈希及请求/回执不匹配。回执只包含有界记录/事件元数据，不包含记录文本、内容哈希、来源/session 标签或任意后端字段。其固定作用域为 `local_record_metadata_not_native_conversation`，并具有 `restorable: false` 和 `native_checkpoint: false`。状态验证嵌套回执及请求的检查点 ID、`is_current`、`current_watermark` 和固定作用域 `metadata_comparison_at_this_read_snapshot_not_restore_or_authority`。有效元数据不能证明不诚实适配器的完整性、载荷正确性或原生来源覆盖。
+
+创建以观察到的水位作为围栏。空存储可捕获水位零；后续更正或遗忘会使较早的检查点过时。精确重放返回原始历史回执，不创建新快照，也不表示该检查点仍为当前状态。使用 `checkpoint_status` 检查该读取快照时刻的新鲜度；即使结果为当前，也可能立即过时。两种操作都不会恢复记录或已遗忘内容。既有的有界存储扫描和回执配额仍适用；本 SDK 扩展不增加模式迁移、裁剪、自动调度或保留机制。
+
+创建属于写入。未知后端失败或无效确认会产生经过脱敏的 `outcome_unknown`，并禁用自动重试，因为检查点可能已经提交。保留原始 `request_id` 和不变的 `expected_watermark`：显式重放完全相同的键和载荷进行对账，再通过 `checkpoint_status` 检查返回的检查点。不要仅因确认丢失就使用新键，也不要将状态读取失败视为不存在。已知领域拒绝仅在经过审查的适配器保证未提交新修改的契约下保留；不会返回任意后端消息。
+
+适配器作者可以在**另一个全新的合成存储**上单独运行 `personal_agent.memory_conformance` 中的 `run_checkpoint_conformance(factory, isolated_synthetic=True)`，不得使用生产配置档案或 CRUD/进度套件已经使用过的存储。该可选运行器覆盖空/当前/过时检查点、更正和终止性遗忘、重开后的持久性、精确历史重放、请求变更冲突及过期水位围栏。不支持检查点的适配器会显式失败，而非静默跳过套件。上方独立 CRUD 示例不声称支持检查点。这是隔离的本地离线合规验证，不是生产验收或原生 checkpoint-v2 支持。不改变原生 provider、网络操作、共享 REST 契约或宿主生命周期行为。
+
 ## 剩余 E2.6 工作
 
 更广的 [#43](https://github.com/MosBot-AI/hermes-superagent/issues/43) 保持开放：本地外观层并未交付完整的版本化来源/事件及多类型契约、远程对账、替换激活/迁移、经过审查的加载/资源 ABI 或原生生命周期集成。[82](82-shared-client-api-zh.md) 中共享客户端契约不变；Python SDK 不证明已提供认证 HTTP 或跨后端功能等价。

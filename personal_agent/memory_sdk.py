@@ -5,6 +5,7 @@ backend and its binding. Python objects are not a malicious-code sandbox.
 """
 
 import json
+import re
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime
@@ -20,13 +21,15 @@ from .memory_backend import (
 )
 
 SDK_VERSION = 1
+CHECKPOINT_OPERATIONS = frozenset({"checkpoint_create", "checkpoint_status"})
 PROGRESS_OPERATIONS = frozenset({"changes", "consumer_get", "consumer_advance"})
 OPERATIONS = (
     frozenset({"remember", "correct", "forget", "get", "list", "search", "export"})
     | PROGRESS_OPERATIONS
+    | CHECKPOINT_OPERATIONS
 )
 _RECORD_WRITES = frozenset({"remember", "correct", "forget"})
-_WRITES = _RECORD_WRITES | {"consumer_advance"}
+_WRITES = _RECORD_WRITES | {"consumer_advance", "checkpoint_create"}
 _REJECTIONS = frozenset(
     {
         "idempotency_conflict",
@@ -44,6 +47,12 @@ _REJECTIONS = frozenset(
         "consumer_limit",
         "consumer_mutation_limit",
         "consumer_scope_required",
+        "checkpoint_scope_required",
+        "checkpoint_not_found",
+        "watermark_conflict",
+        "checkpoint_limit",
+        "checkpoint_state_limit",
+        "checkpoint_state_inconsistent",
     }
 )
 _RECORD = frozenset(
@@ -166,10 +175,14 @@ class LocalMemorySDK:
         request = validate_request(operation, payload)
         self._service.descriptor.check_request(operation, request)
         if (
-            operation == "consumer_advance"
+            operation in {"consumer_advance", "checkpoint_create"}
             and self.binding.source_kind != "explicit_local_operator"
         ):
-            raise MemoryError("consumer_scope_required")
+            raise MemoryError(
+                "checkpoint_scope_required"
+                if operation == "checkpoint_create"
+                else "consumer_scope_required"
+            )
         try:
             result = self._service.execute(operation, deepcopy(request))
         except MemoryError as error:
@@ -203,6 +216,9 @@ class LocalMemorySDK:
         _keys(result, {"data", "replayed"})
         _require(type(result["replayed"]) is bool)
         data = result["data"]
+        if operation in CHECKPOINT_OPERATIONS:
+            self._validate_checkpoint(operation, request, result)
+            return
         if operation in PROGRESS_OPERATIONS:
             self._validate_progress(operation, request, result)
             return
@@ -342,6 +358,82 @@ class LocalMemorySDK:
             _require(data["revision"] == request["expected_revision"] + 1)
             _require(data["through_sequence"] == request["through_sequence"])
             _require(data["request_id"] == request["request_id"])
+
+    def _validate_checkpoint_receipt(self, receipt):
+        _keys(
+            receipt,
+            {
+                "schema_version",
+                "checkpoint_id",
+                "request_id",
+                "through_sequence",
+                "event_count",
+                "record_count",
+                "active_count",
+                "forgotten_count",
+                "metadata_sha256",
+                "scope",
+                "restorable",
+                "native_checkpoint",
+            },
+        )
+        _require(receipt["schema_version"] == "personal.memory.metadata_checkpoint.v1")
+        _require(type(receipt["checkpoint_id"]) is str and len(receipt["checkpoint_id"]) == 36)
+        _identifier(receipt["checkpoint_id"])
+        _require(type(receipt["request_id"]) is str)
+        # Reuse the bounded request-key grammar without accepting arbitrary text.
+        validate_request(
+            "checkpoint_create",
+            {
+                "request_id": receipt["request_id"],
+                "expected_watermark": 0,
+            },
+        )
+        digest = receipt["metadata_sha256"]
+        _require(type(digest) is str and re.fullmatch(r"[0-9a-f]{64}", digest) is not None)
+        _require(receipt["scope"] == "local_record_metadata_not_native_conversation")
+        _require(receipt["restorable"] is False and receipt["native_checkpoint"] is False)
+        for key in (
+            "through_sequence",
+            "event_count",
+            "record_count",
+            "active_count",
+            "forgotten_count",
+        ):
+            _integer(receipt[key])
+        limits = dict(self._service.descriptor.limits)
+        records, events = receipt["record_count"], receipt["event_count"]
+        forgotten = receipt["forgotten_count"]
+        _require(records == receipt["active_count"] + forgotten)
+        _require(records <= limits["max_total_records"])
+        _require(events <= limits["max_total_mutations"])
+        _require(events - forgotten <= limits["max_nonterminal_mutations"])
+        _require(events >= records + forgotten)
+        _require((events == 0) == (records == 0))
+        _require((events == 0) == (receipt["through_sequence"] == 0))
+        # Sequence gaps are allowed; the watermark is not an event count.
+        _require(events <= receipt["through_sequence"])
+
+    def _validate_checkpoint(self, operation, request, result):
+        data = result["data"]
+        if operation == "checkpoint_create":
+            self._validate_checkpoint_receipt(data)
+            _require(data["request_id"] == request["request_id"])
+            _require(data["through_sequence"] == request["expected_watermark"])
+            return
+        _require(result["replayed"] is False)
+        _keys(data, {"checkpoint", "is_current", "current_watermark", "scope"})
+        receipt = data["checkpoint"]
+        self._validate_checkpoint_receipt(receipt)
+        _require(receipt["checkpoint_id"] == request["checkpoint_id"])
+        _require(type(data["is_current"]) is bool)
+        _integer(data["current_watermark"])
+        _require(
+            data["scope"] == "metadata_comparison_at_this_read_snapshot_not_restore_or_authority"
+        )
+        _require(receipt["through_sequence"] <= data["current_watermark"])
+        # Equal watermarks need not mean equal metadata (e.g. same-watermark tampering).
+        _require(not data["is_current"] or receipt["through_sequence"] == data["current_watermark"])
 
     def context(self, query: str, *, limit: int = 6, max_chars: int = 6000) -> dict:
         """One fresh search snapshot, whole records only; not instructions/authority."""

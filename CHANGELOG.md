@@ -6,6 +6,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ## Unreleased
 
+- Extend the optional API-v1 local Memory SDK with operator-gated metadata checkpoint creation, strict bounded receipt/status validation and isolated checkpoint conformance; historical replay is not current-state proof, and no native checkpoint-v2 or REST capability is enabled (#121).
+
 - Extend the optional local Memory SDK with capability-gated metadata changes and operator-only durable consumer progress, strict payload-free result validation and reusable isolated progress conformance; CRUD-only adapters remain supported.
 
 - Add a review-only pinned-host proposal for durable exact-key cron creation, retained deletion receipts and fail-closed locking; production scheduling, authorization and notification delivery remain unchanged.
