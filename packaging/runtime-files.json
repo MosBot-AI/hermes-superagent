@@ -55,6 +55,7 @@
     "personal_agent/native_kanban_pin.py",
     "personal_agent/native_memory_provider.py",
     "personal_agent/native_source_resolution.py",
+    "personal_agent/native_source_workbench.py",
     "personal_agent/plugin.py",
     "personal_agent/read_admission.py",
     "personal_agent/retained_sources.py",
