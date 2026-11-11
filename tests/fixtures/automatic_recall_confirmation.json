@@ -1,0 +1,710 @@
+{
+  "scope": "Second independently authored frozen synthetic automatic-recall confirmation set. Intended for final assessment after candidate selection. Labels describe requested information, including paraphrases and exclusions, independently of tokenizer support. Not production or model-answer evidence. No candidate source, other fixture queries or evaluation reports were consulted during this authoring pass.",
+  "clock": "2026-11-12T09:30:00Z",
+  "records": [
+    {
+      "id": "pei_phone",
+      "content": "裴照的联系电话是 555-0163。",
+      "topic": "裴照"
+    },
+    {
+      "id": "pei_email",
+      "content": "裴照的电子邮箱是 pei@opalhollow.example。",
+      "topic": "裴照"
+    },
+    {
+      "id": "pei_work",
+      "content": "裴照的工作单位是栖墨工坊。",
+      "topic": "裴照"
+    },
+    {
+      "id": "pei_food",
+      "content": "裴照不吃香菜。",
+      "topic": "裴照"
+    },
+    {
+      "id": "cen_phone",
+      "content": "岑澈的联系电话是 555-0174。",
+      "topic": "岑澈"
+    },
+    {
+      "id": "cen_email",
+      "content": "岑澈的电子邮箱是 cen@cloverfjord.example。",
+      "topic": "岑澈"
+    },
+    {
+      "id": "cen_work",
+      "content": "岑澈的工作单位是麦穗书局。",
+      "topic": "岑澈"
+    },
+    {
+      "id": "cen_food",
+      "content": "岑澈吃香菜。",
+      "topic": "岑澈"
+    },
+    {
+      "id": "xu_owner",
+      "content": "栩的负责人是裴照。",
+      "topic": "栩"
+    },
+    {
+      "id": "xu_budget",
+      "content": "栩的预算是四千五百元。",
+      "topic": "栩"
+    },
+    {
+      "id": "bo_owner",
+      "content": "泊岚的负责人是岑澈。",
+      "topic": "泊岚"
+    },
+    {
+      "id": "bo_budget",
+      "content": "泊岚的预算是八千三百元。",
+      "topic": "泊岚"
+    },
+    {
+      "id": "bo_date",
+      "content": "泊岚的截止日期是十二月二十六日。",
+      "topic": "泊岚"
+    },
+    {
+      "id": "velvet_owner",
+      "content": "Velvet Compass 的负责人是潭初。",
+      "topic": "Velvet Compass"
+    },
+    {
+      "id": "velvet_budget",
+      "content": "Velvet Compass 的预算是一万三千元。",
+      "topic": "Velvet Compass"
+    },
+    {
+      "id": "velvet_repo",
+      "content": "Velvet Compass 的代码仓库地址是 https://velvet-compass.example/repo。",
+      "topic": "Velvet Compass"
+    },
+    {
+      "id": "velvet_meadow_owner",
+      "content": "Velvet Meadow 的负责人是蒲延。",
+      "topic": "Velvet Meadow"
+    },
+    {
+      "id": "copper_compass_owner",
+      "content": "Copper Compass 的负责人是裴照。",
+      "topic": "Copper Compass"
+    },
+    {
+      "id": "copper_owner",
+      "content": "Copper Lantern 的负责人是岑澈。",
+      "topic": "Copper Lantern"
+    },
+    {
+      "id": "copper_budget",
+      "content": "Copper Lantern 的预算是一万七千元。",
+      "topic": "Copper Lantern"
+    },
+    {
+      "id": "shenme_addr",
+      "content": "什么湾的地址是竹隐街二十一号。",
+      "topic": "什么湾"
+    },
+    {
+      "id": "shenme_hours",
+      "content": "什么湾的营业时间是上午十点到下午六点。",
+      "topic": "什么湾"
+    },
+    {
+      "id": "shifou_addr",
+      "content": "是否亭的地址是云篆路八号。",
+      "topic": "是否亭"
+    },
+    {
+      "id": "shifou_hours",
+      "content": "是否亭的营业时间是下午两点到晚上九点。",
+      "topic": "是否亭"
+    },
+    {
+      "id": "zhishi_owner",
+      "content": "只是园的负责人是潭初。",
+      "topic": "只是园"
+    },
+    {
+      "id": "zhishi_budget",
+      "content": "只是园的预算是三千二百元。",
+      "topic": "只是园"
+    },
+    {
+      "id": "tan_phone",
+      "content": "潭初的联系电话是 555-0111。",
+      "topic": "潭初"
+    },
+    {
+      "id": "tan_work",
+      "content": "潭初的工作单位是丹枫画社。",
+      "topic": "潭初"
+    },
+    {
+      "id": "pu_desk",
+      "content": "蒲延的工位编号是 PY-64。",
+      "topic": "蒲延"
+    },
+    {
+      "id": "pu_work",
+      "content": "蒲延的工作单位是砾光设计室。",
+      "topic": "蒲延"
+    },
+    {
+      "id": "ferry",
+      "content": "绒浦行程的船班编号是 RP-26。",
+      "topic": "绒浦行程"
+    },
+    {
+      "id": "ferry_hotel",
+      "content": "绒浦行程的酒店是栎影馆。",
+      "topic": "绒浦行程"
+    },
+    {
+      "id": "equal_venue",
+      "content": "柚岑展览的场地是翠砚厅。",
+      "topic": "柚岑展览"
+    },
+    {
+      "id": "future_venue",
+      "content": "鹿苔展览的场地是鹭羽厅。",
+      "topic": "鹿苔展览"
+    },
+    {
+      "id": "case_code",
+      "content": "萤泊装置的型号是 YB_k7。",
+      "topic": "萤泊装置"
+    },
+    {
+      "id": "percent_code",
+      "content": "榆琴工单的编号是 YQ%19。",
+      "topic": "榆琴工单"
+    }
+  ],
+  "expiry": {
+    "ferry": "2026-11-12T09:29:59Z",
+    "equal_venue": "2026-11-12T09:30:00Z",
+    "future_venue": "2026-11-12T09:30:01Z"
+  },
+  "mutations": [
+    {
+      "op": "correct",
+      "id": "tan_phone",
+      "content": "潭初的联系电话是 555-0188。"
+    },
+    {
+      "op": "forget",
+      "id": "pu_desk"
+    }
+  ],
+  "queries": [
+    {
+      "id": "c01",
+      "category": "attribute",
+      "query": "裴照的联系电话是多少呀？",
+      "relevant": [
+        "pei_phone"
+      ],
+      "intent": "Phone only; email, employer and food are separate attributes."
+    },
+    {
+      "id": "c02",
+      "category": "attribute",
+      "query": "裴照的电子邮箱呢？",
+      "relevant": [
+        "pei_email"
+      ],
+      "intent": "Elliptical email question does not request every contact attribute."
+    },
+    {
+      "id": "c03",
+      "category": "attribute",
+      "query": "裴照在哪个单位工作？",
+      "relevant": [
+        "pei_work"
+      ],
+      "intent": "Employment question, not contact information."
+    },
+    {
+      "id": "c04",
+      "category": "interrogative",
+      "query": "岑澈的联系电话能再说一下吗？",
+      "relevant": [
+        "cen_phone"
+      ],
+      "intent": "Conversational scaffolding must preserve phone specificity."
+    },
+    {
+      "id": "c05",
+      "category": "interrogative",
+      "query": "我想确认一下，岑澈的电子邮箱是什么来着？",
+      "relevant": [
+        "cen_email"
+      ],
+      "intent": "Longer question scaffold surrounding entity and attribute."
+    },
+    {
+      "id": "c06",
+      "category": "synonym",
+      "query": "裴照的电话号码是多少？",
+      "relevant": [
+        "pei_phone"
+      ],
+      "intent": "Telephone-number wording denotes the stored contact phone."
+    },
+    {
+      "id": "c07",
+      "category": "synonym",
+      "query": "岑澈的邮箱地址能给我吗？",
+      "relevant": [
+        "cen_email"
+      ],
+      "intent": "Email-address synonym, not physical location."
+    },
+    {
+      "id": "c08",
+      "category": "synonym",
+      "query": "岑澈在哪儿上班？",
+      "relevant": [
+        "cen_work"
+      ],
+      "intent": "Colloquial employment query denotes the workplace."
+    },
+    {
+      "id": "c09",
+      "category": "short_entity",
+      "query": "栩由谁负责？",
+      "relevant": [
+        "xu_owner"
+      ],
+      "intent": "Single-character entity with an owner attribute."
+    },
+    {
+      "id": "c10",
+      "category": "short_entity",
+      "query": "栩的预算有多少？",
+      "relevant": [
+        "xu_budget"
+      ],
+      "intent": "One-character name with unrelated same-entity distractor."
+    },
+    {
+      "id": "c11",
+      "category": "short_entity",
+      "query": "泊岚负责人是哪一位？",
+      "relevant": [
+        "bo_owner"
+      ],
+      "intent": "Two-character entity with interrogative scaffold."
+    },
+    {
+      "id": "c12",
+      "category": "short_entity",
+      "query": "泊岚到底有多少预算？",
+      "relevant": [
+        "bo_budget"
+      ],
+      "intent": "Quantity wording for stored project budget."
+    },
+    {
+      "id": "c13",
+      "category": "synonym",
+      "query": "泊岚何时到期？",
+      "relevant": [
+        "bo_date"
+      ],
+      "intent": "Temporal synonym for project deadline; no stored alternative due date."
+    },
+    {
+      "id": "c14",
+      "category": "interrogative",
+      "query": "泊岚的截止日期定在哪天？",
+      "relevant": [
+        "bo_date"
+      ],
+      "intent": "Explicit attribute with date interrogative."
+    },
+    {
+      "id": "c15",
+      "category": "multiword",
+      "query": "Velvet Compass 由谁负责？",
+      "relevant": [
+        "velvet_owner"
+      ],
+      "intent": "Both Latin words are needed to identify this project."
+    },
+    {
+      "id": "c16",
+      "category": "multiword",
+      "query": "Velvet Compass 的预算是多少来着？",
+      "relevant": [
+        "velvet_budget"
+      ],
+      "intent": "Other attributes of same project are not relevant."
+    },
+    {
+      "id": "c17",
+      "category": "multiword",
+      "query": "请给我 Velvet Compass 的代码仓库地址。",
+      "relevant": [
+        "velvet_repo"
+      ],
+      "intent": "Specific repository location request."
+    },
+    {
+      "id": "c18",
+      "category": "overlap",
+      "query": "Velvet Meadow 的负责人是谁？",
+      "relevant": [
+        "velvet_meadow_owner"
+      ],
+      "intent": "Shared first word must not conflate two projects."
+    },
+    {
+      "id": "c19",
+      "category": "overlap",
+      "query": "Copper Compass 谁负责？",
+      "relevant": [
+        "copper_compass_owner"
+      ],
+      "intent": "Shared second word must not conflate two projects."
+    },
+    {
+      "id": "c20",
+      "category": "multiword",
+      "query": "Copper Lantern 的预算是多少？",
+      "relevant": [
+        "copper_budget"
+      ],
+      "intent": "Project and attribute both constrain relevance."
+    },
+    {
+      "id": "c21",
+      "category": "function_entity",
+      "query": "什么湾的地址能告诉我吗？",
+      "relevant": [
+        "shenme_addr"
+      ],
+      "intent": "什么 belongs to the real synthetic name."
+    },
+    {
+      "id": "c22",
+      "category": "function_entity",
+      "query": "什么湾什么时候营业？",
+      "relevant": [
+        "shenme_hours"
+      ],
+      "intent": "Entity interrogative-like prefix and question scaffold are distinct."
+    },
+    {
+      "id": "c23",
+      "category": "function_entity",
+      "query": "是否亭的地址是什么？",
+      "relevant": [
+        "shifou_addr"
+      ],
+      "intent": "是否 is part of the genuine entity."
+    },
+    {
+      "id": "c24",
+      "category": "function_entity",
+      "query": "是否亭几点开门？",
+      "relevant": [
+        "shifou_hours"
+      ],
+      "intent": "Opening-time paraphrase with function-like entity prefix."
+    },
+    {
+      "id": "c25",
+      "category": "function_entity",
+      "query": "只是园的负责人叫什么？",
+      "relevant": [
+        "zhishi_owner"
+      ],
+      "intent": "只是 is a name component, not an exclusion operator."
+    },
+    {
+      "id": "c26",
+      "category": "function_entity",
+      "query": "只是园预算多少？",
+      "relevant": [
+        "zhishi_budget"
+      ],
+      "intent": "Preserve function-like words within the full name."
+    },
+    {
+      "id": "c27",
+      "category": "unknown_entity",
+      "query": "澜棠的联系电话是什么？",
+      "relevant": [],
+      "intent": "Known attribute cannot supply facts for an unknown entity."
+    },
+    {
+      "id": "c28",
+      "category": "unknown_entity",
+      "query": "Velvet Beacon 的负责人是哪位？",
+      "relevant": [],
+      "intent": "Unknown entity with a shared Latin first word."
+    },
+    {
+      "id": "c29",
+      "category": "unknown_entity",
+      "query": "Ivory Compass 的预算是多少？",
+      "relevant": [],
+      "intent": "Unknown entity with shared Latin second word."
+    },
+    {
+      "id": "c30",
+      "category": "unknown_entity",
+      "query": "槿的预算是多少？",
+      "relevant": [],
+      "intent": "A new single-character name must not match 栩."
+    },
+    {
+      "id": "c31",
+      "category": "unknown_attribute",
+      "query": "裴照的出生日期是哪天？",
+      "relevant": [],
+      "intent": "Stored person without the requested attribute."
+    },
+    {
+      "id": "c32",
+      "category": "unknown_attribute",
+      "query": "泊岚的代码仓库地址是什么？",
+      "relevant": [],
+      "intent": "Repository address exists for another project only."
+    },
+    {
+      "id": "c33",
+      "category": "unknown_attribute",
+      "query": "什么湾由谁负责？",
+      "relevant": [],
+      "intent": "Known function-like entity without owner information."
+    },
+    {
+      "id": "c34",
+      "category": "negation",
+      "query": "裴照吃香菜吗？",
+      "relevant": [
+        "pei_food"
+      ],
+      "intent": "Negative food preference is relevant evidence."
+    },
+    {
+      "id": "c35",
+      "category": "negation",
+      "query": "岑澈是不是不吃香菜？",
+      "relevant": [
+        "cen_food"
+      ],
+      "intent": "Contradicting a question premise still supplies relevant evidence."
+    },
+    {
+      "id": "c36",
+      "category": "conjunction",
+      "query": "裴照和岑澈的联系电话分别是什么？",
+      "relevant": [
+        "pei_phone",
+        "cen_phone"
+      ],
+      "intent": "Conjunction asks the same attribute for two people."
+    },
+    {
+      "id": "c37",
+      "category": "conjunction",
+      "query": "泊岚的负责人、预算都告诉我。",
+      "relevant": [
+        "bo_owner",
+        "bo_budget"
+      ],
+      "intent": "Two requested project attributes; deadline remains irrelevant."
+    },
+    {
+      "id": "c38",
+      "category": "multiclause",
+      "query": "告诉我裴照的电子邮箱，再说一下岑澈的工作单位。",
+      "relevant": [
+        "pei_email",
+        "cen_work"
+      ],
+      "intent": "Separate clauses request different attributes for different entities."
+    },
+    {
+      "id": "c39",
+      "category": "multiclause",
+      "query": "Velvet Compass 谁负责？另外，Copper Lantern 的预算有多少？",
+      "relevant": [
+        "velvet_owner",
+        "copper_budget"
+      ],
+      "intent": "Different project-attribute pairs cannot cross-match."
+    },
+    {
+      "id": "c40",
+      "category": "exclusion",
+      "query": "我不要裴照的联系电话，我要岑澈的联系电话。",
+      "relevant": [
+        "cen_phone"
+      ],
+      "intent": "Explicit entity exclusion should not retrieve excluded person."
+    },
+    {
+      "id": "c41",
+      "category": "exclusion",
+      "query": "泊岚的负责人不用说，只告诉我截止日期。",
+      "relevant": [
+        "bo_date"
+      ],
+      "intent": "Mentioning an excluded attribute does not make it relevant."
+    },
+    {
+      "id": "c42",
+      "category": "correction",
+      "query": "潭初最新的联系电话是多少？",
+      "relevant": [
+        "tan_phone"
+      ],
+      "intent": "Only corrected phone content should be eligible."
+    },
+    {
+      "id": "c43",
+      "category": "correction",
+      "query": "555-0111",
+      "relevant": [],
+      "intent": "Old exact value is absent after correction."
+    },
+    {
+      "id": "c44",
+      "category": "correction",
+      "query": "潭初的工作单位是哪家？",
+      "relevant": [
+        "tan_work"
+      ],
+      "intent": "Correction of phone leaves other valid records unchanged."
+    },
+    {
+      "id": "c45",
+      "category": "forget",
+      "query": "蒲延的工位编号是多少？",
+      "relevant": [],
+      "intent": "Forgotten desk fact must not be replaced by same-person employer."
+    },
+    {
+      "id": "c46",
+      "category": "forget",
+      "query": "PY-64",
+      "relevant": [],
+      "intent": "Forgotten literal identifier is no longer retrievable."
+    },
+    {
+      "id": "c47",
+      "category": "forget",
+      "query": "蒲延在哪个单位工作？",
+      "relevant": [
+        "pu_work"
+      ],
+      "intent": "Active unrelated record survives forgetting."
+    },
+    {
+      "id": "c48",
+      "category": "expiry",
+      "query": "绒浦行程的船班编号是什么？",
+      "relevant": [],
+      "intent": "Expired boat record must not leak; hotel is not requested."
+    },
+    {
+      "id": "c49",
+      "category": "expiry",
+      "query": "绒浦行程订的是哪家酒店？",
+      "relevant": [
+        "ferry_hotel"
+      ],
+      "intent": "Unexpired same-entity hotel remains relevant."
+    },
+    {
+      "id": "c50",
+      "category": "expiry_boundary",
+      "query": "柚岑展览的场地在哪里？",
+      "relevant": [],
+      "intent": "Deadline equality is already expired."
+    },
+    {
+      "id": "c51",
+      "category": "expiry_future",
+      "query": "鹿苔展览的场地在哪里？",
+      "relevant": [
+        "future_venue"
+      ],
+      "intent": "Deadline one second into the future remains valid."
+    },
+    {
+      "id": "c52",
+      "category": "literal",
+      "query": "YB_k7",
+      "relevant": [
+        "case_code"
+      ],
+      "intent": "Exact underscore-bearing identifier is literal."
+    },
+    {
+      "id": "c53",
+      "category": "literal",
+      "query": "YBzk7",
+      "relevant": [],
+      "intent": "Underscore is not a single-character wildcard."
+    },
+    {
+      "id": "c54",
+      "category": "literal",
+      "query": "YQ%19",
+      "relevant": [
+        "percent_code"
+      ],
+      "intent": "Exact percent-bearing identifier is literal."
+    },
+    {
+      "id": "c55",
+      "category": "literal",
+      "query": "YQabc19",
+      "relevant": [],
+      "intent": "Percent is not a wildcard."
+    },
+    {
+      "id": "c56",
+      "category": "limit",
+      "query": "/personal-memory recall 泊岚",
+      "relevant": [],
+      "intent": "Command-shaped input is excluded from automatic recall."
+    },
+    {
+      "id": "c57",
+      "category": "limit",
+      "query": "裴照的电子邮箱是什么？！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！",
+      "relevant": [],
+      "intent": "Automatic recall input exceeds the maximum length."
+    },
+    {
+      "id": "c58",
+      "category": "negative",
+      "query": "帮我写一段描写月光的文字。",
+      "relevant": [],
+      "intent": "Creative request unrelated to stored facts."
+    },
+    {
+      "id": "c59",
+      "category": "negative",
+      "query": "好的，暂时不用了。",
+      "relevant": [],
+      "intent": "Conversation acknowledgment requests no recall."
+    },
+    {
+      "id": "c60",
+      "category": "synonym_limit",
+      "query": "Opal Compass 的负责人是谁？",
+      "relevant": [],
+      "intent": "Different proper names are not interchangeable synonyms."
+    }
+  ]
+}
