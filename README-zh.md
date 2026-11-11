@@ -176,3 +176,5 @@ plugins:
 [仅供审阅的回执绑定来源读取](docs/94-receipt-source-reads-zh.md)在一个有界原生快照内返回原始行与有效性；删除影响后续读取，不启用记忆接受或 checkpoint-v2。
 
 [显式保留观察来源](docs/98-observed-source-retention-zh.md)将已审阅的原生原始行通过显式 LOCAL 预览/保留命令导入规范记忆，提供不依赖原生文本的元数据恢复；不启用自动摄取、模型工具或 HTTP。
+
+[安装包记忆生命周期验收](docs/99-packaged-memory-lifecycle-zh.md)新增手动真实 Gateway 重启及来源丢失场景，单独标记 SDK 待决设置，并检查规范更正/遗忘及精确内容重入抑制。运行证据仍与模型或生产验收区分。

@@ -6,6 +6,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ## Unreleased
 
+- Add manual production-package memory lifecycle acceptance across real Gateway restarts, with source-text loss, explicit SDK pending recovery, correction/forgetting and exact reentry suppression kept distinct from model or production acceptance (#139).
+
 - Add explicit LOCAL source preview/retain and metadata status/cursor/discard commands, connecting canonical acceptance with actual host UUID and observed provenance; schema-13 preserves legacy receipt history and supports recovery after source loss, without automatic ingestion (#137).
 
 - Add explicit native `source-list`/`source-show` commands for bounded current-session original-row review with metadata-only listing and snapshot-bound selection; no native/canonical writes, source receipts or automatic ingestion (#135).
