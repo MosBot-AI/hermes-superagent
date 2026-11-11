@@ -6,6 +6,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ## Unreleased
 
+- Add a review-only metadata journal that recovers interrupted source receipt accounting by the same attempt without replaying native compression; source availability remains a fresh observation, not a memory checkpoint or two-database atomic guarantee (#127).
+
 - Extend the optional API-v1 local Memory SDK with operator-gated metadata checkpoint creation, strict bounded receipt/status validation and isolated checkpoint conformance; historical replay is not current-state proof, and no native checkpoint-v2 or REST capability is enabled (#121).
 
 - Extend the optional local Memory SDK with capability-gated metadata changes and operator-only durable consumer progress, strict payload-free result validation and reusable isolated progress conformance; CRUD-only adapters remain supported.

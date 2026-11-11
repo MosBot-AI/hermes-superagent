@@ -173,3 +173,5 @@ Added [saved native attention review](docs/54-saved-native-attention.md): local 
 [Native result review and explicit local acceptance](docs/58-native-result-review.md): Review untrusted card text directly, then explicitly complete the local task with a rechecked digest and human note; no automatic completion or native mutation.
 
 [Review-only native checkpoint source receipts](docs/92-native-checkpoint-sources.md): isolated host-owned commit/retention proposal; provider v1 and production runtime remain unchanged.
+
+[Review-only source receipt recovery](docs/93-source-receipt-recovery.md) adds a durable metadata journal for interrupted consumer accounting; it does not enable production capture or memory checkpoints.

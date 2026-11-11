@@ -1,9 +1,9 @@
 diff --git a/hermes_state_checkpoint_sources.py b/hermes_state_checkpoint_sources.py
 new file mode 100644
-index 00000000..61b3b476
+index 00000000..4c250975
 --- /dev/null
 +++ b/hermes_state_checkpoint_sources.py
-@@ -0,0 +1,480 @@
+@@ -0,0 +1,500 @@
 +"""Review-only explicit owner in-place source receipts. Not a memory checkpoint.
 +
 +No ordinary path imports this module. Requests are untrusted bounded values; the
@@ -325,6 +325,26 @@ index 00000000..61b3b476
 +            ids.append(ref["id"])
 +    _require(len(ids) <= MAX_ROWS and ids == sorted(set(ids)))
 +    _require(len(_json(request)) <= 1500000, "limit")
++
++
++def source_request_identity(session_id, request):
++    """Metadata identity only, not admission, authority or current source validity.
++
++    Consumers may persist this before submitting the same canonical request and
++    later match its historical receipt without retaining source/summary payload.
++    """
++    try:
++        _text(session_id, 256)
++        _validate(request, session_id)
++        request = json.loads(_json(request))
++        return {
++            "receipt_id": _hash([session_id, request["attempt_id"], _hash(request)]),
++            "source_count": sum(len(group) for group in request["sources"]),
++        }
++    except SourceReceiptError:
++        raise
++    except Exception:  # health: allow BLE001 -- redact malformed request details at the identity boundary
++        raise SourceReceiptError("invalid_request") from None
 +
 +
 +def _schema(conn):

@@ -170,3 +170,5 @@ plugins:
 [原生结果审阅与明确本地接受](docs/58-native-result-review-zh.md): 直接审阅不可信卡片结果，再凭重新核对的摘要及人工说明完成本地任务；不自动完成或修改原生卡片。
 
 [仅供评审的原生检查点来源回执](docs/92-native-checkpoint-sources-zh.md)：隔离的宿主持有提交/保留提案；provider v1 与生产运行时保持不变。
+
+[仅供审查的来源回执恢复](docs/93-source-receipt-recovery-zh.md)为中断的消费者记账加入持久元数据日志，不启用生产捕获或记忆检查点。

@@ -162,3 +162,5 @@ See [79. Explicit consistent local memory snapshots](79-local-memory-snapshots.m
 91. [Bounded native source resolution](91-native-source-resolution.md): caller-bound read-only reconciliation and revision fences, without automatic capture or checkpoint-v2.
 
 92. [Review-only native checkpoint source receipts](92-native-checkpoint-sources.md): explicit owner in-place transaction proposal, metadata status and retention invalidation; no provider-v2 activation.
+
+93. [Review-only source receipt recovery](93-source-receipt-recovery.md): durable metadata intent and same-attempt restart reconciliation, not two-store atomicity or a memory checkpoint.
