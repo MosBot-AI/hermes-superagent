@@ -1,0 +1,716 @@
+{
+  "scope": "Frozen independent synthetic holdout for automatic record retrieval, not answer quality or production certification. Labels encode requested attributes and explicit exclusions rather than entity co-occurrence. Authored without existing diagnostic fixture queries or candidate results; do not relabel after evaluation.",
+  "clock": "2026-11-11T12:00:00Z",
+  "records": [
+    {
+      "id": "yue_contact",
+      "content": "岳澄的联系方式是 yue.cheng@mistquay.example。",
+      "topic": "岳澄"
+    },
+    {
+      "id": "yue_drink",
+      "content": "岳澄喝茶时不加糖。",
+      "topic": "岳澄"
+    },
+    {
+      "id": "yue_city",
+      "content": "岳澄常住霁川。",
+      "topic": "岳澄"
+    },
+    {
+      "id": "yue_role",
+      "content": "岳澄负责石榴灯项目的验收。",
+      "topic": "岳澄"
+    },
+    {
+      "id": "lan_contact",
+      "content": "岚序的联系方式是 lan.xu@reedatlas.example。",
+      "topic": "岚序"
+    },
+    {
+      "id": "lan_drink",
+      "content": "岚序喝茶时加一勺糖。",
+      "topic": "岚序"
+    },
+    {
+      "id": "lan_city",
+      "content": "岚序常住绮港。",
+      "topic": "岚序"
+    },
+    {
+      "id": "qing_budget",
+      "content": "青栎的预算是六千元。",
+      "topic": "青栎"
+    },
+    {
+      "id": "qing_deadline",
+      "content": "青栎的截止日期是十二月十八日。",
+      "topic": "青栎"
+    },
+    {
+      "id": "qing_owner",
+      "content": "青栎的负责人是岚序。",
+      "topic": "青栎"
+    },
+    {
+      "id": "amber_budget",
+      "content": "Amber Loom 的预算是九千元。",
+      "topic": "Amber Loom"
+    },
+    {
+      "id": "amber_owner",
+      "content": "Amber Loom 的负责人是岳澄。",
+      "topic": "Amber Loom"
+    },
+    {
+      "id": "amber_deadline",
+      "content": "Amber Loom 的截止日期是十二月二十日。",
+      "topic": "Amber Loom"
+    },
+    {
+      "id": "silver_budget",
+      "content": "Silver Cairn 的预算是一万一千元。",
+      "topic": "Silver Cairn"
+    },
+    {
+      "id": "silver_owner",
+      "content": "Silver Cairn 的负责人是容禾。",
+      "topic": "Silver Cairn"
+    },
+    {
+      "id": "amber_bay_owner",
+      "content": "Amber Bay 的负责人是初砚。",
+      "topic": "Amber Bay"
+    },
+    {
+      "id": "silver_loom_owner",
+      "content": "Silver Loom 的负责人是槐宁。",
+      "topic": "Silver Loom"
+    },
+    {
+      "id": "heshi_address",
+      "content": "何时岛的地址是织霞路十七号。",
+      "topic": "何时岛"
+    },
+    {
+      "id": "heshi_hours",
+      "content": "何时岛的营业时间是上午九点到下午五点。",
+      "topic": "何时岛"
+    },
+    {
+      "id": "weihe_address",
+      "content": "为何坊的地址是白榆街三号。",
+      "topic": "为何坊"
+    },
+    {
+      "id": "weihe_hours",
+      "content": "为何坊的营业时间是下午一点到晚上八点。",
+      "topic": "为何坊"
+    },
+    {
+      "id": "buyao_owner",
+      "content": "不要桥的负责人是初砚。",
+      "topic": "不要桥"
+    },
+    {
+      "id": "buyao_budget",
+      "content": "不要桥的预算是七千元。",
+      "topic": "不要桥"
+    },
+    {
+      "id": "rong_food",
+      "content": "容禾不吃花生。",
+      "topic": "容禾"
+    },
+    {
+      "id": "rong_drink",
+      "content": "容禾喜欢桂花茶。",
+      "topic": "容禾"
+    },
+    {
+      "id": "huai_food",
+      "content": "槐宁可以吃花生。",
+      "topic": "槐宁"
+    },
+    {
+      "id": "changed_contact",
+      "content": "初砚的联系方式是 old@paperfen.example。",
+      "topic": "初砚"
+    },
+    {
+      "id": "changed_city",
+      "content": "初砚常住雪汀。",
+      "topic": "初砚"
+    },
+    {
+      "id": "forgotten_gate",
+      "content": "蓼湾的门禁编号是 LIAO-73。",
+      "topic": "蓼湾"
+    },
+    {
+      "id": "liao_budget",
+      "content": "蓼湾的预算是两千元。",
+      "topic": "蓼湾"
+    },
+    {
+      "id": "expired_train",
+      "content": "雾汐行程的车次是 WU-82。",
+      "topic": "雾汐行程"
+    },
+    {
+      "id": "wuxi_hotel",
+      "content": "雾汐行程的旅馆是苔丘客舍。",
+      "topic": "雾汐行程"
+    },
+    {
+      "id": "boundary_room",
+      "content": "苇岫活动的房间是苇影厅。",
+      "topic": "苇岫活动"
+    },
+    {
+      "id": "future_room",
+      "content": "砚岚活动的房间是浮萤厅。",
+      "topic": "砚岚活动"
+    },
+    {
+      "id": "literal_percent",
+      "content": "折纸台的折扣码是 FEN%8。",
+      "topic": "折纸台"
+    },
+    {
+      "id": "literal_underscore",
+      "content": "松帆柜的型号是 SF_42。",
+      "topic": "松帆柜"
+    },
+    {
+      "id": "single_entity",
+      "content": "芩的联系方式是 qin@cloudfern.example。",
+      "topic": "芩"
+    },
+    {
+      "id": "single_other",
+      "content": "芩的生日是四月九日。",
+      "topic": "芩"
+    }
+  ],
+  "expiry": {
+    "expired_train": "2026-11-11T11:59:59Z",
+    "boundary_room": "2026-11-11T12:00:00Z",
+    "future_room": "2026-11-11T12:00:01Z"
+  },
+  "mutations": [
+    {
+      "op": "correct",
+      "id": "changed_contact",
+      "content": "初砚的联系方式是 new@paperfen.example。"
+    },
+    {
+      "op": "forget",
+      "id": "forgotten_gate"
+    }
+  ],
+  "queries": [
+    {
+      "id": "h01",
+      "category": "attribute_selection",
+      "query": "岳澄的联系方式是什么？",
+      "relevant": [
+        "yue_contact"
+      ],
+      "intent": "Only contact information answers the question; same-person drink, city and role are irrelevant."
+    },
+    {
+      "id": "h02",
+      "category": "attribute_selection",
+      "query": "岳澄住在哪座城市？",
+      "relevant": [
+        "yue_city"
+      ],
+      "intent": "Residence, not other attributes of the named person."
+    },
+    {
+      "id": "h03",
+      "category": "attribute_selection",
+      "query": "岳澄喝茶加糖吗？",
+      "relevant": [
+        "yue_drink"
+      ],
+      "intent": "A negative preference is relevant evidence for a yes/no question."
+    },
+    {
+      "id": "h04",
+      "category": "attribute_selection",
+      "query": "岳澄负责什么项目的验收？",
+      "relevant": [
+        "yue_role"
+      ],
+      "intent": "Project responsibility only."
+    },
+    {
+      "id": "h05",
+      "category": "interrogative",
+      "query": "岚序的联系方式能告诉我吗？",
+      "relevant": [
+        "lan_contact"
+      ],
+      "intent": "Polite question wrapper must not substitute for attribute relevance."
+    },
+    {
+      "id": "h06",
+      "category": "interrogative",
+      "query": "岚序喝茶加几勺糖？",
+      "relevant": [
+        "lan_drink"
+      ],
+      "intent": "Quantity question about an explicit preference."
+    },
+    {
+      "id": "h07",
+      "category": "interrogative",
+      "query": "岚序现在住哪儿？",
+      "relevant": [
+        "lan_city"
+      ],
+      "intent": "Colloquial location question with same-person distractors."
+    },
+    {
+      "id": "h08",
+      "category": "short_entity",
+      "query": "青栎的预算是多少？",
+      "relevant": [
+        "qing_budget"
+      ],
+      "intent": "Two-character entity, budget only."
+    },
+    {
+      "id": "h09",
+      "category": "short_entity",
+      "query": "青栎什么时候截止？",
+      "relevant": [
+        "qing_deadline"
+      ],
+      "intent": "Two-character entity with interrogative rather than repeated attribute wording."
+    },
+    {
+      "id": "h10",
+      "category": "short_entity",
+      "query": "青栎由谁负责？",
+      "relevant": [
+        "qing_owner"
+      ],
+      "intent": "Two-character entity owner question."
+    },
+    {
+      "id": "h11",
+      "category": "mixed_multiword",
+      "query": "Amber Loom 的负责人是谁？",
+      "relevant": [
+        "amber_owner"
+      ],
+      "intent": "Both Latin entity words identify the project; overlapping names are distractors."
+    },
+    {
+      "id": "h12",
+      "category": "mixed_multiword",
+      "query": "请问 Amber Loom 预算多少？",
+      "relevant": [
+        "amber_budget"
+      ],
+      "intent": "Budget only, not deadline or owner for the same project."
+    },
+    {
+      "id": "h13",
+      "category": "mixed_multiword",
+      "query": "Amber Loom 何时截止？",
+      "relevant": [
+        "amber_deadline"
+      ],
+      "intent": "Multiword Latin project with Chinese temporal interrogative."
+    },
+    {
+      "id": "h14",
+      "category": "mixed_multiword",
+      "query": "Silver Cairn 负责人叫什么？",
+      "relevant": [
+        "silver_owner"
+      ],
+      "intent": "Do not confuse Silver Loom or Amber Loom."
+    },
+    {
+      "id": "h15",
+      "category": "mixed_multiword",
+      "query": "Silver Cairn 的预算有多少？",
+      "relevant": [
+        "silver_budget"
+      ],
+      "intent": "Project identity and requested attribute both matter."
+    },
+    {
+      "id": "h16",
+      "category": "overlapping_entity",
+      "query": "Amber Bay 谁负责？",
+      "relevant": [
+        "amber_bay_owner"
+      ],
+      "intent": "Shared first Latin word is insufficient to match another project."
+    },
+    {
+      "id": "h17",
+      "category": "overlapping_entity",
+      "query": "Silver Loom 的负责人是哪位？",
+      "relevant": [
+        "silver_loom_owner"
+      ],
+      "intent": "Shared second Latin word is insufficient to match another project."
+    },
+    {
+      "id": "h18",
+      "category": "function_word_entity",
+      "query": "何时岛的地址在哪？",
+      "relevant": [
+        "heshi_address"
+      ],
+      "intent": "The genuine entity contains the interrogative 何时."
+    },
+    {
+      "id": "h19",
+      "category": "function_word_entity",
+      "query": "何时岛几点营业？",
+      "relevant": [
+        "heshi_hours"
+      ],
+      "intent": "Preserve the entire genuine entity when identifying its hours."
+    },
+    {
+      "id": "h20",
+      "category": "function_word_entity",
+      "query": "为何坊地址是什么？",
+      "relevant": [
+        "weihe_address"
+      ],
+      "intent": "The genuine entity contains 为何; do not strip part of its name."
+    },
+    {
+      "id": "h21",
+      "category": "function_word_entity",
+      "query": "为何坊的营业时间呢？",
+      "relevant": [
+        "weihe_hours"
+      ],
+      "intent": "Elliptical question about the same genuine entity."
+    },
+    {
+      "id": "h22",
+      "category": "function_word_entity",
+      "query": "不要桥的负责人是谁？",
+      "relevant": [
+        "buyao_owner"
+      ],
+      "intent": "不要 is part of an entity, not a negative instruction."
+    },
+    {
+      "id": "h23",
+      "category": "function_word_entity",
+      "query": "不要桥预算多少？",
+      "relevant": [
+        "buyao_budget"
+      ],
+      "intent": "Function-like prefix must not erase the named entity."
+    },
+    {
+      "id": "h24",
+      "category": "unknown_entity",
+      "query": "沄堤的联系方式是什么？",
+      "relevant": [],
+      "intent": "Known attribute but no record about this entity."
+    },
+    {
+      "id": "h25",
+      "category": "unknown_entity",
+      "query": "Blue Orchard 的负责人是谁？",
+      "relevant": [],
+      "intent": "Unknown Latin multiword project with common known attribute."
+    },
+    {
+      "id": "h26",
+      "category": "unknown_entity",
+      "query": "Silver Orchard 的预算是多少？",
+      "relevant": [],
+      "intent": "A partially overlapping name does not identify Silver Cairn."
+    },
+    {
+      "id": "h27",
+      "category": "unknown_entity",
+      "query": "问问珩的生日是几月几日？",
+      "relevant": [],
+      "intent": "Unknown one-character entity, known birthday attribute elsewhere."
+    },
+    {
+      "id": "h28",
+      "category": "unknown_attribute",
+      "query": "岳澄的生日是什么时候？",
+      "relevant": [],
+      "intent": "Same entity exists, but no birthday is stored for that person."
+    },
+    {
+      "id": "h29",
+      "category": "unknown_attribute",
+      "query": "青栎的办公地址在哪？",
+      "relevant": [],
+      "intent": "Other project attributes must not be injected for an unknown attribute."
+    },
+    {
+      "id": "h30",
+      "category": "unknown_attribute",
+      "query": "何时岛的负责人是谁？",
+      "relevant": [],
+      "intent": "Function-like entity exists, but requested attribute is absent."
+    },
+    {
+      "id": "h31",
+      "category": "negation",
+      "query": "容禾能吃花生吗？",
+      "relevant": [
+        "rong_food"
+      ],
+      "intent": "The negative food statement answers the question; it is not irrelevant because it is negated."
+    },
+    {
+      "id": "h32",
+      "category": "negation",
+      "query": "槐宁是不是不能吃花生？",
+      "relevant": [
+        "huai_food"
+      ],
+      "intent": "Evidence contradicting the premise remains relevant."
+    },
+    {
+      "id": "h33",
+      "category": "negation",
+      "query": "容禾不吃什么？",
+      "relevant": [
+        "rong_food"
+      ],
+      "intent": "Negative preference question."
+    },
+    {
+      "id": "h34",
+      "category": "negation",
+      "query": "岳澄喝茶是不是要加糖？",
+      "relevant": [
+        "yue_drink"
+      ],
+      "intent": "Stored negative evidence corrects the premise."
+    },
+    {
+      "id": "h35",
+      "category": "negative_chat",
+      "query": "谢谢，今天先聊到这里。",
+      "relevant": [],
+      "intent": "Conversation closure has no request for stored facts."
+    },
+    {
+      "id": "h36",
+      "category": "negative_chat",
+      "query": "请写一首关于雨声的短诗。",
+      "relevant": [],
+      "intent": "Creative request unrelated to any stored synthetic entity."
+    },
+    {
+      "id": "h37",
+      "category": "correction",
+      "query": "初砚现在的联系方式是什么？",
+      "relevant": [
+        "changed_contact"
+      ],
+      "intent": "Only the latest content of the corrected record is eligible."
+    },
+    {
+      "id": "h38",
+      "category": "correction",
+      "query": "old@paperfen.example",
+      "relevant": [],
+      "intent": "Superseded exact contact value must not match the corrected payload."
+    },
+    {
+      "id": "h39",
+      "category": "correction",
+      "query": "初砚住在哪儿？",
+      "relevant": [
+        "changed_city"
+      ],
+      "intent": "Correction of one attribute must not replace a separate valid attribute."
+    },
+    {
+      "id": "h40",
+      "category": "forget",
+      "query": "蓼湾的门禁编号是什么？",
+      "relevant": [],
+      "intent": "Forgotten attribute remains unavailable despite another active record for this entity."
+    },
+    {
+      "id": "h41",
+      "category": "forget",
+      "query": "LIAO-73",
+      "relevant": [],
+      "intent": "Forgotten payload cannot reappear via its literal identifier."
+    },
+    {
+      "id": "h42",
+      "category": "forget",
+      "query": "蓼湾的预算是多少？",
+      "relevant": [
+        "liao_budget"
+      ],
+      "intent": "Forgetting one record leaves a distinct active attribute eligible."
+    },
+    {
+      "id": "h43",
+      "category": "expiry",
+      "query": "雾汐行程的车次是什么？",
+      "relevant": [],
+      "intent": "Expired attribute must not leak; same-entity hotel is not an answer."
+    },
+    {
+      "id": "h44",
+      "category": "expiry",
+      "query": "雾汐行程住哪家旅馆？",
+      "relevant": [
+        "wuxi_hotel"
+      ],
+      "intent": "An unexpired record for the same entity remains eligible."
+    },
+    {
+      "id": "h45",
+      "category": "expiry_equality",
+      "query": "苇岫活动的房间是哪间？",
+      "relevant": [],
+      "intent": "Expiry exactly equal to evaluation time is ineligible."
+    },
+    {
+      "id": "h46",
+      "category": "expiry_future",
+      "query": "砚岚活动的房间是哪间？",
+      "relevant": [
+        "future_room"
+      ],
+      "intent": "Expiry one second after evaluation time is still eligible."
+    },
+    {
+      "id": "h47",
+      "category": "literal",
+      "query": "FEN%8",
+      "relevant": [
+        "literal_percent"
+      ],
+      "intent": "Percent sign is literal, not a SQL wildcard."
+    },
+    {
+      "id": "h48",
+      "category": "literal",
+      "query": "SF_42",
+      "relevant": [
+        "literal_underscore"
+      ],
+      "intent": "Underscore inside a literal model identifier is not a wildcard."
+    },
+    {
+      "id": "h49",
+      "category": "literal",
+      "query": "SFx42",
+      "relevant": [],
+      "intent": "Underscore must not match an arbitrary character."
+    },
+    {
+      "id": "h50",
+      "category": "literal",
+      "query": "FENx8",
+      "relevant": [],
+      "intent": "Percent must not match arbitrary characters."
+    },
+    {
+      "id": "h51",
+      "category": "literal_limits",
+      "query": "/personal-memory search 岳澄",
+      "relevant": [],
+      "intent": "Automatic recall must skip command-shaped input."
+    },
+    {
+      "id": "h52",
+      "category": "literal_limits",
+      "query": "岳澄的联系方式是什么？。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。",
+      "relevant": [],
+      "intent": "Input exceeds the 2048-character automatic-query limit."
+    },
+    {
+      "id": "h53",
+      "category": "literal_limits",
+      "query": "",
+      "relevant": [],
+      "intent": "Empty input cannot request recall."
+    },
+    {
+      "id": "h54",
+      "category": "literal_limits",
+      "query": "   \n\t",
+      "relevant": [],
+      "intent": "Whitespace-only input cannot request recall."
+    },
+    {
+      "id": "h55",
+      "category": "single_character_entity",
+      "query": "芩的联系方式是什么？",
+      "relevant": [
+        "single_entity"
+      ],
+      "intent": "A genuine one-character name must not be confused with a function word."
+    },
+    {
+      "id": "h56",
+      "category": "single_character_entity",
+      "query": "芩的生日是哪天？",
+      "relevant": [
+        "single_other"
+      ],
+      "intent": "Single-character entity still requires attribute discrimination."
+    },
+    {
+      "id": "h57",
+      "category": "multi_attribute",
+      "query": "青栎的预算和截止日期分别是什么？",
+      "relevant": [
+        "qing_budget",
+        "qing_deadline"
+      ],
+      "intent": "Two explicit attributes, not the owner record."
+    },
+    {
+      "id": "h58",
+      "category": "multi_entity",
+      "query": "岳澄和岚序分别住在哪儿？",
+      "relevant": [
+        "yue_city",
+        "lan_city"
+      ],
+      "intent": "Both explicitly named entities, residence only."
+    },
+    {
+      "id": "h59",
+      "category": "entity_exclusion",
+      "query": "不要说岚序的住址，只告诉我岳澄住哪儿。",
+      "relevant": [
+        "yue_city"
+      ],
+      "intent": "Explicitly excluded entity must not contribute unrelated context."
+    },
+    {
+      "id": "h60",
+      "category": "attribute_exclusion",
+      "query": "青栎预算先不说，我只想知道负责人。",
+      "relevant": [
+        "qing_owner"
+      ],
+      "intent": "Mentioning an excluded attribute does not make it relevant."
+    }
+  ]
+}
