@@ -10,7 +10,7 @@
     "hermes_state_checkpoint_sources.py"
   ],
   "source_hashes": {
-    "run_tests.py": "9bf2380de2c0b82dd044319782e9b4cf46d998e3dd695c5bbdd4924522cf5a84",
+    "run_tests.py": "65c770a5677ca56ff1843f92b5b8abc43a865f71e87f1e65d2d899919c73b73b",
     "consumer.py": "e117d064e92ef3c1bbab293a7de86a999f74f445f62f077ea618a5c465b2690b",
     "test_checkpoint_sources.py": "71af473f9559133dceb4898658a3e5140ffe408f490844f23885c1b2d8342a21",
     "../../personal_agent/checkpoint_evidence.py": "21ae6c7bc11521a408d2ab17ffb7c1ec7af92f8fabf320c0f0531e4a553c306f",
@@ -19,7 +19,7 @@
     "../../personal_agent/__init__.py": "18d45546de86a949e6b4645694d71f4136cca36e5b3ceea56e3dd23778eb3222",
     "recovery.py": "e7706e78bf2003915ea4d700828c974d58aa0b51b0f5980b838edb3aa06a3f93",
     "test_recovery.py": "aec695c126f6d4d0e92f5861511cb1ba61c2f0d977612a91793a60426713fd80",
-    "test_source_reads.py": "3606e16a3a237d25b12c5780265251a4b89fad0297e610c63d53573b930ea596"
+    "test_source_reads.py": "37b9331d1321d545265399e819bebe7f7dc17af3283f683d78400ba30978d8e5"
   },
   "artifact_files": [
     "LICENSE.hermes-agent",
@@ -43,9 +43,9 @@
     "tests/agent/test_compression_commit_fence_race.py"
   ],
   "selected_suite": {
-    "proposal_passed": 171,
+    "proposal_passed": 177,
     "native_passed": 70,
-    "passed": 241,
+    "passed": 247,
     "failed": 0,
     "skipped": 0,
     "full_upstream_suite": false,

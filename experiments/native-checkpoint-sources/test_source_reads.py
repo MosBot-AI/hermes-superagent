@@ -5,6 +5,8 @@ import os
 import sqlite3
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor
+from threading import Event
 
 import hermes_state_checkpoint_sources as proposal
 import pytest
@@ -114,31 +116,73 @@ def test_wrong_binding_no_payload(db, tmp_path, binding):
     ["DELETE FROM messages WHERE id=1", "UPDATE messages SET content='changed' WHERE id=1"],
 )
 @pytest.mark.parametrize("timing", ["before", "within", "after"])
-def test_mutation_races_use_one_snapshot(db, monkeypatch, mutation, timing):
-    receipt = commit(db, request(db))
-    if timing == "before":
-        mutate(db, mutation)
-        assert_empty(read(db, receipt), "invalidated_or_unknown")
-        return
+@pytest.mark.parametrize("journal", ["native", "delete"])
+def test_mutation_races_use_one_snapshot(tmp_path, monkeypatch, mutation, timing, journal):
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HERMES_HOME", str(home))
+    if journal == "delete":
+        (home / "config.yaml").write_text("database:\n  journal_mode: delete\n")
+    with SessionDB(tmp_path / "race.db") as store:
+        store.create_session("session", source="cli")
+        store.append_message("session", "user", "original synthetic source")
+        mode = store._conn.execute("PRAGMA journal_mode").fetchone()[0]
+        assert mode in ("wal", "delete")
+        if journal == "delete":
+            assert mode == "delete" and not store._wal_active
+        receipt = commit(store, request(store))
+        if timing == "before":
+            mutate(store, mutation)
+            assert_empty(read(store, receipt), "invalidated_or_unknown")
+            return
+        _assert_snapshot_race(store, receipt, monkeypatch, mutation, timing, mode)
+
+
+def _assert_snapshot_race(store, receipt, monkeypatch, mutation, timing, mode):
     original = proposal._read_originals if timing == "within" else proposal._read_receipt_snapshot
+    observed, release = Event(), Event()
+    observation = []
+
+    def writer():
+        with sqlite3.connect(store.db_path, timeout=0) as conn:
+            conn.execute(mutation)
+            try:
+                conn.commit()
+            except sqlite3.OperationalError as exc:
+                assert mode == "delete" and exc.sqlite_errorcode == sqlite3.SQLITE_BUSY
+                observation.append("blocked_commit")
+                observed.set()
+                assert release.wait(10), "reader did not release its snapshot"
+                conn.commit()
+            else:
+                observation.append("committed_during_snapshot")
+                observed.set()
 
     def interleave(*args):
-        if timing == "within":
-            mutate(db, mutation)
-        result = original(*args)
         if timing == "after":
-            mutate(db, mutation)
-        return result
+            result = original(*args)
+        futures.append(pool.submit(writer))
+        assert observed.wait(10), "writer did not reach commit observation"
+        assert observation == ["committed_during_snapshot" if mode == "wal" else "blocked_commit"]
+        return original(*args) if timing == "within" else result
 
-    with monkeypatch.context() as patch:
-        patch.setattr(
-            proposal,
-            "_read_originals" if timing == "within" else "_read_receipt_snapshot",
-            interleave,
-        )
-        result = read(db, receipt)
-    assert result["sources"][0]["content"] == "original synthetic source"
-    assert_empty(read(db, receipt), "invalidated_or_unknown")
+    futures = []
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        try:
+            with monkeypatch.context() as patch:
+                patch.setattr(
+                    proposal,
+                    "_read_originals" if timing == "within" else "_read_receipt_snapshot",
+                    interleave,
+                )
+                result = read(store, receipt)
+            assert result["sources"][0]["content"] == "original synthetic source"
+        finally:
+            # DELETE writers can commit only after the native read transaction ends.
+            release.set()
+        assert len(futures) == 1
+        futures[0].result(timeout=10)
+    assert_empty(read(store, receipt), "invalidated_or_unknown")
 
 
 @pytest.mark.parametrize(
