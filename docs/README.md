@@ -184,3 +184,5 @@ See [79. Explicit consistent local memory snapshots](79-local-memory-snapshots.m
 102. [Synthetic longitudinal memory acceptance](102-longitudinal-memory-acceptance.md): independently frozen 28/250/1000-record native-hook relevance diagnostics, restart/repack invariants and retained-source migration composition; no model or production acceptance.
 
 103. [Literal slots in automatic recall](103-automatic-recall-slots.md): conservative current-input subject/attribute matching, explicit fallback limits and independently frozen synthetic evaluations.
+
+104. [Retained-source expiry and cleanup recovery](104-retained-source-expiry.md): original retained deadlines, read-only automatic exclusion, reviewed cleanup, historical receipt/cursor preservation and restart/repack suppression evidence.

@@ -4,6 +4,8 @@ English | [简体中文](102-longitudinal-memory-acceptance-zh.md)
 
 ## Scope and independent fixture
 
+Follow-on [104](104-retained-source-expiry.md) separately composes original retained-source deadlines with reviewed cleanup and recovery. The corpus, measurements and limits recorded below remain historical evidence for #145.
+
 [Issue #145](https://github.com/MosBot-AI/hermes-superagent/issues/145) adds a bounded diagnostic toward #46, not production or live-model acceptance. The [fixture](../tests/fixtures/longitudinal_memory_recall.json) was authored independently and frozen before any production query evaluation: SHA256 `4e504fd7b2c84bcf2418a482f5769eecf845e84b2a56cd1c6237f7c2bc5ed2dd`. Neither its relevance labels nor production retrieval were tuned after seeing results. The historical 28-record evaluator and its document-69 evidence remain unchanged. The unavailable local knowledge base was not used to invent prior decisions; repository contracts are the evidence.
 
 The cumulative synthetic store grows from 28 to 250 to 1,000 retained rows, including tombstones and expired rows. It adds mineral-catalog filler and eight independently chosen same-entity distractors. Thirty-seven fixed queries cover short and same-name entities, Chinese and mixed-script wording, dates/numbers, negative facts, injection-like stored data, correction, forgetting, expiry and unsupported cross-script matching. An unrelated attribute of the right person/project is not labeled relevant.

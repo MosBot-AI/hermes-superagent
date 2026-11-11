@@ -6,6 +6,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ## Unreleased
 
+- Add deterministic retained-source deadline, reviewed cleanup and recovery acceptance through registered native recall, including legacy/observed provenance, historical retries and cross-route suppression; runtime behavior and frozen relevance labels remain unchanged (#149).
+
 - Anchor recognized automatic-recall questions to all literal subject/attribute terms, preserving names inside clear slots and legacy behavior for ambiguous syntax; explicit search/recall and one-read budgets stay unchanged. Add frozen development and independent confirmation evaluations with disclosed limits (#147).
 
 - Add independently frozen longitudinal memory diagnostics through the actual native recall hook at 28/250/1000 retained records, with honest relevance misses, complete-context budgets, fresh-process/repack invariants and retained-source migration evidence; no production retrieval changes (#145).

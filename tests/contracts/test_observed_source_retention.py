@@ -316,6 +316,10 @@ def test_lost_accept_response_reconciles_committed_result_after_native_loss(host
         if name.endswith(".local_memory") and hasattr(m, "LocalMemoryBackend")
     ]
     assert modules
+    # These two readbacks compare the complete result, including its fresh
+    # evaluation timestamp. Keep the synthetic clock fixed across native loss.
+    for module in modules:
+        monkeypatch.setattr(module.memory_expiry, "utc_now", lambda: "2030-01-01T00:00:00Z")
     originals = []
     committed = []
     for module in modules:
