@@ -166,11 +166,16 @@ def test_installed_handoff_review_accept_and_restart(installed_handoff):
                 "--request-id handoff-prepare"
             )
         )["data"]
+        # Unflagged callers retain the pre-workbench JSON envelope.
+        legacy = await call(f"personal-handoff show {preview['id']}")
+        explicit = await call(f"personal-handoff --json show {preview['id']}")
+        assert legacy == explicit
+        assert legacy["data"] == preview
         assert preview["state"] == "prepared"
         assert preview["source"]["task_id"] == task["id"]
         assert preview["destination"]["board"] == BOARD
         assert Path(preview["destination"]["root"]) == Path(gateway.env["HERMES_KANBAN_HOME"])
-        readable = await call(f"personal-handoff show {preview['id']}", readable=True)
+        readable = await call(f"personal-handoff --text show {preview['id']}", readable=True)
         for value in (task["title"], preview["id"], preview["intent_digest"], BOARD):
             assert value in readable
         await call(
@@ -238,7 +243,7 @@ def test_installed_handoff_review_accept_and_restart(installed_handoff):
         assert reviewed["can_accept"] is True
         assert reviewed["evidence"]["native"]["result"] == RESULT
         assert reviewed["evidence"]["identity"] == identity
-        text = await call("personal-handoff " + args, readable=True)
+        text = await call("personal-handoff --text " + args, readable=True)
         assert_readable_review(text, reviewed["review_digest"], RESULT)
         return reviewed
 

@@ -29,4 +29,4 @@ This slice uses offline fixtures only. No live Kanban, installation, Gateway or 
 [Explicit native result review](58-native-result-review.md) adds a separate operator decision to complete the local record after inspecting and rechecking bounded native result text. Handoff creation and advisory sync still never complete a task automatically.
 
 
-[The native handoff workbench](100-native-handoff-workbench.md) now provides readable default views and explicit `--json` compatibility across this complete operator journey. Its manual packaged-Gateway lane and exact-source execution evidence are separate from this original offline milestone.
+[The native handoff workbench](100-native-handoff-workbench.md) now provides opt-in `--text` readable views while preserving default JSON and explicit `--json` output across this complete operator journey. Its manual packaged-Gateway lane and exact-source execution evidence are separate from this original offline milestone.

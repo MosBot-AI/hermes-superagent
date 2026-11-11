@@ -49,7 +49,7 @@ def accept(flow, record, digest, note="My independent conclusion", key="accept")
 def test_explicit_preview_is_ascii_safe_and_does_not_mutate_or_enable_model(flow):
     _, _, raw = setup(flow)
     before = flow.tasks
-    text = flow.instance.command("--json " + raw, **flow.context)
+    text = flow.instance.command(raw, **flow.context)
     assert "\\u202e" in text and "\u202e" not in text
     view = json.loads(text)
     assert view["status"] == "ok", view

@@ -13,7 +13,7 @@ from personal_agent.kanban_handoff_presentation import render
 
 
 def readable(flow, raw):
-    return flow.instance.command(raw, **flow.context)
+    return flow.instance.command("--text " + raw, **flow.context)
 
 
 def test_prepare_show_exact_export_and_separate_choices(flow):
@@ -141,9 +141,9 @@ def test_accept_receipt_and_replay_never_claim_current_native_completion(flow):
 @pytest.mark.parametrize("raw", ["help", "--help", "-h", ""])
 def test_readable_help_and_legacy_help(flow, raw):
     text = readable(flow, raw)
-    assert "Personal handoff workbench" in text and "--json must be first" in text
+    assert "Personal handoff workbench" in text and "--text or --json must be first" in text
     assert "15 minutes" in text and "shared across profiles" in text
-    result = json.loads(readable(flow, "--json " + raw))
+    result = json.loads(flow.instance.command("--json " + raw, **flow.context))
     assert result["schema_version"] == "personal.kanban-handoff.v1"
     assert result["data"]["help"]
 
@@ -152,14 +152,14 @@ def test_readable_help_and_legacy_help(flow, raw):
     "raw", ["--json --json list", "--json list --json", "--json bogus", '--json "']
 )
 def test_json_flag_errors_remain_legacy_envelopes(flow, raw):
-    result = json.loads(readable(flow, raw))
+    result = json.loads(flow.instance.command(raw, **flow.context))
     assert result["error"]["code"] == "invalid_request"
     assert result["status"] == "error"
 
 
 def test_nonleading_flag_and_admission_errors_are_readable(flow):
     assert "invalid_request" in readable(flow, "list --json")
-    text = flow.instance.command("list", **{**flow.context, "platform": "telegram"})
+    text = flow.instance.command("--text list", **{**flow.context, "platform": "telegram"})
     assert "unsupported_origin" in text and "No success is confirmed" in text
     assert "--json" not in flow.invoke("list")["data"]
 
@@ -223,7 +223,7 @@ def test_supplementary_controls_preserve_exact_json_data(flow):
     assert "\U000e0001" not in title and "\U000f0000" not in title
 
 
-def test_default_review_does_not_offer_approval_for_display_overflow(flow):
+def test_text_review_does_not_offer_approval_for_display_overflow(flow):
     _, native, raw = setup(flow)
     native["result"] = "\n" * 7999 + "x"
     text = readable(flow, raw)
@@ -248,3 +248,65 @@ def test_live_review_assertions_match_current_renderer(flow):
     namespace["assert_readable_review"](
         readable(flow, raw), reviewed["review_digest"], native["result"]
     )
+
+
+@pytest.mark.parametrize("raw", ["", "help", "list", "bogus", "list --text", "list --json"])
+def test_default_json_is_byte_identical_to_explicit_json(flow, raw):
+    default = flow.instance.command(raw, **flow.context)
+    explicit = flow.instance.command("--json " + raw, **flow.context)
+    assert default == explicit
+    envelope = json.loads(default)
+    assert envelope["schema_version"] == "personal.kanban-handoff.v1"
+    assert envelope["scope"] == "trusted_local_operator_parked_card"
+    assert set(envelope) == {"schema_version", "scope", "status", "data", "error"}
+
+
+def test_default_json_preserves_prepare_show_and_review_envelopes(flow):
+    record, _, review = setup(flow)
+    for raw in (f"show {record['id']}", review):
+        default = flow.instance.command(raw, **flow.context)
+        explicit = flow.instance.command("--json " + raw, **flow.context)
+        assert default == explicit
+        assert json.loads(default)["status"] == "ok"
+
+
+@pytest.mark.parametrize(
+    ("raw", "text_mode"),
+    [
+        ("list --text", False),
+        ("--json --text list", False),
+        ("--json --json list", False),
+        ("--text --json list", True),
+        ("--text --text list", True),
+        ("--text list --text", True),
+        ('--text "', True),
+    ],
+)
+def test_mode_is_selected_only_by_first_flag_and_mixed_flags_fail(flow, raw, text_mode):
+    output = flow.instance.command(raw, **flow.context)
+    if text_mode:
+        assert output.startswith("Handoff command refused") and "invalid_request" in output
+    else:
+        assert json.loads(output)["error"]["code"] == "invalid_request"
+
+
+def test_readable_next_commands_keep_text_mode(flow):
+    record = prepare(flow)
+    preview = readable(flow, f"show {record['id']}")
+    help_text = readable(flow, "help")
+    for output in (preview, help_text):
+        commands = [
+            line.strip() for line in output.splitlines() if line.startswith("  /personal-handoff")
+        ]
+        assert commands
+        assert all(line.startswith("/personal-handoff --text ") for line in commands)
+    assert "Inspect retained records: /personal-handoff --text list" in readable(flow, "bogus")
+
+
+def test_mode_flags_do_not_bypass_total_input_bound(flow):
+    for flag in ("--text", "--json"):
+        raw = flag + " " + "x" * 8192
+        output = flow.instance.command(raw, **flow.context)
+        assert "invalid_request" in output
+        if flag == "--json":
+            assert json.loads(output)["status"] == "error"

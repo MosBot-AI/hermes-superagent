@@ -99,7 +99,7 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
-- Add a readable native handoff/result-review workbench with explicit JSON compatibility and a complete isolated packaged-Gateway operator journey; parked cards never imply worker dispatch or automatic local completion (#141).
+- Add an opt-in readable native handoff/result-review workbench via leading `--text`, while preserving default JSON output unchanged and retaining explicit `--json`. Existing output-parsing scripts need no migration. Add a complete isolated packaged-Gateway operator journey; parked cards never imply worker dispatch or automatic local completion (#141).
 - Added optional trusted-local retained-source admission, acceptance, discard and metadata recovery with schema-12 migration, exact-source suppression and an independent no-skip source cursor. The isolated native-source consumer requires explicit independent retention; no automatic ingestion or production activation.
 
 
