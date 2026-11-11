@@ -82,6 +82,24 @@ def main():
             "LANG": "C.UTF-8",
             "TZ": "UTC",
         }
+        # Observe native journal selection without overriding its safety policy.
+        probe = subprocess.run(
+            [
+                str(args.python.absolute()),
+                "-c",
+                "import os, sqlite3; from pathlib import Path; "
+                "from hermes_state import SessionDB; "
+                "db = SessionDB(Path(os.environ['HERMES_HOME']) / 'journal-probe.db'); "
+                "print('Native SQLite runtime:', sqlite3.sqlite_version, "
+                "'journal_mode:', db._conn.execute('PRAGMA journal_mode').fetchone()[0], "
+                "flush=True); db.close()",
+            ],
+            cwd=checkout,
+            env=env,
+            timeout=60,
+        ).returncode
+        if probe:
+            return probe
         result = subprocess.run(
             [
                 str(args.python.absolute()),
