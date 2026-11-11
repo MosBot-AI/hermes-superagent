@@ -273,3 +273,5 @@ Added [saved native attention review](54-saved-native-attention.md): local snaps
 [Explicit task breakdown](57-task-breakdown.md): Atomically captures steps, inherits prerequisites and makes the parent depend on every new step; no automatic execution or completion.
 
 [Native result review and explicit local acceptance](58-native-result-review.md): Review untrusted card text directly, then explicitly complete the local task with a rechecked digest and human note; no automatic completion or native mutation.
+
+[Current-host text-worker preparation](101-current-host-text-worker.md) advances E3.3 adoption readiness on the supported pin. Frozen managed workers and isolated plugin-host operation remain unsupported; upstream or maintained-host adoption and live acceptance are separate gates. It does not complete E3/E9 or unblock reminders/checkpoint-v2.

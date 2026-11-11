@@ -4,9 +4,15 @@
 
 ## 状态
 
-这是隔离环境中的宿主提案及具体实验任务消费者，**未安装、未启用、未提交上游、未部署**；生产注册不直接导入本实验工件。正式宿主基线仍为 `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`。不要把补丁应用到已安装的宿主，也不要为了尝试它而降低插件隔离。
+这是隔离环境中的宿主提案及具体实验任务消费者，**未安装、未启用、未提交上游、未部署**；生产注册不直接导入本实验工件。正式宿主基线仍为 `2281116525106e3c109993ccb5dc74d02bfc1427`。不要把补丁应用到已安装的宿主，也不要为了尝试它而降低插件隔离。
 
 [清单](manifest.json)记录准确补丁、源文件哈希、选定验证和限制。[宿主补丁](text-worker-prototype.patch)保留上游 [MIT 许可证](LICENSE.hermes-agent)。在本项目功能分支分发不等于上游发布。
+
+## 当前基线准备，不等于采纳
+
+当前候选将提案迁到 `2281116525106e3c109993ccb5dc74d02bfc1427`，保留重构后的 PluginContext 和中间件行为，并拒绝读取失败后的过时配置回退。已知配置后端故障被处理为拒绝或真实失败终态。冻结的 managed-worker 配置无法证明当前撤权，因此明确不受支持；生产消费者仍不支持隔离的 plugin-host 代理。不提供一般 worker 回退或隔离设置变更。
+
+旧基线测试及此前提供商/安装尝试在清单中仍标为历史。准确边界、依赖影响及独立的上游或维护发行版选择，参见[当前宿主准备与采纳选项](../../docs/101-current-host-text-worker-zh.md)。离线候选通过不表示真实 Gateway worker 已启用。
 
 ## 原生宿主授权与包边界
 
@@ -16,7 +22,7 @@
 
 消费者和账本现在相对导入同包的 `personal_agent`，不再意外依赖开发仓库的 `PYTHONPATH`。冷启动隔离 `python -I` 测试阻止全局 `personal_agent` 导入，覆盖原生包发现、任务记录、明确授权、通过 mock HTTP transport 的拟议宿主请求、保存草稿和重新加载，并检查模块来源和同包错误类型身份。这修复了实际的包加载缺陷，但仍是**离线安装形态测试，不是官方安装或真实 Gateway 验收**。
 
-原始采用检查单为：审阅/发布本宿主权限约定 → 把实验消费者与其生产同包模块一起打包并声明权限 → 单独批准安装/宿主同意及准确路由 → 授权单任务 → 真实验收。后续[受门控生产包集成](../../docs/55-gated-plan-worker-zh.md)声明权限并接入生产副本，受默认关闭配置、准确宿主约定及当前同意门控限制；干净基线宿主仍不注册 worker。未安装包、未提交上游，也未增加 DNS/代理/TLS 绕行。
+原始采用检查单为：审阅/发布本宿主权限约定 → 把实验消费者与其生产同包模块一起打包并声明权限 → 单独批准安装/宿主同意及准确路由 → 授权单任务 → 真实验收。后续[受门控生产包集成](../../docs/55-gated-plan-worker-zh.md)声明权限并接入生产副本，受默认关闭配置、准确宿主约定及当前同意门控限制；干净基线宿主仍不注册 worker。该集成没有安装 worker 宿主提案、提交上游变更或增加 DNS/代理/TLS 绕行。后续干净宿主包验收没有启用 worker。
 
 ## 收窄后的实用流程
 
@@ -70,13 +76,13 @@
 
 ## 提供商兼容性及实际验收尝试
 
-OpenCode Go 要求 session-affinity header。专用客户端现在仅对准确的 `opencode-go` 提供商及 HTTPS `opencode.ai:443` 源站，在空上下文中以全新单次标识调用官方宿主 affinity helper。不继承父/根会话标识或任意 header。已配置的 `/inference/go/openai/v1` 与元数据 `/zen/go/v1` 路径均保留准确目标检查。其他源站、相似域名及其他提供商不会获得此 header。所选离线测试现为 247 项宿主及 109 项消费者测试。
+OpenCode Go 要求 session-affinity header。专用客户端现在仅对准确的 `opencode-go` 提供商及 HTTPS `opencode.ai:443` 源站，在空上下文中以全新单次标识调用官方宿主 affinity helper。不继承父/根会话标识或任意 header。已配置的 `/inference/go/openai/v1` 与元数据 `/zen/go/v1` 路径均保留准确目标检查。其他源站、相似域名及其他提供商不会获得此 header。该旧基线历史检查点有 247 项宿主及 109 项消费者测试，当前基线结果另行记录在清单中。
 
 一次明确获授权的合成请求通过官方凭据解析器及本传输路径访问 `https://opencode.ai/inference/go/openai/v1`，只请求 `deepseek-v4.1-flash`。请求以 `ConnectError` 失败，没有 HTTP 状态或模型响应。是否送达未确认；未重试、fallback 或改用其他路由。`config.yaml` 未变；官方解析器可能维护凭据元数据，不能据此声称整个 profile 未变。未使用原生激活、worker 启动或 Gateway。**真实 worker/模型验收仍未完成。**
 
 后续仅本地审阅发现与早期成功 SDK 探针的明确差异：早期使用 HTTPX 环境路由/CA 默认值，本专用客户端则刻意忽略环境代理并使用 certifi 根证书。原始异常原因及早期环境快照未保留，因此路由或 CA 不匹配只是推测，不是已确认根因。未重发请求，也未放宽代理/TLS 策略。
 
-另一次针对生产仓库的官方安装尝试，在全新无凭据离线 profile 中被未修改的扫描器阻断：CAUTION，50 条发现，退出码 1。未接受覆盖；官方列表和文件系统检查确认插件不存在。仓库安装源包含开发文档/测试及这些实验，当时生产注册不导入 worker。离线运行时分发构建器及后续受门控 worker 打包，都不是绕过该结论的许可。安装、激活和受支持宿主 worker 能力尚未验证。
+另一次针对生产仓库的官方安装尝试，在全新无凭据离线 profile 中被未修改的扫描器阻断：CAUTION，50 条发现，退出码 1。未接受覆盖；官方列表和文件系统检查确认插件不存在。仓库安装源包含开发文档/测试及这些实验，当时生产注册不导入 worker。离线运行时分发构建器及后续受门控 worker 打包，都不是绕过该结论的许可。worker 宿主安装、激活和可用性仍未验证。后续干净宿主包验收是独立证据，不会使该历史拒绝变成当前运行包故障。
 
 ## 重现选定离线证据
 
@@ -86,9 +92,9 @@ OpenCode Go 要求 session-affinity header。专用客户端现在仅对准确�
 set -eu
 ARTIFACT="/path/to/hermes-superagent/experiments/text-worker"
 COPY="/path/to/disposable-hermes"
-CLEAN="/path/to/unchanged-90d6-hermes"
+CLEAN="/path/to/unchanged-2281116-hermes"
 PYTHON="/path/to/existing-test-venv/bin/python"
-test "$(git -C "$COPY" rev-parse HEAD)" = 90d6b98fd86d20981ee06ddd5b7d93e4320f26a4
+test "$(git -C "$COPY" rev-parse HEAD)" = 2281116525106e3c109993ccb5dc74d02bfc1427
 test -z "$(git -C "$COPY" status --porcelain)"
 git -C "$COPY" apply --check "$ARTIFACT/text-worker-prototype.patch"
 git -C "$COPY" apply --index "$ARTIFACT/text-worker-prototype.patch"
@@ -104,7 +110,7 @@ CI 使用独立步骤，仅向新建可丢弃 worktree 应用已审阅补丁，�
 
 普通项目检查器仅验证工件完整性，继续针对**未修改的干净宿主**进行契约测试。准确提交的项目 CI 不是该宿主提案的上游 CI，也不是真实模型验收。隔离实验是单独选定的测试范围，不是全量上游测试。没有重试曾被拒绝的 Gateway socket 测试。
 
-扩大后的受影响宿主回归覆盖 14 个文件：**422 通过、1 失败、0 跳过**。同一数据库路径断言在未修改基线上也失败，原因是本环境 `/var/tmp` 指向 `/tmp`，而官方 runner 使用 `/var/tmp`；未改源码或断言掩盖失败。此前所选工件记录过 356 项通过；这是历史数量，不代表扩展后的生产入口测试通道。两条测试通道都不是完整上游套件，后者还包含不可用或已禁止的真实传输场景。
+旧基线历史受影响宿主回归覆盖 14 个文件：**422 通过、1 失败、0 跳过**。同一数据库路径断言在未修改基线上也失败，原因是本环境 `/var/tmp` 指向 `/tmp`，而官方 runner 使用 `/var/tmp`；未改源码或断言掩盖失败。此前所选工件记录过 356 项通过；这是历史数量，不代表扩展后的生产入口测试通道。两条测试通道都不是完整上游套件，后者还包含不可用或已禁止的真实传输场景。
 
 ## 剩余发布门槛
 

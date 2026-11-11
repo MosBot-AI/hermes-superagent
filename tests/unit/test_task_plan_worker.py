@@ -350,3 +350,54 @@ def test_ledger_refuses_unsafe_existing_files_unchanged(home, kind):
         before.st_mode,
         before.st_nlink,
     )
+
+
+@pytest.mark.parametrize("ledger_failure", [False, True])
+def test_known_config_backend_exit_revokes_pending_grant(home, monkeypatch, ledger_failure):
+    class BackendUnavailable(SystemExit):
+        pass
+
+    module = ModuleType("hermes_cli.config_backend")
+    module.ConfigBackendUnavailable = BackendUnavailable
+    monkeypatch.setitem(sys.modules, "hermes_cli.config_backend", module)
+    instance, _, _ = consumer(home)
+    key = ("session", "route", "outage")
+    grant = worker.Grant(str(uuid4()), 1, "context", time.monotonic() + 120)
+    instance.grants[key] = grant
+    original = instance.read_config
+
+    def unavailable(*args):
+        raise BackendUnavailable("private diagnostic")
+
+    instance.read_config = unavailable
+    if ledger_failure:
+
+        def fail():
+            raise TaskError("storage_busy")
+
+        monkeypatch.setattr(instance.ledger, "revoke_owned", fail)
+    with pytest.raises(TaskError):
+        instance._configured()
+    assert grant.state == "revoked"
+    instance.read_config = original
+    instance._configured()
+    assert grant.state == "revoked"
+
+
+@pytest.mark.parametrize("exception", [SystemExit(73), KeyboardInterrupt()])
+def test_unrelated_configuration_process_exit_propagates(home, monkeypatch, exception):
+    class BackendUnavailable(SystemExit):
+        pass
+
+    module = ModuleType("hermes_cli.config_backend")
+    module.ConfigBackendUnavailable = BackendUnavailable
+    monkeypatch.setitem(sys.modules, "hermes_cli.config_backend", module)
+    instance, _, _ = consumer(home)
+
+    def exiting(*args):
+        raise exception
+
+    instance.read_config = exiting
+    with pytest.raises(type(exception)) as raised:
+        instance._configured()
+    assert raised.value is exception

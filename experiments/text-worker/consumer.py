@@ -72,11 +72,27 @@ class TaskPlanningWorker(SessionTaskTools):
         self.grants: dict[tuple[str, str, str], Grant] = {}
         self.ledger = Ledger(self.bound_home, str(uuid4()))
 
-    def _configured(self):
+    def _check_configuration(self):
         try:
             super()._configured()
             if self.read_config("experimental_text_worker", False) is not True:
                 raise TaskError("experimental_worker_disabled")
+        except SystemExit as error:
+            # This host outage deliberately subclasses SystemExit. Normalize only
+            # that known type before the revocation latch, never process exits.
+            try:
+                from hermes_cli.config_backend import (  # ty: ignore[unresolved-import]
+                    ConfigBackendUnavailable,
+                )
+            except ImportError:
+                raise error from None
+            if not isinstance(error, ConfigBackendUnavailable):
+                raise
+            raise TaskError("worker_unavailable") from None
+
+    def _configured(self):
+        try:
+            self._check_configuration()
         except Exception:
             # Observed revocation is terminal, even if configuration is later
             # restored. Unobserved A→B→A changes need host revision fencing.

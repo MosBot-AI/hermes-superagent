@@ -275,3 +275,5 @@ Project 链接、Issue 号与最终字段以实际创建结果为准。若 API/�
 [明确任务拆解](57-task-breakdown-zh.md): 原子记录步骤、继承前置，并让父任务依赖全部新步骤；不自动执行或完成。
 
 [原生结果审阅与明确本地接受](58-native-result-review-zh.md): 直接审阅不可信卡片结果，再凭重新核对的摘要及人工说明完成本地任务；不自动完成或修改原生卡片。
+
+[当前宿主纯文本 worker 准备](101-current-host-text-worker-zh.md)推进受支持基线上的 E3.3 采纳准备。冻结 managed worker 和隔离 plugin-host 运行仍不受支持；上游或维护宿主采纳及真实验收是独立门槛。本切片不完成 E3/E9，也不解除提醒/checkpoint-v2 阻塞。

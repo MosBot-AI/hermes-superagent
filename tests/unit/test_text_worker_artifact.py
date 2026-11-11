@@ -12,8 +12,8 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 ARTIFACT = ROOT / "experiments/text-worker"
-SHA = "97e4acd85091f64e693185a195c9141bd5faa43a3c23896ba635564966e372d8"
-BASE = "90d6b98fd86d20981ee06ddd5b7d93e4320f26a4"
+SHA = "7407e37482e44c95bbc7093ccf097cca30ca3351d253e9367905eb944cc279f8"
+BASE = "2281116525106e3c109993ccb5dc74d02bfc1427"
 
 
 def manifest():
@@ -107,7 +107,14 @@ def test_runner_accepts_exact_staged_bundle(monkeypatch, tmp_path):
     module = runner()
     data = manifest()
     responses = iter(
-        [BASE.encode(), b"H file.py\0", b"", b"", (ARTIFACT / data["patch_file"]).read_bytes()]
+        [
+            BASE.encode(),
+            b"H file.py\0",
+            b"",
+            b"",
+            (ARTIFACT / data["patch_file"]).read_bytes(),
+            data["staged_tree"].encode(),
+        ]
     )
     monkeypatch.setattr(module, "git", lambda *args: next(responses))
     assert module.verify(tmp_path) == data
@@ -120,3 +127,65 @@ def test_runner_canonical_offline_selection():
     assert '"__HERMES_TESTS_REEXEC": "1"' in source
     assert 'str(ARTIFACT / "test_task_worker.py")' in source
     assert all("gateway" not in path for path in manifest()["portable_test_files"])
+
+
+def test_historical_evidence_cannot_be_attributed_to_current_pin():
+    data = manifest()
+    historical = data["historical_evidence"]
+    assert historical["base"] == "90d6b98fd86d20981ee06ddd5b7d93e4320f26a4"
+    assert (
+        historical["patch_sha256"]
+        == "97e4acd85091f64e693185a195c9141bd5faa43a3c23896ba635564966e372d8"
+    )
+    assert (
+        historical["source_hashes"]["test_production_entrypoint.py"]
+        == "8fbe7112dcc13eb47d3291fae856d01ff0432e1d27ba39912cb8e9e8428104a0"
+    )
+    assert historical["selected_suite"]["passed"] == 357
+    assert historical["production_entrypoint_suite"]["clean_host_passed"] == 4
+    assert historical["live_transport_probe"]["acceptance_passed"] is False
+    assert historical["official_install_attempt"]["override_or_retry"] is False
+    assert "live_transport_probe" not in data and "official_install_attempt" not in data
+
+
+def test_runner_refuses_wrong_staged_tree(monkeypatch, tmp_path):
+    module = runner()
+    data = manifest()
+    responses = iter(
+        [
+            BASE.encode(),
+            b"H file.py\0",
+            b"",
+            b"",
+            (ARTIFACT / data["patch_file"]).read_bytes(),
+            b"wrong-tree",
+        ]
+    )
+    monkeypatch.setattr(module, "git", lambda *args: next(responses))
+    with pytest.raises(ValueError, match="Staged tree"):
+        module.verify(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "answers,reason",
+    [
+        ([b"old-pin"], "exact current pin"),
+        ([BASE.encode(), b"h hidden.py\0"], "index flags"),
+        ([BASE.encode(), b"S hidden.py\0"], "index flags"),
+        ([BASE.encode(), b"H file.py\0", b" M changed.py"], "changed or untracked"),
+        ([BASE.encode(), b"H file.py\0", b"?? untracked.py"], "changed or untracked"),
+    ],
+)
+def test_runner_refuses_dirty_clean_host(monkeypatch, tmp_path, answers, reason):
+    module = runner()
+    responses = iter(answers)
+    monkeypatch.setattr(module, "git", lambda *args: next(responses))
+    with pytest.raises(ValueError, match=reason):
+        module.verify_clean(tmp_path)
+
+
+def test_runner_accepts_clean_host(monkeypatch, tmp_path):
+    module = runner()
+    responses = iter([BASE.encode(), b"H file.py\0", b""])
+    monkeypatch.setattr(module, "git", lambda *args: next(responses))
+    module.verify_clean(tmp_path)

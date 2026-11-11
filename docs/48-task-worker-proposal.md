@@ -2,6 +2,8 @@
 
 English | [简体中文](48-task-worker-proposal-zh.md)
 
+Current-pin adoption preparation and managed-worker/isolation limits are recorded in [101](101-current-host-text-worker.md). The original old-pin evidence below is historical; preparation does not enable the host contract.
+
 ## What advanced
 
 The [review-only text-worker bundle](../experiments/text-worker/README.md) connects an explicitly approved local task revision to one native-host text request and a lifecycle result. It includes a proposed host API, exact-route opt-in, guarded one-attempt execution, a dedicated no-redirect client, durable single-claim/draft receipts, a concrete experimental command/model consumer and reproducible offline tests. That original bundle was not loaded by the production plugin. The subsequent [gated package integration](55-gated-plan-worker.md) copies the consumer into production modules behind a default-off, exact-contract and consent gate; this does not deploy the host proposal.
@@ -38,12 +40,12 @@ The experiment now preserves a bounded fixed failure category and local callback
 
 ## Real provider and installation checks
 
-The dedicated transport now supplies OpenCode Go's required affinity header via the official helper, with a fresh one-shot identifier rather than inherited parent/root context. It is restricted to the exact provider and HTTPS `opencode.ai:443` origin, without weakening target checks, redirects or fallback restrictions. The selected offline lane has 247 host and 109 consumer tests.
+The dedicated transport now supplies OpenCode Go's required affinity header via the official helper, with a fresh one-shot identifier rather than inherited parent/root context. It is restricted to the exact provider and HTTPS `opencode.ai:443` origin, without weakening target checks, redirects or fallback restrictions. The historical old-pin lane had 247 host and 109 consumer tests.
 
 The authorized one-shot synthetic DeepSeek transport probe failed with `ConnectError`; there was no HTTP status or model response. Delivery is unconfirmed, and it was not retried. No Gateway or native activation was involved. A separate official production-repository installation in a fresh offline profile was refused by the unchanged scanner (CAUTION, 50 findings); the plugin remained absent. Neither attempt is a passed acceptance gate. See the [bundle](../experiments/text-worker/README.md#provider-compatibility-and-actual-acceptance-attempt) for exact scope and limitations.
 
 ## Next acceptance
 
-Upstream adoption and real authorized OpenCode Go `deepseek-v4.1-flash` validation are still required. Production-grade unknown-outcome reconciliation, durable provider-side execution identity and cost/concurrency controls must precede ongoing autonomous worker orchestration. The local ledger is not a provider execution transaction or a guarantee of exactly-once remote delivery. General tool-using workers need separately enforceable permissions. Gateway transport and automatic memory gates remain open.
+Supported-host adoption, through upstream or an explicitly chosen maintained distribution, and real authorized OpenCode Go `deepseek-v4.1-flash` validation are still required. Production-grade unknown-outcome reconciliation, durable provider-side execution identity and cost/concurrency controls must precede ongoing autonomous worker orchestration. The local ledger is not a provider execution transaction or a guarantee of exactly-once remote delivery. General tool-using workers need separately enforceable permissions. Worker-specific Gateway acceptance and automatic memory gates remain open.
 
 See [atomic project plans](47-atomic-project-plans.md), [worker routing](11-worker-model-routing.md) and [roadmap](08-roadmap-and-acceptance.md). This prototype advances feasibility; it does not complete those acceptance criteria.

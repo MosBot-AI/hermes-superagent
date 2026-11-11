@@ -1,5 +1,5 @@
 diff --git a/agent/subagent_lifecycle.py b/agent/subagent_lifecycle.py
-index 65865471..0130a55a 100644
+index 65865471..2f2ab919 100644
 --- a/agent/subagent_lifecycle.py
 +++ b/agent/subagent_lifecycle.py
 @@ -144,6 +144,10 @@ class _Record:
@@ -70,21 +70,22 @@ index 65865471..0130a55a 100644
              agent = record.agent
              record.state = SubagentState.CANCEL_REQUESTED
              record.updated_at = time.time()
-@@ -365,6 +400,13 @@ class SubagentLifecycleService:
+@@ -365,6 +400,14 @@ class SubagentLifecycleService:
          record = self._record(handle)
          if record is None:
              return SubagentResult(handle, SubagentState.UNKNOWN, False, error_classification="UNKNOWN_HANDLE")
 +        if record.text_route_fingerprint is not None:
++            from hermes_cli.config_backend import ConfigBackendUnavailable
 +            try:
 +                current = self.authorize_text_route(record.handle.provider, record.handle.model, record.handle.parent_session_id)
 +                if current != record.text_route_fingerprint:
 +                    raise SubagentLifecycleError("Text worker route changed.")
-+            except Exception:  # health: allow BLE001 -- fail-closed disclosure gate redacts configuration and authorization errors
++            except (Exception, ConfigBackendUnavailable):  # health: allow BLE001 -- known config outages deny disclosure without swallowing arbitrary exits
 +                return SubagentResult(record.handle, SubagentState.UNKNOWN, False, error_classification="TEXT_ROUTE_UNAVAILABLE")
          with _REGISTRY.lock:
              return record.result or SubagentResult(record.handle, record.state, False, error_classification="NOT_READY")
  
-@@ -383,6 +425,8 @@ class SubagentLifecycleService:
+@@ -383,6 +426,8 @@ class SubagentLifecycleService:
          with _REGISTRY.lock:
              if record.result is not None:
                  return False
@@ -93,7 +94,7 @@ index 65865471..0130a55a 100644
          from tools.delegate_tool_registry import steer_subagent
          return steer_subagent(record.handle.subagent_id, text.strip())
  
-@@ -397,7 +441,14 @@ class SubagentLifecycleService:
+@@ -397,7 +442,14 @@ class SubagentLifecycleService:
          if _session_id_of(self._parent_agent_resolver()) != handle.parent_session_id:
              return None
          with _REGISTRY.lock:
@@ -109,7 +110,7 @@ index 65865471..0130a55a 100644
  
      @staticmethod
      def _cleanup_locked() -> None:
-@@ -408,9 +459,10 @@ class SubagentLifecycleService:
+@@ -408,9 +460,10 @@ class SubagentLifecycleService:
              if record.result is not None and record.completed_at is not None and record.completed_at < cutoff
          ]
          for subagent_id in expired:
@@ -122,7 +123,7 @@ index 65865471..0130a55a 100644
  
      def _run(self, record: _Record, goal: str, parent: Any) -> None:
          with _REGISTRY.lock:
-@@ -470,3 +522,6 @@ class SubagentLifecycleService:
+@@ -470,3 +523,6 @@ class SubagentLifecycleService:
          enabled = getattr(parent, "enabled_toolsets", None)
          if enabled is not None and not set(request.allowed_toolsets).issubset(set(enabled)):
              raise SubagentLifecycleError("Requested toolsets would broaden parent permissions.")
@@ -131,10 +132,10 @@ index 65865471..0130a55a 100644
 +from agent.text_subagent import TextSubagentRequest
 diff --git a/agent/text_subagent.py b/agent/text_subagent.py
 new file mode 100644
-index 00000000..565b3db2
+index 00000000..da189bce
 --- /dev/null
 +++ b/agent/text_subagent.py
-@@ -0,0 +1,396 @@
+@@ -0,0 +1,397 @@
 +"""Opt-in bounded text workers. No credential resolver, agent loop, or tool executor.
 +
 +Trusted in-process plugins/middleware are not sandboxed. Cancellation and timeout
@@ -320,7 +321,7 @@ index 00000000..565b3db2
 +
 +
 +def _authorize(service, parent, request, owner):
-+    from hermes_cli.config import load_config_readonly
++    from hermes_cli.text_worker_consent import live_text_worker_config
 +    from hermes_cli.plugin_capabilities import plugin_capability_granted
 +    from hermes_constants import hermes_home_key
 +    from openai import OpenAI
@@ -350,8 +351,8 @@ index 00000000..565b3db2
 +    if not session or request.parent_session_id not in (None, session):
 +        _refuse()
 +    try:
-+        snapshot = load_config_readonly()
-+        if not plugin_capability_granted(service._plugin_id, "llm.text_worker", config=snapshot):
++        snapshot = live_text_worker_config()
++        if snapshot is None or not plugin_capability_granted(service._plugin_id, "llm.text_worker", config=snapshot):
 +            _refuse()
 +        cfg = snapshot["plugins"]["entries"][service._plugin_id]["text_workers"]
 +        route = {"provider": provider, "model": model, "base_url": base_url}
@@ -422,6 +423,7 @@ index 00000000..565b3db2
 +    from agent.subagent_lifecycle import SubagentState, SubagentResult, _REGISTRY
 +    from agent.transports.chat_completions import ChatCompletionsTransport
 +    from hermes_cli.middleware import apply_llm_request_middleware, run_llm_execution_middleware
++    from hermes_cli.config_backend import ConfigBackendUnavailable
 +
 +    expired = threading.Event()
 +    timer = threading.Timer(max(0.0, deadline - time.monotonic()), expired.set)
@@ -504,7 +506,7 @@ index 00000000..565b3db2
 +            if any(type(value) is not int or not 0 <= value <= 2**63 - 1 for value in usage.values()):
 +                usage = {}
 +                _refuse()
-+    except Exception:  # health: allow BLE001 -- result boundary redacts provider/middleware exceptions that may contain credentials
++    except (Exception, ConfigBackendUnavailable):  # health: allow BLE001 -- known backend exits are terminal failures; unrelated process exits propagate
 +        error = transport_error or "TEXT_WORKER_FAILED"
 +    finally:
 +        with guard:
@@ -513,7 +515,7 @@ index 00000000..565b3db2
 +        if client is not None:
 +            try:
 +                client.close()
-+            except Exception:  # health: allow BLE001 -- cleanup failure is redacted and cannot publish success
++            except (Exception, ConfigBackendUnavailable):  # health: allow BLE001 -- known cleanup failure cannot publish success
 +                error = "TEXT_WORKER_FAILED"
 +        client = None
 +        route = None  # retained middleware callbacks cannot retain the credential snapshot
@@ -532,19 +534,19 @@ index 00000000..565b3db2
 +        record.result = dataclasses.replace(result, result_hash=digest)
 +        record.state, record.completed_at, record.updated_at = state, result.completed_at, result.completed_at
 diff --git a/hermes_cli/middleware.py b/hermes_cli/middleware.py
-index 6efd1a77..f40a776a 100644
+index 2b41a782..426f5a7f 100644
 --- a/hermes_cli/middleware.py
 +++ b/hermes_cli/middleware.py
-@@ -162,6 +162,8 @@ class _DownstreamExecutionError(Exception):
- def _run_execution_chain(kind: str, terminal_call: Callable[[Any], Any], **kwargs: Any) -> Any:
+@@ -163,6 +163,8 @@ def _run_execution_chain(kind: str, terminal_call: Callable[[Any], Any], **kwarg
      from hermes_cli.plugins import _delivery_manager
+     from hermes_cli.plugins_dispatch import PluginDispatchMixin
  
 +    strict_single_use = kwargs.pop("strict_single_use", False)
 +    repeated_call = False
      payload_key = "request" if "request" in kwargs else "args"
      manager = _delivery_manager()
      callbacks = list(manager._middleware.get(kind, []))
-@@ -178,10 +180,11 @@ def _run_execution_chain(kind: str, terminal_call: Callable[[Any], Any], **kwarg
+@@ -179,10 +181,11 @@ def _run_execution_chain(kind: str, terminal_call: Callable[[Any], Any], **kwarg
          next_result: Any = None
  
          def next_call(next_payload: Any = None) -> Any:
@@ -557,7 +559,7 @@ index 6efd1a77..f40a776a 100644
                  raise RuntimeError(
                      f"Middleware '{kind}' callback "
                      f"{getattr(callback, '__name__', repr(callback))} called "
-@@ -212,4 +215,7 @@ def _run_execution_chain(kind: str, terminal_call: Callable[[Any], Any], **kwarg
+@@ -213,4 +216,7 @@ def _run_execution_chain(kind: str, terminal_call: Callable[[Any], Any], **kwarg
                  raise
              return call_at(index + 1, payload)
  
@@ -580,26 +582,8 @@ index b10c8673..57050967 100644
      ("llm.side_question", (),
       "Ask your agent a short question after each turn. It sees the "
       "whole session, including memory, and spends your main model's tokens."),
-diff --git a/hermes_cli/plugins.py b/hermes_cli/plugins.py
-index 58aa4ba4..2241362d 100644
---- a/hermes_cli/plugins.py
-+++ b/hermes_cli/plugins.py
-@@ -384,13 +384,6 @@ class PluginContext(PluginCapabilityCtxMixin):
-             self._llm = PluginLlm(plugin_id=self.plugin_id)
-         return self._llm
- 
--    @cached_property
--    def subagent_lifecycle(self) -> Any:
--        """Plugin-safe subagent lifecycle service: serializable handles and immutable snapshots,
--        never a live agent or private registry."""
--        from agent.subagent_lifecycle import SubagentLifecycleService, get_active_subagent_parent
--        return SubagentLifecycleService(get_active_subagent_parent)
--
-     @cached_property
-     def delegation_backends(self) -> Any:
-         """``agent.delegation_backends.DelegationBackends``: list delegation backends and save one, optionally
 diff --git a/hermes_cli/plugins_capability_ctx.py b/hermes_cli/plugins_capability_ctx.py
-index 8aa55ff3..5d45b30b 100644
+index 8aa55ff3..0374bfaa 100644
 --- a/hermes_cli/plugins_capability_ctx.py
 +++ b/hermes_cli/plugins_capability_ctx.py
 @@ -4,7 +4,8 @@
@@ -633,21 +617,73 @@ index 8aa55ff3..5d45b30b 100644
              return True
 +        if capability == "llm.text_worker":
 +            try:
-+                from hermes_cli.config import load_config_readonly
++                from hermes_cli.text_worker_consent import live_text_worker_config
 +                with _plugin_home_scope(self._manager.home_path):
-+                    cfg = load_config_readonly()
++                    cfg = live_text_worker_config()
 +            except Exception:  # health: allow BLE001 -- unreadable capability consent fails closed
 +                return False
-+            return plugin_capability_granted(self.plugin_id, capability, config=cfg)
++            return cfg is not None and plugin_capability_granted(self.plugin_id, capability, config=cfg)
          return plugin_capability_granted(self.plugin_id, capability)
  
      def side_question(self, token: str, prompt: str, *, timeout: float = 15.0) -> Optional[str]:
+diff --git a/hermes_cli/plugins_context.py b/hermes_cli/plugins_context.py
+index 71bacc4f..ed70fdcf 100644
+--- a/hermes_cli/plugins_context.py
++++ b/hermes_cli/plugins_context.py
+@@ -190,13 +190,6 @@ class PluginContext(PluginCapabilityCtxMixin):
+             self._llm = PluginLlm(plugin_id=self.plugin_id)
+         return self._llm
+ 
+-    @cached_property
+-    def subagent_lifecycle(self) -> Any:
+-        """Plugin-safe subagent lifecycle service: serializable handles and immutable snapshots,
+-        never a live agent or private registry."""
+-        from agent.subagent_lifecycle import SubagentLifecycleService, get_active_subagent_parent
+-        return SubagentLifecycleService(get_active_subagent_parent)
+-
+     @cached_property
+     def delegation_backends(self) -> Any:
+         """``agent.delegation_backends.DelegationBackends``: list delegation backends and save one, optionally
+diff --git a/hermes_cli/text_worker_consent.py b/hermes_cli/text_worker_consent.py
+new file mode 100644
+index 00000000..2d9aeb0a
+--- /dev/null
++++ b/hermes_cli/text_worker_consent.py
+@@ -0,0 +1,28 @@
++"""Live config gate for the review-only in-process text worker candidate.
++
++Managed workers deliberately read frozen config. They cannot promise live consent
++revocation and are unsupported, including ordinary non-safe managed sessions.
++"""
++
++from __future__ import annotations
++
++
++def live_text_worker_config() -> dict | None:
++    """One fresh read, or no authority. Never adopt last-known-good consent.
++
++    The known backend outage is a SystemExit subclass; catch it explicitly, not
++    arbitrary process exits. Callers bind the owning profile before this read.
++    """
++    from agent.safe_worker_policy import worker_config_snapshot
++    from hermes_cli.config import FailedConfigRead, load_config_readonly
++    from hermes_cli.config_backend import ConfigBackendUnavailable
++
++    try:
++        if worker_config_snapshot() is not None:
++            return None
++        snapshot = load_config_readonly()
++    except (Exception, ConfigBackendUnavailable):  # health: allow BLE001 -- unreadable consent never grants
++        return None
++    if not isinstance(snapshot, dict) or isinstance(snapshot, FailedConfigRead):
++        return None
++    return snapshot
 diff --git a/tests/agent/test_text_subagent.py b/tests/agent/test_text_subagent.py
 new file mode 100644
-index 00000000..818e3266
+index 00000000..2c19e19f
 --- /dev/null
 +++ b/tests/agent/test_text_subagent.py
-@@ -0,0 +1,977 @@
+@@ -0,0 +1,1252 @@
 +"""Text-worker proposal: real SDK/transport/middleware, in-memory HTTP only."""
 +import dataclasses
 +import json
@@ -1625,6 +1661,281 @@ index 00000000..818e3266
 +    with pytest.raises(SubagentLifecycleError):
 +        service.launch_text(request())
 +    assert world.calls == [] and world.children == []
++
++
++def test_refactored_context_binds_first_access_to_originating_profile(world, monkeypatch, tmp_path):
++    from hermes_cli.plugins_context import PluginContext as RefactoredContext
++    from hermes_cli.plugins_loader import _plugin_home_scope
++
++    assert PluginContext is RefactoredContext
++    held = RefactoredContext(PluginManifest(name="planner"), world.manager)
++    foreign = tmp_path / "foreign"
++    foreign.mkdir()
++    (foreign / "config.yaml").write_text(json.dumps(world.config))
++    with _plugin_home_scope(foreign):
++        service = held.subagent_lifecycle  # first descriptor access is in the wrong profile
++        assert held.has_capability("llm.text_worker")  # probe reads its own profile
++        with pytest.raises(SubagentLifecycleError):
++            service.launch_text(request())
++    with _plugin_home_scope(world.home):
++        handle = service.launch_text(request())
++        assert service.wait(handle, timeout_seconds=5).completed
++        assert service.result(handle).summary == "A planning draft"
++    assert len(world.calls) == 1
++
++
++@pytest.mark.parametrize("failure", ["stale", "backend"])
++def test_config_failure_cannot_admit_or_disclose(world, monkeypatch, failure):
++    from hermes_cli import config
++    from hermes_cli.config_backend import ConfigBackendUnavailable
++
++    handle, original = finish(world)
++    assert original.ready
++
++    def failed_read():
++        if failure == "backend":
++            raise ConfigBackendUnavailable("synthetic-unavailable")
++        return config.FailedConfigRead(world.config, error=OSError("synthetic-read-failure"))
++
++    monkeypatch.setattr(config, "load_config_readonly", failed_read)
++    assert not world.ctx.has_capability("llm.text_worker")
++    with pytest.raises(SubagentLifecycleError):
++        world.service.launch_text(request())
++    with pytest.raises(SubagentLifecycleError):
++        world.service.authorize_text_route(world.route["provider"], world.route["model"], "parent")
++    hidden = world.service.result(handle)
++    assert not hidden.ready and hidden.summary is None
++    assert hidden.error_classification == "TEXT_ROUTE_UNAVAILABLE"
++    assert len(world.calls) == len(world.children) == 1
++
++
++@pytest.mark.parametrize("failure", ["stale", "backend"])
++@pytest.mark.parametrize("phase", ["before_send", "after_send"])
++def test_config_failure_in_flight_publishes_terminal_failure(world, monkeypatch, failure, phase):
++    from agent import text_subagent
++    from hermes_cli import config
++    from hermes_cli.config_backend import ConfigBackendUnavailable
++
++    original = config.load_config_readonly
++
++    def failed_read():
++        if failure == "backend":
++            raise ConfigBackendUnavailable("synthetic-unavailable")
++        return config.FailedConfigRead(world.config, error=OSError("synthetic-read-failure"))
++
++    if phase == "before_send":
++        factory = text_subagent._new_http_client
++        def revoke(timeout):
++            monkeypatch.setattr(config, "load_config_readonly", failed_read)
++            return factory(timeout)
++        monkeypatch.setattr(text_subagent, "_new_http_client", revoke)
++    else:
++        def revoke(req):
++            response = world.answer(req)
++            monkeypatch.setattr(config, "load_config_readonly", failed_read)
++            return response
++        world.handler[0] = revoke
++
++    handle = world.service.launch_text(request(correlation_id="failure-once"))
++    assert world.service.wait(handle, timeout_seconds=5).completed
++    assert world.service.status(handle).state == SubagentState.FAILED
++    assert not world.service.result(handle).ready  # unavailable authority also hides receipts
++    monkeypatch.setattr(config, "load_config_readonly", original)
++    result = world.service.result(handle)
++    assert result.ready and result.summary is None
++    assert result.terminal_state == SubagentState.FAILED
++    assert result.error_classification == "TEXT_WORKER_FAILED"
++    assert result.usage_metadata["api_calls"] == (phase == "after_send")
++    assert len(world.calls) == (phase == "after_send")
++    with pytest.raises(SubagentLifecycleError):
++        world.service.launch_text(request(correlation_id="failure-once"))
++
++
++@pytest.mark.parametrize("exception", [SystemExit(73), KeyboardInterrupt()])
++def test_unrelated_process_exit_not_treated_as_config_outage(world, monkeypatch, exception):
++    from hermes_cli import config
++    def exiting():
++        raise exception
++    monkeypatch.setattr(config, "load_config_readonly", exiting)
++    with pytest.raises(type(exception)) as raised:
++        world.ctx.has_capability("llm.text_worker")
++    assert raised.value is exception
++    with pytest.raises(type(exception)) as raised:
++        world.service.launch_text(request())
++    assert raised.value is exception
++    assert not world.calls and not world.children
++
++
++@pytest.mark.parametrize("safe_mode", [False, True])
++def test_frozen_managed_worker_refuses_in_fresh_process(world, tmp_path, safe_mode):
++    import os
++    from pathlib import Path
++    import subprocess
++    import sys
++
++    script = r'''
++import json, pathlib, socket, sys
++sys.path.insert(0, sys.argv[1])
++def deny(*args, **kwargs):
++    raise AssertionError("No socket or provider I/O")
++for name in ("connect", "connect_ex", "bind", "listen", "sendto", "sendmsg"):
++    if hasattr(socket.socket, name): setattr(socket.socket, name, deny)
++socket.getaddrinfo = deny
++from agent.safe_worker_policy import _bind_worker_config, _bind_safe_worker_policy
++cfg = json.loads(sys.argv[2])
++if sys.argv[3] == "safe":
++    _bind_safe_worker_policy(safe_mode=True, ignore_user_config=True, config=cfg)
++else:
++    _bind_worker_config(cfg)
++from hermes_cli.config import load_config_readonly
++from hermes_cli.plugins import PluginManager, PluginManifest, PluginContext
++from agent.subagent_lifecycle import SubagentLifecycleError, bind_subagent_parent
++from types import SimpleNamespace
++import httpx
++from openai import OpenAI
++route = cfg["plugins"]["entries"]["planner"]["text_workers"]["routes"][0]
++client = OpenAI(api_key="synthetic", base_url=route["base_url"],
++                http_client=httpx.Client(transport=httpx.MockTransport(deny)))
++parent = SimpleNamespace(**route, session_id="parent", api_mode="chat_completions", client=client)
++# Demonstrate why generic config reads are insufficient: disk revoke is invisible.
++home = pathlib.Path(__import__("os").environ["HERMES_HOME"])
++home.mkdir(parents=True)
++(home / "config.yaml").write_text('{"plugins": {"entries": {}}}')
++assert load_config_readonly()["plugins"]["entries"]["planner"]["granted_capabilities"] == ["llm.text_worker"]
++ctx = PluginContext(PluginManifest(name="planner"), PluginManager())
++assert not ctx.has_capability("llm.text_worker")
++with bind_subagent_parent(parent):
++    service = ctx.subagent_lifecycle
++    for operation in (
++        lambda: service.authorize_text_route(route["provider"], route["model"], "parent"),
++        lambda: service.launch_text({"goal": "do not send", "provider": route["provider"], "model": route["model"]}),
++    ):
++        try:
++            operation()
++        except SubagentLifecycleError:
++            pass
++        else:
++            raise AssertionError("Frozen worker admitted")
++client.close()
++print("frozen worker refused")
++'''
++    env = {
++        "PATH": os.environ.get("PATH", os.defpath),
++        "HOME": str(tmp_path / "child-home"),
++        "HERMES_HOME": str(tmp_path / "child-profile"),
++        "HERMES_RUNTIME_DIR": str(tmp_path / "child-runtime"),
++        "LANG": "C.UTF-8", "TZ": "UTC",
++    }
++    result = subprocess.run(
++        [sys.executable, "-I", "-B", "-c", script, str(Path(__file__).resolve().parents[2]),
++         json.dumps(world.config), "safe" if safe_mode else "ordinary"],
++        env=env, cwd=tmp_path, text=True, capture_output=True, timeout=60,
++    )
++    assert result.returncode == 0, result.stdout + result.stderr
++    assert "frozen worker refused" in result.stdout
++    assert not world.calls
++
++
++@pytest.mark.parametrize("strict", [False, True])
++def test_execution_middleware_narrow_dispatch_and_warn_once_unchanged(world, caplog, strict):
++    import logging
++    from hermes_cli.middleware import run_llm_execution_middleware
++
++    calls = []
++    def misdeclared(missing_argument, next_call):
++        raise AssertionError("Not invoked")
++    def narrow(request, next_call):
++        return next_call({**request, "narrow": True})
++    world.manager._middleware["llm_execution"] = [misdeclared, narrow]
++    def terminal(payload):
++        calls.append(payload)
++        return "normal result"
++    with caplog.at_level(logging.DEBUG):
++        for _ in range(3):
++            assert run_llm_execution_middleware({}, terminal, strict_single_use=strict,
++                                                session_id="session") == "normal result"
++    assert calls == [{"narrow": True}] * 3
++    warnings = [r for r in caplog.records if r.levelno == logging.WARNING and "misdeclared" in r.getMessage()]
++    assert len(warnings) == 1
++
++
++@pytest.mark.parametrize("strict", [False, True])
++def test_strict_repeat_detection_does_not_change_normal_middleware(world, strict):
++    from hermes_cli.middleware import run_llm_execution_middleware
++
++    calls = []
++    def middleware(request, next_call):
++        result = next_call(request)
++        with pytest.raises(RuntimeError):
++            next_call(request)
++        return result
++    world.manager._middleware["llm_execution"] = [middleware]
++    def run():
++        return run_llm_execution_middleware({}, lambda payload: calls.append(payload) or "result",
++                                            strict_single_use=strict)
++    if strict:
++        with pytest.raises(RuntimeError, match="Repeated downstream"):
++            run()
++    else:
++        assert run() == "result"
++    assert calls == [{}]
++
++
++def test_real_last_known_good_config_is_not_live_consent(world):
++    from hermes_cli.config import FailedConfigRead, load_config_readonly
++
++    assert world.ctx.has_capability("llm.text_worker")
++    assert load_config_readonly()["plugins"]["entries"]["planner"]["granted_capabilities"]
++    (world.home / "config.yaml").write_text("plugins: [malformed\n")
++    stale = load_config_readonly()
++    assert isinstance(stale, FailedConfigRead)
++    assert stale["plugins"]["entries"]["planner"]["granted_capabilities"] == ["llm.text_worker"]
++    assert not world.ctx.has_capability("llm.text_worker")
++    with pytest.raises(SubagentLifecycleError):
++        world.service.launch_text(request())
++    assert not world.calls and not world.children
++
++
++@pytest.mark.parametrize("phase", ["before_send", "after_send", "cleanup"])
++def test_known_backend_exit_at_result_boundary_is_terminal(world, monkeypatch, phase):
++    from agent import text_subagent
++    from hermes_cli.config_backend import ConfigBackendUnavailable
++
++    if phase == "cleanup":
++        factory = text_subagent._new_http_client
++        def failing_cleanup(timeout):
++            client = factory(timeout)
++            close = client.close
++            def fail():
++                close()
++                raise ConfigBackendUnavailable("synthetic-private-detail")
++            monkeypatch.setattr(client, "close", fail)
++            return client
++        monkeypatch.setattr(text_subagent, "_new_http_client", failing_cleanup)
++    else:
++        def unavailable(request, next_call):
++            if phase == "after_send":
++                next_call(request)
++            raise ConfigBackendUnavailable("synthetic-private-detail")
++        world.manager._middleware["llm_execution"] = [unavailable]
++    _, result = finish(world)
++    assert result.ready and result.terminal_state == SubagentState.FAILED
++    assert result.error_classification == "TEXT_WORKER_FAILED" and result.summary is None
++    assert result.usage_metadata["api_calls"] == (phase != "before_send")
++    assert len(world.calls) == (phase != "before_send")
++    assert "synthetic-private-detail" not in json.dumps(dataclasses.asdict(result))
++
++
++@pytest.mark.parametrize("exception", [SystemExit(73), KeyboardInterrupt()])
++def test_unrelated_process_exit_at_result_boundary_propagates(world, exception):
++    def exiting(request, next_call):
++        raise exception
++    world.manager._middleware["llm_execution"] = [exiting]
++    handle = world.service.launch_text(request())
++    with pytest.raises(type(exception)) as raised:
++        world.service.wait(handle, timeout_seconds=5)
++    assert raised.value is exception
++    assert not world.calls
 diff --git a/tests/hermes_cli/test_plugin_capabilities.py b/tests/hermes_cli/test_plugin_capabilities.py
 index cfee0a0d..55e12753 100644
 --- a/tests/hermes_cli/test_plugin_capabilities.py

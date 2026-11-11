@@ -178,3 +178,5 @@ E9 已选定原生 worker 路由设计，并实现离线约束验证器和部分
 99. [安装包记忆生命周期验收](99-packaged-memory-lifecycle-zh.md)：手动验证真实 Gateway 重启及来源丢失，单独标记 SDK 待决设置，并检查精确重入抑制；不是模型或生产验收。
 
 100. [原生交接工作台](100-native-handoff-workbench-zh.md)：以显式 `--text` 可读操作指引及保持原样的默认 JSON 串联停放创建、恢复、观察与明确结果验收。
+
+101. [当前宿主纯文本 worker 准备](101-current-host-text-worker-zh.md)：当前基线安全移植、明确拒绝冻结 worker/不支持隔离模式及采纳选择；不启用 worker。

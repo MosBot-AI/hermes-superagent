@@ -4,9 +4,15 @@ English | [简体中文](README-zh.md)
 
 ## Status
 
-This is an isolated host proposal plus a concrete experimental task consumer. It is **not installed, enabled, submitted upstream or deployed**; this experimental bundle itself is not imported by production registration. The supported host pin remains `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`. Do not apply this patch to an installed host or weaken plugin isolation to try it.
+This is an isolated host proposal plus a concrete experimental task consumer. It is **not installed, enabled, submitted upstream or deployed**; this experimental bundle itself is not imported by production registration. The supported host pin remains `2281116525106e3c109993ccb5dc74d02bfc1427`. Do not apply this patch to an installed host or weaken plugin isolation to try it.
 
 The [manifest](manifest.json) records the exact patch, source hashes, selected verification and limitations. The [host patch](text-worker-prototype.patch) retains the upstream [MIT license](LICENSE.hermes-agent). Distribution on this project's feature branch is not an upstream release.
+
+## Current-pin preparation, not adoption
+
+The current candidate ports the proposal to `2281116525106e3c109993ccb5dc74d02bfc1427`, preserves the refactored PluginContext and middleware behavior, and refuses stale failed-configuration fallbacks. A known configuration-backend outage is handled as a refusal or truthful terminal failure. Frozen managed-worker configuration is explicitly unsupported because it cannot establish current revocation; isolated plugin-host proxies remain unsupported by the production consumer. No general-worker fallback or isolation change is provided.
+
+The old-pin tests and earlier provider/install attempts remain historical in the manifest. See [current-host preparation and adoption choices](../../docs/101-current-host-text-worker.md) for the exact boundaries, dependency impact and separate upstream or maintained-distribution decision. A passing offline candidate does not enable a real Gateway worker.
 
 ## Native host consent and package boundary
 
@@ -16,7 +22,7 @@ The proposal now registers a **consent-only `llm.text_worker` capability** in He
 
 The consumer and ledger now import their sibling `personal_agent` package relatively, rather than accidentally depending on the development repository's `PYTHONPATH`. A cold isolated `python -I` test blocks global `personal_agent` imports and exercises native package discovery, task capture, explicit grant, the proposed host request through a mock HTTP transport, saved draft and reload. Module origins and the shared package's error identity are checked. This fixes a real package-loading defect; it is still **offline installed-shaped testing, not official installation or live Gateway acceptance**.
 
-The original adoption checklist was: review/release this host capability contract → package the experimental consumer with its production sibling modules and declare the capability → separately approve installation/host consent and exact route → grant one task → run real acceptance. The subsequent [gated production-package integration](../../docs/55-gated-plan-worker.md) declares the capability and wires a production copy behind default-off configuration, the exact host contract and current consent. Clean baseline hosts still register no worker. No package was installed, no upstream change was submitted, and no DNS/proxy/TLS workaround was added.
+The original adoption checklist was: review/release this host capability contract → package the experimental consumer with its production sibling modules and declare the capability → separately approve installation/host consent and exact route → grant one task → run real acceptance. The subsequent [gated production-package integration](../../docs/55-gated-plan-worker.md) declares the capability and wires a production copy behind default-off configuration, the exact host contract and current consent. Clean baseline hosts still register no worker. That integration did not install the worker host proposal, submit an upstream change or add a DNS/proxy/TLS workaround. Later clean-host package acceptance did not enable workers.
 
 ## The narrow useful flow
 
@@ -70,13 +76,13 @@ These are local observations, not proof of provider execution, delivery, billing
 
 ## Provider compatibility and actual acceptance attempt
 
-OpenCode Go requires a session-affinity header. For the exact `opencode-go` provider and HTTPS `opencode.ai:443` origin only, the dedicated client now calls the official host affinity helper with a fresh one-shot identifier in an empty context. It does not inherit the parent/root session identifier or arbitrary headers. Both the configured `/inference/go/openai/v1` path and metadata `/zen/go/v1` path retain exact-target checks. Foreign origins, lookalike hosts and other providers do not receive this header. The selected offline lane now has 247 host and 109 consumer tests.
+OpenCode Go requires a session-affinity header. For the exact `opencode-go` provider and HTTPS `opencode.ai:443` origin only, the dedicated client now calls the official host affinity helper with a fresh one-shot identifier in an empty context. It does not inherit the parent/root session identifier or arbitrary headers. Both the configured `/inference/go/openai/v1` path and metadata `/zen/go/v1` path retain exact-target checks. Foreign origins, lookalike hosts and other providers do not receive this header. That historical old-pin checkpoint had 247 host and 109 consumer tests. Current-pin results are recorded separately in the manifest.
 
 One explicitly authorized synthetic request used the official credential resolver and this transport at `https://opencode.ai/inference/go/openai/v1`, requesting only `deepseek-v4.1-flash`. It failed with `ConnectError` before an HTTP status or model response was available. Delivery is unconfirmed; no retry, fallback or alternative route was attempted. `config.yaml` remained unchanged; the official resolver can maintain credential metadata, so this is not a claim that the whole profile was unchanged. No native activation, worker launch or Gateway was involved. **Live worker/model acceptance is still open.**
 
 A later local-only review found a concrete difference from the earlier successful SDK probes: those used HTTPX environment routing/CA defaults, while this dedicated client intentionally ignores environment proxies and uses certifi roots. The original exception cause and earlier environment snapshot were not retained, so a routing or CA mismatch is only a hypothesis, not a proven root cause. No request was repeated and no proxy/TLS policy was relaxed.
 
-A separate official installation attempt for the production repository, in a fresh credential-free offline profile, stopped at the unchanged scanner: CAUTION, 50 findings, exit 1. No override was accepted; official listing and filesystem checks confirmed the plugin was absent. The repository install source includes development docs/tests and these experiments at the time when production registration did not import a worker. The offline runtime distribution builder and subsequent gated worker packaging are not permission to bypass that verdict. Installation, activation and supported-host worker availability are unverified.
+A separate official installation attempt for the production repository, in a fresh credential-free offline profile, stopped at the unchanged scanner: CAUTION, 50 findings, exit 1. No override was accepted; official listing and filesystem checks confirmed the plugin was absent. The repository install source includes development docs/tests and these experiments at the time when production registration did not import a worker. The offline runtime distribution builder and subsequent gated worker packaging are not permission to bypass that verdict. Worker-host installation, activation and availability remain unverified. Later clean-host package acceptance is separate and does not turn that historical refusal into a current runtime-package failure.
 
 ## Reproduce the selected offline evidence
 
@@ -86,9 +92,9 @@ Use a fresh, trusted, credential-free disposable source copy at the exact host b
 set -eu
 ARTIFACT="/path/to/hermes-superagent/experiments/text-worker"
 COPY="/path/to/disposable-hermes"
-CLEAN="/path/to/unchanged-90d6-hermes"
+CLEAN="/path/to/unchanged-2281116-hermes"
 PYTHON="/path/to/existing-test-venv/bin/python"
-test "$(git -C "$COPY" rev-parse HEAD)" = 90d6b98fd86d20981ee06ddd5b7d93e4320f26a4
+test "$(git -C "$COPY" rev-parse HEAD)" = 2281116525106e3c109993ccb5dc74d02bfc1427
 test -z "$(git -C "$COPY" status --porcelain)"
 git -C "$COPY" apply --check "$ARTIFACT/text-worker-prototype.patch"
 git -C "$COPY" apply --index "$ARTIFACT/text-worker-prototype.patch"
@@ -104,7 +110,7 @@ CI uses a separate step to apply the reviewed patch only to a newly created disp
 
 The ordinary project checker tests artifact integrity only and continues testing the **clean unmodified host**. Exact-commit project CI is not the proposed host's upstream CI, nor a live-model acceptance result. The isolated experiment suite is a separate selected lane, not the full upstream suite. No previously denied Gateway socket test is retried.
 
-The broader affected-host regression covered 14 files: **422 passed, 1 failed, 0 skipped**. The same database-path assertion fails on the untouched baseline because this environment aliases `/var/tmp` to `/tmp` while the canonical runner uses `/var/tmp`. No source/assertion was changed to suppress it. An earlier selected bundle recorded 356 passing tests; that historical count is not a claim for the expanded production-entrypoint lane; neither lane is the full upstream suite, which also includes unavailable or prohibited live transport coverage.
+The historical old-pin affected-host regression covered 14 files: **422 passed, 1 failed, 0 skipped**. The same database-path assertion fails on the untouched baseline because this environment aliases `/var/tmp` to `/tmp` while the canonical runner uses `/var/tmp`. No source/assertion was changed to suppress it. An earlier selected bundle recorded 356 passing tests; that historical count is not a claim for the expanded production-entrypoint lane; neither lane is the full upstream suite, which also includes unavailable or prohibited live transport coverage.
 
 ## Remaining release gates
 

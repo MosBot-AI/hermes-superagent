@@ -178,3 +178,5 @@ See [79. Explicit consistent local memory snapshots](79-local-memory-snapshots.m
 99. [Packaged memory lifecycle acceptance](99-packaged-memory-lifecycle.md): manual real Gateway restart/source-loss verification, with separately labeled SDK pending setup and exact reentry suppression; no model or production acceptance.
 
 100. [Native handoff workbench](100-native-handoff-workbench.md): opt-in `--text` operator guidance and unchanged default JSON across parked creation, recovery, observation and explicit result acceptance.
+
+101. [Current-host text-worker preparation](101-current-host-text-worker.md): current-pin security port, explicit frozen-worker/isolation refusal and adoption choices; no worker activation.

@@ -2,6 +2,8 @@
 
 [English](48-task-worker-proposal.md) | 简体中文
 
+当前基线采纳准备及 managed-worker/隔离限制记录于 [101](101-current-host-text-worker-zh.md)。下方原始旧基线证据保留为历史；准备工作不启用宿主约定。
+
 ## 本轮推进
 
 [仅供审阅的文本 worker 工件](../experiments/text-worker/README-zh.md)把明确批准的本地任务修订，连接到一次原生宿主文本请求及生命周期结果。包含拟议宿主 API、准确路由 opt-in、受控单次执行、专用 no-redirect 客户端、持久单次领取/草稿回执、具体实验命令/模型消费者及可重现离线测试。原始工件不由生产插件加载。后续[受门控包级集成](55-gated-plan-worker-zh.md)把消费者复制到生产模块，受默认关闭、准确约定和同意门控限制，不代表部署宿主提案。
@@ -38,12 +40,12 @@
 
 ## 真实提供商及安装检查
 
-专用传输现在通过官方 helper 提供 OpenCode Go 必需的 affinity header，使用新的单次标识，而不继承父/根上下文。仅限准确提供商及 HTTPS `opencode.ai:443` 源站，不放宽目标、重定向或 fallback 限制。所选离线测试为 247 项宿主及 109 项消费者测试。
+专用传输现在通过官方 helper 提供 OpenCode Go 必需的 affinity header，使用新的单次标识，而不继承父/根上下文。仅限准确提供商及 HTTPS `opencode.ai:443` 源站，不放宽目标、重定向或 fallback 限制。旧基线历史测试为 247 项宿主及 109 项消费者测试。
 
 已授权的单次合成 DeepSeek 传输探针以 `ConnectError` 失败，没有 HTTP 状态或模型响应。是否送达未确认，未重试；未涉及 Gateway 或原生激活。另一次全新离线 profile 中的官方生产仓库安装被未修改的扫描器拒绝（CAUTION，50 条发现），插件仍不存在。两次尝试均不算通过验收。准确范围和限制参见[工件说明](../experiments/text-worker/README-zh.md#提供商兼容性及实际验收尝试)。
 
 ## 后续验收
 
-仍需上游采纳及真实获授权 OpenCode Go `deepseek-v4.1-flash` 验证。在持续自主 worker 编排前，必须完成生产级结果不明核对、提供商侧持久执行标识和成本/并发控制。本地账本不是提供商执行事务，也不保证远端恰好执行一次。带工具 worker 需要单独的可执行权限约束。Gateway 传输及自动记忆门槛仍未关闭。
+仍需通过上游或明确选择的维护发行版完成受支持宿主采纳，以及真实获授权 OpenCode Go `deepseek-v4.1-flash` 验证。在持续自主 worker 编排前，必须完成生产级结果不明核对、提供商侧持久执行标识和成本/并发控制。本地账本不是提供商执行事务，也不保证远端恰好执行一次。带工具 worker 需要单独的可执行权限约束。worker 专属 Gateway 验收及自动记忆门槛仍未关闭。
 
 参见[原子项目计划](47-atomic-project-plans-zh.md)、[worker 路由](11-worker-model-routing-zh.md)和[路线图](08-roadmap-and-acceptance-zh.md)。本原型推进可行性，不表示上述验收完成。
