@@ -89,3 +89,31 @@ def test_multiple_sentences_do_not_gain_required_slot_interpretation():
         "required_query_indices"
         not in filter_automatic_recall(data, query, terms)["automatic_filter"]
     )
+
+
+@pytest.mark.parametrize(
+    "query,legacy_terms",
+    [
+        ("Copper Harbor 管理人叫什么？", ["Copper", "Harbor", "管理人叫"]),
+        ("榆湾的预算和截止日期分别是什么？", ["榆湾", "预算", "截止日期分别"]),
+        ("和平的生日是哪天？", ["平", "生日"]),
+    ],
+)
+def test_ambiguous_structures_keep_base_terms_results_and_filter_metadata(query, legacy_terms):
+    terms = automatic_recall_terms(query)
+    assert terms == legacy_terms
+    data = {
+        "items": [
+            {"record_id": "legacy-two-term", "matched_queries": [0, 1]},
+            {"record_id": "legacy-one-term", "matched_queries": [0]},
+        ],
+        "omitted_records": 0,
+        "items_json_chars": 0,
+    }
+    result = filter_automatic_recall(data, query, terms)
+    assert [r["record_id"] for r in result["items"]] == ["legacy-two-term"]
+    assert result["automatic_filter"] == {
+        "minimum_matched_terms": 2,
+        "filtered_returned_records": 1,
+        "refilled": False,
+    }

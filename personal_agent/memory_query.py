@@ -91,6 +91,9 @@ _ATTRIBUTE = re.compile(
 )
 _PREFIX = re.compile(r"^(?:请问|请告诉我|告诉我|我想知道)\s*")
 _SINGLE_CLAUSE = re.compile(r"^[\w\s-]+[?？!！。]*$")
+# These may be coordination or part of a name. Do not guess which: preserve
+# the legacy plan rather than reinterpret the whole phrase as one attribute.
+_AMBIGUOUS_SLOTS = re.compile(r"和|与|及|或|、|分别|各自")
 
 
 def _slot_terms(slot):
@@ -129,11 +132,13 @@ def _question_terms(query):
             body = match[1].strip()
             if "的" in body:
                 subject, attribute = body.split("的", 1)
-            elif re.search(r"(?:现在|目前)", text[len(body) :]) or " " in body:
+            elif re.search(r"(?:现在|目前)", text[len(body) :]):
                 subject, attribute = "", body
             else:
                 return None
     subject, attribute = subject.strip(), attribute.strip()
+    if _AMBIGUOUS_SLOTS.search(subject) or _AMBIGUOUS_SLOTS.search(attribute):
+        return None
     if subject == "我":
         subject = ""
     if not attribute:
@@ -209,11 +214,12 @@ def filter_automatic_recall(data, query, terms):
     removed = len(data["items"]) - len(result["items"])
     result["omitted_records"] += removed
     result["items_json_chars"] = len(json.dumps(result["items"], ensure_ascii=True, sort_keys=True))
-    result["automatic_filter"] = {
+    filtering: dict[str, object] = {
         "minimum_matched_terms": len(required) if required is not None else 2,
         "filtered_returned_records": removed,
         "refilled": False,
     }
     if required is not None:
-        result["automatic_filter"]["required_query_indices"] = required
+        filtering["required_query_indices"] = required
+    result["automatic_filter"] = filtering
     return result
