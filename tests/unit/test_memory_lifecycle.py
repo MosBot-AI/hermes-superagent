@@ -316,3 +316,17 @@ def test_chinese_multiterm_provider_omits_single_attribute_matches(lifecycle):
     assert result["omitted_records"] == 2 and state["reads"] == 1
     assert instance.prefetch("赵六的生日是哪天？", session_id="s1") == ""
     assert state["reads"] == 2
+
+
+def test_optional_provider_uses_required_slots_without_extra_reads(lifecycle):
+    instance, backend, _, _, state, home = lifecycle
+    target = save(backend, content="Comet delivery 的管理人为景明")
+    backend.execute("remember", {"content": "Comet delivery 标识是圆形", "request_id": "logo"})
+    backend.execute("remember", {"content": "Comet staging 管理人为秋叶", "request_id": "other"})
+    initialize(instance, home)
+    result = json.loads(instance.prefetch("Comet delivery 谁管理", session_id="s1"))
+    assert [item["record_id"] for item in result["memory"]["items"]] == [target]
+    assert result["memory"]["automatic_filter"]["required_query_indices"] == [0, 1, 2]
+    assert state["reads"] == 1
+    assert instance.prefetch("Comet unknown 谁管理", session_id="s1") == ""
+    assert state["reads"] == 2
