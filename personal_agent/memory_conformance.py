@@ -110,3 +110,125 @@ def run_conformance(factory, *, isolated_synthetic: bool = False) -> Conformance
             "terminal_tombstone",
         ),
     )
+
+
+def run_progress_conformance(factory, *, isolated_synthetic: bool = False) -> ConformanceReport:
+    """Optional progress suite on its own fresh store; CRUD-only factories need not run it.
+
+    Uses the same isolation and reviewed-opener requirements as run_conformance.
+    A cursor proves caller-reported local progress, never native checkpointing.
+    """
+    if isolated_synthetic is not True:
+        raise MemoryError("synthetic_store_required")
+    with factory() as service:
+        page = service.execute("export", {"limit": 1})["data"]
+        if page["items"] or page["has_more"] or page["watermark"] != 0:
+            raise MemoryError("empty_store_required")
+        _check(not service.execute("changes", {})["data"]["items"])
+        _check(
+            not service.execute("consumer_get", {"consumer_id": "projection"})["data"]["registered"]
+        )
+        created = service.execute("remember", {"content": "synthetic secret", "request_id": "p-r"})
+        rid = created["data"]["record_id"]
+        corrected = service.execute(
+            "correct",
+            {
+                "record_id": rid,
+                "content": "replacement secret",
+                "expected_revision": 1,
+                "request_id": "p-c",
+            },
+        )
+        bound = corrected["data"]["event_sequence"]
+        first = service.execute("changes", {"limit": 1, "through_sequence": bound})["data"]
+        _check(first["has_more"] and first["items"][0]["operation"] == "remember")
+        forgotten = service.execute(
+            "forget",
+            {
+                "record_id": rid,
+                "expected_revision": 2,
+                "request_id": "p-f",
+            },
+        )
+        last = forgotten["data"]["event_sequence"]
+        second = service.execute(
+            "changes",
+            {
+                "after_sequence": first["next_sequence"],
+                "through_sequence": bound,
+                "limit": 1,
+            },
+        )["data"]
+        _check(not second["has_more"] and second["current_watermark"] == last)
+        _check(second["items"][0]["operation"] == "correct")
+        request = {
+            "consumer_id": "projection",
+            "through_sequence": bound,
+            "expected_revision": 0,
+            "request_id": "p-progress",
+        }
+        receipt = service.execute("consumer_advance", request)
+    with factory() as service:
+        _check(
+            service.execute("consumer_advance", request)
+            == {"data": receipt["data"], "replayed": True}
+        )
+        _reject(
+            service,
+            "consumer_advance",
+            {**request, "through_sequence": last},
+            "idempotency_conflict",
+        )
+        _reject(
+            service, "consumer_advance", {**request, "request_id": "stale"}, "revision_conflict"
+        )
+        for sequence in (0, bound):
+            _reject(
+                service,
+                "consumer_advance",
+                {
+                    **request,
+                    "expected_revision": 1,
+                    "through_sequence": sequence,
+                    "request_id": "regressive",
+                },
+                "cursor_not_advanced",
+            )
+        _reject(
+            service,
+            "consumer_advance",
+            {
+                **request,
+                "expected_revision": 1,
+                "through_sequence": last + 1,
+                "request_id": "future",
+            },
+            "future_watermark",
+        )
+        service.execute(
+            "consumer_advance",
+            {**request, "expected_revision": 1, "through_sequence": last, "request_id": "p-final"},
+        )
+        _check(
+            not service.execute("consumer_get", {"consumer_id": "independent"})["data"][
+                "registered"
+            ]
+        )
+        _check(service.execute("consumer_advance", request)["replayed"])
+    with factory() as service:
+        current = service.execute("consumer_get", {"consumer_id": "projection"})["data"]
+        _check(current["revision"] == 2 and current["through_sequence"] == last)
+        feed = service.execute("changes", {})["data"]
+        _check([item["operation"] for item in feed["items"]] == ["remember", "correct", "forget"])
+        _check(service.execute("get", {"record_id": rid})["data"]["content"] is None)
+    return ConformanceReport(
+        1,
+        (
+            "bounded_metadata_changes",
+            "progress_reopen",
+            "progress_cas",
+            "progress_idempotency",
+            "no_rewind",
+            "independent_consumers",
+        ),
+    )

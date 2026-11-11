@@ -6,6 +6,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ## Unreleased
 
+- Extend the optional local Memory SDK with capability-gated metadata changes and operator-only durable consumer progress, strict payload-free result validation and reusable isolated progress conformance; CRUD-only adapters remain supported.
+
 - Add a review-only pinned-host proposal for durable exact-key cron creation, retained deletion receipts and fail-closed locking; production scheduling, authorization and notification delivery remain unchanged.
 
 - Add a fixed-checkpoint original local M1 acceptance ledger, executable reference checks and explicit delivery limits; no new runtime capability is enabled.
