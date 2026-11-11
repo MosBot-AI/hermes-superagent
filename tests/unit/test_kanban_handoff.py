@@ -120,7 +120,7 @@ def flow(monkeypatch, tmp_path):
     context = dict(platform="local", source=source, session_id="session", session_key="route")
 
     def invoke(command, **overrides):
-        return json.loads(instance.command(command, **{**context, **overrides}))
+        return json.loads(instance.command("--json " + command, **{**context, **overrides}))
 
     with tasks(tmp_path) as store:
         task = store.run(
@@ -374,7 +374,8 @@ def test_restarted_service_cannot_recreate_claimed_handoff(flow):
     fresh = service.LocalKanbanHandoff(bound_home=flow.tmp_path, read_config=flow.config.get)
     reply = json.loads(
         fresh.command(
-            f"commit {record['id']} --expected-digest {record['intent_digest']}", **flow.context
+            f"--json commit {record['id']} --expected-digest {record['intent_digest']}",
+            **flow.context,
         )
     )
     assert reply["data"]["state"] == "confirmed" and reply["data"]["payload"] is None

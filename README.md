@@ -181,3 +181,5 @@ Added [saved native attention review](docs/54-saved-native-attention.md): local 
 [Explicit observed-source retention](docs/98-observed-source-retention.md) imports reviewed original native rows into canonical memory through explicit LOCAL preview/retain commands, with metadata recovery independent of native text; it enables no automatic ingestion, model tool or HTTP surface.
 
 [Packaged memory lifecycle acceptance](docs/99-packaged-memory-lifecycle.md) adds manual real-Gateway restart and source-loss scenarios, with separately labeled SDK pending setup, canonical correction/forgetting and exact-content reentry suppression. Execution evidence remains distinct from model or production acceptance.
+
+[Native handoff workbench](docs/100-native-handoff-workbench.md): readable explicit task handoff, recovery and result review; scripts use `/personal-handoff --json`. No worker dispatch or automatic completion.

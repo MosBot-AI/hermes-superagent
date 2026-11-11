@@ -4,7 +4,7 @@ English | [简体中文](55-gated-plan-worker-zh.md)
 
 ## Package integration, not deployment acceptance
 
-This slice moves the reviewed text-only task consumer, durable ledger and presentation into the production package and connects them to the real plugin entrypoint. It does not install the plugin or adopt the host patch upstream. The supported clean host pin `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4` lacks the required API/capability and must register no planning worker.
+This slice moves the reviewed text-only task consumer, durable ledger and presentation into the production package and connects them to the real plugin entrypoint. It does not install the plugin or adopt the host patch upstream. The supported clean host pin `2281116525106e3c109993ccb5dc74d02bfc1427` lacks the required API/capability and must register no planning worker.
 
 `plan_worker` defaults to false. Registration requires the exact host contract `text_worker_contract == 'hermes.text-worker.v1'` and current canonical `llm.text_worker` consent, as well as the local task/conversation/model-tool prerequisites. A matching method name alone is not enough. Unsupported or unconsented hosts do not fall back to generic subagent launch, `ctx.llm`, another provider or another model.
 

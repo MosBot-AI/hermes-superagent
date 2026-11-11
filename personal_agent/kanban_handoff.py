@@ -14,6 +14,7 @@ import threading
 import time
 
 from .conversation_tasks import _supported_origin
+from .kanban_handoff_presentation import render
 from .kanban_handoff_storage import open_handoff_store
 from .kanban_handoff_store import HandoffError
 from .task_cli import current_profile_home, open_task_store
@@ -430,6 +431,13 @@ class LocalKanbanHandoff:
 
     def command(self, raw_args, *, platform="", source=None, session_id="", session_key=""):
         operation = None
+        json_mode = False
+        if type(raw_args) is str:
+            flag = re.match(r"^\s*--json(?:\s+|$)", raw_args)
+            if flag:
+                json_mode = True
+                # Keep the original command size limit, including the display flag.
+                raw_args = raw_args[flag.end() :] if len(raw_args) <= 8192 else None
         output: dict = {}
         try:
             with self._lock:
@@ -456,16 +464,19 @@ class LocalKanbanHandoff:
             }
         if operation in ("sync", "accept-review") and output["status"] == "error":
             output["replayed"] = False
+        envelope = {
+            "schema_version": "personal.kanban-handoff.v1",
+            "scope": (
+                "trusted_local_operator_native_result_review"
+                if operation in ("review", "accept-review")
+                else "trusted_local_operator_parked_card"
+            ),
+            **output,
+        }
+        if not json_mode:
+            return render(envelope, operation)
         return json.dumps(
-            {
-                "schema_version": "personal.kanban-handoff.v1",
-                "scope": (
-                    "trusted_local_operator_native_result_review"
-                    if operation in ("review", "accept-review")
-                    else "trusted_local_operator_parked_card"
-                ),
-                **output,
-            },
+            envelope,
             ensure_ascii=operation in ("review", "accept-review"),
             sort_keys=True,
             indent=2,

@@ -176,3 +176,5 @@ E9 已选定原生 worker 路由设计，并实现离线约束验证器和部分
 98. [显式保留观察来源](98-observed-source-retention-zh.md)：完整预览、显式独立快照接受及不依赖原生文本的元数据恢复；如实标记来源，不自动摄取。
 
 99. [安装包记忆生命周期验收](99-packaged-memory-lifecycle-zh.md)：手动验证真实 Gateway 重启及来源丢失，单独标记 SDK 待决设置，并检查精确重入抑制；不是模型或生产验收。
+
+100. [原生交接工作台](100-native-handoff-workbench-zh.md)：以可读操作指引和准确 JSON 模式串联停放创建、恢复、观察与明确结果验收。

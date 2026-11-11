@@ -33,3 +33,6 @@ Native and local databases are not one atomic transaction. The native card may c
 ## Scope and remaining gates
 
 This is an E3.2/E3.5 precursor connecting [identity-bound handoff](52-parked-kanban-handoff.md) to a deliberate local completion decision. [Advisory progress observations](53-native-progress-observation.md) still never complete a task automatically. No live Kanban, Gateway, model or installation acceptance is claimed. The workflow introduces no installation retry, native write or provider call. Full host adoption and real-world acceptance remain open on the [roadmap](08-roadmap-and-acceptance.md).
+
+
+[The native handoff workbench](100-native-handoff-workbench.md) now provides readable default views and explicit `--json` compatibility across this complete operator journey. Its manual packaged-Gateway lane and exact-source execution evidence are separate from this original offline milestone.

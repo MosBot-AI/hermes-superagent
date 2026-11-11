@@ -23,6 +23,7 @@
     "personal_agent/enrollment_storage.py",
     "personal_agent/identity.py",
     "personal_agent/kanban_handoff.py",
+    "personal_agent/kanban_handoff_presentation.py",
     "personal_agent/kanban_handoff_storage.py",
     "personal_agent/kanban_handoff_store.py",
     "personal_agent/local_memory.py",
