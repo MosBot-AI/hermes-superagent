@@ -1,0 +1,486 @@
+diff --git a/hermes_state_checkpoint_sources.py b/hermes_state_checkpoint_sources.py
+new file mode 100644
+index 00000000..61b3b476
+--- /dev/null
++++ b/hermes_state_checkpoint_sources.py
+@@ -0,0 +1,480 @@
++"""Review-only explicit owner in-place source receipts. Not a memory checkpoint.
++
++No ordinary path imports this module. Requests are untrusted bounded values; the
++caller owns the SessionDB/session binding. Source text stays in native messages.
++"""
++
++import hashlib
++import json
++import re
++import time
++
++MAX_ROWS = 256
++MAX_CHARS = 65536
++MAX_ROW_CHARS = 16384
++MAX_IDENTITIES = 1024
++MAX_RECEIPTS = 4096
++MAX_BINDINGS = 1048576
++MARKERS = (
++    "[CONTEXT COMPACTION — REFERENCE ONLY]",
++    "[CONTEXT SUMMARY]:",
++    "[END OF PRIOR CONTEXT — COMPACTION SUMMARY BELOW]",
++)
++
++
++class SourceReceiptError(ValueError):
++    """Fixed safe error code, never backend text."""
++
++    def __init__(self, code):
++        safe = {
++            "invalid_request",
++            "limit",
++            "session_missing",
++            "source_ambiguous",
++            "unsupported_source",
++            "source_mismatch",
++            "unsupported_store",
++            "prepare_failed",
++            "unsupported_mode",
++            "wrong_session",
++            "attempt_conflict",
++            "capacity",
++            "stale_revision",
++            "stale_sources",
++            "lease_conflict",
++            "lease_lost",
++            "cancelled",
++            "read_only",
++            "commit_failed_reconcile_same_attempt",
++            "status_unknown",
++        }
++        super().__init__(
++            code if type(code) is str and code in safe else "operation_failed"
++        )
++
++
++def _require(condition, code="invalid_request"):
++    if not condition:
++        raise SourceReceiptError(code)
++
++
++def _text(value, limit, *, empty=False):
++    _require(type(value) is str and (empty or bool(value)) and len(value) <= limit)
++    try:
++        value.encode("utf-8")
++    except UnicodeError:
++        raise SourceReceiptError("invalid_request") from None
++    return value
++
++
++def _json(value):
++    return json.dumps(
++        value, sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False
++    )
++
++
++def _hash(value):
++    return hashlib.sha256(_json(value).encode()).hexdigest()
++
++
++def _uids(values):
++    _require(type(values) is list and 0 < len(values) <= MAX_IDENTITIES)
++    _require(all(type(v) is str and re.fullmatch(r"[0-9a-f]{32}", v) for v in values))
++    _require(len(set(values)) == len(values))
++    return values
++
++
++def _candidates(items):
++    _require(type(items) is list and 0 < len(items) <= MAX_ROWS)
++    seen, total = set(), 0
++    for item in items:
++        _require(type(item) is dict and set(item) == {"role", "content", "uids"})
++        _require(item["role"] in ("user", "assistant"))
++        text = _text(item["content"], MAX_ROW_CHARS)
++        _require(text.strip() and not any(m in text for m in MARKERS))
++        uids = _uids(item["uids"])
++        _require(not seen.intersection(uids))
++        seen.update(uids)
++        total += len(text)
++    _require(total <= MAX_CHARS and len(seen) <= MAX_IDENTITIES, "limit")
++
++
++def _summaries(items):
++    # Narrow contract: generated plain summary only; no carry/model-config/tool sidecars.
++    _require(type(items) is list and len(items) == 1)
++    item = items[0]
++    _require(type(item) is dict and set(item) == {"role", "content"})
++    _require(item["role"] == "assistant")
++    _text(item["content"], MAX_ROW_CHARS)
++
++
++def _revision(conn, sid):
++    session = conn.execute(
++        "SELECT transcript_revision FROM sessions WHERE id = ?", (sid,)
++    ).fetchone()
++    _require(session is not None, "session_missing")
++    row = conn.execute(
++        "SELECT COUNT(*), COALESCE(MAX(id),0) FROM messages WHERE session_id=? AND active=1",
++        (sid,),
++    ).fetchone()
++    return [[sid], row[0], row[1], session[0]]
++
++
++def _fingerprint(row):
++    return _hash(
++        {
++            k: ({"bytes": row[k].hex()} if isinstance(row[k], bytes) else row[k])
++            for k in row.keys()
++            if k not in ("active", "compacted", "display_order")
++        }
++    )
++
++
++def _scan(db, conn, sid):
++    rows = conn.execute(
++        "SELECT * FROM messages WHERE session_id=? AND active=1 ORDER BY id LIMIT ?",
++        (sid, MAX_ROWS + 1),
++    ).fetchall()
++    _require(len(rows) <= MAX_ROWS, "limit")
++    seen, total, result, metadata_bytes = set(), 0, [], 0
++    for row in rows:
++        raw_lineage = row["absorbed_message_uids"] or "[]"
++        _require(
++            type(raw_lineage) is str and len(raw_lineage) <= MAX_IDENTITIES * 36 + 2,
++            "limit",
++        )
++        absorbed = json.loads(raw_lineage)
++        _require(type(absorbed) is list and len(absorbed) < MAX_IDENTITIES)
++        size = sum(len(v) for v in tuple(row) if isinstance(v, (str, bytes)))
++        metadata_bytes += size
++        _require(size <= 262144 and metadata_bytes <= 2097152, "limit")
++        uids = _uids([row["message_uid"], *absorbed])
++        _require(
++            type(absorbed) is list and not seen.intersection(uids), "source_ambiguous"
++        )
++        seen.update(uids)
++        content = db._decode_content(row["content"])
++        _require(content is None or type(content) is str, "unsupported_source")
++        if content is not None:
++            _text(content, MAX_ROW_CHARS, empty=True)
++            total += len(content)
++        _require(total <= MAX_CHARS and len(seen) <= MAX_IDENTITIES, "limit")
++        eligible = row["role"] in ("user", "assistant") and bool(
++            content and content.strip()
++        )
++        eligible = eligible and not any(m in (content or "") for m in MARKERS)
++        eligible = eligible and not any(
++            row[k]
++            for k in (
++                "tool_call_id",
++                "tool_name",
++                "tool_call_uid",
++                "display_kind",
++                "_compressed_summary",
++            )
++        )
++        eligible = (
++            eligible
++            and not json.loads(row["tool_calls"] or "[]")
++            and not json.loads(row["tool_call_uids"] or "[]")
++        )
++        result.append((row, uids, content, eligible))
++    return result
++
++
++def _resolve(db, conn, sid, candidates):
++    rows = _scan(db, conn, sid)
++    refs, previous = [], None
++    for item in candidates:
++        starts = [
++            i
++            for i, (_, uids, _, eligible) in enumerate(rows)
++            if eligible and uids[0] == item["uids"][0]
++        ]
++        _require(len(starts) == 1, "source_mismatch")
++        start = starts[0]
++        _require(previous is None or start == previous, "source_mismatch")
++        row, uids, content, _ = rows[start]
++        end = start + 1
++        if uids != item["uids"]:
++            end = start + len(item["uids"])
++            selected = rows[start:end]
++            _require(
++                item["role"] == "user" and len(selected) == len(item["uids"]),
++                "source_mismatch",
++            )
++            _require(
++                all(
++                    e
++                    and r["role"] == "user"
++                    and len(u) == 1
++                    and not c.startswith("\0json:")
++                    for r, u, c, e in selected
++                ),
++                "source_mismatch",
++            )
++            _require(
++                [u[0] for _, u, _, _ in selected] == item["uids"], "source_mismatch"
++            )
++            content = "\n\n".join(c for _, _, c, _ in selected)
++        _require(
++            row["role"] == item["role"] and content == item["content"],
++            "source_mismatch",
++        )
++        refs.append(
++            [
++                {"id": r["id"], "fingerprint": _fingerprint(r), "uids": u}
++                for r, u, _, _ in rows[start:end]
++            ]
++        )
++        previous = end
++    return refs
++
++
++def _scope(db, sid):
++    from hermes_state import SessionDB
++
++    _require(type(db) is SessionDB, "unsupported_store")
++    _text(sid, 256)
++
++
++def prepare_source_request(
++    db, session_id, attempt_id, candidates, compacted_messages, *, lock_holder=None
++):
++    """Read-only preparation from exact public candidate dictionaries, no schema creation.
++
++    Candidates contain only role/content/uids. A pending constituent cannot be
++    inferred from an identified prefix: exact persisted text must match.
++    """
++    try:
++        _scope(db, session_id)
++        _text(attempt_id, 128)
++        _candidates(candidates)
++        _summaries(compacted_messages)
++        if lock_holder is not None:
++            _text(lock_holder, 128)
++        with db._read_ctx() as conn:
++            conn.execute("BEGIN")
++            try:
++                request = {
++                    "version": 1,
++                    "mode": "owner_in_place",
++                    "session_id": session_id,
++                    "attempt_id": attempt_id,
++                    "revision": _revision(conn, session_id),
++                    "candidates": candidates,
++                    "sources": _resolve(db, conn, session_id, candidates),
++                    "compacted_messages": compacted_messages,
++                    "lock_holder": lock_holder,
++                }
++                return json.loads(_json(request))
++            finally:
++                conn.rollback()
++    except SourceReceiptError:
++        raise
++    except Exception:  # health: allow BLE001 -- redact backend/callback details at the explicit receipt boundary
++        raise SourceReceiptError("prepare_failed") from None
++
++
++def _validate(request, sid):
++    _require(
++        type(request) is dict
++        and set(request)
++        == {
++            "version",
++            "mode",
++            "session_id",
++            "attempt_id",
++            "revision",
++            "candidates",
++            "sources",
++            "compacted_messages",
++            "lock_holder",
++        }
++    )
++    _require(type(request["version"]) is int and request["version"] == 1)
++    _require(request["mode"] == "owner_in_place", "unsupported_mode")
++    _require(request["session_id"] == sid, "wrong_session")
++    _text(request["attempt_id"], 128)
++    _candidates(request["candidates"])
++    _summaries(request["compacted_messages"])
++    if request["lock_holder"] is not None:
++        _text(request["lock_holder"], 128)
++    rev = request["revision"]
++    _require(type(rev) is list and len(rev) == 4 and rev[0] == [sid])
++    _require(all(type(v) is int and 0 <= v < 2**63 for v in rev[1:]))
++    refs = request["sources"]
++    _require(type(refs) is list and len(refs) == len(request["candidates"]))
++    ids = []
++    for group in refs:
++        _require(type(group) is list and 0 < len(group) <= MAX_ROWS)
++        for ref in group:
++            _require(type(ref) is dict and set(ref) == {"id", "fingerprint", "uids"})
++            _require(type(ref["id"]) is int and 0 < ref["id"] < 2**63)
++            _require(
++                type(ref["fingerprint"]) is str
++                and re.fullmatch(r"[0-9a-f]{64}", ref["fingerprint"])
++            )
++            _uids(ref["uids"])
++            ids.append(ref["id"])
++    _require(len(ids) <= MAX_ROWS and ids == sorted(set(ids)))
++    _require(len(_json(request)) <= 1500000, "limit")
++
++
++def _schema(conn):
++    conn.execute(
++        "CREATE TABLE IF NOT EXISTS source_receipts (session_id TEXT, attempt_id TEXT, request_hash TEXT NOT NULL, receipt_id TEXT NOT NULL, source_count INTEGER NOT NULL, active_count INTEGER NOT NULL, invalidated INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(session_id,attempt_id))"
++    )
++    conn.execute(
++        "CREATE TABLE IF NOT EXISTS source_receipt_rows (receipt_id TEXT, row_id INTEGER, PRIMARY KEY(receipt_id,row_id))"
++    )
++    conn.execute(
++        "CREATE INDEX IF NOT EXISTS source_receipt_row_lookup ON source_receipt_rows(row_id)"
++    )
++    columns = [
++        r[1]
++        for r in conn.execute("PRAGMA table_info(messages)")
++        if r[1] != "display_order"
++    ]
++    changed = " OR ".join(f"OLD.{c} IS NOT NEW.{c}" for c in columns)
++    for event, when in (("DELETE", ""), ("UPDATE", " WHEN " + changed)):
++        conn.execute(
++            f"CREATE TRIGGER IF NOT EXISTS source_receipt_{event.lower()} AFTER {event} ON messages{when} BEGIN UPDATE source_receipts SET invalidated=1 WHERE receipt_id IN (SELECT receipt_id FROM source_receipt_rows WHERE row_id=OLD.id); END"
++        )
++
++
++def _historical(row):
++    return {
++        "status": "committed",
++        "receipt_id": row["receipt_id"],
++        "source_count": row["source_count"],
++        "active_count": row["active_count"],
++        "durable_memory_checkpoint": False,
++    }
++
++
++def _commit(db, conn, sid, request, cancelled):
++    _schema(conn)
++    digest = _hash(request)
++    prior = conn.execute(
++        "SELECT * FROM source_receipts WHERE session_id=? AND attempt_id=?",
++        (sid, request["attempt_id"]),
++    ).fetchone()
++    if prior is not None:
++        _require(prior["request_hash"] == digest, "attempt_conflict")
++        return _historical(prior)
++    _require(
++        conn.execute("SELECT COUNT(*) FROM source_receipts").fetchone()[0]
++        < MAX_RECEIPTS,
++        "capacity",
++    )
++    _require(_revision(conn, sid) == request["revision"], "stale_revision")
++    refs = _resolve(db, conn, sid, request["candidates"])
++    _require(refs == request["sources"], "stale_sources")
++    ids = [ref["id"] for group in refs for ref in group]
++    count = conn.execute("SELECT COUNT(*) FROM source_receipt_rows").fetchone()[0]
++    _require(count + len(ids) <= MAX_BINDINGS, "capacity")
++    lease = conn.execute(
++        "SELECT holder, expires_at FROM compression_locks WHERE session_id=?", (sid,)
++    ).fetchone()
++    if lease is not None and lease["expires_at"] > time.time():
++        _require(lease["holder"] == request["lock_holder"], "lease_conflict")
++    if request["lock_holder"] is not None:
++        _require(
++            lease is not None
++            and lease["holder"] == request["lock_holder"]
++            and lease["expires_at"] > time.time(),
++            "lease_lost",
++        )
++    if cancelled is not None:
++        _require(cancelled() is False, "cancelled")
++    # Always concrete nonempty covered_ids and no unresolved inputs: no watermark fallback.
++    summaries = [
++        {**item, "_compressed_summary": True} for item in request["compacted_messages"]
++    ]
++    active = db._archive_and_compact_on_conn(
++        conn, sid, summaries, covered_ids=ids, lock_holder=request["lock_holder"]
++    )
++    receipt_id = _hash([sid, request["attempt_id"], digest])
++    conn.execute(
++        "INSERT INTO source_receipts VALUES (?,?,?,?,?,?,0)",
++        (sid, request["attempt_id"], digest, receipt_id, len(ids), active),
++    )
++    conn.executemany(
++        "INSERT INTO source_receipt_rows VALUES (?,?)",
++        [(receipt_id, rid) for rid in ids],
++    )
++    return {
++        "status": "committed",
++        "receipt_id": receipt_id,
++        "source_count": len(ids),
++        "active_count": active,
++        "durable_memory_checkpoint": False,
++    }
++
++
++def commit_source_request(db, session_id, request, *, cancelled=None):
++    """Explicit local owner API. Cancellation is admission only, not post-admission.
++
++    Unknown write outcomes are reconciled with the SAME request, never a new key.
++    No worker, rotation, canonical mutation or app-server route accepts this API.
++    """
++    try:
++        _scope(db, session_id)
++        _require(not db.read_only, "read_only")
++        _validate(request, session_id)
++        _require(cancelled is None or callable(cancelled))
++        request = json.loads(_json(request))
++        return db._execute_transcript_write(
++            lambda conn: _commit(db, conn, session_id, request, cancelled),
++            request["compacted_messages"],
++        )
++    except SourceReceiptError:
++        raise
++    except Exception:  # health: allow BLE001 -- redact backend/callback details at the explicit receipt boundary
++        raise SourceReceiptError("commit_failed_reconcile_same_attempt") from None
++
++
++def source_receipt_status(db, session_id, attempt_id):
++    """One read snapshot; never initialize schema, restore text or grant authority."""
++    try:
++        _scope(db, session_id)
++        _text(attempt_id, 128)
++        with db._read_ctx() as conn:
++            conn.execute("BEGIN")
++            try:
++                if not conn.execute(
++                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='source_receipts'"
++                ).fetchone():
++                    return {"status": "absent", "available": False}
++                row = conn.execute(
++                    "SELECT * FROM source_receipts WHERE session_id=? AND attempt_id=?",
++                    (session_id, attempt_id),
++                ).fetchone()
++                if row is None:
++                    return {"status": "absent", "available": False}
++                triggers = conn.execute(
++                    "SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND name IN ('source_receipt_update','source_receipt_delete')"
++                ).fetchone()[0]
++                count = conn.execute(
++                    "SELECT COUNT(*) FROM source_receipt_rows b JOIN messages m ON m.id=b.row_id WHERE b.receipt_id=? AND m.session_id=? AND m.active=0 AND m.compacted=1",
++                    (row["receipt_id"], session_id),
++                ).fetchone()[0]
++                available = (
++                    not row["invalidated"]
++                    and triggers == 2
++                    and count == row["source_count"]
++                )
++                return {
++                    **_historical(row),
++                    "status": "committed_available"
++                    if available
++                    else "invalidated_or_unknown",
++                    "available": bool(available),
++                }
++            finally:
++                conn.rollback()
++    except SourceReceiptError:
++        raise
++    except Exception:  # health: allow BLE001 -- redact backend/callback details at the explicit receipt boundary
++        raise SourceReceiptError("status_unknown") from None
