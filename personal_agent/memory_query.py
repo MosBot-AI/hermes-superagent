@@ -80,9 +80,9 @@ _HAN = re.compile(r"^[\u3400-\u4dbf\u4e00-\u9fff]+$")
 # Recognize whole, single-clause questions before the legacy character splitter.
 # Slots stay verbatim; these are grammatical markers, never domain/name aliases.
 _QUESTION_END = r"(?:[？?！!。]+)?"
-_WHO = re.compile(r"(.+?)\s*(?:由)?谁\s*([^\W_]+)" + _QUESTION_END + r"$")
+_WHO = re.compile(r"(.+?)\s*(?:由)?谁\s*([^\W_]+?)(?:呢|吗)?" + _QUESTION_END + r"$")
 _CHOICE = re.compile(
-    r"(.+?)(?:喜欢|想要)(?:哪种|哪类|什么类型的)\s*([^\W_]+)" + _QUESTION_END + r"$"
+    r"(.+?)(?:喜欢|想要)(?:哪种|哪类|什么类型的)\s*([^\W_]+?)(?:呢|吗)?" + _QUESTION_END + r"$"
 )
 _ATTRIBUTE = re.compile(
     r"(.+?)(?:现在|目前)?(?:是|在|为|有)?"
@@ -90,7 +90,7 @@ _ATTRIBUTE = re.compile(
     r"(?:呢|吗)?" + _QUESTION_END + r"$"
 )
 _PREFIX = re.compile(r"^(?:请问|请告诉我|告诉我|我想知道)\s*")
-_SINGLE_CLAUSE = re.compile(r"^[\w\s?？!！。-]+$")
+_SINGLE_CLAUSE = re.compile(r"^[\w\s-]+[?？!！。]*$")
 
 
 def _slot_terms(slot):

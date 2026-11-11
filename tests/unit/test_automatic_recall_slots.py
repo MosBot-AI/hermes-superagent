@@ -12,6 +12,8 @@ from personal_agent.memory_query import automatic_recall_terms, filter_automatic
     [
         ("Comet delivery 谁管理", ["Comet", "delivery", "管理"]),
         ("Comet delivery 由谁管理？", ["Comet", "delivery", "管理"]),
+        ("Comet delivery 由谁管理呢？", ["Comet", "delivery", "管理"]),
+        ("沈望喜欢哪种小说吗？", ["沈望", "小说"]),
         ("我喜欢哪类小说？", ["小说"]),
         ("沈望喜欢哪种小说", ["沈望", "小说"]),
         ("请问会宁的读书会地点是哪里？", ["会宁", "读书会地点"]),
@@ -72,3 +74,18 @@ def test_unrecognized_multiclause_input_keeps_historical_planner():
     # Do not pretend that a single-clause recognizer parses an arbitrary request.
     assert automatic_recall_terms("我不喝咖啡，早餐选什么？") == ["咖啡", "早餐选"]
     assert automatic_recall_terms("王明 生日") == ["王明", "生日"]
+
+
+def test_multiple_sentences_do_not_gain_required_slot_interpretation():
+    query = "沈望的生日是什么？会宁的地址在哪里？"
+    terms = automatic_recall_terms(query)
+    assert terms == ["沈望", "生日", "宁", "地址"]
+    data = {
+        "items": [{"matched_queries": [0, 1]}],
+        "omitted_records": 0,
+        "items_json_chars": 0,
+    }
+    assert (
+        "required_query_indices"
+        not in filter_automatic_recall(data, query, terms)["automatic_filter"]
+    )
