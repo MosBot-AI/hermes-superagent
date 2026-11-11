@@ -15,8 +15,8 @@ import tempfile
 from pathlib import Path
 
 ARTIFACT = Path(__file__).resolve().parent
-PATCH_SHA256 = "97e4acd85091f64e693185a195c9141bd5faa43a3c23896ba635564966e372d8"
-BASE = "90d6b98fd86d20981ee06ddd5b7d93e4320f26a4"
+PATCH_SHA256 = "7407e37482e44c95bbc7093ccf097cca30ca3351d253e9367905eb944cc279f8"
+BASE = "2281116525106e3c109993ccb5dc74d02bfc1427"
 
 
 def git(checkout, *args):
@@ -59,6 +59,8 @@ def verify(checkout):
     )
     if staged != patch:
         raise ValueError("Staged diff must exactly equal the bundled reviewed patch")
+    if git(checkout, "write-tree").decode().strip() != manifest["staged_tree"]:
+        raise ValueError("Staged tree must exactly equal the reviewed manifest tree")
     for name, digest in manifest["source_hashes"].items():
         if hashlib.sha256((ARTIFACT / name).read_bytes()).hexdigest() != digest:
             raise ValueError("Experiment source checksum mismatch")
@@ -66,6 +68,16 @@ def verify(checkout):
         if hashlib.sha256((ARTIFACT.parents[1] / name).read_bytes()).hexdigest() != digest:
             raise ValueError("Production worker source checksum mismatch")
     return manifest
+
+
+def verify_clean(checkout):
+    if git(checkout, "rev-parse", "HEAD").decode().strip() != BASE:
+        raise ValueError("Clean host must use the exact current pin")
+    entries = git(checkout, "ls-files", "-v", "-z").split(b"\0")
+    if any(entry and (entry[:1].islower() or entry[:1] == b"S") for entry in entries):
+        raise ValueError("Clean host index flags are not permitted")
+    if git(checkout, "status", "--porcelain", "--untracked-files=all"):
+        raise ValueError("Clean host must have no changed or untracked files")
 
 
 def main():
@@ -105,10 +117,10 @@ def main():
     if args.clean_checkout is None:
         parser.error("--clean-checkout is required for production-entrypoint tests")
     clean = args.clean_checkout.resolve()
-    if git(clean, "rev-parse", "HEAD").decode().strip() != BASE or git(
-        clean, "diff", "HEAD", "--name-only"
-    ):
-        parser.error("--clean-checkout must be the unchanged pinned host")
+    try:
+        verify_clean(clean)
+    except (ValueError, OSError, subprocess.CalledProcessError) as exc:
+        parser.exit(2, f"Refusing clean host: {exc}\n")
     if not interpreter.is_file() or not os.access(interpreter, os.X_OK):
         parser.exit(2, "An existing executable interpreter is required; nothing installed.\n")
     with tempfile.TemporaryDirectory(prefix="text-worker-tests-") as home:
@@ -179,6 +191,7 @@ def main():
                 "pytest",
                 str(ARTIFACT / "test_production_entrypoint.py"),
                 "-q",
+                "-s",
                 "--tb=short",
             ],
             cwd=clean,

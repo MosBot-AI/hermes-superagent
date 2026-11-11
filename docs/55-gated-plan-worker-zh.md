@@ -2,6 +2,8 @@
 
 [English](55-gated-plan-worker.md) | 简体中文
 
+[当前基线候选](101-current-host-text-worker-zh.md)仍仅供审阅。冻结的 managed-worker 配置和隔离 plugin-host 代理不受支持，候选不证明 Gateway 规划 worker 可用。后续干净宿主运行包验收不意味着 worker 宿主安装或验收完成。
+
 ## 包级集成，不等于部署验收
 
 本次把经过审阅的纯文本任务消费者、持久账本及展示移入生产包，并连接真实插件入口，不代表安装插件或上游采纳宿主补丁。正式干净宿主基线 `2281116525106e3c109993ccb5dc74d02bfc1427` 缺少所需 API/权限，必须不注册规划 worker。

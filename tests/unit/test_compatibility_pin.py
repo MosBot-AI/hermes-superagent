@@ -1,4 +1,4 @@
-"""Current runtime pins agree; historical proposals retain their exact base."""
+"""Current runtime and review-only candidate pins agree; history stays labeled."""
 
 import json
 import subprocess
@@ -21,15 +21,18 @@ def test_current_pin_matches_runtime_and_workflow():
         assert f"checkout --detach {expected}" in (ROOT / filename).read_text()
 
 
-def test_historical_proposal_uses_own_clean_source_and_interpreter():
+def test_worker_proposal_uses_current_clean_source_and_interpreter():
     manifest = json.loads((ROOT / "experiments/text-worker/manifest.json").read_text())
+    expected = json.loads((ROOT / "compatibility.json").read_text())["hermes_commit"]
+    assert manifest["base"] == expected
+    assert manifest["historical_evidence"]["base"] != expected
     workflow = (ROOT / ".github/workflows/check.yml").read_text()
     proposal = workflow.split("Verify gated worker on separate disposable proposed host")[1]
     proposal = proposal.split("      - name:")[0]
-    assert f'worktree add --detach "$legacy" {manifest["base"]}' in proposal
-    assert '--clean-checkout "$legacy"' in proposal
-    assert '--python "$RUNNER_TEMP/proposal-test-venv/bin/python"' in proposal
-    assert 'pm.build_env --source "$legacy"' in proposal
+    assert f'worktree add --detach "$proposed" {expected}' in proposal
+    assert '--clean-checkout "$RUNNER_TEMP/hermes"' in proposal
+    assert '--python "$RUNNER_TEMP/hermes-test-venv/bin/python"' in proposal
+    assert "proposal-test-venv" not in proposal and "legacy" not in proposal
 
 
 def test_workflow_shell_fragments_parse():

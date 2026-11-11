@@ -2,6 +2,8 @@
 
 English | [简体中文](55-gated-plan-worker-zh.md)
 
+The [current-pin candidate](101-current-host-text-worker.md) remains review-only. Frozen managed-worker configuration and isolated plugin-host proxies are unsupported; the candidate does not establish a usable Gateway planning worker. Later clean-host runtime-package acceptance does not imply worker-host installation or acceptance.
+
 ## Package integration, not deployment acceptance
 
 This slice moves the reviewed text-only task consumer, durable ledger and presentation into the production package and connects them to the real plugin entrypoint. It does not install the plugin or adopt the host patch upstream. The supported clean host pin `2281116525106e3c109993ccb5dc74d02bfc1427` lacks the required API/capability and must register no planning worker.

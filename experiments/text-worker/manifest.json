@@ -1,27 +1,28 @@
 {
   "schema_version": 1,
-  "status": "Review-only host proposal with default-off production-package consumer; host adoption gated",
-  "base": "90d6b98fd86d20981ee06ddd5b7d93e4320f26a4",
-  "staged_tree": "5c68618187f2a6d168ab8eeb11efe8cb259d8139",
+  "status": "Review-only current-pin offline adoption candidate; production default-off and host adoption gated",
+  "base": "2281116525106e3c109993ccb5dc74d02bfc1427",
+  "staged_tree": "085c9e00d45743bdeee87a023eb4302f82540cca",
   "patch_file": "text-worker-prototype.patch",
-  "patch_sha256": "97e4acd85091f64e693185a195c9141bd5faa43a3c23896ba635564966e372d8",
-  "changed_files": 8,
+  "patch_sha256": "7407e37482e44c95bbc7093ccf097cca30ca3351d253e9367905eb944cc279f8",
+  "changed_files": 9,
   "patch_files": [
     "agent/subagent_lifecycle.py",
     "agent/text_subagent.py",
     "hermes_cli/middleware.py",
     "hermes_cli/plugin_capabilities.py",
-    "hermes_cli/plugins.py",
     "hermes_cli/plugins_capability_ctx.py",
+    "hermes_cli/plugins_context.py",
+    "hermes_cli/text_worker_consent.py",
     "tests/agent/test_text_subagent.py",
     "tests/hermes_cli/test_plugin_capabilities.py"
   ],
   "source_hashes": {
-    "consumer.py": "128deac4bbf39d0ce71cd4d07b77633a0617e168c3e66789f9f0f5759382cd2b",
+    "consumer.py": "526db38c7bd8ad3e3d5b75aa735a725061753a0b0a91dca515d57b30f9953629",
     "worker_ledger.py": "bd40dfdc14fda232b160d0b558089603cab5dbb3e638cdf39f53cb191b400e79",
     "worker_presentation.py": "a3b3fb4e6e42739dfc03077d7aac26675f45dc4f405a10568702874526e395bd",
     "test_task_worker.py": "1db866d4a7cb346c8bc5eb51497c15dfbf1c339a196d648bed3ee8d5d92d6d9c",
-    "test_production_entrypoint.py": "8fbe7112dcc13eb47d3291fae856d01ff0432e1d27ba39912cb8e9e8428104a0"
+    "test_production_entrypoint.py": "9c06c4450f9c6c97428dd8cf37a4022cef3df2d6bff1936322ba54dcaac5a986"
   },
   "artifact_files": [
     "LICENSE.hermes-agent",
@@ -43,29 +44,32 @@
     "tests/hermes_cli/test_plugin_capabilities.py",
     "tests/agent/test_plugin_llm.py",
     "tests/agent/test_plugin_llm_task_routing.py",
-    "tests/hermes_cli/test_plugin_api_compat.py"
+    "tests/hermes_cli/test_plugin_api_compat.py",
+    "tests/hermes_cli/test_plugin_hook_failure_reporting.py"
   ],
   "selected_suite": {
-    "host_passed": 248,
+    "status": "Passed current-pin offline reviewed lane",
+    "host_passed": 280,
     "consumer_passed": 109,
-    "passed": 357,
+    "passed": 389,
     "failed": 0,
     "skipped": 0,
     "retries": 0,
     "full_upstream_suite": false
   },
   "static_checks": {
-    "passed": 14,
+    "status": "Passed bundle integrity and current-pin workflow guards",
+    "passed": 22,
     "failed": 0
   },
   "submitted_upstream": false,
   "restricted_gateway_sockets_retried": false,
   "environment": {
     "python": "3.14.9",
-    "installed_package_count": 89,
-    "installed_packages_sha256": "a7f231e19ab48389c43700b8bbfd489b3ddde43f11ad98d800103e0cd04ab0b9",
-    "hermes_uv_lock_sha256": "5057a8a3cbc6d2b1f2059d66e27ffa43f447021f89779599dca416056574c064",
-    "environment_origin": "Existing caller-supplied PM test environment; no packages installed or modified",
+    "installed_package_count": 87,
+    "installed_packages_sha256": "a2f640fd3048c40d228514fc6456d2f7fa7e29700f161815e39e037462dfa86a",
+    "hermes_uv_lock_sha256": "79c8ec9f62dd3a7ec221a61c04912b6a1bc3fd43840d25838a4a0975dee061be",
+    "environment_origin": "Existing caller-supplied current-pin PM test environment; no packages installed or modified",
     "lock_environment_equivalence_attested": false
   },
   "limits": [
@@ -87,7 +91,12 @@
     "Native exec output uses audited client display paths, not model submission; clients may cache it and live UI acceptance remains untested",
     "Fixed terminal failure diagnostics and local callback attempt counts do not establish remote delivery, billing, cancellation or retry eligibility; old receipts without diagnostics remain unchanged",
     "Text capability is consent-only llm.text_worker and bound to the originating manager profile; runtime never auto-grants it",
-    "Cold isolated package loading and task-to-draft flow are verified offline with MockTransport, not by an official installation or live model"
+    "Cold isolated package loading and task-to-draft flow are verified offline with MockTransport, not by an official installation or live model",
+    "Managed worker processes, including ordinary non-safe frozen-config sessions, are explicitly unsupported; profile edits cannot provide live revocation there",
+    "FailedConfigRead last-known-good grants and known ConfigBackendUnavailable outages confer no text-worker authority",
+    "Isolated RemoteFacade plugins remain unsupported; no static contract-marker bypass or isolation change",
+    "Current-pin offline adoption preparation only: upstream/fork selection, installation and Gateway activation require separate decisions and acceptance",
+    "Host dispatchers may fail on independent config reads before reaching the consumer; this candidate does not change global hook failure behavior"
   ],
   "clean_base_apply_check": true,
   "live_model_acceptance_passed": false,
@@ -96,43 +105,8 @@
     "network_requests": false,
     "sockets_opened": false
   },
-  "live_transport_probe": {
-    "scope": "One explicitly authorized synthetic transport request, not native worker activation",
-    "status": "ConnectError; no HTTP status or model response; delivery unconfirmed",
-    "submission_attempted": true,
-    "official_credential_resolver_used": true,
-    "provider": "opencode-go",
-    "model": "deepseek-v4.1-flash",
-    "endpoint": "https://opencode.ai/inference/go/openai/v1",
-    "config_yaml_unchanged": true,
-    "whole_profile_unchanged_attested": false,
-    "retries": 0,
-    "gateway_used": false,
-    "acceptance_passed": false,
-    "host_text_transport_sha256_at_attempt": "8c817eacd1a421cc02b616611736533188d7aa2fed7f81e1dea3d1ed188a9958"
-  },
-  "official_install_attempt": {
-    "scope": "Production repository at local d4581ce (same tree as published 7c6b11b), fresh credential-free profile",
-    "status": "Scanner CAUTION, exit 1; not installed or enabled",
-    "scanner_findings": 50,
-    "override_or_retry": false,
-    "plugin_absent_after_attempt": true
-  },
-  "extended_host_regression": {
-    "files": 14,
-    "passed": 422,
-    "failed": 1,
-    "skipped": 0,
-    "retries": 0,
-    "full_upstream_suite": false,
-    "failure": "tests/tools/test_delegate.py::test_child_dedicated_db_follows_parents_db_path",
-    "failure_reproduced_on_clean_base": true,
-    "reason": "Environment /var/tmp -> /tmp alias: parent/child database path strings differ; unmodified canonical runner uses /var/tmp",
-    "source_or_assertion_changed_to_pass": false,
-    "historical": true
-  },
   "production_source_hashes": {
-    "personal_agent/task_plan_worker.py": "13b28460126a455bda982780c9460beeec48b94b6522cd14236d39a0b4c79d0f",
+    "personal_agent/task_plan_worker.py": "3bfc75251d1466e761626f3168c4fc30348ebd1cc19a771bd07a471ed5e93cc0",
     "personal_agent/task_worker_ledger.py": "c3a3ff59aeff48bd3e4bf08277f69ad74677bdaa8c7650ca7a72cb946a7c49f0",
     "personal_agent/task_worker_presentation.py": "97aa7c5367e61bba187e40edab4f4b62604c027a62ee4de21a7f20767f37dd3d"
   },
@@ -140,13 +114,110 @@
   "installed_or_live_runtime_integrated": false,
   "contract_marker": "hermes.text-worker.v1",
   "production_entrypoint_suite": {
-    "clean_host_passed": 4,
-    "patched_host_passed": 23,
+    "status": "Passed current-pin cold isolated production-entrypoint lanes",
+    "clean_host_passed": 5,
+    "patched_host_passed": 28,
     "outer_harness_passed": 2,
     "failed": 0,
     "skipped": 0,
     "retries": 0,
     "cold_isolated_shipped_package": true,
     "live_calls": false
+  },
+  "historical_evidence": {
+    "status": "Historical old-pin evidence only; not rerun or attributed to the current-pin candidate",
+    "base": "90d6b98fd86d20981ee06ddd5b7d93e4320f26a4",
+    "staged_tree": "5c68618187f2a6d168ab8eeb11efe8cb259d8139",
+    "patch_sha256": "97e4acd85091f64e693185a195c9141bd5faa43a3c23896ba635564966e372d8",
+    "source_hashes": {
+      "consumer.py": "128deac4bbf39d0ce71cd4d07b77633a0617e168c3e66789f9f0f5759382cd2b",
+      "worker_ledger.py": "bd40dfdc14fda232b160d0b558089603cab5dbb3e638cdf39f53cb191b400e79",
+      "worker_presentation.py": "a3b3fb4e6e42739dfc03077d7aac26675f45dc4f405a10568702874526e395bd",
+      "test_task_worker.py": "1db866d4a7cb346c8bc5eb51497c15dfbf1c339a196d648bed3ee8d5d92d6d9c",
+      "test_production_entrypoint.py": "8fbe7112dcc13eb47d3291fae856d01ff0432e1d27ba39912cb8e9e8428104a0"
+    },
+    "production_source_hashes": {
+      "personal_agent/task_plan_worker.py": "13b28460126a455bda982780c9460beeec48b94b6522cd14236d39a0b4c79d0f",
+      "personal_agent/task_worker_ledger.py": "c3a3ff59aeff48bd3e4bf08277f69ad74677bdaa8c7650ca7a72cb946a7c49f0",
+      "personal_agent/task_worker_presentation.py": "97aa7c5367e61bba187e40edab4f4b62604c027a62ee4de21a7f20767f37dd3d"
+    },
+    "selected_suite": {
+      "host_passed": 248,
+      "consumer_passed": 109,
+      "passed": 357,
+      "failed": 0,
+      "skipped": 0,
+      "retries": 0,
+      "full_upstream_suite": false
+    },
+    "static_checks": {
+      "passed": 14,
+      "failed": 0
+    },
+    "environment": {
+      "python": "3.14.9",
+      "installed_package_count": 89,
+      "installed_packages_sha256": "a7f231e19ab48389c43700b8bbfd489b3ddde43f11ad98d800103e0cd04ab0b9",
+      "hermes_uv_lock_sha256": "5057a8a3cbc6d2b1f2059d66e27ffa43f447021f89779599dca416056574c064",
+      "environment_origin": "Existing caller-supplied PM test environment; no packages installed or modified",
+      "lock_environment_equivalence_attested": false
+    },
+    "live_transport_probe": {
+      "scope": "One explicitly authorized synthetic transport request, not native worker activation",
+      "status": "ConnectError; no HTTP status or model response; delivery unconfirmed",
+      "submission_attempted": true,
+      "official_credential_resolver_used": true,
+      "provider": "opencode-go",
+      "model": "deepseek-v4.1-flash",
+      "endpoint": "https://opencode.ai/inference/go/openai/v1",
+      "config_yaml_unchanged": true,
+      "whole_profile_unchanged_attested": false,
+      "retries": 0,
+      "gateway_used": false,
+      "acceptance_passed": false,
+      "host_text_transport_sha256_at_attempt": "8c817eacd1a421cc02b616611736533188d7aa2fed7f81e1dea3d1ed188a9958"
+    },
+    "official_install_attempt": {
+      "scope": "Production repository at local d4581ce (same tree as published 7c6b11b), fresh credential-free profile",
+      "status": "Scanner CAUTION, exit 1; not installed or enabled",
+      "scanner_findings": 50,
+      "override_or_retry": false,
+      "plugin_absent_after_attempt": true
+    },
+    "extended_host_regression": {
+      "files": 14,
+      "passed": 422,
+      "failed": 1,
+      "skipped": 0,
+      "retries": 0,
+      "full_upstream_suite": false,
+      "failure": "tests/tools/test_delegate.py::test_child_dedicated_db_follows_parents_db_path",
+      "failure_reproduced_on_clean_base": true,
+      "reason": "Environment /var/tmp -> /tmp alias: parent/child database path strings differ; unmodified canonical runner uses /var/tmp",
+      "source_or_assertion_changed_to_pass": false,
+      "historical": true
+    },
+    "production_entrypoint_suite": {
+      "clean_host_passed": 4,
+      "patched_host_passed": 23,
+      "outer_harness_passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "retries": 0,
+      "cold_isolated_shipped_package": true,
+      "live_calls": false
+    },
+    "offline_selected_suite": {
+      "credentials_used": false,
+      "network_requests": false,
+      "sockets_opened": false
+    },
+    "retained_from_superagent_commit": "73542b5a7b0ecebbbabdb334af319dd037236f6b"
+  },
+  "current_pin_attempts": {
+    "provider_requests_attempted": 0,
+    "installation_attempted": false,
+    "gateway_activation_attempted": false,
+    "sockets_opened": false
   }
 }

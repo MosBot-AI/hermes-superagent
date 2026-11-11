@@ -100,6 +100,81 @@ def test_production_unknown_claim_survives_reload_without_duplicate(host, monkey
     assert len(host.requests) == 1
 
 
+@pytest.mark.parametrize("fail_on_read", [1, 4])
+@pytest.mark.parametrize("state", ["pending", "completed"])
+def test_production_config_backend_outage_fails_closed(host, monkeypatch, fail_on_read, state):
+    from hermes_cli import plugins
+    from hermes_cli.config_backend import ConfigBackendUnavailable
+    allow(host)
+    if state == "completed":
+        with native_turn(host):
+            assert invoke(host)["status"] == "ok"
+            assert wait(host).completed
+            assert invoke(host, action="result")["data"]["draft"]
+    original = plugins.load_config_readonly
+    reads = []
+    def unavailable():
+        reads.append(1)
+        if len(reads) == fail_on_read:
+            raise ConfigBackendUnavailable("synthetic-private-outage")
+        return original()
+    monkeypatch.setattr(plugins, "load_config_readonly", unavailable)
+    # Call the installed-shaped consumer directly: the upstream dispatcher has
+    # independent config reads before this candidate can receive the operation.
+    result = direct(host, host.consumer, "launch" if state == "pending" else "result")
+    assert result["status"] == "error" and result["data"] is None
+    assert result["error"]["code"] == "worker_unavailable"
+    assert "synthetic-private-outage" not in json.dumps(result)
+    monkeypatch.setattr(plugins, "load_config_readonly", original)
+    if state == "pending":
+        assert all(grant.state == "revoked" for grant in host.consumer.grants.values())
+        assert direct(host, host.consumer)["data"]["state"] == "revoked"
+        host.manager.discover_and_load(force=True)
+        host.consumer = host.manager._plugin_commands["personal-plan-worker"]["handler"].__self__
+        assert direct(host, host.consumer)["data"]["state"] == "revoked"
+    else:
+        assert direct(host, host.consumer, "result")["data"]["draft"]
+    assert len(host.requests) == (state == "completed")
+
+
+def test_isolated_plugin_remote_facade_remains_unsupported(host):
+    import importlib
+    from hermes_cli.plugin_host_child import RemotePluginContext
+    consumer = importlib.import_module(type(host.consumer).__module__)
+    plugin = importlib.import_module(consumer.__package__ + ".plugin")
+    calls = []
+    class Runtime:
+        def facade_call(self, *args, **kwargs):
+            calls.append((args, kwargs))
+            raise AssertionError("Static host-contract refusal must precede RPC")
+    remote = RemotePluginContext(Runtime(), PLUGIN_ID, {"plugin_id": PLUGIN_ID})
+    service = remote.subagent_lifecycle
+    with pytest.raises(consumer.TaskError, match="plan_worker_host_unsupported"):
+        consumer.require_host_contract(service)
+    assert plugin.plan_worker_host_status(remote) == "unsupported_host"
+    assert not calls
+
+
+def test_clean_host_explicit_opt_in_never_registers(native, monkeypatch):
+    from agent.subagent_lifecycle import SubagentLifecycleService
+    assert not hasattr(SubagentLifecycleService, "text_worker_contract")
+    home, manager = native
+    config = json.loads((home / "config.yaml").read_text())
+    entry = config["plugins"]["entries"][PLUGIN_ID]
+    entry["settings"].update(local_model_tools=True, plan_worker=True)
+    entry["granted_capabilities"] = ["llm.text_worker"]
+    (home / "config.yaml").write_text(json.dumps(config))
+    def load(manager):
+        manager.discover_and_load()
+        loaded = manager._plugins[PLUGIN_ID]
+        assert loaded.error is None, loaded.error
+        assert "personal-plan-worker" not in manager._plugin_commands
+        assert "personal_task_plan_preview" not in loaded.tools_registered
+        assert "personal_tasks_read" in loaded.tools_registered
+    monkeypatch.setattr("test_local_conversation_tasks.load", load)
+    make_host(home, manager)
+
+
 def test_production_module_origins(host):
     import importlib
     consumer = importlib.import_module(type(host.consumer).__module__)
@@ -132,8 +207,12 @@ for name in ("connect", "connect_ex", "bind", "listen", "sendto", "sendmsg"):
 socket.getaddrinfo = deny
 import pytest
 selection = "test_production_gate_keeps_ordinary_features"
+if lane == "clean":
+    selection += " or test_clean_host_explicit_opt_in_never_registers"
 if lane == "patched":
     selection += (" or test_production_module_origins"
+      " or test_isolated_plugin_remote_facade_remains_unsupported"
+      " or test_production_config_backend_outage_fails_closed"
       " or test_production_consent_revoked_before_launch"
       " or test_production_projection_excludes_ungranted_metadata"
       " or test_production_unknown_claim_survives_reload_without_duplicate"
