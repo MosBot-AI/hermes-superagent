@@ -109,7 +109,7 @@ def test_schema10_upgrade_no_backfill_and_readonly_no_migration(tmp_path):
     assert list(conn.iterdump()) == old
     conn.close()
     backend, conn = opened(path)
-    assert conn.execute("PRAGMA user_version").fetchone() == (12,)
+    assert conn.execute("PRAGMA user_version").fetchone() == (13,)
     assert conn.execute("SELECT * FROM memory_source_lineage").fetchall() == []
     assert conn.execute("SELECT * FROM memory_source_suppressions").fetchall() == []
     assert MemoryService(backend).execute("candidate_accept", accept_args(cid))["replayed"]

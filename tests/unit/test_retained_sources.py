@@ -12,8 +12,8 @@ from personal_agent.memory_backend import MemoryError, MemoryService
 from personal_agent.memory_sdk import LocalBinding, LocalMemorySDK, source_request_identity
 
 
-def request(key="import", content="Synthetic original", **updates):
-    return {
+def request(key="import", content="Synthetic original", *, observed=False, **updates):
+    payload = {
         "request_id": key,
         "consumer_id": "native-source",
         "expected_sequence": 0,
@@ -29,6 +29,12 @@ def request(key="import", content="Synthetic original", **updates):
         },
         **updates,
     }
+
+    if observed:
+        source = payload["source"]
+        source["kind"] = "observed_native_snapshot"
+        source["observation_id"] = source.pop("receipt_id")
+    return payload
 
 
 @contextmanager
@@ -88,9 +94,10 @@ def test_corrupt_evidence_never_success_or_absence(sql, operation):
 
 
 @pytest.mark.parametrize("mutation", ["correct", "forget", "source_discard"])
-def test_retained_suppression_purges_current_input_drafts(mutation):
+@pytest.mark.parametrize("observed", [False, True])
+def test_retained_suppression_purges_current_input_drafts(mutation, observed):
     with opened() as (sdk, backend, connection):
-        payload = request()
+        payload = request(observed=observed)
         if mutation == "source_discard":
             sdk.execute("source_stage", payload)
         else:
@@ -146,9 +153,10 @@ def test_retained_suppression_purges_current_input_drafts(mutation):
             )
 
 
-def test_candidate_suppression_blocks_previously_staged_source():
+@pytest.mark.parametrize("observed", [False, True])
+def test_candidate_suppression_blocks_previously_staged_source(observed):
     with opened() as (sdk, backend, _):
-        payload = request()
+        payload = request(observed=observed)
         sdk.execute("source_stage", payload)
         backend._source_kind = "activated_session_model"
         service = MemoryService(backend)

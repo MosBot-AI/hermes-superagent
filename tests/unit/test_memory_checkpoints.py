@@ -279,7 +279,7 @@ def test_upgrade_is_atomic_including_all_earlier_migrations(version, schema):
     conn.set_authorizer(None)
     assert list(conn.iterdump()) == before
     backend.open(conn, namespace_id="progress-test", session_ref="s")
-    assert conn.execute("PRAGMA user_version").fetchone() == (12,)
+    assert conn.execute("PRAGMA user_version").fetchone() == (13,)
     assert capture(backend)["data"]["record_count"] == 0
     backend.close()
     conn.close()

@@ -4,6 +4,8 @@
 
 ## 已实现的边界
 
+后续的[显式保留观察来源](98-observed-source-retention-zh.md)以独立、如实标记的 `observed_native_snapshot` 来源增加原生 LOCAL 命令及 schema-13 迁移。下文描述 #133 的回执路径和共享接受协议；其旧来源、摘要与历史输出保持不变。“不是原生命令”仅描述原始 #133 切片，不适用于新增的 #137 命令。
+
 [Issue #133](https://github.com/MosBot-AI/hermes-superagent/issues/133) 新增实际的规范 SQLite 接受操作，用于接受明确保留的原生原始来源。这是 Memory SDK API-v1 的可选操作族，包含 schema-12 可写迁移，以及一个读取[回执绑定来源提案](94-receipt-source-reads-zh.md)的隔离可运行消费端。它不是自动摄取、新模型工具、原生命令、HTTP 路由、宿主采纳、安装或生产启用。宿主兼容性固定版本仍为 `2281116525106e3c109993ccb5dc74d02bfc1427`。
 
 可信本地操作员必须另外授权将选定来源作为独立快照保留，并选择规范记忆的保留方式：明确的 `expires_at` 时间戳或明确的 null。必填的 `retention: independent_snapshot` 字段记录这种导入语义，但不认证用户，也不会把模型载荷变成许可。SDK 绑定和规范写入端都要求现有的 `explicit_local_operator` 路径。模型绑定和只读写入端不能借用这种权限。经审查的进程内 Python 仍是可信代码，不是防范伪造来源或绑定的沙箱。

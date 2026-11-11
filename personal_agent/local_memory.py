@@ -27,7 +27,7 @@ from .memory_checkpoints import CHECKPOINT_SCHEMA, checkpoint_status, create_che
 from .memory_progress import PROGRESS_SCHEMA, advance_consumer, get_changes, get_consumer
 
 _APPLICATION_ID = 0x50414D45
-_SCHEMA_VERSION = 12
+_SCHEMA_VERSION = 13
 _SCHEMA_V1 = {
     "namespace": "CREATE TABLE namespace (id TEXT PRIMARY KEY NOT NULL)",
     "records": """CREATE TABLE records (
@@ -72,6 +72,7 @@ _SCHEMA_V8 = {**_SCHEMA_V7, **memory_projection.SCHEMA}
 _SCHEMA_V9 = {**_SCHEMA_V8, **memory_edits.SCHEMA_V9}
 _SCHEMA_V10 = {**_SCHEMA_V8, **memory_edits.SCHEMA}
 _SCHEMA_V11 = {**_SCHEMA_V10, **memory_sources.SCHEMA}
+_SCHEMA_V12 = {**_SCHEMA_V11, **retained_sources.SCHEMA_V12}
 _SCHEMA = {**_SCHEMA_V11, **retained_sources.SCHEMA}
 
 _COLUMNS = (
@@ -285,6 +286,19 @@ class LocalMemoryBackend:
                 for sql in retained_sources.SCHEMA.values():
                     connection.execute(sql)
                 connection.execute(f"PRAGMA user_version={_SCHEMA_VERSION}")
+            if version == 12:
+                connection.execute(
+                    "ALTER TABLE retained_source_decisions RENAME TO retained_source_decisions_v12"
+                )
+                connection.execute(retained_sources.SCHEMA["retained_source_decisions"])
+                connection.execute(
+                    "INSERT INTO retained_source_decisions SELECT "
+                    "request_id,consumer_id,source_sequence,request_digest,source_identity,"
+                    "source_fingerprint,source_role,source_receipt,'retained_native_snapshot',NULL,"
+                    "state,record_id,receipt,suppressed FROM retained_source_decisions_v12"
+                )
+                connection.execute("DROP TABLE retained_source_decisions_v12")
+                connection.execute(f"PRAGMA user_version={_SCHEMA_VERSION}")
             memory_sources.validate(connection)
             retained_sources.validate_store(connection, None)
             memory_fts.validate_index_config(connection)
@@ -314,7 +328,8 @@ class LocalMemoryBackend:
             9: _SCHEMA_V9,
             10: _SCHEMA_V10,
             11: _SCHEMA_V11,
-            12: _SCHEMA,
+            12: _SCHEMA_V12,
+            13: _SCHEMA,
         }.get(version)
         return expected is not None and dict(rows) == expected and len(rows) == len(expected)
 
@@ -375,7 +390,7 @@ class LocalMemoryBackend:
         rows = connection.execute(
             "SELECT name, sql FROM sqlite_master WHERE name NOT GLOB 'sqlite_*'"
         ).fetchall()
-        allowed = (10, 11, 12) if historical_snapshot else (_SCHEMA_VERSION,)
+        allowed = (10, 11, 12, 13) if historical_snapshot else (_SCHEMA_VERSION,)
         if version not in allowed or not LocalMemoryBackend._valid_schema(version, rows):
             raise MemoryError("readonly_schema_unavailable")
         if connection.execute("SELECT id FROM namespace").fetchall() != [(namespace_id,)]:

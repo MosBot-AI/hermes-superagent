@@ -100,8 +100,15 @@ raise RuntimeError('crash point not reached')
 
 @pytest.mark.parametrize("operation", ["source_stage", "source_accept", "source_discard"])
 @pytest.mark.parametrize("stage", ["before", "after"])
-def test_process_death_at_commit_recovers_metadata_and_atomic_cursor(tmp_path, operation, stage):
+@pytest.mark.parametrize("observed", [False, True])
+def test_process_death_at_commit_recovers_metadata_and_atomic_cursor(
+    tmp_path, operation, stage, observed
+):
     path, action = tmp_path / "crash.db", request()
+    if observed:
+        source = action["source"]
+        source["kind"] = "observed_native_snapshot"
+        source["observation_id"] = source.pop("receipt_id")
     with opened(path) as (sdk, _, conn):
         if operation != "source_stage":
             sdk.execute("source_stage", action)
@@ -320,7 +327,7 @@ def test_schema11_migration_preserves_payload_and_rolls_back_on_failure(tmp_path
     class FailMigration(sqlite3.Connection):
         def execute(self, sql, *args):
             result = super().execute(sql, *args)
-            if sql == "PRAGMA user_version=12":
+            if sql == "PRAGMA user_version=13":
                 raise sqlite3.OperationalError("synthetic migration interruption")
             return result
 
@@ -334,7 +341,7 @@ def test_schema11_migration_preserves_payload_and_rolls_back_on_failure(tmp_path
     finally:
         conn.close()
     with opened(path) as (sdk, _, conn):
-        assert conn.execute("PRAGMA user_version").fetchone() == (12,)
+        assert conn.execute("PRAGMA user_version").fetchone() == (13,)
         assert conn.execute("SELECT * FROM records").fetchall() == payload
         assert counts(conn) == (1, 1, 1, 0)
         assert cursor(sdk)["through_sequence"] == 0
@@ -361,7 +368,7 @@ def test_full_source_quotas_do_not_block_forgetting_or_suppression(tmp_path, quo
             )
             conn.execute(
                 "INSERT INTO retained_source_decisions VALUES "
-                "(?,?,?,?,?,?,?,?,'discarded',NULL,NULL,1)",
+                "(?,?,?,?,?,?,?,?,'retained_native_snapshot',NULL,'discarded',NULL,NULL,1)",
                 (
                     seed["request_id"],
                     seed["consumer_id"],
