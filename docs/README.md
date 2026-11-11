@@ -166,3 +166,5 @@ See [79. Explicit consistent local memory snapshots](79-local-memory-snapshots.m
 93. [Review-only source receipt recovery](93-source-receipt-recovery.md): durable metadata intent and same-attempt restart reconciliation, not two-store atomicity or a memory checkpoint.
 
 94. [Review-only receipt-bound source reads](94-receipt-source-reads.md): one-snapshot original rows and retention invalidation; no memory acceptance or cursor advancement.
+
+95. [Read-only canonical mutation outcomes](95-canonical-mutation-status.md): digest-bound historical receipt and current metadata inspection without payload replay or cursor advancement.

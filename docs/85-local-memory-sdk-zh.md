@@ -76,6 +76,10 @@ with TemporaryDirectory() as directory:
 
 适配器作者可以在**另一个全新的合成存储**上单独运行 `personal_agent.memory_conformance` 中的 `run_checkpoint_conformance(factory, isolated_synthetic=True)`，不得使用生产配置档案或 CRUD/进度套件已经使用过的存储。该可选运行器覆盖空/当前/过时检查点、更正和终止性遗忘、重开后的持久性、精确历史重放、请求变更冲突及过期水位围栏。不支持检查点的适配器会显式失败，而非静默跳过套件。上方独立 CRUD 示例不声称支持检查点。这是隔离的本地离线合规验证，不是生产验收或原生 checkpoint-v2 支持。不改变原生 provider、网络操作、共享 REST 契约或宿主生命周期行为。
 
+## 可选规范修改结果检查
+
+可选的 `mutation_receipt_status` 操作使用事先保留的规范化请求身份，检查 `remember`、`correct` 和 `forget`。它从同一读取快照返回历史回执及单独的当前元数据，或明确表示该快照中不存在。它不重放修改，也不需要原文。摘要契约、只读恢复、严格验证、隐私边界及仍然独立的来源接受/游标协议见 [95](95-canonical-mutation-status-zh.md)。现有进度与检查点恢复语义不变。
+
 ## 剩余 E2.6 工作
 
 更广的 [#43](https://github.com/MosBot-AI/hermes-superagent/issues/43) 保持开放：本地外观层并未交付完整的版本化来源/事件及多类型契约、远程对账、替换激活/迁移、经过审查的加载/资源 ABI 或原生生命周期集成。[82](82-shared-client-api-zh.md) 中共享客户端契约不变；Python SDK 不证明已提供认证 HTTP 或跨后端功能等价。

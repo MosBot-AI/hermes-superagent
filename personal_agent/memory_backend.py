@@ -57,6 +57,10 @@ def validate_expiry(value: object, *, error_code: str = "invalid_request") -> st
 
 
 def validate_request(operation: str, payload: dict) -> dict:
+    if operation == "mutation_receipt_status":
+        from .memory_mutation_status import validate_query
+
+        return validate_query(payload)
     if operation in ("expired_preview", "forget_expired"):
         from .memory_retention import validate
 

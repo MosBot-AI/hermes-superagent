@@ -32,6 +32,7 @@ _CAPABILITIES = frozenset(
         "metadata_changes",
         "durable_consumer_cursor",
         "local_metadata_checkpoint",
+        "mutation_receipt_status",
     }
 )
 _LIMITS = {
@@ -59,6 +60,7 @@ _DESCRIPTOR_FIELDS = {
     *_LIMITS,
 }
 _OPERATION_CAPABILITIES = {
+    "mutation_receipt_status": {"explicit_records", "mutation_receipt_status"},
     "expired_preview": {"explicit_records", "record_expiry", "reviewed_expired_cleanup"},
     "forget_expired": {
         "explicit_records",

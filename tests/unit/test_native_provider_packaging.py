@@ -31,6 +31,7 @@ def test_native_provider_build_is_separate_and_contains_only_source(tmp_path):
         names = archive.namelist()
         assert "personal_agent/native_memory_provider.py" in names
         assert "personal_agent/memory_lifecycle.py" in names
+        assert "personal_agent/memory_mutation_status.py" in names
         assert all(
             name.startswith(("personal_agent/", "hermes_personal_agent-0.1.0.dist-info/"))
             for name in names

@@ -355,3 +355,88 @@ def run_checkpoint_conformance(factory, *, isolated_synthetic: bool = False) -> 
             "historical_replay_after_forget",
         ),
     )
+
+
+def run_mutation_status_conformance(factory, *, isolated_synthetic=False) -> ConformanceReport:
+    """Optional status checks on a separate, fresh caller-owned synthetic store.
+
+    Writes fixtures intentionally; reconciliation itself never replays a write.
+    This does not certify crash durability or a dishonest adapter's integrity.
+    """
+    from .memory_sdk import mutation_request_identity
+
+    if isolated_synthetic is not True:
+        raise MemoryError("synthetic_store_required")
+    request = {"content": "Synthetic receipt fixture", "request_id": "status-create"}
+    identity = mutation_request_identity("remember", request)
+    with factory() as service:
+        page = service.execute("export", {"limit": 1})["data"]
+        if page["items"] or page["has_more"] or page["watermark"] != 0:
+            raise MemoryError("empty_store_required")
+        _check(
+            service.execute("mutation_receipt_status", identity)["data"]["state"]
+            == "absent_at_snapshot"
+        )
+        receipt = service.execute("remember", request)["data"]
+    with factory() as service:
+        status = service.execute("mutation_receipt_status", identity)
+        _check(status["replayed"] is False and status["data"]["receipt"] == receipt)
+        _reject(
+            service,
+            "mutation_receipt_status",
+            {**identity, "expected_digest": "0" * 64},
+            "idempotency_conflict",
+        )
+        _reject(
+            service,
+            "mutation_receipt_status",
+            {**identity, "operation": "forget"},
+            "idempotency_conflict",
+        )
+        correction = {
+            "record_id": receipt["record_id"],
+            "expected_revision": 1,
+            "request_id": "status-correct",
+            "expires_at": "2000-01-01T00:00:00Z",
+        }
+        correction_identity = mutation_request_identity("correct", correction)
+        corrected = service.execute("correct", correction)["data"]
+        status = service.execute("mutation_receipt_status", identity)["data"]
+        _check(status["receipt"] == receipt and status["current"]["expired"] is True)
+        forget = {
+            "record_id": receipt["record_id"],
+            "expected_revision": 2,
+            "request_id": "status-forget",
+        }
+        forget_identity = mutation_request_identity("forget", forget)
+        forgotten = service.execute("forget", forget)["data"]
+    with factory() as service:
+        for query, historical in (
+            (identity, receipt),
+            (correction_identity, corrected),
+            (forget_identity, forgotten),
+        ):
+            status = service.execute("mutation_receipt_status", query)["data"]
+            _check(status["receipt"] == historical)
+            _check(
+                status["current"]
+                == {
+                    "record_id": receipt["record_id"],
+                    "revision": 3,
+                    "status": "forgotten",
+                    "expired": False,
+                }
+            )
+        _check(service.execute("export", {"limit": 1})["data"]["watermark"] == 3)
+    return ConformanceReport(
+        1,
+        (
+            "missing_identity",
+            "reopened_receipt",
+            "identity_conflict",
+            "historical_receipt",
+            "expiry",
+            "terminal_forget",
+            "status_without_mutation_replay",
+        ),
+    )

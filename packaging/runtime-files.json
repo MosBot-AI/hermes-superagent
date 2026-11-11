@@ -39,6 +39,7 @@
     "personal_agent/memory_index.py",
     "personal_agent/memory_lifecycle.py",
     "personal_agent/memory_maintenance.py",
+    "personal_agent/memory_mutation_status.py",
     "personal_agent/memory_presentation.py",
     "personal_agent/memory_progress.py",
     "personal_agent/memory_projection.py",

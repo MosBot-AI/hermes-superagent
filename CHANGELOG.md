@@ -6,6 +6,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ## Unreleased
 
+- Add optional digest-bound canonical mutation receipt inspection through the local Memory SDK, separating historical outcomes from current record metadata without replaying payloads, writing cursors or enabling source acceptance (#131).
+
 - Add a review-only receipt-bound reader that returns complete original native sources and validity in one bounded snapshot; fresh reads honor source invalidation, without enabling memory acceptance, retention authority or checkpoint-v2 (#129).
 
 - Add a review-only metadata journal that recovers interrupted source receipt accounting by the same attempt without replaying native compression; source availability remains a fresh observation, not a memory checkpoint or two-database atomic guarantee (#127).
