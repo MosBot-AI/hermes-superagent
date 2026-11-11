@@ -10,6 +10,8 @@ The exact target is [Hermes `2281116525106e3c109993ccb5dc74d02bfc1427`](https://
 
 The matrix identifies assertions and their limits. Execution results belong to the exact Issue/PR revision and must not be inferred merely from the presence of tests. E0.9 verification and E2.8 durable lifecycle implementation are separate gates; recording an unsupported contract does not enable it.
 
+The later internal source-resolution slice [91](91-native-source-resolution.md) adds exact caller-bound read-only reconciliation and revision fences. It does not change this test-only slice's historical scope or enable the missing durable checkpoint contract.
+
 ## Acceptance matrix
 
 | Contract | Evidence | Boundary |
