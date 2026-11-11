@@ -272,5 +272,8 @@ def test_memory_configuration_is_opted_in_only_for_memory_acceptance():
     memory = (ROOT / "acceptance/live/test_packaged_gateway_memory.py").read_text()
     tasks = (ROOT / "acceptance/live/test_packaged_gateway_tasks.py").read_text()
     assert "def installed_memory(installed):" in memory
+    assert "enable_installed_memory(home)" in memory
+    assert "config = yaml.load(path)" in memory
+    assert "yaml.dump(config, path)" in memory
     assert '["settings"]["local_memory"] = True' in memory
     assert '"local_memory": True' not in tasks
