@@ -4,7 +4,7 @@ English | [简体中文](43-native-checkpoint-boundary-zh.md)
 
 Current E0.9 update: [76](76-native-memory-contracts.md) places these existing checkpoint contracts in the current Hermes `22811165` verification matrix. The original evidence and source links below retain their historical pin. A verified limitation can satisfy a verification criterion without implementing the missing E2.8 durable guarantee.
 
-Status: pinned-host compatibility tests and an internal, I/O-free evidence preparer are implemented. **No native checkpoint-v2, automatic ingestion, source resolver or runtime configuration is enabled.** The optional [native recall provider](41-native-memory-recall.md) remains API v1. This is a capability-boundary result, not an end-to-end memory checkpoint implementation.
+Status: pinned-host compatibility tests and an internal, I/O-free evidence preparer are implemented. **No native checkpoint-v2, automatic ingestion or runtime configuration is enabled.** A subsequent internal read-only source resolver is documented in [91](91-native-source-resolution.md); it is not wired into the provider and does not supply durable checkpoint guarantees. The optional [native recall provider](41-native-memory-recall.md) remains API v1. This is a capability-boundary result, not an end-to-end memory checkpoint implementation.
 
 ## 1. What the Pinned Host Actually Provides
 

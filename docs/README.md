@@ -158,3 +158,5 @@ See [79. Explicit consistent local memory snapshots](79-local-memory-snapshots.m
 90. [Original local M1 acceptance](90-local-m1-acceptance.md): fixed-checkpoint evidence and delivery boundaries, not full Super Agent completion.
 
 - [Exact-key cron host proposal](../experiments/cron-create-requests/README.md): non-activated native creation/replay foundation for reminders, not a delivered notification capability.
+
+91. [Bounded native source resolution](91-native-source-resolution.md): caller-bound read-only reconciliation and revision fences, without automatic capture or checkpoint-v2.
