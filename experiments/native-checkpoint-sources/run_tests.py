@@ -90,6 +90,7 @@ def main():
                 "-q",
                 str(ARTIFACT / "test_checkpoint_sources.py"),
                 str(ARTIFACT / "test_recovery.py"),
+                str(ARTIFACT / "test_source_reads.py"),
                 "--confcutdir=" + str(ARTIFACT),
             ],
             cwd=checkout,

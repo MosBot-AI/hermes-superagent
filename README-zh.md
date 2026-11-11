@@ -172,3 +172,5 @@ plugins:
 [仅供评审的原生检查点来源回执](docs/92-native-checkpoint-sources-zh.md)：隔离的宿主持有提交/保留提案；provider v1 与生产运行时保持不变。
 
 [仅供审查的来源回执恢复](docs/93-source-receipt-recovery-zh.md)为中断的消费者记账加入持久元数据日志，不启用生产捕获或记忆检查点。
+
+[仅供审阅的回执绑定来源读取](docs/94-receipt-source-reads-zh.md)在一个有界原生快照内返回原始行与有效性；删除影响后续读取，不启用记忆接受或 checkpoint-v2。
