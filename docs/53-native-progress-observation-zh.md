@@ -29,4 +29,4 @@
 本里程碑仅有离线夹具覆盖，不宣称安装、真实 Kanban、Gateway 或模型验收通过，现有扫描限制不变。[路线图](08-roadmap-and-acceptance-zh.md)中的 worker 编排和通用任务映射仍未完成。
 
 
-[原生交接工作台](100-native-handoff-workbench-zh.md) 现在为这条完整操作者流程提供默认可读视图和明确 `--json` 兼容模式。其手动安装包 Gateway 通道与准确源版本执行证据，和本篇原始离线里程碑分别记录。
+[原生交接工作台](100-native-handoff-workbench-zh.md) 现在为这条完整操作者流程提供显式 `--text` 可读视图，同时保留默认 JSON 及显式 `--json` 输出。其手动安装包 Gateway 通道与准确源版本执行证据，和本篇原始离线里程碑分别记录。

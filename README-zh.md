@@ -179,4 +179,4 @@ plugins:
 
 [安装包记忆生命周期验收](docs/99-packaged-memory-lifecycle-zh.md)新增手动真实 Gateway 重启及来源丢失场景，单独标记 SDK 待决设置，并检查规范更正/遗忘及精确内容重入抑制。运行证据仍与模型或生产验收区分。
 
-[原生交接工作台](docs/100-native-handoff-workbench-zh.md)：可读的明确任务交接、恢复与结果审阅；脚本使用 `/personal-handoff --json`。不调度 worker 或自动完成。
+[原生交接工作台](docs/100-native-handoff-workbench-zh.md)：通过 `/personal-handoff --text` 显式启用可读任务交接、恢复与结果审阅；供脚本使用的默认 JSON 及显式 `--json` 保持不变。不调度 worker 或自动完成。

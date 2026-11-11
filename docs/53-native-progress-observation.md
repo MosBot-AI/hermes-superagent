@@ -29,4 +29,4 @@ Task detail and bounded task/review views label this as **Native board observed 
 This milestone has offline fixture coverage only. No installation, live Kanban, Gateway or model acceptance is claimed, and existing scanner restrictions are unchanged. [Roadmap](08-roadmap-and-acceptance.md) worker orchestration and universal task mapping remain incomplete.
 
 
-[The native handoff workbench](100-native-handoff-workbench.md) now provides readable default views and explicit `--json` compatibility across this complete operator journey. Its manual packaged-Gateway lane and exact-source execution evidence are separate from this original offline milestone.
+[The native handoff workbench](100-native-handoff-workbench.md) now provides opt-in `--text` readable views while preserving default JSON and explicit `--json` output across this complete operator journey. Its manual packaged-Gateway lane and exact-source execution evidence are separate from this original offline milestone.

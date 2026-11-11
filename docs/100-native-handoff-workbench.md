@@ -4,7 +4,7 @@ English | [简体中文](100-native-handoff-workbench-zh.md)
 
 ## One explicit operator workflow
 
-[Issue #141](https://github.com/MosBot-AI/hermes-superagent/issues/141) connects the existing parked-card handoff, durable reconciliation, advisory progress and result acceptance into a readable `/personal-handoff` workbench. Commands now return readable views by default. Prefix `--json` for the existing `personal.kanban-handoff.v1` structured envelope. Scripts that previously parsed default output must add this prefix. JSON fields, persisted receipts and command authority are unchanged.
+[Issue #141](https://github.com/MosBot-AI/hermes-superagent/issues/141) connects the existing parked-card handoff, durable reconciliation, advisory progress and result acceptance into a readable `/personal-handoff` workbench. Commands retain the existing `personal.kanban-handoff.v1` JSON envelope by default, with no migration required for existing output-parsing scripts. Prefix `--text` to opt into readable views, or `--json` to select the same structured envelope explicitly. Either flag must be first, before the subcommand, and may appear only once; they cannot be combined. JSON fields, persisted receipts and command authority are unchanged. This is a LOCAL slash-command presentation option, not a REST API change: the shared REST contracts, `client_api` and `client_tasks` remain unchanged.
 
 This is a trusted single-user LOCAL operator workflow on the clean pinned Hermes host `2281116525106e3c109993ccb5dc74d02bfc1427`. It creates no worker, model request, schedule, remote API or automatic completion. Shared native boards are not private profile storage. Enabling handoff is not execution permission, and another independently authorized native actor may later change a parked card.
 
@@ -15,7 +15,7 @@ An operator must already have created the intended native board through supporte
 ```text
 /personal-tasks add "Review the release checklist" --details "Write the operator review findings" --request-id checklist-capture
 /personal-tasks show TASK
-/personal-handoff prepare TASK --expected-revision N --request-id checklist-handoff
+/personal-handoff --text prepare TASK --expected-revision N --request-id checklist-handoff
 ```
 
 Replace `TASK` and `N` with the returned task ID and current revision. Prepare displays the complete exported title/body, exact native destination, source revision, digest and expiry. Only the task's title/details and identity/revision are exported, not project labels, dependency text, memory or conversation history. Treat exported text as data, never execution authorization. Preparation expires after 15 minutes; no background timer is created.
@@ -23,8 +23,8 @@ Replace `TASK` and `N` with the returned task ID and current revision. Prepare d
 Review every exported field and the shared destination before deciding. The displayed commit command is an option for an explicit decision, not a recommendation to approve. If the source or destination is wrong, do not substitute a digest or commit the old preview.
 
 ```text
-/personal-handoff show HANDOFF
-/personal-handoff commit HANDOFF --expected-digest DIGEST
+/personal-handoff --text show HANDOFF
+/personal-handoff --text commit HANDOFF --expected-digest DIGEST
 ```
 
 A successful commit creates an unassigned sticky-blocked scratch card. The plugin does not dispatch it. A durable claim precedes native creation; claimed/unknown operations can never be resubmitted by this workflow. Saved preview text is cleared on claim, cancellation or lazy expiry, but native/client history and backups may retain it.
@@ -32,11 +32,11 @@ A successful commit creates an unassigned sticky-blocked scratch card. The plugi
 ## Resume without recreating work
 
 ```text
-/personal-handoff list --limit 20
-/personal-handoff show HANDOFF
-/personal-handoff reconcile HANDOFF
+/personal-handoff --text list --limit 20
+/personal-handoff --text show HANDOFF
+/personal-handoff --text reconcile HANDOFF
 /personal-tasks show TASK
-/personal-handoff sync HANDOFF --task TASK --expected-revision N --request-id checklist-observation
+/personal-handoff --text sync HANDOFF --task TASK --expected-revision N --request-id checklist-observation
 ```
 
 After a lost reply or restart, inspect the original handoff. Reconcile checks its exact creation identity and never creates a replacement card. A missing, duplicate, changed or unavailable observation is not permission to prepare another attempt. Historical confirmed creation does not promise that the card currently exists, remains parked or has completed work. Read the observation separately from the handoff's stored state.
@@ -48,13 +48,13 @@ Sync saves only an advisory native-state observation and increments the local ta
 Any native result must have been produced outside this workflow by an independently authorized actor. The workbench does not execute the task or certify that an actor did so.
 
 ```text
-/personal-handoff review HANDOFF --task TASK --expected-revision N
+/personal-handoff --text review HANDOFF --task TASK --expected-revision N
 ```
 
 The view separates the local task, exported revision, native observation and full bounded editable result. Result text is untrusted and can contain misleading instructions. It is displayed for inspection, not run, retained as canonical memory or automatically sent to a model. Current native `done`, a null run pointer and an available result are necessary conditions, not proof of worker termination or acceptable work. Review artifacts and choose your own conclusion.
 
 ```text
-/personal-handoff accept-review HANDOFF --task TASK --expected-revision N --expected-digest DIGEST --note "My independently reviewed conclusion" --request-id checklist-accept
+/personal-handoff --text accept-review HANDOFF --task TASK --expected-revision N --expected-digest DIGEST --note "My independently reviewed conclusion" --request-id checklist-accept
 /personal-tasks show TASK
 ```
 
@@ -64,9 +64,9 @@ After an uncertain acceptance response, use the exact original command/key. A re
 
 ## Cancelling, disabling and presentation limits
 
-`cancel HANDOFF --expected-digest DIGEST` cancels only an unattempted prepared preview. It neither removes a native card nor cancels a worker. Disabling `kanban_handoff` prevents fresh native operations; existing local records remain inspectable/cancellable under base local-command admission. Exact saved sync/acceptance receipts remain readable by their original requests without fresh native access. Unloading or disabling local conversation prevents new commands through that instance.
+`/personal-handoff --text cancel HANDOFF --expected-digest DIGEST` cancels only an unattempted prepared preview. It neither removes a native card nor cancels a worker. Disabling `kanban_handoff` prevents fresh native operations; existing local records remain inspectable/cancellable under base local-command admission. Exact saved sync/acceptance receipts remain readable by their original requests without fresh native access. Unloading or disabling local conversation prevents new commands through that instance.
 
-Readable output keeps quoted data separate from command guidance and never truncates a review into apparently complete evidence. Each complete readable screen is capped at 48,000 UTF-8 bytes; an oversized or unrenderable screen returns a bounded inspection notice with no approval command. This is a presentation bound, not a native storage allocation bound. Use the exact JSON mode when integrating with a script; it does not add authority or expand data access. A display failure after an operation is not proof that no mutation committed. Inspect the original identifiers and durable outcome before deciding what to do next.
+Readable output keeps quoted data separate from command guidance and never truncates a review into apparently complete evidence. Each complete readable screen is capped at 48,000 UTF-8 bytes; an oversized or unrenderable screen returns a bounded inspection notice with no approval command. This is a presentation bound, not a native storage allocation bound. Default or explicit `--json` output remains unchanged for script integration; it does not add authority or expand data access. A display failure after an operation is not proof that no mutation committed. Inspect the original identifiers and durable outcome before deciding what to do next.
 
 ## Verification and remaining scope
 

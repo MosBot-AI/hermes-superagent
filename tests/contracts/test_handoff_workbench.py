@@ -1,7 +1,9 @@
 """Readable workbench through pinned LOCAL command authority and real native stores."""
 
+import json
+
 from test_kanban_handoff import board as board
-from test_kanban_handoff import handoff, handoff_text, inspect_db, prepared
+from test_kanban_handoff import handoff, handoff_output, handoff_text, inspect_db, prepared
 from test_kanban_handoff import handoff_host as handoff_host
 from test_kanban_handoff import native as native
 from test_local_conversation_tasks import command
@@ -54,11 +56,11 @@ def test_readable_prepare_commit_sync_review_accept_and_replay(handoff_host, boa
         assert conn.execute("SELECT count(*) FROM task_runs").fetchone()[0] == 0
 
 
-def test_readable_cancel_help_and_errors_with_json_optin(handoff_host, board):
+def test_readable_cancel_help_and_errors_with_explicit_text(handoff_host, board):
     host = handoff_host
     source, preview = prepared(host)
     text = handoff_text(host, "help")
-    assert "--json must be first" in text and "15 minutes" in text
+    assert "--text" in text and "--json" in text and "15 minutes" in text
     cancelled = handoff_text(
         host, f"cancel {preview['id']} --expected-digest {preview['intent_digest']}"
     )
@@ -70,3 +72,16 @@ def test_readable_cancel_help_and_errors_with_json_optin(handoff_host, board):
     assert command(host, f"show {source['id']}")["data"] == source
     with inspect_db(board[1]) as conn:
         assert conn.execute("SELECT count(*) FROM tasks").fetchone()[0] == 0
+
+
+def test_unflagged_json_remains_compatible_with_explicit_json(handoff_host, board):
+    host = handoff_host
+    source, preview = prepared(host)
+    for args in ("help", "list", f"show {preview['id']}", "invalid-operation"):
+        legacy = handoff_output(host, args)
+        explicit = handoff_output(host, "--json " + args)
+        assert legacy == explicit
+        assert json.loads(legacy) == json.loads(explicit)
+        assert json.loads(legacy)["schema_version"] == "personal.kanban-handoff.v1"
+    assert handoff(host, "list --text")["error"]["code"] == "invalid_request"
+    assert command(host, f"show {source['id']}")["data"] == source

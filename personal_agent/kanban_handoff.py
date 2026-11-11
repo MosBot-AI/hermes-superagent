@@ -431,11 +431,11 @@ class LocalKanbanHandoff:
 
     def command(self, raw_args, *, platform="", source=None, session_id="", session_key=""):
         operation = None
-        json_mode = False
+        json_mode = True
         if type(raw_args) is str:
-            flag = re.match(r"^\s*--json(?:\s+|$)", raw_args)
+            flag = re.match(r"^\s*--(json|text)(?:\s+|$)", raw_args)
             if flag:
-                json_mode = True
+                json_mode = flag.group(1) == "json"
                 # Keep the original command size limit, including the display flag.
                 raw_args = raw_args[flag.end() :] if len(raw_args) <= 8192 else None
         output: dict = {}
