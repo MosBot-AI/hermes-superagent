@@ -180,3 +180,5 @@ See [79. Explicit consistent local memory snapshots](79-local-memory-snapshots.m
 100. [Native handoff workbench](100-native-handoff-workbench.md): opt-in `--text` operator guidance and unchanged default JSON across parked creation, recovery, observation and explicit result acceptance.
 
 101. [Current-host text-worker preparation](101-current-host-text-worker.md): current-pin security port, explicit frozen-worker/isolation refusal and adoption choices; no worker activation.
+
+102. [Synthetic longitudinal memory acceptance](102-longitudinal-memory-acceptance.md): independently frozen 28/250/1000-record native-hook relevance diagnostics, restart/repack invariants and retained-source migration composition; no model or production acceptance.

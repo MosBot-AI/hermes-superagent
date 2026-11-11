@@ -6,6 +6,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ## Unreleased
 
+- Add independently frozen longitudinal memory diagnostics through the actual native recall hook at 28/250/1000 retained records, with honest relevance misses, complete-context budgets, fresh-process/repack invariants and retained-source migration evidence; no production retrieval changes (#145).
+
 - Port the review-only no-tool worker proposal to the supported host, reject stale/frozen authorization and handle known backend outages; preserve default-off clean-host behavior and separate adoption/release gates (#143).
 
 - Add manual production-package memory lifecycle acceptance across real Gateway restarts, with source-text loss, explicit SDK pending recovery, correction/forgetting and exact reentry suppression kept distinct from model or production acceptance (#139).
