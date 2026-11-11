@@ -186,6 +186,7 @@ def test_v10_historical_browse_does_not_migrate(store):
     run(home)
     target = path.parent / "snapshots/before-change.sqlite3"
     with sqlite3.connect(target) as db:
+        db.execute("DROP TABLE retained_source_decisions")
         db.execute("DROP TABLE memory_source_lineage")
         db.execute("DROP TABLE memory_source_suppressions")
         db.execute("PRAGMA user_version=10")

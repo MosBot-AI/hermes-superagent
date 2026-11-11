@@ -92,6 +92,8 @@ This file distinguishes design work, development changes, and released capabilit
 - Added default-off [parked native Kanban handoff](docs/52-parked-kanban-handoff.md): explicit board, preview/digest commit, durable single-use claim and bounded read-only reconciliation. No worker dispatch, storage initialization or live acceptance.
 
 ### Added
+- Added optional trusted-local retained-source admission, acceptance, discard and metadata recovery with schema-12 migration, exact-source suppression and an independent no-skip source cursor. The isolated native-source consumer requires explicit independent retention; no automatic ingestion or production activation.
+
 
 - Add a [review-only native checkpoint source receipt proposal](docs/92-native-checkpoint-sources.md), isolated artifact verification and canonical native regressions; shipping provider v1, production pin and runtime activation remain unchanged (#125).
 

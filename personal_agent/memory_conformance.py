@@ -440,3 +440,113 @@ def run_mutation_status_conformance(factory, *, isolated_synthetic=False) -> Con
             "status_without_mutation_replay",
         ),
     )
+
+
+def run_retained_source_conformance(factory, *, isolated_synthetic=False) -> ConformanceReport:
+    """Optional retained-snapshot checks on a fresh caller-owned synthetic store.
+
+    Deliberately stages and accepts synthetic snapshots; never reads native data.
+    This is not evidence of live-source validity, host fencing or crash durability.
+    """
+    from hashlib import sha256
+
+    from .memory_sdk import source_request_identity
+
+    if isolated_synthetic is not True:
+        raise MemoryError("synthetic_store_required")
+    request = {
+        "request_id": "source-conformance",
+        "consumer_id": "synthetic-source",
+        "expected_sequence": 0,
+        "content": "Synthetic retained snapshot",
+        "expires_at": None,
+        "retention": "independent_snapshot",
+        "source": {
+            "identity": "a" * 64,
+            "fingerprint": sha256(b"Synthetic retained snapshot").hexdigest(),
+            "role": "user",
+            "receipt_id": "b" * 64,
+        },
+    }
+    identity = source_request_identity(request)
+    with factory() as service:
+        page = service.execute("export", {"limit": 1})["data"]
+        if page["items"] or page["has_more"] or page["watermark"] != 0:
+            raise MemoryError("empty_store_required")
+        _check(service.execute("source_status", identity)["data"]["state"] == "absent_at_snapshot")
+        staged = service.execute("source_stage", request)
+        _check(staged["data"]["state"] == "pending" and staged["data"]["record"] is None)
+        _check(service.execute("export", {"limit": 1})["data"]["watermark"] == 0)
+        cursor = service.execute("source_cursor", {"consumer_id": request["consumer_id"]})["data"]
+        _check(cursor["through_sequence"] == 0 and cursor["pending"] == staged["data"])
+    with factory() as service:
+        _check(
+            service.execute("source_stage", request) == {"data": staged["data"], "replayed": True}
+        )
+        accepted = service.execute("source_accept", request)
+        record = accepted["data"]["record"]
+        _check(accepted["data"]["state"] == "accepted")
+        _check(
+            service.execute("get", {"record_id": record["record_id"]})["data"]["content"]
+            == request["content"]
+        )
+        _reject(
+            service,
+            "source_status",
+            {**identity, "expected_digest": "0" * 64},
+            "idempotency_conflict",
+        )
+        service.execute(
+            "forget",
+            {
+                "request_id": "source-forget",
+                "record_id": record["record_id"],
+                "expected_revision": 1,
+            },
+        )
+    with factory() as service:
+        _check(
+            service.execute("source_accept", request)
+            == {"data": accepted["data"], "replayed": True}
+        )
+        status = service.execute("source_status", identity)["data"]
+        _check(status["decision"] == accepted["data"])
+        _check(status["current"]["status"] == "forgotten" and status["suppressed"] is True)
+        cursor = service.execute("source_cursor", {"consumer_id": request["consumer_id"]})["data"]
+        _check(cursor["through_sequence"] == 1 and cursor["pending"] is None)
+        discarded_request = {
+            **request,
+            "request_id": "source-discard-fixture",
+            "expected_sequence": 1,
+            "content": "Distinct discard snapshot",
+            "source": {
+                **request["source"],
+                "identity": "c" * 64,
+                "fingerprint": sha256(b"Distinct discard snapshot").hexdigest(),
+            },
+        }
+        discarded_identity = source_request_identity(discarded_request)
+        service.execute("source_stage", discarded_request)
+        discarded = service.execute("source_discard", discarded_identity)
+        _check(discarded["data"]["state"] == "discarded" and discarded["data"]["record"] is None)
+    with factory() as service:
+        _check(
+            service.execute("source_discard", discarded_identity)
+            == {"data": discarded["data"], "replayed": True}
+        )
+        cursor = service.execute("source_cursor", {"consumer_id": request["consumer_id"]})["data"]
+        _check(cursor["through_sequence"] == 2 and cursor["pending"] is None)
+        _check(service.execute("export", {"limit": 1})["data"]["watermark"] == 2)
+    return ConformanceReport(
+        1,
+        (
+            "absent_source",
+            "metadata_stage",
+            "pending_cursor",
+            "reopen_accept",
+            "identity_conflict",
+            "terminal_replay",
+            "source_discard",
+            "independent_cursor",
+        ),
+    )

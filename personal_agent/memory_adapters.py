@@ -33,6 +33,7 @@ _CAPABILITIES = frozenset(
         "durable_consumer_cursor",
         "local_metadata_checkpoint",
         "mutation_receipt_status",
+        "retained_source_acceptance",
     }
 )
 _LIMITS = {
@@ -60,6 +61,30 @@ _DESCRIPTOR_FIELDS = {
     *_LIMITS,
 }
 _OPERATION_CAPABILITIES = {
+    "source_stage": {
+        "retained_source_acceptance",
+        "explicit_records",
+        "durable_write",
+        "cas",
+        "idempotency",
+        "record_expiry",
+    },
+    "source_accept": {
+        "retained_source_acceptance",
+        "explicit_records",
+        "durable_write",
+        "cas",
+        "idempotency",
+        "record_expiry",
+    },
+    "source_discard": {
+        "retained_source_acceptance",
+        "explicit_records",
+        "durable_write",
+        "idempotency",
+    },
+    "source_status": {"retained_source_acceptance", "explicit_records"},
+    "source_cursor": {"retained_source_acceptance", "explicit_records"},
     "mutation_receipt_status": {"explicit_records", "mutation_receipt_status"},
     "expired_preview": {"explicit_records", "record_expiry", "reviewed_expired_cleanup"},
     "forget_expired": {

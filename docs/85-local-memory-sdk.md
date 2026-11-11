@@ -83,3 +83,7 @@ The optional `mutation_receipt_status` operation inspects `remember`, `correct` 
 ## Remaining E2.6 work
 
 The broader [#43](https://github.com/MosBot-AI/hermes-superagent/issues/43) remains open: complete versioned source/event and multi-kind contracts, remote reconciliation, replacement activation/migration, a reviewed loading/resource ABI and native lifecycle integration are not delivered by this local facade. The shared client contract in [82](82-shared-client-api.md) is unchanged; a Python SDK does not establish authenticated HTTP availability or cross-backend feature parity.
+
+## Optional retained-source acceptance
+
+[96](96-retained-source-acceptance.md) adds the optional `retained_source_acceptance` family: `source_stage`, `source_accept`, `source_discard`, `source_status` and `source_cursor`. A metadata-only pending slot binds explicitly authorized independent retention before a real canonical write; acceptance and a distinct source cursor commit together with suppression checks. Source provenance is separate from the existing editing-route field and available through decision/status, not ordinary record `get` or recall. The optional `run_retained_source_conformance` runner uses its own empty synthetic store. Schema-12 migration and the isolated native consumer do not enable automatic lifecycle, checkpoint-v2, a provider switch or production ingestion.

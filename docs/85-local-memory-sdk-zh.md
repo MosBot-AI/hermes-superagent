@@ -83,3 +83,7 @@ with TemporaryDirectory() as directory:
 ## 剩余 E2.6 工作
 
 更广的 [#43](https://github.com/MosBot-AI/hermes-superagent/issues/43) 保持开放：本地外观层并未交付完整的版本化来源/事件及多类型契约、远程对账、替换激活/迁移、经过审查的加载/资源 ABI 或原生生命周期集成。[82](82-shared-client-api-zh.md) 中共享客户端契约不变；Python SDK 不证明已提供认证 HTTP 或跨后端功能等价。
+
+## 可选的保留来源接受
+
+[96](96-retained-source-acceptance-zh.md) 新增可选的 `retained_source_acceptance` 操作族：`source_stage`、`source_accept`、`source_discard`、`source_status` 和 `source_cursor`。仅含元数据的待处理槽在实际规范写入前绑定明确授权的独立保留；接受、独立来源游标及抑制检查在同一个事务内提交。来源信息与现有编辑路径字段分开，通过决定/状态查看，而不附加到普通记录 `get` 或召回中。可选的 `run_retained_source_conformance` 入口使用单独的空合成存储。Schema-12 迁移和隔离原生消费端不启用自动生命周期、checkpoint-v2、提供方切换或生产摄取。

@@ -166,7 +166,7 @@ def test_v6_migration_atomic_and_readonly_never_migrates(tmp_path, monkeypatch):
     b = local_memory.create_backend()
     b.open(c, namespace_id="fts:test", session_ref="s")
     assert find(b, "legacy", "中文")["items"][0]["record_id"] == rid
-    assert c.execute("PRAGMA user_version").fetchone() == (11,)
+    assert c.execute("PRAGMA user_version").fetchone() == (12,)
     c.close()
 
 

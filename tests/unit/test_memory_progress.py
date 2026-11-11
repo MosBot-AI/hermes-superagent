@@ -252,6 +252,7 @@ def test_exact_v2_migration_preserves_records_receipts_events_and_model_source()
         conn.execute("DROP TABLE memory_projection")
         conn.execute("DROP TABLE memory_edits")
         conn.execute("DROP TABLE memory_fts")
+        conn.execute("DROP TABLE retained_source_decisions")
         conn.execute("DROP TABLE memory_source_lineage")
         conn.execute("DROP TABLE memory_source_suppressions")
         conn.execute("DROP TABLE memory_candidates")
@@ -260,7 +261,7 @@ def test_exact_v2_migration_preserves_records_receipts_events_and_model_source()
         conn.execute("DROP TABLE consumer_receipts")
         conn.execute("PRAGMA user_version=2")
         backend.open(conn, namespace_id="progress-test", session_ref="new")
-        assert conn.execute("PRAGMA user_version").fetchone() == (11,)
+        assert conn.execute("PRAGMA user_version").fetchone() == (12,)
         assert {name: conn.execute(f"SELECT * FROM {name}").fetchall() for name in before} == before
         assert save(backend) == rid
         assert backend.execute("get", {"record_id": rid})["source"] == "activated_session_model"

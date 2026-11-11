@@ -279,12 +279,12 @@ def test_reopen_replay_is_session_independent_and_metadata_only(tmp_path):
 def test_exact_schema_rejects_trigger_and_future_version(opened):
     backend, conn = opened
     backend.close()
-    conn.execute("PRAGMA user_version=12")
+    conn.execute("PRAGMA user_version=13")
     assert_error(
         "unsupported_schema",
         lambda: backend.open(conn, namespace_id="profile:test", session_ref="s"),
     )
-    conn.execute("PRAGMA user_version=11")
+    conn.execute("PRAGMA user_version=12")
     conn.execute("CREATE TRIGGER surprise AFTER INSERT ON events BEGIN SELECT 1; END")
     assert_error(
         "unsupported_schema",
@@ -457,7 +457,7 @@ def test_legacy_upgrade_preserves_data_receipt_bytes_and_replay(tmp_path):
     backend.open(
         conn, namespace_id="legacy", session_ref="new", source_kind="activated_session_model"
     )
-    assert conn.execute("PRAGMA user_version").fetchone() == (11,)
+    assert conn.execute("PRAGMA user_version").fetchone() == (12,)
     assert (
         dict(conn.execute("SELECT name,sql FROM sqlite_master WHERE name NOT GLOB 'sqlite_*'"))
         == _SCHEMA
@@ -524,7 +524,7 @@ def test_migration_failure_rolls_back_schema_data_and_version():
     assert conn.execute("PRAGMA user_version").fetchone() == (1,)
     assert list(conn.iterdump()) == before
     backend.open(conn, namespace_id="legacy", session_ref="s")
-    assert conn.execute("PRAGMA user_version").fetchone() == (11,)
+    assert conn.execute("PRAGMA user_version").fetchone() == (12,)
     conn.close()
 
 

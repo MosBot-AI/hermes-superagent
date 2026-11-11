@@ -297,7 +297,7 @@ def test_v7_migration_and_readonly_require_current_schema(tmp_path):
     conn.execute("PRAGMA query_only=OFF")
     backend = create_backend()
     backend.open(conn, namespace_id="test", session_ref="s")
-    assert conn.execute("PRAGMA user_version").fetchone() == (11,)
+    assert conn.execute("PRAGMA user_version").fetchone() == (12,)
     assert conn.execute("SELECT * FROM memory_projection").fetchall() == []
     backend.close()
     conn.close()

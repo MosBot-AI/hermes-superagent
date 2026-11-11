@@ -128,7 +128,7 @@ def inspect_status(backend, conn, request, now):
         raise MemoryError("storage_corrupt") from None
 
 
-def _inspect_status(backend, conn, request, now):
+def _inspect_metadata(backend, conn, now):
     # Revalidate the already bound store, including writable-open adapters.
     from .local_memory import _APPLICATION_ID, _SCHEMA_VERSION
 
@@ -202,7 +202,7 @@ def _inspect_status(backend, conn, request, now):
         "FROM receipts LIMIT 12001"
     ).fetchall()
     require(len(receipts) <= 12000)
-    seen, found, batches, children = set(), None, [], {}
+    seen, receipts_by_key, batches, children = set(), {}, [], {}
     for key, digest, raw in receipts:
         require(type(raw) is str and len(raw) <= 16384)
         receipt = json.loads(raw, object_pairs_hook=_unique_object)
@@ -210,8 +210,7 @@ def _inspect_status(backend, conn, request, now):
         if receipt.get("operation") == "forget_expired":
             _batch_valid(receipt, key, digest)
             batches.append(receipt)
-            if key == request["request_id"]:
-                raise MemoryError("idempotency_conflict")
+            receipts_by_key[key] = (digest, receipt)
             continue
         require(len(raw) <= 2048)
         receipt_valid(receipt, internal=True)
@@ -226,10 +225,7 @@ def _inspect_status(backend, conn, request, now):
             event_map.get(sequence)
             == (receipt["record_id"], receipt["revision"], receipt["operation"])
         )
-        if key == request["request_id"]:
-            if digest != request["expected_digest"] or receipt["operation"] != request["operation"]:
-                raise MemoryError("idempotency_conflict")
-            found = receipt
+        receipts_by_key[key] = (digest, receipt)
     require(seen == set(event_map))
     linked_children = {}
     for batch in batches:
@@ -238,6 +234,25 @@ def _inspect_status(backend, conn, request, now):
             require(key not in linked_children and children.get(key) == child)
             linked_children[key] = child
     require(linked_children == children)
+    return records, receipts_by_key
+
+
+def validate_metadata(backend, conn, now):
+    """Reusable bounded canonical metadata integrity check, without payload reads."""
+    try:
+        return _inspect_metadata(backend, conn, now)
+    except ValueError, TypeError, KeyError, RecursionError, MemoryError:
+        raise MemoryError("storage_corrupt") from None
+
+
+def _inspect_status(backend, conn, request, now):
+    records, receipts = _inspect_metadata(backend, conn, now)
+    matched = receipts.get(request["request_id"])
+    found = None
+    if matched is not None:
+        digest, found = matched
+        if digest != request["expected_digest"] or found["operation"] != request["operation"]:
+            raise MemoryError("idempotency_conflict")
     result = {
         "state": "absent_at_snapshot" if found is None else "committed",
         "evaluated_at": now.isoformat(timespec="seconds").replace("+00:00", "Z"),

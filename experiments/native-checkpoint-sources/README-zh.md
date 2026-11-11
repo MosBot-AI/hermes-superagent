@@ -48,3 +48,9 @@ python "$ARTIFACT/run_tests.py" --checkout "$DISPOSABLE_HOST" --python "$PREPARE
 ## 回执绑定的原始来源读取
 
 [Issue #129](https://github.com/MosBot-AI/hermes-superagent/issues/129) 新增显式宿主操作 `read_receipt_sources(db, session_id, attempt_id, expected_receipt_id)` 与只读消费者。回执有效性、精确成员关系及完整原始行共用一个有界 SQLite 读取快照。缺失、失效或不可用结果没有来源载荷；回执哈希不匹配时拒绝，不泄露文本。快照建立后仍可能发生删除，因此返回的历史观察不代表持续可用性或权限。参见[读取协议与上限](../../docs/94-receipt-source-reads-zh.md)。不新增日志载荷、自动读取器、记忆接受、游标或 provider-v2 能力。
+
+## 显式保留快照消费端
+
+[Issue #133](https://github.com/MosBot-AI/hermes-superagent/issues/133) 新增 `capture_retained_snapshot`、`execute_retained_snapshot` 和 `test_acceptance.py`。在操作员另外明确确认后，捕获操作选择一个完整原始行（最多 2,048 字符），保留其原始角色及稳定的存储/会话/消息身份，准备调用方持有的明文和仅含元数据的恢复查询。调用方在分别通过实际 Memory SDK/SQLite 后端执行暂存和接受之前，必须保留该查询。不会自动重试，也不会根据来源状态推断权限。
+
+这个后续消费端仅能按独立保留快照语义写入规范记忆；前述来源读取器和恢复日志仍仅负责读取/记账。捕获后原生来源被删除，不会自行撤销已授权的独立保留，也不会遗忘规范记忆。待处理槽顺序、规范抑制、历史结果及独立来源游标详见[实际接受协议](../../docs/96-retained-source-acceptance-zh.md)。原生与规范提交仍然独立。宿主补丁保持不变、未提交上游且未启用；不新增生产生命周期钩子或模型调用。
