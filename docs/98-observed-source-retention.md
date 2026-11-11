@@ -59,6 +59,8 @@ Canonical correction/forgetting and retained-source discard enforce existing exa
 
 ## Verification and remaining gates
 
+The follow-on [packaged lifecycle acceptance lane](99-packaged-memory-lifecycle.md) exercises real Gateway processes and original-text loss, with explicitly separate SDK-staged pending setup. Its exact-source run evidence is required; test implementation alone does not establish live acceptance.
+
 Run repository and documentation checks:
 
 ```sh

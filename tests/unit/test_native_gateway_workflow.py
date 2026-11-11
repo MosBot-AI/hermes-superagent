@@ -185,3 +185,92 @@ def test_packaged_crash_recovery_uses_three_real_instances_and_no_manual_repair(
             if node.func.attr == "connect" and isinstance(node.func.value, ast.Name):
                 if node.func.value.id == "sqlite3":
                     assert "?mode=ro" in ast.get_source_segment(source, node)
+
+
+def test_packaged_memory_lifecycle_is_manual_real_transport_and_readonly_oracle():
+    import ast
+
+    workflow = (ROOT / ".github/workflows/native-gateway.yml").read_text()
+    assert "acceptance/live/test_packaged_gateway_memory.py" in workflow
+    source = (ROOT / "acceptance/live/test_packaged_gateway_memory.py").read_text()
+    tree = ast.parse(source)
+    for evidence in (
+        "session.create",
+        "session.resume",
+        "slash.exec",
+        "live.daemon(",
+        "live.planned_stop(",
+        "live.control_absent(",
+        "instance_id",
+        "proc.pid",
+        "SessionDB",
+        "db.append_message(",
+        "db.clear_messages(",
+        "source-list",
+        "source-show",
+        "source-preview",
+        "source-retain",
+        "source-status",
+        "source-cursor",
+        "source-discard",
+        "source_suppressed",
+        "independent_snapshot",
+        "--expires-at",
+        "--include-expired",
+        "memory_store_missing",
+        'status["decision"] == decision',
+        'status["current"]["revision"] == 2',
+        "PRAGMA integrity_check",
+        "?mode=ro",
+        "db.iterdump()",
+    ):
+        assert evidence in source
+    for forbidden in ("prompt.submit", "monkeypatch", "SIGKILL", "_connection", "DELETE FROM"):
+        assert forbidden not in source
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+            if node.func.attr == "execute":
+                assert isinstance(node.args[0], ast.Constant)
+                assert node.args[0].value.startswith(("SELECT ", "PRAGMA integrity_check"))
+            assert node.func.attr not in ("unlink", "rmdir")
+
+
+def test_pending_fixture_uses_cold_installed_sdk_not_fake_gateway_interruption():
+    import ast
+
+    source = (ROOT / "acceptance/live/test_packaged_gateway_memory.py").read_text()
+    tree = ast.parse(source)
+    script = next(
+        node.value.value
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        and any(isinstance(t, ast.Name) and t.id == "STAGE_INSTALLED" for t in node.targets)
+    )
+    ast.parse(script)
+    for evidence in (
+        "get_plugin_manager",
+        "manager.discover_and_load()",
+        "loaded.module.__name__",
+        "PROVENANCE.json",
+        "source_commit",
+        "module.__file__",
+        "is_relative_to(plugin)",
+        '"personal_agent" not in sys.modules',
+        "storage.open_memory_backend(home, sid)",
+        "LocalMemorySDK",
+        "LocalBinding(namespace, sid)",
+        'sdk.execute("source_stage", payload)',
+    ):
+        assert evidence in script
+    assert '"-I"' in source and '"-B"' in source
+    assert "pending fixture" in source.lower() or "pending recovery" in source.lower()
+    assert "not a simulated Gateway crash" in source
+    assert "sqlite3" not in script and "monkeypatch" not in script
+
+
+def test_memory_configuration_is_opted_in_only_for_memory_acceptance():
+    memory = (ROOT / "acceptance/live/test_packaged_gateway_memory.py").read_text()
+    tasks = (ROOT / "acceptance/live/test_packaged_gateway_tasks.py").read_text()
+    assert "def installed_memory(installed):" in memory
+    assert '["settings"]["local_memory"] = True' in memory
+    assert '"local_memory": True' not in tasks
