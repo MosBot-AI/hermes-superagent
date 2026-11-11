@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "issue": 149,
+  "scope": "Synthetic retained-source deadline and terminal cleanup composition; no model answer scoring, deployment or complete memory-roadmap claim.",
+  "accepted_at": "2030-01-01T00:00:00Z",
+  "before": "2030-01-01T00:00:59Z",
+  "deadline": "2030-01-01T00:01:00Z",
+  "after": "2030-01-01T00:01:01Z",
+  "query": "retained expiry",
+  "sources": [
+    {"id": "legacy", "content": "Synthetic retained expiry legacy itinerary.", "role": "user"},
+    {"id": "observed", "content": "Synthetic retained expiry observed itinerary.", "role": "assistant"}
+  ],
+  "anchor": "Synthetic retained expiry permanent control."
+}

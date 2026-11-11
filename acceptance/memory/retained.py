@@ -141,21 +141,25 @@ def _seed(sdk, requests):
             sdk.execute("correct" if state == "corrected" else "forget", payload)
 
 
+def _legacy_layout(connection):
+    # Reconstruct the historical table layout before the ordinary writable migration.
+    connection.execute("ALTER TABLE retained_source_decisions RENAME TO new_decisions")
+    connection.execute(SCHEMA_V12["retained_source_decisions"])
+    connection.execute(
+        "INSERT INTO retained_source_decisions SELECT request_id,consumer_id,source_sequence,"
+        "request_digest,source_identity,source_fingerprint,source_role,source_receipt,"
+        "state,record_id,receipt,suppressed FROM new_decisions"
+    )
+    connection.execute("DROP TABLE new_decisions")
+    connection.execute("PRAGMA user_version=12")
+
+
 def _prepare(home):
     home.mkdir(mode=0o700)
     _path(home).parent.mkdir(parents=True, mode=0o700)
     with _opened(home) as (sdk, connection):
         _seed(sdk, _requests()[:4])
-        # Reconstruct the historical table layout before the ordinary writable migration.
-        connection.execute("ALTER TABLE retained_source_decisions RENAME TO new_decisions")
-        connection.execute(SCHEMA_V12["retained_source_decisions"])
-        connection.execute(
-            "INSERT INTO retained_source_decisions SELECT request_id,consumer_id,source_sequence,"
-            "request_digest,source_identity,source_fingerprint,source_role,source_receipt,"
-            "state,record_id,receipt,suppressed FROM new_decisions"
-        )
-        connection.execute("DROP TABLE new_decisions")
-        connection.execute("PRAGMA user_version=12")
+        _legacy_layout(connection)
         legacy = connection.execute(
             "SELECT request_digest,source_receipt,receipt FROM retained_source_decisions "
             "ORDER BY request_id"
