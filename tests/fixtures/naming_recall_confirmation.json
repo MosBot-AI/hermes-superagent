@@ -1,0 +1,613 @@
+{
+  "scope": "Independently authored synthetic issue #151 confirmation set. Labels describe information relevance under current eligible record state, not planner capabilities. Includes unsupported/coordinated and nested-relation diagnostics; not an all-pass acceptance gate or evidence of semantic recall, model answers, or production performance. Frozen without inspecting production planner, other fixture queries/labels, or evaluation reports.",
+  "clock": "2026-11-11T12:00:00Z",
+  "label_policy": "Only current, non-forgotten, non-expired records count. Naming questions label records identifying the requested subject/role, not other-role or other-owner matches. Multi-hop questions label both the relation bridge and answer. Negative old-value questions have no historical-answer label after correction. All people, organizations, animals and facts are synthetic.",
+  "records": [
+    {
+      "id": "r01",
+      "topic": "陶序的猫",
+      "content": "陶序的猫叫糯团。"
+    },
+    {
+      "id": "r02",
+      "topic": "陶序的狗",
+      "content": "陶序的狗叫霜豆。"
+    },
+    {
+      "id": "r03",
+      "topic": "陶序的姐姐",
+      "content": "陶序的姐姐叫陶岚。"
+    },
+    {
+      "id": "r04",
+      "topic": "陶岚的公司",
+      "content": "陶岚的公司叫芽桥。"
+    },
+    {
+      "id": "r05",
+      "topic": "陶岚的猫",
+      "content": "陶岚的猫叫杏仁。"
+    },
+    {
+      "id": "r06",
+      "topic": "陶序的宠物护理",
+      "content": "给陶序的猫洗澡的美容师叫沈白。"
+    },
+    {
+      "id": "r07",
+      "topic": "林芷的猫",
+      "content": "林芷的猫叫糯团。"
+    },
+    {
+      "id": "r08",
+      "topic": "陶序的公司",
+      "content": "陶序的公司叫汐塔。"
+    },
+    {
+      "id": "r09",
+      "topic": "陶序的项目",
+      "content": "陶序的项目叫双桨。"
+    },
+    {
+      "id": "r10",
+      "topic": "呦的猫",
+      "content": "呦的猫叫米。"
+    },
+    {
+      "id": "r11",
+      "topic": "K7的猫",
+      "content": "K7的猫叫云豆。"
+    },
+    {
+      "id": "r12",
+      "topic": "阿Q的乐队",
+      "content": "阿Q的乐队叫星屿。"
+    },
+    {
+      "id": "r13",
+      "topic": "叫叫的猫",
+      "content": "叫叫的猫叫泡泡。"
+    },
+    {
+      "id": "r14",
+      "topic": "林叫的狗",
+      "content": "林叫的狗叫铜铃。"
+    },
+    {
+      "id": "r15",
+      "topic": "阿叫的花店",
+      "content": "阿叫的花店叫雾岸。"
+    },
+    {
+      "id": "r16",
+      "topic": "叫的咖啡馆",
+      "content": "叫的咖啡馆叫叶舟。"
+    },
+    {
+      "id": "r17",
+      "topic": "余笛的猫",
+      "content": "余笛的猫叫叫叫。"
+    },
+    {
+      "id": "r18",
+      "topic": "余笛的狗",
+      "content": "余笛的狗叫名字。"
+    },
+    {
+      "id": "r19",
+      "topic": "余笛的乐队",
+      "content": "余笛的乐队叫叫什么。"
+    },
+    {
+      "id": "r20",
+      "topic": "周禾的小名",
+      "content": "周禾的小名是禾禾。"
+    },
+    {
+      "id": "r21",
+      "topic": "周禾的公司",
+      "content": "周禾的公司叫禾禾。"
+    },
+    {
+      "id": "r22",
+      "topic": "周禾的主管",
+      "content": "周禾的主管叫禾禾。"
+    },
+    {
+      "id": "r23",
+      "topic": "陶序的茶",
+      "content": "陶序喜欢喝茉莉花茶。"
+    },
+    {
+      "id": "r24",
+      "topic": "陶序的住所",
+      "content": "陶序住在北堤路。"
+    },
+    {
+      "id": "r25",
+      "topic": "叫叫的乐器",
+      "content": "叫叫喜欢的乐器是长笛。"
+    },
+    {
+      "id": "r26",
+      "topic": "冉书的仓鼠",
+      "content": "冉书的仓鼠叫旧雪。"
+    },
+    {
+      "id": "r27",
+      "topic": "岳遥的乐队",
+      "content": "岳遥的乐队叫纸帆。"
+    },
+    {
+      "id": "r28",
+      "topic": "薄舟的项目",
+      "content": "薄舟的项目叫晨弦。"
+    },
+    {
+      "id": "r29",
+      "topic": "薄舟的公司",
+      "content": "薄舟的公司叫鹭影。"
+    },
+    {
+      "id": "r30",
+      "topic": "余笛的猫玩具",
+      "content": "余笛给猫买了一个玩具，玩具叫小松塔。"
+    },
+    {
+      "id": "r31",
+      "topic": "陶岚的书店",
+      "content": "陶岚的书店叫月盏。"
+    },
+    {
+      "id": "r32",
+      "topic": "林芷的狗",
+      "content": "林芷的狗叫新芽。"
+    }
+  ],
+  "mutations": [
+    {
+      "id": "r26",
+      "op": "correct",
+      "content": "冉书的仓鼠叫新雪。"
+    },
+    {
+      "id": "r27",
+      "op": "forget"
+    }
+  ],
+  "expiry": {
+    "r28": "2026-11-11T11:59:59Z",
+    "r29": "2027-01-01T00:00:00Z"
+  },
+  "queries": [
+    {
+      "id": "q01",
+      "category": "possessive_naming",
+      "query": "陶序的猫叫什么",
+      "relevant": [
+        "r01"
+      ]
+    },
+    {
+      "id": "q02",
+      "category": "possessive_naming",
+      "query": "陶序的猫叫什么名字",
+      "relevant": [
+        "r01"
+      ]
+    },
+    {
+      "id": "q03",
+      "category": "possessive_naming",
+      "query": "陶序的狗叫什么",
+      "relevant": [
+        "r02"
+      ]
+    },
+    {
+      "id": "q04",
+      "category": "possessive_naming",
+      "query": "陶序的姐姐叫什么名字",
+      "relevant": [
+        "r03"
+      ]
+    },
+    {
+      "id": "q05",
+      "category": "possessive_naming",
+      "query": "陶岚的公司叫什么",
+      "relevant": [
+        "r04"
+      ]
+    },
+    {
+      "id": "q06",
+      "category": "possessive_naming",
+      "query": "陶岚的猫叫什么名字",
+      "relevant": [
+        "r05"
+      ]
+    },
+    {
+      "id": "q07",
+      "category": "possessive_naming",
+      "query": "陶序的公司叫什么名字",
+      "relevant": [
+        "r08"
+      ]
+    },
+    {
+      "id": "q08",
+      "category": "possessive_naming",
+      "query": "陶序的项目叫什么",
+      "relevant": [
+        "r09"
+      ]
+    },
+    {
+      "id": "q09",
+      "category": "same_name_other_owner",
+      "query": "林芷的猫叫什么",
+      "relevant": [
+        "r07"
+      ]
+    },
+    {
+      "id": "q10",
+      "category": "same_owner_other_role",
+      "query": "林芷的狗叫什么名字",
+      "relevant": [
+        "r32"
+      ]
+    },
+    {
+      "id": "q11",
+      "category": "short_subject",
+      "query": "呦的猫叫什么",
+      "relevant": [
+        "r10"
+      ]
+    },
+    {
+      "id": "q12",
+      "category": "short_subject",
+      "query": "呦的猫叫什么名字",
+      "relevant": [
+        "r10"
+      ]
+    },
+    {
+      "id": "q13",
+      "category": "mixed_script_subject",
+      "query": "K7的猫叫什么",
+      "relevant": [
+        "r11"
+      ]
+    },
+    {
+      "id": "q14",
+      "category": "mixed_script_subject",
+      "query": "K7的猫叫什么名字",
+      "relevant": [
+        "r11"
+      ]
+    },
+    {
+      "id": "q15",
+      "category": "mixed_script_subject",
+      "query": "阿Q的乐队叫什么",
+      "relevant": [
+        "r12"
+      ]
+    },
+    {
+      "id": "q16",
+      "category": "mixed_script_subject",
+      "query": "阿Q的乐队叫什么名字",
+      "relevant": [
+        "r12"
+      ]
+    },
+    {
+      "id": "q17",
+      "category": "literal_verb_collision",
+      "query": "叫叫的猫叫什么",
+      "relevant": [
+        "r13"
+      ]
+    },
+    {
+      "id": "q18",
+      "category": "literal_verb_collision",
+      "query": "叫叫的猫叫什么名字",
+      "relevant": [
+        "r13"
+      ]
+    },
+    {
+      "id": "q19",
+      "category": "literal_verb_collision",
+      "query": "林叫的狗叫什么",
+      "relevant": [
+        "r14"
+      ]
+    },
+    {
+      "id": "q20",
+      "category": "literal_verb_collision",
+      "query": "阿叫的花店叫什么名字",
+      "relevant": [
+        "r15"
+      ]
+    },
+    {
+      "id": "q21",
+      "category": "literal_verb_collision",
+      "query": "叫的咖啡馆叫什么",
+      "relevant": [
+        "r16"
+      ]
+    },
+    {
+      "id": "q22",
+      "category": "literal_verb_collision",
+      "query": "叫的咖啡馆叫什么名字",
+      "relevant": [
+        "r16"
+      ]
+    },
+    {
+      "id": "q23",
+      "category": "answer_verb_collision",
+      "query": "余笛的猫叫什么名字",
+      "relevant": [
+        "r17"
+      ]
+    },
+    {
+      "id": "q24",
+      "category": "answer_name_collision",
+      "query": "余笛的狗叫什么",
+      "relevant": [
+        "r18"
+      ]
+    },
+    {
+      "id": "q25",
+      "category": "answer_question_collision",
+      "query": "余笛的乐队叫什么名字",
+      "relevant": [
+        "r19"
+      ]
+    },
+    {
+      "id": "q26",
+      "category": "same_name_other_role",
+      "query": "周禾的小名叫什么",
+      "relevant": [
+        "r20"
+      ]
+    },
+    {
+      "id": "q27",
+      "category": "same_name_other_role",
+      "query": "周禾的公司叫什么名字",
+      "relevant": [
+        "r21"
+      ]
+    },
+    {
+      "id": "q28",
+      "category": "same_name_other_role",
+      "query": "周禾的主管叫什么",
+      "relevant": [
+        "r22"
+      ]
+    },
+    {
+      "id": "q29",
+      "category": "ordinary_control",
+      "query": "陶序喜欢喝什么茶",
+      "relevant": [
+        "r23"
+      ]
+    },
+    {
+      "id": "q30",
+      "category": "ordinary_control",
+      "query": "陶序住在哪里",
+      "relevant": [
+        "r24"
+      ]
+    },
+    {
+      "id": "q31",
+      "category": "ordinary_control",
+      "query": "叫叫喜欢什么乐器",
+      "relevant": [
+        "r25"
+      ]
+    },
+    {
+      "id": "q32",
+      "category": "ordinary_control",
+      "query": "陶序的猫的名字是什么",
+      "relevant": [
+        "r01"
+      ]
+    },
+    {
+      "id": "q33",
+      "category": "ordinary_control",
+      "query": "K7的猫的名字是什么",
+      "relevant": [
+        "r11"
+      ]
+    },
+    {
+      "id": "q34",
+      "category": "negative_unknown_role",
+      "query": "陶序的鹦鹉叫什么",
+      "relevant": []
+    },
+    {
+      "id": "q35",
+      "category": "negative_unknown_subject",
+      "query": "严栩的猫叫什么名字",
+      "relevant": []
+    },
+    {
+      "id": "q36",
+      "category": "negative_unknown_role",
+      "query": "林叫的猫叫什么",
+      "relevant": []
+    },
+    {
+      "id": "q37",
+      "category": "negative_subject_fragment",
+      "query": "林的狗叫什么",
+      "relevant": []
+    },
+    {
+      "id": "q38",
+      "category": "negative_subject_fragment",
+      "query": "Q的乐队叫什么名字",
+      "relevant": []
+    },
+    {
+      "id": "q39",
+      "category": "negative_subject_fragment",
+      "query": "K的猫叫什么",
+      "relevant": []
+    },
+    {
+      "id": "q40",
+      "category": "negative_unknown_attribute",
+      "query": "陶序的公司的地址是什么",
+      "relevant": []
+    },
+    {
+      "id": "q41",
+      "category": "corrected_current",
+      "query": "冉书的仓鼠叫什么",
+      "relevant": [
+        "r26"
+      ]
+    },
+    {
+      "id": "q42",
+      "category": "corrected_current",
+      "query": "冉书的仓鼠叫什么名字",
+      "relevant": [
+        "r26"
+      ]
+    },
+    {
+      "id": "q43",
+      "category": "corrected_old_value_absent",
+      "query": "谁的仓鼠叫旧雪",
+      "relevant": []
+    },
+    {
+      "id": "q44",
+      "category": "forgotten_unavailable",
+      "query": "岳遥的乐队叫什么",
+      "relevant": []
+    },
+    {
+      "id": "q45",
+      "category": "forgotten_unavailable",
+      "query": "岳遥的乐队叫什么名字",
+      "relevant": []
+    },
+    {
+      "id": "q46",
+      "category": "expired_unavailable",
+      "query": "薄舟的项目叫什么",
+      "relevant": []
+    },
+    {
+      "id": "q47",
+      "category": "expired_unavailable",
+      "query": "薄舟的项目叫什么名字",
+      "relevant": []
+    },
+    {
+      "id": "q48",
+      "category": "unexpired_available",
+      "query": "薄舟的公司叫什么名字",
+      "relevant": [
+        "r29"
+      ]
+    },
+    {
+      "id": "q49",
+      "category": "coordinated_diagnostic",
+      "query": "陶序的猫和狗分别叫什么",
+      "relevant": [
+        "r01",
+        "r02"
+      ]
+    },
+    {
+      "id": "q50",
+      "category": "coordinated_diagnostic",
+      "query": "陶序和林芷的猫分别叫什么名字",
+      "relevant": [
+        "r01",
+        "r07"
+      ]
+    },
+    {
+      "id": "q51",
+      "category": "coordinated_diagnostic",
+      "query": "周禾的公司和主管分别叫什么",
+      "relevant": [
+        "r21",
+        "r22"
+      ]
+    },
+    {
+      "id": "q52",
+      "category": "nested_relation_diagnostic",
+      "query": "陶序的姐姐的猫叫什么",
+      "relevant": [
+        "r03",
+        "r05"
+      ]
+    },
+    {
+      "id": "q53",
+      "category": "nested_relation_diagnostic",
+      "query": "陶序的姐姐的书店叫什么名字",
+      "relevant": [
+        "r03",
+        "r31"
+      ]
+    },
+    {
+      "id": "q54",
+      "category": "long_role_diagnostic",
+      "query": "给陶序的猫洗澡的美容师叫什么",
+      "relevant": [
+        "r06"
+      ]
+    },
+    {
+      "id": "q55",
+      "category": "nested_attribute_diagnostic",
+      "query": "余笛给猫买的玩具叫什么",
+      "relevant": [
+        "r30"
+      ]
+    },
+    {
+      "id": "q56",
+      "category": "punctuation_control",
+      "query": "请问，陶序的猫叫什么名字？",
+      "relevant": [
+        "r01"
+      ]
+    }
+  ]
+}
