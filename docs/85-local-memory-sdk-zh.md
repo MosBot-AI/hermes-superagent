@@ -54,6 +54,16 @@ with TemporaryDirectory() as directory:
     print(run_conformance(open_synthetic, isolated_synthetic=True))
 ```
 
+## 可选持久进度扩展
+
+新增的 API-v1 SDK 操作 `changes`、`consumer_get` 和 `consumer_advance` 复用已有的 [37](37-durable-memory-progress-zh.md) 后端契约。仅支持 CRUD 的适配器仍可准入，现有 `run_conformance` 运行器不变。缺少声明能力时在分发前失败，不提供回退。推进需要 `metadata_changes`、`durable_consumer_cursor`、持久写入、CAS 和幂等性。SDK 还会在后端分发前拒绝模型来源绑定，包括回执重放。可信打开方仍须正确绑定实际后端；这不是身份认证。
+
+变更页只包含序列、记录 ID、revision 和操作，不包含历史载荷、来源标签、请求键或摘要。严格验证检查精确字段、整数类型、递增序列、请求边界、水位关系、分页及固定为零的保留下界。同一页中重复记录 ID 的 revision 必须递增，记录终止性遗忘后不得再有该记录的事件。不引入连续序列要求或跨调用历史缓存。消费者读取及回执验证精确标识符、注册状态与 revision 一致性、作用域及请求的推进值。成功推进的回执是历史元数据，不一定代表当前游标。游标或经过验证的响应均不能证明原生检查点完成、外部发布、来源覆盖或恶意适配器的诚实性。
+
+推进属于写入：意外异常或无效确认会产生 `outcome_unknown`，不会自动重试。保留原始 request ID，通过精确重放和 `consumer_get` 对账；重放旧回执不得倒退当前进度。可信的“未提交新修改”拒绝白名单包含序列/未来水位、游标未推进、消费者配额及操作者作用域失败。任意后端消息仍不会透传。
+
+适配器作者可以在**另一个全新的合成存储**上，单独运行 `personal_agent.memory_conformance` 中的 `run_progress_conformance(factory, isolated_synthetic=True)`。该可选套件检查贯穿更正与遗忘的有界/固定上界分页、重开后游标持久保留、精确重试、同键变更载荷冲突、过期 CAS、倒退/未来拒绝、独立消费者及不倒退进度的旧回执重放。它要求这些可选能力，不会静默跳过不支持的适配器。独立 CRUD 示例不声称支持进度。基于 SQLite 的测试还注入无效元数据/回执和确认丢失。这些属于离线观察，不是生产、断电或原生生命周期验收。
+
 ## 剩余 E2.6 工作
 
 更广的 [#43](https://github.com/MosBot-AI/hermes-superagent/issues/43) 保持开放：本地外观层并未交付完整的版本化来源/事件及多类型契约、远程对账、替换激活/迁移、经过审查的加载/资源 ABI 或原生生命周期集成。[82](82-shared-client-api-zh.md) 中共享客户端契约不变；Python SDK 不证明已提供认证 HTTP 或跨后端功能等价。

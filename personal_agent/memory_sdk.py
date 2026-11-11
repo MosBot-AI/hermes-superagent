@@ -20,8 +20,13 @@ from .memory_backend import (
 )
 
 SDK_VERSION = 1
-OPERATIONS = frozenset({"remember", "correct", "forget", "get", "list", "search", "export"})
-_WRITES = frozenset({"remember", "correct", "forget"})
+PROGRESS_OPERATIONS = frozenset({"changes", "consumer_get", "consumer_advance"})
+OPERATIONS = (
+    frozenset({"remember", "correct", "forget", "get", "list", "search", "export"})
+    | PROGRESS_OPERATIONS
+)
+_RECORD_WRITES = frozenset({"remember", "correct", "forget"})
+_WRITES = _RECORD_WRITES | {"consumer_advance"}
 _REJECTIONS = frozenset(
     {
         "idempotency_conflict",
@@ -32,6 +37,13 @@ _REJECTIONS = frozenset(
         "record_limit",
         "mutation_limit",
         "read_only",
+        "read_only_backend",
+        "invalid_sequence",
+        "future_watermark",
+        "cursor_not_advanced",
+        "consumer_limit",
+        "consumer_mutation_limit",
+        "consumer_scope_required",
     }
 )
 _RECORD = frozenset(
@@ -153,6 +165,11 @@ class LocalMemorySDK:
             raise MemoryError("unsupported_operation")
         request = validate_request(operation, payload)
         self._service.descriptor.check_request(operation, request)
+        if (
+            operation == "consumer_advance"
+            and self.binding.source_kind != "explicit_local_operator"
+        ):
+            raise MemoryError("consumer_scope_required")
         try:
             result = self._service.execute(operation, deepcopy(request))
         except MemoryError as error:
@@ -186,7 +203,10 @@ class LocalMemorySDK:
         _keys(result, {"data", "replayed"})
         _require(type(result["replayed"]) is bool)
         data = result["data"]
-        if operation in _WRITES:
+        if operation in PROGRESS_OPERATIONS:
+            self._validate_progress(operation, request, result)
+            return
+        if operation in _RECORD_WRITES:
             _keys(
                 data,
                 {"record_id", "revision", "status", "operation", "request_id", "event_sequence"},
@@ -239,6 +259,89 @@ class LocalMemorySDK:
             _require(data["scope"] == "current_records_and_tombstones_live_page")
             _require(data["restorable"] is False)
             _integer(data["watermark"])
+
+    def _validate_progress(self, operation, request, result):
+        data = result["data"]
+        if operation != "consumer_advance":
+            _require(result["replayed"] is False)
+        if operation == "changes":
+            _keys(
+                data,
+                {
+                    "schema_version",
+                    "items",
+                    "through_sequence",
+                    "current_watermark",
+                    "next_sequence",
+                    "has_more",
+                    "retention_floor",
+                    "scope",
+                },
+            )
+            _require(data["schema_version"] == "personal.memory.changes.v1")
+            _require(data["scope"] == "committed_record_event_metadata_no_historical_payload")
+            for key in (
+                "through_sequence",
+                "current_watermark",
+                "next_sequence",
+                "retention_floor",
+            ):
+                _integer(data[key])
+            _require(data["retention_floor"] == 0)
+            after, through = request["after_sequence"], data["through_sequence"]
+            _require(after <= through <= data["current_watermark"])
+            _require(
+                through
+                == (
+                    request["through_sequence"]
+                    if request["through_sequence"] is not None
+                    else data["current_watermark"]
+                )
+            )
+            _require(type(data["items"]) is list and len(data["items"]) <= request["limit"])
+            _require(type(data["has_more"]) is bool)
+            previous = after
+            records = {}
+            for item in data["items"]:
+                _keys(item, {"sequence", "record_id", "revision", "operation"})
+                _integer(item["sequence"], 1)
+                _integer(item["revision"], 1)
+                _identifier(item["record_id"])
+                _require(item["operation"] in _RECORD_WRITES)
+                _require(
+                    item["revision"] == 1
+                    if item["operation"] == "remember"
+                    else item["revision"] >= 2
+                )
+                prior = records.get(item["record_id"])
+                if prior is not None:
+                    _require(prior["operation"] != "forget")
+                    _require(item["revision"] > prior["revision"])
+                records[item["record_id"]] = item
+                _require(previous < item["sequence"] <= through)
+                previous = item["sequence"]
+            _require(data["next_sequence"] == previous)
+            if data["has_more"]:
+                _require(len(data["items"]) == request["limit"] and previous < through)
+            else:
+                _require(previous == through)
+            return
+        fields = {"consumer_id", "revision", "through_sequence", "registered", "scope"}
+        if operation == "consumer_advance":
+            fields |= {"request_id"}
+        _keys(data, fields)
+        _require(data["consumer_id"] == request["consumer_id"])
+        _require(data["scope"] == "caller_reported_local_record_progress_not_native_checkpoint")
+        _integer(data["revision"])
+        _integer(data["through_sequence"])
+        _require(type(data["registered"]) is bool)
+        _require(data["registered"] == (data["revision"] > 0))
+        _require(data["registered"] or data["through_sequence"] == 0)
+        if operation == "consumer_advance":
+            _require(data["registered"] is True)
+            _require(data["revision"] == request["expected_revision"] + 1)
+            _require(data["through_sequence"] == request["through_sequence"])
+            _require(data["request_id"] == request["request_id"])
 
     def context(self, query: str, *, limit: int = 6, max_chars: int = 6000) -> dict:
         """One fresh search snapshot, whole records only; not instructions/authority."""
