@@ -38,3 +38,9 @@ python "$ARTIFACT/run_tests.py" --checkout "$DISPOSABLE_HOST" --python "$PREPARE
 运行器核验准确基础版本、已暂存补丁/树、制品源码哈希、未跟踪文件及隐藏索引标志。它不会下载、安装、应用补丁、启动监听器或改变生产固定版本。提案测试使用净化后的环境及临时合成 home。原生回归使用固定宿主的规范 `scripts/run_tests.sh` 及其逐文件进程隔离，并显式指定预配解释器。存在测试不代表测试通过；实际执行计数应记录于经过评审的 manifest。CI 使用独立的一次性宿主作业，不会在运行时包中启用此提案。
 
 `consumer.py` 是显式测试/评审消费者，不是交付的 provider 注册或自动钩子。制品仅包含合成测试证据，没有真实模型调用、凭据、生产 profile 或外部送达检查。源自上游的补丁材料受[保留的许可证](LICENSE.hermes-agent)约束。尚未提交上游或发布。
+
+## 中断的消费者记账
+
+[Issue #127](https://github.com/MosBot-AI/hermes-superagent/issues/127)加入 `recovery.py` 和 `test_recovery.py`。宿主还公开 `source_request_identity(session_id, request)`，这个有界元数据标识辅助函数不访问数据库，也不执行来源准入。`RecoveryJournal(path, host_path, session_id, create=True)` 显式初始化私有日志；重新打开时省略 `create`。`stage` 先于宿主准入，`submit` 显式提交相同的绑定请求，`pending` 有界列出待处理尝试，`reconcile` 在本地历史记账前读取同一宿主回执。日志不保留完整请求、来源或摘要文本。
+
+使用前请阅读[恢复协议与边界](../../docs/93-source-receipt-recovery-zh.md)。回执缺失需要显式重新提供相同请求，不会自动重试。来源可用性是重新读取的观察结果，不由记账保证。两个存储不是原子的，不写入规范记忆或游标。本切片仍是隔离的合成测试入口，不是生产启用。

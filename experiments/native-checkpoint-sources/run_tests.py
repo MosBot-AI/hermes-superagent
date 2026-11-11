@@ -89,6 +89,7 @@ def main():
                 "pytest",
                 "-q",
                 str(ARTIFACT / "test_checkpoint_sources.py"),
+                str(ARTIFACT / "test_recovery.py"),
                 "--confcutdir=" + str(ARTIFACT),
             ],
             cwd=checkout,

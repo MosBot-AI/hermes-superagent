@@ -162,3 +162,5 @@ E9 已选定原生 worker 路由设计，并实现离线约束验证器和部分
 91. [有界原生来源解析](91-native-source-resolution-zh.md)：调用方绑定的只读核对及 revision 围栏，不提供自动采集或 checkpoint-v2。
 
 92. [仅供评审的原生检查点来源回执](92-native-checkpoint-sources-zh.md)：显式所有者原地事务提案、元数据状态与保留失效；不启用 provider-v2。
+
+93. [仅供审查的来源回执恢复](93-source-receipt-recovery-zh.md)：持久元数据意图与同 attempt 重启对账，不构成双库原子性或记忆检查点。
