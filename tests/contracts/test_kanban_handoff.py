@@ -361,9 +361,8 @@ def handoff_host(native, board, monkeypatch):
     return local.make_host(home, manager)
 
 
-def handoff(host, text):
+def handoff_text(host, text):
     import asyncio
-    import json
 
     from gateway.session_commands import execute_command
 
@@ -371,7 +370,13 @@ def handoff(host, text):
         execute_command(host.connection, host.ref, {"command": "personal-handoff " + text})
     )
     assert response["type"] == "exec"
-    return json.loads(response["output"])
+    return response["output"]
+
+
+def handoff(host, text):
+    import json
+
+    return json.loads(handoff_text(host, "--json " + text))
 
 
 def prepared(host):

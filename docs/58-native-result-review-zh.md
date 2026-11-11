@@ -33,3 +33,6 @@
 ## 范围与剩余门槛
 
 这是 E3.2/E3.5 的先导，把[身份绑定交接](52-parked-kanban-handoff-zh.md)连到明确的本地完成决定。[建议性进度观察](53-native-progress-observation-zh.md)仍绝不自动完成任务。不宣称真实 Kanban、Gateway、模型或安装验收，不增加安装重试、原生写入或提供商调用。完整宿主采纳和真实验收仍列于[路线图](08-roadmap-and-acceptance-zh.md)。
+
+
+[原生交接工作台](100-native-handoff-workbench-zh.md) 现在为这条完整操作者流程提供默认可读视图和明确 `--json` 兼容模式。其手动安装包 Gateway 通道与准确源版本执行证据，和本篇原始离线里程碑分别记录。

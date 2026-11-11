@@ -27,3 +27,6 @@ Task detail and bounded task/review views label this as **Native board observed 
 [Parked handoff](52-parked-kanban-handoff.md) source/schema checks, shared-board boundaries and trusted-host import assumptions still apply. Observation uses read-only SQL, which may still cause SQLite WAL bookkeeping. Current opt-in and task CAS are rechecked, but native and local databases are not one atomic transaction: the native card can change immediately after observation. Stored timestamps identify the local observation time, not proof of freshness or provider execution.
 
 This milestone has offline fixture coverage only. No installation, live Kanban, Gateway or model acceptance is claimed, and existing scanner restrictions are unchanged. [Roadmap](08-roadmap-and-acceptance.md) worker orchestration and universal task mapping remain incomplete.
+
+
+[The native handoff workbench](100-native-handoff-workbench.md) now provides readable default views and explicit `--json` compatibility across this complete operator journey. Its manual packaged-Gateway lane and exact-source execution evidence are separate from this original offline milestone.
