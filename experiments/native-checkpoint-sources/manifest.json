@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "status": "Review-only, unsubmitted and not activated",
+  "base": "2281116525106e3c109993ccb5dc74d02bfc1427",
+  "staged_tree": "06b8bf68d4ec71628ff6a81f812a1f95407cc9cf",
+  "patch_file": "native-checkpoint-sources.patch",
+  "patch_sha256": "030cb545ac82654c42dca52913621515778971cdeccc2e7d9c48599070042ef6",
+  "changed_files": 1,
+  "patch_files": [
+    "hermes_state_checkpoint_sources.py"
+  ],
+  "source_hashes": {
+    "run_tests.py": "10b2890ef315b9ff2087fd7ee26eddb1531e7795f4c3abeddb77a34b3013f3e1",
+    "consumer.py": "0119bbe689d44f0943afb54bfdb8f2af07e9008f50d874cec959770996b4174b",
+    "test_checkpoint_sources.py": "71af473f9559133dceb4898658a3e5140ffe408f490844f23885c1b2d8342a21",
+    "../../personal_agent/checkpoint_evidence.py": "21ae6c7bc11521a408d2ab17ffb7c1ec7af92f8fabf320c0f0531e4a553c306f",
+    "../../personal_agent/native_source_resolution.py": "030d3d86ee9d40b6772d9cc844b9c44d44eb3bc72b7e21f99522e28e4b0d35f2",
+    "../../personal_agent/memory_backend.py": "e87b76dbdd87c4cc9246926dcff7125382a5095127c62bc79881013f8558c902",
+    "../../personal_agent/__init__.py": "18d45546de86a949e6b4645694d71f4136cca36e5b3ceea56e3dd23778eb3222"
+  },
+  "artifact_files": [
+    "LICENSE.hermes-agent",
+    "README-zh.md",
+    "README.md",
+    "consumer.py",
+    "manifest.json",
+    "native-checkpoint-sources.patch",
+    "run_tests.py",
+    "test_checkpoint_sources.py"
+  ],
+  "native_test_files": [
+    "tests/hermes_state/test_compression_watermark_commit.py",
+    "tests/hermes_state/test_compression_lineage_guard.py",
+    "tests/hermes_state/test_hermes_state_compression_locks.py",
+    "tests/hermes_state/test_compression_created_source.py",
+    "tests/hermes_state/test_delete_compression_chain.py",
+    "tests/agent/test_compression_commit_fence_race.py"
+  ],
+  "selected_suite": {
+    "proposal_passed": 71,
+    "native_passed": 70,
+    "passed": 141,
+    "failed": 0,
+    "skipped": 0,
+    "full_upstream_suite": false,
+    "native_expectation_changes": []
+  },
+  "submitted_upstream": false,
+  "production_activated": false,
+  "live_model_calls": false,
+  "external_delivery": false,
+  "project_source_base": "1619902719f10f0f5acb27f9bbe1484440939b17"
+}

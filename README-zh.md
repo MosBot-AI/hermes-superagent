@@ -168,3 +168,5 @@ plugins:
 [明确任务拆解](docs/57-task-breakdown-zh.md): 原子记录步骤、继承前置，并让父任务依赖全部新步骤；不自动执行或完成。
 
 [原生结果审阅与明确本地接受](docs/58-native-result-review-zh.md): 直接审阅不可信卡片结果，再凭重新核对的摘要及人工说明完成本地任务；不自动完成或修改原生卡片。
+
+[仅供评审的原生检查点来源回执](docs/92-native-checkpoint-sources-zh.md)：隔离的宿主持有提交/保留提案；provider v1 与生产运行时保持不变。

@@ -9,6 +9,42 @@ permissions:
   contents: read
 
 jobs:
+  checkpoint-source-proposal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.14.9'
+      - name: Prepare the pinned Hermes test environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          upstream="$RUNNER_TEMP/hermes"
+          git init "$upstream"
+          git -C "$upstream" remote add origin https://github.com/NousResearch/hermes-agent.git
+          git -C "$upstream" fetch --depth=1 origin 2281116525106e3c109993ccb5dc74d02bfc1427
+          git -C "$upstream" checkout --detach FETCH_HEAD
+          export HERMES_HOME="$RUNNER_TEMP/hermes-build-home"
+          export HERMES_RUNTIME_DIR="$RUNNER_TEMP/hermes-build-runtime"
+          cd "$upstream"
+          python -m pm.build_env --source . --out "$RUNNER_TEMP/hermes-test-venv" \
+            --group dev --group test --python "$(command -v python)"
+      - name: Verify checkpoint source receipts on a disposable proposed host
+        shell: bash
+        run: |
+          set -euo pipefail
+          proposed="$RUNNER_TEMP/hermes-checkpoint-source-proposal"
+          artifact="$GITHUB_WORKSPACE/experiments/native-checkpoint-sources"
+          git -C "$RUNNER_TEMP/hermes" worktree add --detach "$proposed" 2281116525106e3c109993ccb5dc74d02bfc1427
+          git -C "$proposed" apply --check "$artifact/native-checkpoint-sources.patch"
+          git -C "$proposed" apply --index "$artifact/native-checkpoint-sources.patch"
+          "$RUNNER_TEMP/hermes-test-venv/bin/python" "$artifact/run_tests.py" \
+            --checkout "$proposed" --python "$RUNNER_TEMP/hermes-test-venv/bin/python"
   native-contracts:
     runs-on: ubuntu-latest
     timeout-minutes: 20

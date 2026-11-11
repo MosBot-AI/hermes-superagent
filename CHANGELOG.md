@@ -87,6 +87,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Add a [review-only native checkpoint source receipt proposal](docs/92-native-checkpoint-sources.md), isolated artifact verification and canonical native regressions; shipping provider v1, production pin and runtime activation remain unchanged (#125).
+
 - Add internal caller-bound read-only native source resolution with exact content/lineage validation, finite admission limits and revision fences; no automatic capture, retention guarantee or checkpoint-v2 activation (#123).
 
 - Add a manual-only installed-runtime Gateway task lifecycle acceptance candidate, with real ticket/WebSocket commands and restart readback; live execution remains separately gated.
