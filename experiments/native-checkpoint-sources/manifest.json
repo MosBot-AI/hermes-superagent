@@ -2,23 +2,24 @@
   "schema_version": 1,
   "status": "Review-only, unsubmitted and not activated",
   "base": "2281116525106e3c109993ccb5dc74d02bfc1427",
-  "staged_tree": "21cec6c910959cea85024c1b565e82f98f67f3d3",
+  "staged_tree": "e9172be3deb5b7f544ebfb22f700621dd3b741c2",
   "patch_file": "native-checkpoint-sources.patch",
-  "patch_sha256": "8446a578ca06d90813920933ccce63cbe3307340a775eecfeb8b240813e8c79f",
+  "patch_sha256": "711845a9eb4c6ace372238338c822d17c2f0ab11b824333f7a1ab4f31763277f",
   "changed_files": 1,
   "patch_files": [
     "hermes_state_checkpoint_sources.py"
   ],
   "source_hashes": {
-    "run_tests.py": "e8dcb1de7b897b197b39db80b2323f99179eced22f872302eddbedacbd3319da",
-    "consumer.py": "0119bbe689d44f0943afb54bfdb8f2af07e9008f50d874cec959770996b4174b",
+    "run_tests.py": "9bf2380de2c0b82dd044319782e9b4cf46d998e3dd695c5bbdd4924522cf5a84",
+    "consumer.py": "e117d064e92ef3c1bbab293a7de86a999f74f445f62f077ea618a5c465b2690b",
     "test_checkpoint_sources.py": "71af473f9559133dceb4898658a3e5140ffe408f490844f23885c1b2d8342a21",
     "../../personal_agent/checkpoint_evidence.py": "21ae6c7bc11521a408d2ab17ffb7c1ec7af92f8fabf320c0f0531e4a553c306f",
     "../../personal_agent/native_source_resolution.py": "030d3d86ee9d40b6772d9cc844b9c44d44eb3bc72b7e21f99522e28e4b0d35f2",
     "../../personal_agent/memory_backend.py": "e87b76dbdd87c4cc9246926dcff7125382a5095127c62bc79881013f8558c902",
     "../../personal_agent/__init__.py": "18d45546de86a949e6b4645694d71f4136cca36e5b3ceea56e3dd23778eb3222",
     "recovery.py": "e7706e78bf2003915ea4d700828c974d58aa0b51b0f5980b838edb3aa06a3f93",
-    "test_recovery.py": "aec695c126f6d4d0e92f5861511cb1ba61c2f0d977612a91793a60426713fd80"
+    "test_recovery.py": "aec695c126f6d4d0e92f5861511cb1ba61c2f0d977612a91793a60426713fd80",
+    "test_source_reads.py": "3606e16a3a237d25b12c5780265251a4b89fad0297e610c63d53573b930ea596"
   },
   "artifact_files": [
     "LICENSE.hermes-agent",
@@ -30,7 +31,8 @@
     "run_tests.py",
     "test_checkpoint_sources.py",
     "recovery.py",
-    "test_recovery.py"
+    "test_recovery.py",
+    "test_source_reads.py"
   ],
   "native_test_files": [
     "tests/hermes_state/test_compression_watermark_commit.py",
@@ -41,9 +43,9 @@
     "tests/agent/test_compression_commit_fence_race.py"
   ],
   "selected_suite": {
-    "proposal_passed": 109,
+    "proposal_passed": 171,
     "native_passed": 70,
-    "passed": 179,
+    "passed": 241,
     "failed": 0,
     "skipped": 0,
     "full_upstream_suite": false,
@@ -53,5 +55,5 @@
   "production_activated": false,
   "live_model_calls": false,
   "external_delivery": false,
-  "project_source_base": "39791ec685eac27cfdf816831bea5cea03ea6a2d"
+  "project_source_base": "d778457856019ffd141aaa207bfb31c817f4fc15"
 }

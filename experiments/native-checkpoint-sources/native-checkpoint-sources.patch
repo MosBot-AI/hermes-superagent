@@ -1,9 +1,9 @@
 diff --git a/hermes_state_checkpoint_sources.py b/hermes_state_checkpoint_sources.py
 new file mode 100644
-index 00000000..4c250975
+index 00000000..8e98ba37
 --- /dev/null
 +++ b/hermes_state_checkpoint_sources.py
-@@ -0,0 +1,500 @@
+@@ -0,0 +1,599 @@
 +"""Review-only explicit owner in-place source receipts. Not a memory checkpoint.
 +
 +No ordinary path imports this module. Requests are untrusted bounded values; the
@@ -21,6 +21,9 @@ index 00000000..4c250975
 +MAX_IDENTITIES = 1024
 +MAX_RECEIPTS = 4096
 +MAX_BINDINGS = 1048576
++MAX_RAW_ROW = 262144
++MAX_RAW_TOTAL = 2097152
++MAX_SOURCE_OUTPUT = 1500000
 +MARKERS = (
 +    "[CONTEXT COMPACTION — REFERENCE ONLY]",
 +    "[CONTEXT SUMMARY]:",
@@ -53,6 +56,7 @@ index 00000000..4c250975
 +            "read_only",
 +            "commit_failed_reconcile_same_attempt",
 +            "status_unknown",
++            "receipt_mismatch",
 +        }
 +        super().__init__(
 +            code if type(code) is str and code in safe else "operation_failed"
@@ -141,6 +145,10 @@ index 00000000..4c250975
 +        "SELECT * FROM messages WHERE session_id=? AND active=1 ORDER BY id LIMIT ?",
 +        (sid, MAX_ROWS + 1),
 +    ).fetchall()
++    return _inspect_source_rows(db, rows)
++
++
++def _inspect_source_rows(db, rows):
 +    _require(len(rows) <= MAX_ROWS, "limit")
 +    seen, total, result, metadata_bytes = set(), 0, [], 0
 +    for row in rows:
@@ -153,7 +161,7 @@ index 00000000..4c250975
 +        _require(type(absorbed) is list and len(absorbed) < MAX_IDENTITIES)
 +        size = sum(len(v) for v in tuple(row) if isinstance(v, (str, bytes)))
 +        metadata_bytes += size
-+        _require(size <= 262144 and metadata_bytes <= 2097152, "limit")
++        _require(size <= MAX_RAW_ROW and metadata_bytes <= MAX_RAW_TOTAL, "limit")
 +        uids = _uids([row["message_uid"], *absorbed])
 +        _require(
 +            type(absorbed) is list and not seen.intersection(uids), "source_ambiguous"
@@ -504,3 +512,94 @@ index 00000000..4c250975
 +        raise
 +    except Exception:  # health: allow BLE001 -- redact backend/callback details at the explicit receipt boundary
 +        raise SourceReceiptError("status_unknown") from None
++
++
++def _read_originals(db, conn, sid, receipt):
++    """Inspect exact membership without a filtering join hiding extra bindings."""
++    count = receipt["source_count"]
++    _require(type(count) is int and 0 < count <= MAX_ROWS, "limit")
++    bindings = conn.execute(
++        "SELECT row_id FROM source_receipt_rows WHERE receipt_id=? ORDER BY row_id LIMIT ?",
++        (receipt["receipt_id"], MAX_ROWS + 1),
++    ).fetchall()
++    ids = [row[0] for row in bindings]
++    _require(len(ids) == count and len(set(ids)) == count)
++    _require(all(type(rid) is int and 0 < rid < 2**63 for rid in ids))
++    rows = conn.execute(
++        "SELECT * FROM messages WHERE id IN (" + ",".join("?" for _ in ids)
++        + ") ORDER BY id LIMIT ?", (*ids, MAX_ROWS + 1),
++    ).fetchall()
++    _require([row["id"] for row in rows] == ids)
++    _require(all(
++        row["session_id"] == sid and row["active"] == 0 and row["compacted"] == 1
++        for row in rows
++    ))
++    sources = []
++    for row, uids, content, eligible in _inspect_source_rows(db, rows):
++        _require(eligible, "unsupported_source")
++        sources.append({
++            "row_id": row["id"], "role": row["role"], "content": content,
++            "message_uid": uids[0], "absorbed_message_uids": uids[1:],
++        })
++    return sources
++
++
++def _read_receipt_snapshot(db, conn, sid, attempt, expected):
++    empty = {"available": False, "durable_memory_checkpoint": False}
++    if not conn.execute(
++        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='source_receipts'"
++    ).fetchone():
++        return {**empty, "status": "absent"}
++    receipt = conn.execute(
++        "SELECT * FROM source_receipts WHERE session_id=? AND attempt_id=?",
++        (sid, attempt),
++    ).fetchone()
++    if receipt is None:
++        return {**empty, "status": "absent"}
++    _require(receipt["receipt_id"] == expected, "receipt_mismatch")
++    triggers = conn.execute(
++        "SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND name IN "
++        "('source_receipt_update','source_receipt_delete')"
++    ).fetchone()[0]
++    if receipt["invalidated"] != 0 or triggers != 2:
++        return {**empty, "status": "invalidated_or_unknown"}
++    result = {
++        "status": "available_at_snapshot", "available": True,
++        "durable_memory_checkpoint": False, "receipt_id": expected,
++        "sources": _read_originals(db, conn, sid, receipt),
++    }
++    _require(len(_json(result).encode("ascii")) <= MAX_SOURCE_OUTPUT, "limit")
++    return result
++
++
++def read_receipt_sources(db, session_id, attempt_id, expected_receipt_id):
++    """Bounded original text from one native snapshot, never recall authorization.
++
++    The caller must already have read authority for this explicit SessionDB and
++    session. Success is only availability at the SQLite snapshot, not a fence
++    against deletion after that snapshot. No payload is retained or written.
++    Trusted native schema/triggers are assumed, not malicious raw-tamper safety.
++    Limits are post-read admission bounds, not preallocation guarantees.
++    """
++    _scope(db, session_id)
++    _text(attempt_id, 128)
++    _require(type(expected_receipt_id) is str and re.fullmatch(
++        r"[0-9a-f]{64}", expected_receipt_id
++    ))
++    try:
++        with db._read_ctx(reopen=False) as conn:
++            # Do not nest BEGIN or roll back a caller-owned transaction.
++            _require(not conn.in_transaction)
++            conn.execute("BEGIN")
++            try:
++                return _read_receipt_snapshot(
++                    db, conn, session_id, attempt_id, expected_receipt_id
++                )
++            finally:
++                conn.rollback()
++    except SourceReceiptError as exc:
++        if str(exc) == "receipt_mismatch":
++            raise
++    except Exception:  # health: allow BLE001 -- redact unavailable store and decoding details at the read boundary
++        return {"status": "unavailable", "available": False, "durable_memory_checkpoint": False}
++    return {"status": "unavailable", "available": False, "durable_memory_checkpoint": False}

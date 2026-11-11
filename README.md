@@ -175,3 +175,5 @@ Added [saved native attention review](docs/54-saved-native-attention.md): local 
 [Review-only native checkpoint source receipts](docs/92-native-checkpoint-sources.md): isolated host-owned commit/retention proposal; provider v1 and production runtime remain unchanged.
 
 [Review-only source receipt recovery](docs/93-source-receipt-recovery.md) adds a durable metadata journal for interrupted consumer accounting; it does not enable production capture or memory checkpoints.
+
+[Review-only receipt-bound source reads](docs/94-receipt-source-reads.md) return original rows and validity in one bounded native snapshot; deletion affects fresh reads, without enabling memory acceptance or checkpoint-v2.

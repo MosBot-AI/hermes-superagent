@@ -27,3 +27,5 @@ The artifact includes a test/review consumer and isolated synthetic tests. Its v
 The production compatibility pin, provider API v1 and runtime configuration remain unchanged. Automatic capture, capture/retention consent, provider integration, memory writes, cursor progression, generic worker/rotation support and complete E2.8 acceptance remain separate gates. This slice adds no public REST contract, background consumer, model call, listener, deployment or release.
 
 [The recovery follow-on](93-source-receipt-recovery.md) adds an isolated durable consumer journal and exact request identity. It closes the historical accounting gap after host commit without claiming two-store atomicity, canonical memory writes or current source availability.
+
+[The source-read follow-on](94-receipt-source-reads.md) returns original rows and receipt validity from one bounded native snapshot. It is still an isolated proposal and does not authorize retention or provide a fence for later memory publication.

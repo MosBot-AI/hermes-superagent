@@ -44,3 +44,7 @@ python "$ARTIFACT/run_tests.py" --checkout "$DISPOSABLE_HOST" --python "$PREPARE
 [Issue #127](https://github.com/MosBot-AI/hermes-superagent/issues/127)加入 `recovery.py` 和 `test_recovery.py`。宿主还公开 `source_request_identity(session_id, request)`，这个有界元数据标识辅助函数不访问数据库，也不执行来源准入。`RecoveryJournal(path, host_path, session_id, create=True)` 显式初始化私有日志；重新打开时省略 `create`。`stage` 先于宿主准入，`submit` 显式提交相同的绑定请求，`pending` 有界列出待处理尝试，`reconcile` 在本地历史记账前读取同一宿主回执。日志不保留完整请求、来源或摘要文本。
 
 使用前请阅读[恢复协议与边界](../../docs/93-source-receipt-recovery-zh.md)。回执缺失需要显式重新提供相同请求，不会自动重试。来源可用性是重新读取的观察结果，不由记账保证。两个存储不是原子的，不写入规范记忆或游标。本切片仍是隔离的合成测试入口，不是生产启用。
+
+## 回执绑定的原始来源读取
+
+[Issue #129](https://github.com/MosBot-AI/hermes-superagent/issues/129) 新增显式宿主操作 `read_receipt_sources(db, session_id, attempt_id, expected_receipt_id)` 与只读消费者。回执有效性、精确成员关系及完整原始行共用一个有界 SQLite 读取快照。缺失、失效或不可用结果没有来源载荷；回执哈希不匹配时拒绝，不泄露文本。快照建立后仍可能发生删除，因此返回的历史观察不代表持续可用性或权限。参见[读取协议与上限](../../docs/94-receipt-source-reads-zh.md)。不新增日志载荷、自动读取器、记忆接受、游标或 provider-v2 能力。

@@ -6,6 +6,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ## Unreleased
 
+- Add a review-only receipt-bound reader that returns complete original native sources and validity in one bounded snapshot; fresh reads honor source invalidation, without enabling memory acceptance, retention authority or checkpoint-v2 (#129).
+
 - Add a review-only metadata journal that recovers interrupted source receipt accounting by the same attempt without replaying native compression; source availability remains a fresh observation, not a memory checkpoint or two-database atomic guarantee (#127).
 
 - Extend the optional API-v1 local Memory SDK with operator-gated metadata checkpoint creation, strict bounded receipt/status validation and isolated checkpoint conformance; historical replay is not current-state proof, and no native checkpoint-v2 or REST capability is enabled (#121).

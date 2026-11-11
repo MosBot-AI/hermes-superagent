@@ -5,8 +5,10 @@ This does not implement the future cross-store memory consumer or enable v2.
 
 from hermes_state import SessionDB
 from hermes_state_checkpoint_sources import (
+    SourceReceiptError,
     commit_source_request,
     prepare_source_request,
+    read_receipt_sources,
     source_receipt_status,
 )
 
@@ -47,3 +49,14 @@ def commit_and_inspect(db_path, session_id, request):
     with SessionDB(db_path, read_only=True) as reader:
         availability = source_receipt_status(reader, session_id, request["attempt_id"])
     return committed, availability
+
+
+def read_original_sources(db_path, session_id, attempt_id, expected_receipt_id):
+    """Explicit optional read, no journal/accounting/cursor or memory writes."""
+    try:
+        with SessionDB(db_path, read_only=True) as reader:
+            return read_receipt_sources(reader, session_id, attempt_id, expected_receipt_id)
+    except SourceReceiptError:
+        raise
+    except Exception:
+        return {"status": "unavailable", "available": False, "durable_memory_checkpoint": False}
