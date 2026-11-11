@@ -24,9 +24,21 @@ from .memory_presentation import render_memory_result
 from .memory_snapshot import snapshot
 from .memory_snapshot import validate as validate_snapshot
 from .memory_storage import open_memory_backend
+from .native_source_workbench import OPERATIONS as SOURCE_REVIEW_OPERATIONS
+from .native_source_workbench import run as review_native_sources
+from .native_source_workbench import validate as validate_source_review
 from .task_cli import current_profile_home
 
 HELP = (
+    "source-list [--limit N] [--after UID --expected-snapshot SHA256]; "
+    "source-show UID --expected-snapshot SHA256. Read-only original-row review in the current "
+    "native session, never ancestors, archived rows or automatic memory. List returns metadata "
+    "only; show returns one complete original user/assistant source. Any transcript change "
+    "requires a fresh list; pagination needs its unchanged snapshot. At most 256 active rows, "
+    "16384 characters per row and 65536 total; row decoding happens before these payload limits. "
+    "Observation digests are not native receipts, authorization or durable checkpoints. "
+    "Review can expose private source text in client/history; later deletion cannot retract it. "
+    "No canonical acceptance or retention is performed. "
     'remember "Text" [--topic LABEL] [--expires-at UTC] [--request-id KEY]; '
     "list [--include-expired --limit N --after ID]; "
     'search "Text" [--include-expired --limit N --after ID]; show ID; '
@@ -133,6 +145,13 @@ def parse_command(raw_args: str) -> tuple[str, dict]:
     remember.add_argument("--topic", default="")
     remember.add_argument("--expires-at", default=argparse.SUPPRESS)
     remember.add_argument("--request-id")
+    source_list = commands.add_parser("source-list")
+    source_list.add_argument("--limit", type=int, default=10)
+    source_list.add_argument("--after", default=None)
+    source_list.add_argument("--expected-snapshot", default=None)
+    source_show = commands.add_parser("source-show")
+    source_show.add_argument("message_uid")
+    source_show.add_argument("--expected-snapshot", required=True)
     show = commands.add_parser("show")
     show.add_argument("record_id")
     commands.add_parser("maintenance-preview")
@@ -270,6 +289,8 @@ def parse_command(raw_args: str) -> tuple[str, dict]:
         "projection-status": "projection_status",
         "projection-refresh": "projection_refresh",
         "search-terms": "search_terms",
+        "source-list": "source_list",
+        "source-show": "source_show",
         "candidate-list": "candidate_list",
         "candidate-show": "candidate_get",
         "candidate-accept": "candidate_accept",
@@ -291,6 +312,8 @@ def parse_command(raw_args: str) -> tuple[str, dict]:
         and payload["request_id"] is None
     ):
         payload["request_id"] = str(uuid4())
+    if operation in SOURCE_REVIEW_OPERATIONS:
+        return operation, validate_source_review(operation, payload)
     if operation.startswith("maintenance_"):
         return operation, validate_maintenance(operation, payload)
     if operation in {"snapshot_create", "snapshot_inspect", "snapshot_list", "snapshot_show"}:
@@ -376,6 +399,8 @@ class LocalMemoryCommands:
                 request_id = payload.get("request_id")
                 if operation == "help":
                     result = {"data": {"help": HELP}, "replayed": False}
+                elif operation in SOURCE_REVIEW_OPERATIONS:
+                    result = review_native_sources(self._home, session_id, operation, payload)
                 elif operation in {
                     "snapshot_create",
                     "snapshot_inspect",

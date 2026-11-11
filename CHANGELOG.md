@@ -6,6 +6,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ## Unreleased
 
+- Add explicit native `source-list`/`source-show` commands for bounded current-session original-row review with metadata-only listing and snapshot-bound selection; no native/canonical writes, source receipts or automatic ingestion (#135).
+
 - Add optional digest-bound canonical mutation receipt inspection through the local Memory SDK, separating historical outcomes from current record metadata without replaying payloads, writing cursors or enabling source acceptance (#131).
 
 - Add a review-only receipt-bound reader that returns complete original native sources and validity in one bounded snapshot; fresh reads honor source invalidation, without enabling memory acceptance, retention authority or checkpoint-v2 (#129).
