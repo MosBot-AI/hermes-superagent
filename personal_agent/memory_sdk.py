@@ -19,6 +19,8 @@ from .memory_backend import (
     validate_expiry,
     validate_request,
 )
+from .memory_mutation_status import mutation_request_identity as mutation_request_identity
+from .memory_mutation_status import validate_result as validate_mutation_status
 
 SDK_VERSION = 1
 CHECKPOINT_OPERATIONS = frozenset({"checkpoint_create", "checkpoint_status"})
@@ -27,6 +29,7 @@ OPERATIONS = (
     frozenset({"remember", "correct", "forget", "get", "list", "search", "export"})
     | PROGRESS_OPERATIONS
     | CHECKPOINT_OPERATIONS
+    | {"mutation_receipt_status"}
 )
 _RECORD_WRITES = frozenset({"remember", "correct", "forget"})
 _WRITES = _RECORD_WRITES | {"consumer_advance", "checkpoint_create"}
@@ -188,7 +191,9 @@ class LocalMemorySDK:
         except MemoryError as error:
             # Reviewed adapters promise these rejections occur without commit.
             # Unknown errors are not evidence of rollback and stay uncertain.
-            if error.code in _REJECTIONS:
+            if error.code in _REJECTIONS and (
+                operation != "mutation_receipt_status" or error.code == "idempotency_conflict"
+            ):
                 raise MemoryError(error.code) from None
             raise MemoryError(
                 "outcome_unknown" if operation in _WRITES else "backend_failure"
@@ -216,6 +221,10 @@ class LocalMemorySDK:
         _keys(result, {"data", "replayed"})
         _require(type(result["replayed"]) is bool)
         data = result["data"]
+        if operation == "mutation_receipt_status":
+            _require(result["replayed"] is False)
+            validate_mutation_status(data, request)
+            return
         if operation in CHECKPOINT_OPERATIONS:
             self._validate_checkpoint(operation, request, result)
             return

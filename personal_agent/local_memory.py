@@ -5,7 +5,6 @@ Host opens/protects/closes the supplied connection. Secure delete is not physica
 media erasure and cannot revoke prior exports, backups or already returned text.
 """
 
-import hashlib
 import json
 import sqlite3
 from datetime import datetime
@@ -15,6 +14,7 @@ from . import (
     memory_edits,
     memory_expiry,
     memory_fts,
+    memory_mutation_status,
     memory_projection,
     memory_retention,
     memory_sources,
@@ -132,6 +132,7 @@ class LocalMemoryBackend:
                 "metadata_changes",
                 "durable_consumer_cursor",
                 "local_metadata_checkpoint",
+                "mutation_receipt_status",
             ],
             "unsupported": [
                 "vector",
@@ -442,7 +443,8 @@ class LocalMemoryBackend:
             # sampling time so lock waits cannot admit an already expired row.
             conn.execute("SELECT id FROM namespace").fetchone()
             memory_fts.validate_index_config(conn)
-            memory_sources.validate(conn)
+            if operation != "mutation_receipt_status":
+                memory_sources.validate(conn)
             now = datetime.fromisoformat(memory_expiry.utc_now())
             if operation in {"expired_preview", "forget_expired"}:
                 result = memory_retention.execute(self, conn, operation, request, now)
@@ -452,6 +454,8 @@ class LocalMemoryBackend:
                 result = execute_candidate(self, conn, operation, request, now)
             elif operation in {"remember", "correct", "forget"}:
                 result = self._mutate(conn, operation, request, now)
+            elif operation == "mutation_receipt_status":
+                result = memory_mutation_status.inspect_status(self, conn, request, now)
             elif operation == "projection_disable":
                 result = memory_projection.disable(self, conn)
             elif operation == "projection_status":
@@ -644,11 +648,7 @@ class LocalMemoryBackend:
         }
 
     def _mutate(self, conn, operation, request, now):
-        digest = hashlib.sha256(
-            json.dumps(
-                [operation, request], ensure_ascii=False, sort_keys=True, separators=(",", ":")
-            ).encode()
-        ).hexdigest()
+        digest = memory_mutation_status.normalized_request_digest(operation, request)
         old = conn.execute(
             "SELECT digest,receipt FROM receipts WHERE request_id=?", (request["request_id"],)
         ).fetchone()

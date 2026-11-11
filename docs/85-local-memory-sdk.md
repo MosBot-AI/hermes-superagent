@@ -76,6 +76,10 @@ Creation is a write. Unknown backend failures or malformed acknowledgements yiel
 
 Adapter authors can separately run `run_checkpoint_conformance(factory, isolated_synthetic=True)` from `personal_agent.memory_conformance` on a **different fresh synthetic store**, not a production profile or a store already used by the CRUD/progress suites. The optional runner exercises empty/current/stale checkpoints, correction and terminal forgetting, persistence across reopening, exact historical replay, changed-request conflicts and stale-watermark fencing. Unsupported checkpoint adapters fail explicitly rather than silently skipping the suite. The independent CRUD example above does not claim checkpoint support. This is isolated local offline conformance, not production acceptance or native checkpoint-v2 support. No native provider, network operation, shared REST contract or host lifecycle behavior changes.
 
+## Optional canonical mutation outcome inspection
+
+The optional `mutation_receipt_status` operation inspects `remember`, `correct` and `forget` using a previously retained normalized request identity. It returns a historical receipt and separate current metadata from one read snapshot, or explicit absence at that snapshot. It does not replay a mutation or require original text. See [95](95-canonical-mutation-status.md) for the digest contract, read-only recovery, strict validation, privacy boundaries and the still-separate source acceptance/cursor protocol. Existing progress and checkpoint recovery semantics are unchanged.
+
 ## Remaining E2.6 work
 
 The broader [#43](https://github.com/MosBot-AI/hermes-superagent/issues/43) remains open: complete versioned source/event and multi-kind contracts, remote reconciliation, replacement activation/migration, a reviewed loading/resource ABI and native lifecycle integration are not delivered by this local facade. The shared client contract in [82](82-shared-client-api.md) is unchanged; a Python SDK does not establish authenticated HTTP availability or cross-backend feature parity.

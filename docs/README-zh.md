@@ -166,3 +166,5 @@ E9 已选定原生 worker 路由设计，并实现离线约束验证器和部分
 93. [仅供审查的来源回执恢复](93-source-receipt-recovery-zh.md)：持久元数据意图与同 attempt 重启对账，不构成双库原子性或记忆检查点。
 
 94. [仅供审阅的回执绑定来源读取](94-receipt-source-reads-zh.md)：单快照原始行与保留失效；不含记忆接受或游标推进。
+
+95. [只读规范记忆修改结果](95-canonical-mutation-status-zh.md)：摘要绑定的历史回执与当前元数据检查，不重放载荷或推进游标。
