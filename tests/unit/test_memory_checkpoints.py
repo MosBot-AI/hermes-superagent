@@ -279,7 +279,7 @@ def test_upgrade_is_atomic_including_all_earlier_migrations(version, schema):
     conn.set_authorizer(None)
     assert list(conn.iterdump()) == before
     backend.open(conn, namespace_id="progress-test", session_ref="s")
-    assert conn.execute("PRAGMA user_version").fetchone() == (11,)
+    assert conn.execute("PRAGMA user_version").fetchone() == (12,)
     assert capture(backend)["data"]["record_count"] == 0
     backend.close()
     conn.close()
@@ -304,6 +304,7 @@ def test_v3_upgrade_preserves_record_and_consumer_state_and_exact_receipts():
         conn.execute("DROP TABLE memory_projection")
         conn.execute("DROP TABLE memory_edits")
         conn.execute("DROP TABLE memory_fts")
+        conn.execute("DROP TABLE retained_source_decisions")
         conn.execute("DROP TABLE memory_source_lineage")
         conn.execute("DROP TABLE memory_source_suppressions")
         conn.execute("DROP TABLE memory_candidates")

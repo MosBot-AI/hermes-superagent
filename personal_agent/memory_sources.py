@@ -61,6 +61,10 @@ def _validate(conn):
 
 
 def check(conn, fingerprint):
+    from .retained_sources import is_suppressed
+
+    if is_suppressed(conn, fingerprint):
+        raise MemoryError("candidate_source_suppressed")
     if conn.execute(
         "SELECT 1 FROM memory_source_suppressions WHERE source_digest=?", (fingerprint,)
     ).fetchone():
@@ -68,12 +72,16 @@ def check(conn, fingerprint):
 
 
 def suppress(conn, fingerprint, candidate, *, target=None, action=None):
-    from .memory_candidate_store import digest, metadata, row_data, terminal
-
     conn.execute(
         "INSERT INTO memory_source_suppressions VALUES (?,?) ON CONFLICT(source_digest) DO NOTHING",
         (fingerprint, candidate),
     )
+    discard_pending(conn, fingerprint, target=target, action=action)
+
+
+def discard_pending(conn, fingerprint, *, target=None, action=None):
+    from .memory_candidate_store import digest, metadata, row_data, terminal
+
     for raw in conn.execute(
         "SELECT * FROM memory_candidates WHERE state='pending' AND source_digest=?", (fingerprint,)
     ).fetchall():
@@ -91,6 +99,9 @@ def suppress(conn, fingerprint, candidate, *, target=None, action=None):
 
 
 def suppress_record(conn, record_id):
+    from .retained_sources import suppress_record as suppress_retained_record
+
+    suppress_retained_record(conn, record_id)
     row = conn.execute(
         "SELECT source_digest,candidate_id FROM memory_source_lineage WHERE record_id=?",
         (record_id,),

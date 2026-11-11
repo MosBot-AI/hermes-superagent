@@ -269,7 +269,7 @@ def test_schema_v8_requires_writable_migration(tmp_path):
     conn.close()
     conn = sqlite3.connect(path, isolation_level=None)
     b.open(conn, namespace_id="test", session_ref="s")
-    assert conn.execute("PRAGMA user_version").fetchone() == (11,)
+    assert conn.execute("PRAGMA user_version").fetchone() == (12,)
     assert conn.execute("SELECT * FROM memory_edits").fetchall() == []
     b.close()
     conn.close()
@@ -882,6 +882,7 @@ def test_v9_existing_drafts_migrate_without_changing_header_or_retry(store, stag
     c.execute(SCHEMA_V9["memory_edits"])
     c.execute(f"INSERT INTO memory_edits SELECT {old_columns} FROM new_edits")
     c.execute("DROP TABLE new_edits")
+    c.execute("DROP TABLE retained_source_decisions")
     c.execute("DROP TABLE memory_source_lineage")
     c.execute("DROP TABLE memory_source_suppressions")
     c.execute("PRAGMA user_version=9")
@@ -896,7 +897,7 @@ def test_v9_existing_drafts_migrate_without_changing_header_or_retry(store, stag
     try:
         service = MemoryService(b)
         assert draft(service, rid) == did
-        assert migrated.execute("PRAGMA user_version").fetchone() == (11,)
+        assert migrated.execute("PRAGMA user_version").fetchone() == (12,)
         if stage != "discarded":
             assert (d / FILENAME).read_bytes() == original
             service.execute("edit_apply", apply_request(service, did))

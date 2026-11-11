@@ -21,6 +21,10 @@ from .memory_backend import (
 )
 from .memory_mutation_status import mutation_request_identity as mutation_request_identity
 from .memory_mutation_status import validate_result as validate_mutation_status
+from .retained_sources import OPERATIONS as SOURCE_OPERATIONS
+from .retained_sources import WRITES as SOURCE_WRITES
+from .retained_sources import source_request_identity as source_request_identity
+from .retained_sources import validate_result as validate_source_result
 
 SDK_VERSION = 1
 CHECKPOINT_OPERATIONS = frozenset({"checkpoint_create", "checkpoint_status"})
@@ -29,13 +33,23 @@ OPERATIONS = (
     frozenset({"remember", "correct", "forget", "get", "list", "search", "export"})
     | PROGRESS_OPERATIONS
     | CHECKPOINT_OPERATIONS
+    | SOURCE_OPERATIONS
     | {"mutation_receipt_status"}
 )
 _RECORD_WRITES = frozenset({"remember", "correct", "forget"})
-_WRITES = _RECORD_WRITES | {"consumer_advance", "checkpoint_create"}
+_WRITES = _RECORD_WRITES | {"consumer_advance", "checkpoint_create"} | SOURCE_WRITES
 _REJECTIONS = frozenset(
     {
         "idempotency_conflict",
+        "source_scope_required",
+        "source_pending",
+        "source_not_staged",
+        "source_identity_conflict",
+        "source_suppressed",
+        "source_terminal",
+        "source_cursor_conflict",
+        "source_limit",
+        "source_consumer_limit",
         "revision_conflict",
         "record_forgotten",
         "not_found",
@@ -186,13 +200,16 @@ class LocalMemorySDK:
                 if operation == "checkpoint_create"
                 else "consumer_scope_required"
             )
+        if operation in SOURCE_WRITES and self.binding.source_kind != "explicit_local_operator":
+            raise MemoryError("source_scope_required")
         try:
             result = self._service.execute(operation, deepcopy(request))
         except MemoryError as error:
             # Reviewed adapters promise these rejections occur without commit.
             # Unknown errors are not evidence of rollback and stay uncertain.
             if error.code in _REJECTIONS and (
-                operation != "mutation_receipt_status" or error.code == "idempotency_conflict"
+                operation not in {"mutation_receipt_status", "source_status", "source_cursor"}
+                or error.code == "idempotency_conflict"
             ):
                 raise MemoryError(error.code) from None
             raise MemoryError(
@@ -221,6 +238,11 @@ class LocalMemorySDK:
         _keys(result, {"data", "replayed"})
         _require(type(result["replayed"]) is bool)
         data = result["data"]
+        if operation in SOURCE_OPERATIONS:
+            if operation not in SOURCE_WRITES:
+                _require(result["replayed"] is False)
+            validate_source_result(operation, request, data)
+            return
         if operation == "mutation_receipt_status":
             _require(result["replayed"] is False)
             validate_mutation_status(data, request)

@@ -57,6 +57,10 @@ def validate_expiry(value: object, *, error_code: str = "invalid_request") -> st
 
 
 def validate_request(operation: str, payload: dict) -> dict:
+    if isinstance(operation, str) and operation.startswith("source_"):
+        from .retained_sources import validate
+
+        return validate(operation, payload)
     if operation == "mutation_receipt_status":
         from .memory_mutation_status import validate_query
 
@@ -211,6 +215,9 @@ class MemoryService:
         self.descriptor.check_request(operation, request)
         result = self.backend.execute(operation, request)
         if operation.startswith(("candidate_", "edit_")) or operation in {
+            "source_stage",
+            "source_accept",
+            "source_discard",
             "forget_expired",
             "remember",
             "correct",

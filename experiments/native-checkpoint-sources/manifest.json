@@ -10,16 +10,23 @@
     "hermes_state_checkpoint_sources.py"
   ],
   "source_hashes": {
-    "run_tests.py": "65c770a5677ca56ff1843f92b5b8abc43a865f71e87f1e65d2d899919c73b73b",
-    "consumer.py": "e117d064e92ef3c1bbab293a7de86a999f74f445f62f077ea618a5c465b2690b",
+    "run_tests.py": "bffeac831fb3667421af8da381003bd3cbbe9420e1c1c84c168f59f1c6c7f816",
+    "consumer.py": "1ac9c7f265ee80844fc6f456f9ac81a88fde08be5971ada279f1817597675ddf",
     "test_checkpoint_sources.py": "71af473f9559133dceb4898658a3e5140ffe408f490844f23885c1b2d8342a21",
     "../../personal_agent/checkpoint_evidence.py": "21ae6c7bc11521a408d2ab17ffb7c1ec7af92f8fabf320c0f0531e4a553c306f",
     "../../personal_agent/native_source_resolution.py": "030d3d86ee9d40b6772d9cc844b9c44d44eb3bc72b7e21f99522e28e4b0d35f2",
-    "../../personal_agent/memory_backend.py": "674e1107d1b8838e060b405e22790fcc808b05212e3aba10d0402199f2112833",
+    "../../personal_agent/memory_backend.py": "63ded729f8601c254adbb79c1e58dd1e1179ea4b27b7349c0067f5b466b79dba",
     "../../personal_agent/__init__.py": "18d45546de86a949e6b4645694d71f4136cca36e5b3ceea56e3dd23778eb3222",
     "recovery.py": "e7706e78bf2003915ea4d700828c974d58aa0b51b0f5980b838edb3aa06a3f93",
     "test_recovery.py": "aec695c126f6d4d0e92f5861511cb1ba61c2f0d977612a91793a60426713fd80",
-    "test_source_reads.py": "37b9331d1321d545265399e819bebe7f7dc17af3283f683d78400ba30978d8e5"
+    "test_source_reads.py": "37b9331d1321d545265399e819bebe7f7dc17af3283f683d78400ba30978d8e5",
+    "test_acceptance.py": "6e9a50439828c1c6fa16246a68a5a37adbf8c45c01b8e87f588542ed85e2a50c",
+    "../../personal_agent/local_memory.py": "fbe83f4ce85763e39fb92ff5f62e9ca4cb5f557501cd1d79ada1670cc403ddde",
+    "../../personal_agent/retained_sources.py": "84a9bc8a85d50154c4f83e7b27478dc612be9d46148fa8449c49ecbb805eacb9",
+    "../../personal_agent/memory_sources.py": "aee6ed1a3bbfbc157902154149748614dfd6b22113acdd24e748b3b3aea82b6a",
+    "../../personal_agent/memory_sdk.py": "1f44853f9626d933683a14dd41ef26962d34203880f2e2f75430c61e74835248",
+    "../../personal_agent/memory_adapters.py": "47c416950aa95f7cbd75064c27f7758eb3a33ea879aee4417be62bf5069875b5",
+    "../../personal_agent/memory_mutation_status.py": "306bb8e1ce6e926d4dcdf80087f90cd7d4db41c8ef612dad55e639d87f09b6d7"
   },
   "artifact_files": [
     "LICENSE.hermes-agent",
@@ -32,7 +39,8 @@
     "test_checkpoint_sources.py",
     "recovery.py",
     "test_recovery.py",
-    "test_source_reads.py"
+    "test_source_reads.py",
+    "test_acceptance.py"
   ],
   "native_test_files": [
     "tests/hermes_state/test_compression_watermark_commit.py",
@@ -43,9 +51,9 @@
     "tests/agent/test_compression_commit_fence_race.py"
   ],
   "selected_suite": {
-    "proposal_passed": 177,
+    "proposal_passed": 191,
     "native_passed": 70,
-    "passed": 247,
+    "passed": 261,
     "failed": 0,
     "skipped": 0,
     "full_upstream_suite": false,
@@ -55,5 +63,5 @@
   "production_activated": false,
   "live_model_calls": false,
   "external_delivery": false,
-  "project_source_base": "d778457856019ffd141aaa207bfb31c817f4fc15"
+  "project_source_base": "a1bd7352652b1226a77c1d36cb44de40cdb2a671"
 }

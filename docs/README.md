@@ -168,3 +168,5 @@ See [79. Explicit consistent local memory snapshots](79-local-memory-snapshots.m
 94. [Review-only receipt-bound source reads](94-receipt-source-reads.md): one-snapshot original rows and retention invalidation; no memory acceptance or cursor advancement.
 
 95. [Read-only canonical mutation outcomes](95-canonical-mutation-status.md): digest-bound historical receipt and current metadata inspection without payload replay or cursor advancement.
+
+96. [Explicit retained-source acceptance](96-retained-source-acceptance.md): durable single-slot admission, suppression-safe canonical imports and a distinct source cursor; no native activation.
