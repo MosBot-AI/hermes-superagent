@@ -57,6 +57,19 @@ adapter 是单线程的。`append_input`/`append_output` 将夹具加入队列�
 
 这些结果不表示原生 Desktop 内置能力不能 streaming，也不表示所有隔离流式传输都不可行；它们说明的是已测试的插件返回对象边界。启用对应模式前，需实现受支持的 streaming bridge 或验证其他原生路径，不得通过关闭隔离或另建有特权的 gateway 绕过。
 
+### 当前固定版本的文件语音分发
+
+[文件分发契约](../tests/contracts/test_voice_provider_contracts.py)使用 Python 3.14.9，在干净的 Hermes 固定版本 `2281116525106e3c109993ccb5dc74d02bfc1427` 上运行。测试在 `in_process` 和 `host` 模式下通过真实 `PluginManager` 发现流程注册合成 provider，再调用原生文件入口。回退用例在内置 TTS 引擎边界替换就绪探测和合成。测试使用生成的媒体数据和临时 profile。确切运行结果记录在 [Issue #36](https://github.com/MosBot-AI/hermes-superagent/issues/36)。
+
+| 原生路径 | 覆盖行为 |
+| --- | --- |
+| `tools.transcription_tools.transcribe_audio` | 已注册夹具的可用性探测返回 true 时，显式选择会调用该夹具。夹具收到本次调用指定的模型以及配置中的语言和提示。夹具不可用、STT 已关闭或显式选择的 provider 未注册时，调用返回失败，不会切换到自动探测的后端。 |
+| `tools.tts_tool.text_to_speech_tool` | 调用传入不同的 `provider` 参数时，仍由配置中的 provider 决定分发。显式选择会调用已注册的夹具，即使其可用性探测返回 false。夹具收到配置中的音色、模型、语速和规范化的输出格式。如果 provider 写入部分内容后抛出异常，分发器会返回错误，清除暂存的部分输出，并保留目标路径上的已有文件。 |
+| `tools.tts_tool.check_tts_requirements` | 工具列表的就绪检查对不可用的夹具及未注册的名称返回 false。两种情况下直接调用仍可能合成文件，因此列表的检查结果不足以判断直接调用的行为。 |
+| 内置文件 TTS 回退 | 配置中未注册的名称可能选用 Edge 合成，成功响应仍报告配置中的名称。Edge 不可用时，分发器可以选用本地 NeuTTS，并报告 `neutts`。两者均不可用时返回错误。 |
+
+如果切换引擎或向在线服务发送文本需要同意，文件 TTS 调用方须在分发前验证配置中的路由。响应报告的 provider 可能与实际运行的引擎不同。测试直接调用原生分发器，覆盖表中的文件路径。流式传输、取消、真实语音输出、托管音频传输、设备行为及在线 provider 验收仍待完成。
+
 ## 5. 测试与剩余门禁
 
 仓库检查器运行离线单元测试、Ruff、ty、双语检查、原生 provider 契约，以及带网络防护的真实顶层 CLI 子进程。输入全部是生成的夹具，本切片不需要 socket listener、麦克风权限、真实音频、模型权重、账户或付费 API。

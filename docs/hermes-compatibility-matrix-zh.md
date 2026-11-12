@@ -48,7 +48,7 @@
 
 ## 复用点与边界
 
-宿主路径相对于[固定版本的 Hermes 源码树](https://github.com/NousResearch/hermes-agent/tree/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4)。契约测试只为实际覆盖的行为和输入提供证据。链接中的记录列出了完整的反例、恢复检查和未完成的验收门槛。[上游研究](09-upstream-evidence-zh.md)提供更全面的源码引用。
+除非表中另列版本，宿主路径均相对于[历史固定版本的 Hermes 源码树](https://github.com/NousResearch/hermes-agent/tree/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4)。契约测试只为实际覆盖的行为和输入提供证据。链接中的记录列出了完整的反例、恢复检查和未完成的验收门槛。[上游研究](09-upstream-evidence-zh.md)提供更全面的源码引用。
 
 | 复用点 | 固定宿主源码 | 已验证行为与未完成的验收 |
 | --- | --- | --- |
@@ -61,7 +61,7 @@
 | 子代理生命周期与纯文本规划 worker | `agent/subagent_lifecycle.py`、`tools/delegate_tool_toolsets.py` | [Worker 路由契约](../tests/contracts/test_worker_routing_contracts.py)证明公开 API 的空允许列表无法保证零工具。[生产入口测试](../experiments/text-worker/test_production_entrypoint.py)覆盖未打补丁宿主的拒绝行为和隔离的宿主提案。未打补丁的固定宿主缺少 `hermes.text-worker.v1`。线上 worker 验收和通用工具隔离仍待完成。 |
 | 记忆提供方、轮次 hook 和对话记录生命周期 | `plugins/memory/__init__.py`、`agent/memory_manager.py`、`agent/turn_context.py`、`hermes_state_messages.py` | [提供方契约](../tests/contracts/test_native_memory_provider.py)和[候选契约](../tests/contracts/test_memory_candidates.py)覆盖分别选择的有界路径。[重启契约](../tests/contracts/test_memory_process_restart.py)覆盖已持久化的本地状态。[检查点测试](../tests/contracts/test_native_checkpoint_boundary.py)说明保留 UID 无法证明持久的来源覆盖或提交回执。严格检查点和完整恢复仍待完成。 |
 | MCP、OAuth 与费用估算 | `website/docs/user-guide/features/mcp.md`、`website/docs/developer-guide/plugins/index.md`、`model_tools.py` | 源码审查确认原生连接器和凭据入口。按账号限定范围的连接器适配、按副作用逐项准入、持久费用记录及未知结果对账需要单独取证。`readOnlyHint` 不足以授权工具。 |
-| 语音提供方注册与音频传输 | `agent/transcription_provider.py`、`agent/tts_provider.py`、`hermes_cli/web_routers/audio.py` | [语音提供方契约](../tests/contracts/test_voice_provider_contracts.py)覆盖注册、流式处理默认行为及合成故障。[语音 IPC 实验](21-native-voice-ipc-experiment-zh.md)单独开展。设备、麦克风及实时服务商验收仍待完成。 |
+| 语音提供方注册、文件分发与音频传输 | `agent/transcription_provider.py`、`agent/tts_provider.py` 和 `hermes_cli/web_routers/audio.py`。文件分发使用 `22811165` 的 `tools/transcription_tools.py` 和 `tools/tts_tool.py`。 | [语音提供方契约](../tests/contracts/test_voice_provider_contracts.py)覆盖注册、流式处理默认行为及合成故障。[当前固定版本的文件分发](20-voice-contract-simulator-zh.md#当前固定版本的文件语音分发)覆盖显式选择 provider、列表就绪检查和回退。[语音 IPC 实验](21-native-voice-ipc-experiment-zh.md)单独开展。设备、麦克风及实时服务商验收仍待完成。 |
 | Dashboard、客户端 API 与移动端登录 | `hermes_cli/web_server_dashboard.py`、`hermes_cli/dashboard_auth/routes.py`、`tui_gateway/contracts/canonical_sessions.py` | [传输源码审查](14-client-api-contracts-zh.md)确认回环回调及授权主体和文件边界的缺口。领域 API 层、受支持的原生手机回调、撤销和部署后的传输验收仍待完成。 |
 | 委派后端与模型、推理强度路由 | `agent/delegation_provider.py`、`tools/delegate_tool_routes.py`、`agent/reasoning_effort.py` | [路由契约](../tests/contracts/test_worker_routing_contracts.py)覆盖 schema、显式空回退列表和无效路由拒绝。[离线影子测试](../tests/unit/test_routing_shadow.py)覆盖合成约束。可信的线上路由上下文、服务商实际请求证据和持久预算准入仍待完成。 |
 

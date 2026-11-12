@@ -6,12 +6,14 @@ Private manager observations verify discovery/cleanup, not a supported plugin AB
 
 import json
 import os
+import wave
 from pathlib import Path
 
 import pytest
 
 PLUGIN_ID = "voice-contract-fixture"
 NAME = "synthetic-voice-contract"
+READY_ASR = "synthetic-ready-asr"
 
 PLUGIN = """
 import os
@@ -46,14 +48,23 @@ class ASR(TranscriptionProvider):
     def list_models(self):
         return [{"id": "synthetic-only"}]
     def transcribe(self, file_path, *, model=None, language=None, **extra):
+        source = Path(file_path)
+        source.with_suffix(".called").write_text(self.name)
         if extra.get("fail"):
             return {"success": False, "transcript": "", "provider": self.name,
                     "error": "synthetic ASR failure"}
         return {"success": True, "transcript": "synthetic file", "provider": self.name,
-                "model": model, "language": language, "bytes": len(Path(file_path).read_bytes()),
+                "model": model, "language": language, "prompt": extra.get("prompt"),
+                "bytes": len(source.read_bytes()),
                 "pid": os.getpid(), "unknown_capability": self.unknown_capability}
     def open_stream_session(self, *, language=None, prompt=None):
         return Utterance()
+
+class ReadyASR(ASR):
+    name = "synthetic-ready-asr"
+    unknown_capability = False
+    def is_available(self):
+        return True
 
 class Speech(TTSProvider):
     name = "synthetic-voice-contract"
@@ -65,9 +76,16 @@ class Speech(TTSProvider):
         return [{"id": "synthetic-voice", "language": "en"}]
     def synthesize(self, text, output_path, *, voice=None, model=None, speed=None,
                    format="mp3", **extra):
+        output = Path(output_path)
         if text == "fail":
             raise ValueError("synthetic TTS failure")
-        Path(output_path).write_bytes(b"\\x00\\x00\\x01\\x00")
+        if text == "partial failure":
+            output.write_bytes(b"partial")
+            raise ValueError("synthetic partial TTS failure")
+        if text == "dispatch settings":
+            output.write_text(f"{voice}/{model}/{speed}/{format}/{os.getpid()}")
+        else:
+            output.write_bytes(b"\\x00\\x00\\x01\\x00")
         return output_path
     def stream(self, text, *, voice=None, model=None, format="opus", **extra):
         yield b"\\x00\\x00"
@@ -91,6 +109,7 @@ def register(ctx):
     asr = ASR()
     asr.unknown_capability = ctx.has_capability("voice.synthetic.unknown")
     ctx.register_transcription_provider(asr)
+    ctx.register_transcription_provider(ReadyASR())
     ctx.register_tts_provider(Speech())
     ctx.register_transcription_provider(FileASR())
     ctx.register_tts_provider(FileSpeech())
@@ -105,7 +124,7 @@ def register(ctx):
 
 @pytest.fixture(params=["in_process", "host"])
 def voice_host(request, tmp_path, monkeypatch):
-    from hermes_cli.plugins import PluginManager
+    from hermes_cli import plugins
 
     home = tmp_path / "profile"
     plugin = home / "plugins" / PLUGIN_ID
@@ -130,7 +149,9 @@ def voice_host(request, tmp_path, monkeypatch):
     monkeypatch.setenv("HERMES_HOME", str(home))
     monkeypatch.setenv("HERMES_BUNDLED_PLUGINS", str(bundled))
     monkeypatch.setenv("HERMES_ENABLE_PROJECT_PLUGINS", "0")
-    manager = PluginManager()
+    monkeypatch.setattr(plugins, "_plugin_manager", None)
+    monkeypatch.setattr(plugins, "_plugin_managers_by_home", {})
+    manager = plugins.get_plugin_manager()
     try:
         manager.discover_and_load()
         loaded = manager._plugins[PLUGIN_ID]
@@ -256,3 +277,215 @@ def test_unload_removes_scoped_registrations(voice_host):
     manager.unload()
     assert providers(manager) == (None, None)
     assert providers(manager, "synthetic-file-only") == (None, None)
+
+
+@pytest.fixture
+def voice_config(voice_host, monkeypatch):
+    import pm
+
+    monkeypatch.setattr(pm, "ensure_import", unexpected_backend)
+    _, home, _ = voice_host
+    path = home / "config.yaml"
+    before = path.read_bytes()
+    expected = before
+
+    def configure(**sections):
+        nonlocal expected
+        config = {**json.loads(before), **sections}
+        expected = json.dumps(config).encode()
+        path.write_bytes(expected)
+
+    try:
+        yield configure
+        assert path.read_bytes() == expected
+    finally:
+        path.write_bytes(before)
+
+
+def unexpected_backend(*args, **kwargs):
+    pytest.fail("Unexpected provider detection, installation or backend invocation")
+
+
+@pytest.fixture
+def synthetic_recording(tmp_path, monkeypatch):
+    from tools import transcription_tools
+
+    monkeypatch.setattr(transcription_tools, "_detect_local_backend", unexpected_backend)
+    for provider in transcription_tools.BUILTIN_STT_PROVIDERS:
+        monkeypatch.setattr(transcription_tools, f"_transcribe_{provider}", unexpected_backend)
+
+    recording = tmp_path / "synthetic.wav"
+    with wave.open(str(recording), "wb") as stream:
+        stream.setparams((1, 2, 16000, 0, "NONE", "not compressed"))
+        stream.writeframes(bytes(320))
+    return recording
+
+
+def test_stt_file_dispatch_uses_selected_plugin(voice_config, synthetic_recording, voice_host):
+    from tools.transcription_tools import transcribe_audio
+
+    mode, _, _ = voice_host
+    voice_config(
+        stt={
+            "provider": READY_ASR,
+            "prompt": "synthetic vocabulary",
+            READY_ASR: {"language": "en", "model": "configured-model"},
+        },
+    )
+    result = transcribe_audio(str(synthetic_recording), model="explicit-model")
+    assert result["success"] is True
+    assert result["transcript"] == "synthetic file"
+    assert result["provider"] == READY_ASR
+    assert result["model"] == "explicit-model"
+    assert result["language"] == "en"
+    assert result["prompt"] == "synthetic vocabulary"
+    assert result["bytes"] == synthetic_recording.stat().st_size
+    assert (result["pid"] == os.getpid()) is (mode == "in_process")
+    assert synthetic_recording.with_suffix(".called").read_text() == READY_ASR
+
+
+@pytest.mark.parametrize(
+    ("config", "error"),
+    [
+        ({"provider": READY_ASR, "enabled": False}, "STT is disabled"),
+        ({"provider": NAME}, f"STT plugin '{NAME}' is not available"),
+        ({"provider": "synthetic-missing"}, "no built-in, command, or plugin provider"),
+    ],
+    ids=["disabled", "unavailable", "unregistered"],
+)
+def test_stt_file_dispatch_does_not_fall_back(
+    voice_config,
+    synthetic_recording,
+    config,
+    error,
+):
+    from tools.transcription_tools import transcribe_audio
+
+    voice_config(stt=config)
+    result = transcribe_audio(str(synthetic_recording))
+    assert result["success"] is False
+    assert result["transcript"] == ""
+    assert error in result["error"]
+    assert not synthetic_recording.with_suffix(".called").exists()
+    if config["provider"] == "synthetic-missing":
+        assert result["provider"] == "synthetic-missing"
+        assert result["error_type"] == "provider_not_registered"
+
+
+def test_tts_file_dispatch_uses_configured_plugin_despite_listing_readiness(
+    voice_config,
+    voice_host,
+    tmp_path,
+    monkeypatch,
+):
+    from tools import tts_tool
+
+    mode, _, _ = voice_host
+    monkeypatch.setattr(tts_tool, "_select_builtin_engine", unexpected_backend)
+    voice_config(
+        tts={
+            "provider": NAME,
+            "voice": "synthetic-voice",
+            "model": "synthetic-model",
+            "speed": 1.25,
+            "output_format": "PCM",
+        },
+    )
+    output = tmp_path / "selected.pcm"
+    assert tts_tool.check_tts_requirements() is False
+    result = json.loads(
+        tts_tool.text_to_speech_tool("dispatch settings", str(output), provider="minimax"),
+    )
+    assert result["success"] is True
+    assert result["provider"] == NAME
+    assert result["file_paths"] == [str(output)]
+    settings, pid = output.read_text().rsplit("/", 1)
+    assert settings == "synthetic-voice/synthetic-model/1.25/pcm"
+    assert (int(pid) == os.getpid()) is (mode == "in_process")
+
+
+def test_tts_plugin_failure_discards_partial_output_and_preserves_existing_file(
+    voice_config,
+    tmp_path,
+    monkeypatch,
+):
+    from tools import tts_tool
+
+    monkeypatch.setattr(tts_tool, "_select_builtin_engine", unexpected_backend)
+    voice_config(tts={"provider": NAME, "output_format": "pcm"})
+    directory = tmp_path / "audio"
+    directory.mkdir()
+    output = directory / "existing.pcm"
+    output.write_bytes(b"existing")
+
+    result = json.loads(tts_tool.text_to_speech_tool("partial failure", str(output)))
+
+    assert result["success"] is False
+    assert "synthetic partial TTS failure" in result["error"]
+    assert output.read_bytes() == b"existing"
+    assert list(directory.iterdir()) == [output]
+
+
+@pytest.mark.parametrize(
+    ("edge_available", "neutts_available", "expected_engine", "reported_provider"),
+    [
+        (True, True, "edge", "synthetic-missing"),
+        (False, True, "neutts", "neutts"),
+        (False, False, None, None),
+    ],
+    ids=["edge", "neutts", "unavailable"],
+)
+def test_unknown_tts_file_provider_falls_through_to_native_defaults(
+    voice_config,
+    tmp_path,
+    monkeypatch,
+    edge_available,
+    neutts_available,
+    expected_engine,
+    reported_provider,
+):
+    from tools import tts_tool
+
+    calls = []
+    synthesize_builtin = tts_tool._synthesize_builtin
+
+    def import_edge():
+        if not edge_available:
+            raise ImportError("synthetic missing Edge SDK")
+
+    def write_edge(_text, path, _config):
+        calls.append("edge")
+        Path(path).write_bytes(b"synthetic Edge output")
+
+    def write_neutts(_text, path, _config):
+        calls.append("neutts")
+        Path(path).write_bytes(b"synthetic NeuTTS output")
+
+    def guard_synthesis(engine, text, path, config, instructions):
+        if engine not in {"synthetic-missing", "edge", "neutts"}:
+            unexpected_backend()
+        synthesize_builtin(engine, text, path, config, instructions)
+
+    monkeypatch.setattr(tts_tool, "_import_edge_tts", import_edge)
+    monkeypatch.setattr(tts_tool, "_check_neutts_available", lambda: neutts_available)
+    monkeypatch.setattr(tts_tool, "_run_edge_tts", write_edge)
+    monkeypatch.setattr(tts_tool, "_generate_neutts", write_neutts)
+    monkeypatch.setattr(tts_tool, "_synthesize_builtin", guard_synthesis)
+    voice_config(tts={"provider": "synthetic-missing"})
+    output = tmp_path / "fallback.mp3"
+
+    assert tts_tool.check_tts_requirements() is False
+    assert calls == []
+    result = json.loads(tts_tool.text_to_speech_tool("synthetic speech", str(output)))
+
+    if expected_engine is None:
+        assert result["success"] is False
+        assert "No TTS provider available" in result["error"]
+        assert calls == []
+        assert not output.exists()
+    else:
+        assert result["success"] is True
+        assert result["provider"] == reported_provider
+        assert result["file_paths"] == [str(output)]
+        assert calls == [expected_engine]
+        assert output.stat().st_size > 0

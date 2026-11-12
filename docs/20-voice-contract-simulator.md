@@ -57,6 +57,19 @@ Pinned host: `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`. New contract fixtures l
 
 These results do not prove that native Desktop built-ins cannot stream, or that every possible hosted streaming transport is impossible. They identify the tested plugin return-object boundary. Implement a supported streaming bridge or another verified native path before enabling that mode; do not turn off isolation or use a parallel privileged gateway as a workaround.
 
+### Current-Pin File Voice Dispatch
+
+The [file-dispatch contracts](../tests/contracts/test_voice_provider_contracts.py) exercise the clean Hermes pin `2281116525106e3c109993ccb5dc74d02bfc1427` under Python 3.14.9. They call the native file entry points with synthetic providers registered through real `PluginManager` discovery in both `in_process` and `host` modes. Built-in TTS readiness and synthesis are substituted at their engine boundaries for the fallback cases. Tests use generated media and temporary profiles. Exact run results are tracked on [Issue #36](https://github.com/MosBot-AI/hermes-superagent/issues/36).
+
+| Native path | Behavior covered |
+| --- | --- |
+| `tools.transcription_tools.transcribe_audio` | Explicit selection reaches the registered fixture when its availability probe returns true. The fixture receives the per-call model and configured language and prompt. An unavailable fixture, disabled STT or an explicitly selected unregistered provider returns a failure without switching to an automatically detected backend. |
+| `tools.tts_tool.text_to_speech_tool` | The configured provider controls dispatch when a call supplies a different `provider` argument. Explicit selection reaches the registered fixture even when its availability probe returns false. The fixture receives the configured voice, model, speed and normalized output format. If the provider writes partial output before raising, the dispatcher returns an error, removes the staged partial file and preserves the existing destination. |
+| `tools.tts_tool.check_tts_requirements` | Listing readiness returns false for the unavailable fixture and for an unregistered name. Direct file synthesis can still run in both cases, so the listing result is insufficient to establish direct-call behavior. |
+| Built-in file TTS fallback | An unregistered configured name can select Edge synthesis while the success response still reports the configured name. If Edge is unavailable, the dispatcher can select local NeuTTS and report `neutts`. If neither is available, it returns an error. |
+
+A file TTS caller needs to validate the configured route before dispatch when changing the engine or sending text to an online service requires consent. The reported provider can differ from the engine that ran. The tests call the native dispatchers directly and qualify the file paths in the table. Streaming, cancellation, actual speech output, hosted audio transport, device behavior and online-provider acceptance remain open.
+
 ## 5. Tests and Remaining Gates
 
 The repository checker runs offline unit tests, Ruff, ty, bilingual checks, native provider contracts and the actual top-level CLI in a guarded subprocess. Test inputs are generated fixtures. No socket listener, microphone permission, real audio, model weights, account or paid API is required for this slice.
