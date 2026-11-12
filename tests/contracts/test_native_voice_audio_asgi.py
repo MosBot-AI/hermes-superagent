@@ -125,6 +125,11 @@ def audio_messages(app, path, frames, *, ticket=None, query=b"", origin=None):
     async def send(message):
         sent.append(message)
 
+    run_audio_app(app, scope, receive, send)
+    return sent
+
+
+def run_audio_app(app, scope, receive, send):
     async def drive():
         task = asyncio.create_task(app(scope, receive, send))
         try:
@@ -149,16 +154,13 @@ def audio_messages(app, path, frames, *, ticket=None, query=b"", origin=None):
             loop.run_until_complete(drive())
         finally:
             loop.close()
-    return sent
 
 
 @pytest.fixture
-def native_audio(tmp_path, monkeypatch, request):
-    isolation = getattr(request, "param", "in_process")
+def native_audio_gateway(tmp_path, monkeypatch):
     launch = tmp_path / "launch"
     profile = launch / "profiles" / "fixture"
-    plugin = profile / "plugins" / PROVIDER
-    plugin.mkdir(parents=True)
+    profile.mkdir(parents=True)
     bundled = tmp_path / "empty-bundled"
     bundled.mkdir()
     monkeypatch.setenv("HOME", str(tmp_path))
@@ -167,7 +169,88 @@ def native_audio(tmp_path, monkeypatch, request):
     monkeypatch.setenv("HERMES_DASHBOARD_SESSION_TOKEN", "synthetic-dashboard-fixture")
     monkeypatch.setenv("HERMES_BUNDLED_PLUGINS", str(bundled))
     monkeypatch.setenv("HERMES_ENABLE_PROJECT_PLUGINS", "0")
-    (launch / "config.yaml").write_text("{}", encoding="utf-8")
+    for name in ("GROQ_API_KEY", "ELEVENLABS_API_KEY", "VOICE_TOOLS_OPENAI_KEY", "OPENAI_API_KEY"):
+        monkeypatch.delenv(name, raising=False)
+    for home in (launch, profile):
+        (home / "config.yaml").write_text("{}", encoding="utf-8")
+
+    import pm
+    from hermes_cli import env_loader
+
+    unexpected_calls = []
+
+    def refuse(*args, **kwargs):
+        unexpected_calls.append("Unexpected network, install or voice backend invocation")
+        raise AssertionError(unexpected_calls[-1])
+
+    monkeypatch.setattr(pm, "ensure_import", refuse)
+    monkeypatch.setattr(socket, "create_connection", refuse)
+    monkeypatch.setattr(socket.socket, "bind", refuse)
+    monkeypatch.setattr(socket.socket, "listen", refuse)
+    monkeypatch.setattr(socket.socket, "connect", refuse)
+    monkeypatch.setattr(socket.socket, "connect_ex", refuse)
+    with monkeypatch.context() as startup:
+        # Startup may consider the pinned checkout's developer .env; only fixture homes are used.
+        startup.setattr(env_loader, "load_hermes_dotenv", lambda *args, **kwargs: [])
+        startup.setattr(env_loader, "apply_config_bootstrap_env", lambda *args, **kwargs: None)
+        from agent.secret_scope import is_multiplex_active, set_multiplex_active
+        from gateway.run_api import GatewayRuntimeAPI
+        from gateway.runtime_bootstrap import TicketStore
+        from gateway.session_authorities import SessionAuthorities
+        from hermes_cli import profiles, web_server
+        from tui_gateway import launch_profile_policy
+
+    monkeypatch.setattr(launch_profile_policy, "_snapshot", None)
+    monkeypatch.setattr(profiles, "_get_default_hermes_home", lambda: launch)
+    monkeypatch.setattr(profiles, "_get_profiles_root", lambda: launch / "profiles")
+
+    authorities = SessionAuthorities(launch, multiplexed=True)
+    for home in (launch, profile):
+        authorities.add(home, SimpleNamespace(profile_id=str(home), instance_id="fixture"))
+    store = TicketStore("fixture", authorities.profile_ids())
+    runner = SimpleNamespace(
+        session_authorities=authorities,
+        session_ticket_store=store,
+        _draining=False,
+        session_runtime_descriptor={
+            "state": "ready",
+            "instance_id": "fixture",
+            "served_profiles": authorities.served_profiles(),
+        },
+    )
+    state = web_server.app.state
+    monkeypatch.setattr(state, "gateway_runner", runner, raising=False)
+    monkeypatch.setattr(state, "ui_surface", "gateway", raising=False)
+    monkeypatch.setattr(state, "auth_required", False, raising=False)
+    monkeypatch.setattr(state, "bound_host", "127.0.0.1", raising=False)
+    previous_multiplexed = is_multiplex_active()
+    try:
+        yield SimpleNamespace(
+            app=GatewayRuntimeAPI(web_server.app, runner, web_server.app),
+            store=store,
+            state=state,
+            launch=launch,
+            profile=profile,
+            refuse=refuse,
+        )
+    finally:
+        set_multiplex_active(previous_multiplexed)
+        assert not unexpected_calls
+
+
+@pytest.fixture
+def native_audio(native_audio_gateway, monkeypatch, request):
+    from hermes_cli import plugins
+    from hermes_cli.dashboard_auth.native_http import grant_home_scope
+    from hermes_cli.web_routers import audio
+    from hermes_cli.web_server_profiles import _config_profile_scope
+    from tools import transcription_streaming, tts_streaming, tts_tool
+
+    isolation = getattr(request, "param", "in_process")
+    profile = native_audio_gateway.profile
+    launch = native_audio_gateway.launch
+    plugin = profile / "plugins" / PROVIDER
+    plugin.mkdir(parents=True)
     (launch / ".env").write_text("VOICE_PROBE_MARKER=launch\n", encoding="utf-8")
     (profile / ".env").write_text("VOICE_PROBE_MARKER=target\n", encoding="utf-8")
     config = {
@@ -190,34 +273,7 @@ def native_audio(tmp_path, monkeypatch, request):
         json.dumps({"name": PROVIDER, "version": "0.0.0"}), encoding="utf-8"
     )
     (plugin / "__init__.py").write_text(PLUGIN, encoding="utf-8")
-
-    import pm
-    from hermes_cli import env_loader
-
-    unexpected_calls = []
-
-    def refuse(*args, **kwargs):
-        unexpected_calls.append("Unexpected socket, install, built-in provider or file synthesis")
-        raise AssertionError(unexpected_calls[-1])
-
-    monkeypatch.setattr(pm, "ensure_import", refuse)
-    monkeypatch.setattr(socket.socket, "bind", refuse)
-    monkeypatch.setattr(socket.socket, "listen", refuse)
-    with monkeypatch.context() as startup:
-        # Startup may consider the pinned checkout's developer .env; only fixture homes are used.
-        startup.setattr(env_loader, "load_hermes_dotenv", lambda *args, **kwargs: [])
-        startup.setattr(env_loader, "apply_config_bootstrap_env", lambda *args, **kwargs: None)
-        from agent.secret_scope import is_multiplex_active, set_multiplex_active
-        from gateway.run_api import GatewayRuntimeAPI
-        from gateway.runtime_bootstrap import TicketStore
-        from gateway.session_authorities import SessionAuthorities
-        from hermes_cli import plugins, web_server
-        from hermes_cli.dashboard_auth.native_http import grant_home_scope
-        from hermes_cli.web_routers import audio
-        from hermes_cli.web_server_profiles import _config_profile_scope
-        from tools import transcription_streaming, tts_streaming, tts_tool
-        from tui_gateway import launch_profile_policy
-
+    refuse = native_audio_gateway.refuse
     monkeypatch.setattr(transcription_streaming, "_builtin_session", refuse)
     monkeypatch.setattr(audio, "_sync_sentence_to_pcm", refuse)
     monkeypatch.setattr(tts_tool, "text_to_speech_tool", refuse)
@@ -225,28 +281,6 @@ def native_audio(tmp_path, monkeypatch, request):
         monkeypatch.setattr(provider, "available", staticmethod(refuse))
     monkeypatch.setattr(plugins, "_plugin_manager", None)
     monkeypatch.setattr(plugins, "_plugin_managers_by_home", {})
-    monkeypatch.setattr(launch_profile_policy, "_snapshot", None)
-
-    authorities = SessionAuthorities(launch, multiplexed=True)
-    for home in (launch, profile):
-        authorities.add(home, SimpleNamespace(profile_id=str(home), instance_id="fixture"))
-    store = TicketStore("fixture", authorities.profile_ids())
-    runner = SimpleNamespace(
-        session_authorities=authorities,
-        session_ticket_store=store,
-        _draining=False,
-        session_runtime_descriptor={
-            "state": "ready",
-            "instance_id": "fixture",
-            "served_profiles": authorities.served_profiles(),
-        },
-    )
-    monkeypatch.setattr(web_server.app.state, "gateway_runner", runner, raising=False)
-    monkeypatch.setattr(web_server.app.state, "ui_surface", "gateway", raising=False)
-    monkeypatch.setattr(web_server.app.state, "auth_required", False, raising=False)
-    monkeypatch.setattr(web_server.app.state, "bound_host", "127.0.0.1", raising=False)
-    app = GatewayRuntimeAPI(web_server.app, runner, web_server.app)
-    previous_multiplexed = is_multiplex_active()
     manager = None
     try:
         # Prepare the synthetic provider registry before dialing the native route.
@@ -256,8 +290,8 @@ def native_audio(tmp_path, monkeypatch, request):
             loaded = manager._plugins[PROVIDER]
             assert loaded.enabled and loaded.error is None, loaded.error
         yield SimpleNamespace(
-            app=app,
-            store=store,
+            app=native_audio_gateway.app,
+            store=native_audio_gateway.store,
             launch=launch,
             profile=profile,
             isolation=isolation,
@@ -268,8 +302,6 @@ def native_audio(tmp_path, monkeypatch, request):
                 manager.unload()
                 if isolation == "host":
                     manager._plugin_host().shutdown()
-        set_multiplex_active(previous_multiplexed)
-        assert not unexpected_calls
         assert not (launch / "audio-calls.jsonl").exists()
 
 

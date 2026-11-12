@@ -5,5 +5,5 @@
   "python": "3.14",
   "status": "development_baseline",
   "semver_support_range": null,
-  "note": "No broad requires_hermes range is claimed from one tested commit. Offline voice file dispatch, streaming consumers, playback, sidecar interruption and local audio ASGI admission are verified against 2281116525106e3c109993ccb5dc74d02bfc1427 by tests/contracts/test_voice_provider_contracts.py, tests/contracts/test_native_voice_control.py and tests/contracts/test_native_voice_audio_asgi.py (Issue #36)."
+  "note": "No broad requires_hermes range is claimed from one tested commit. Offline voice dispatch, playback, sidecar interruption, local audio ASGI admission, HTTP voice configuration and mocked SDP exchange are verified against 2281116525106e3c109993ccb5dc74d02bfc1427. The test paths and evidence limits are recorded in docs/20-voice-contract-simulator.md (Issue #36)."
 }
