@@ -119,6 +119,18 @@ The [voice configuration contracts](../tests/contracts/test_native_voice_http_as
 
 The surface tests use local fixture tickets to exercise response policy. Browser sign-in, deployment-specific credential delivery, trusted remote identity, real network and WebRTC transport, and live device/provider acceptance remain open.
 
+### Current-Pin Native Capture, Transcription Handoff and Voice Admission
+
+The [capture](../tests/contracts/test_native_voice_capture.py), [transcription handoff](../tests/contracts/test_native_voice_transcription_handoff.py) and [voice admission](../tests/contracts/test_native_voice_admission.py) contracts exercise clean Hermes `2281116525106e3c109993ccb5dc74d02bfc1427` in temporary profiles. The recorder tests supply an input stream, clock and minimal numeric fixture for synthetic PCM while retaining the native RMS calculation, recorder callbacks and WAV writer. The authority test uses a fixture connection identity derived from a redeemed local ticket and fences turn scheduling.
+
+| Native path | Behavior covered |
+| --- | --- |
+| `tools.voice_mode.AudioRecorder` and playback barge detector | Sustained synthetic PCM followed by silence triggers the recorder's stop notification. Calling stop writes the expected mono 16-bit WAV at the fixture's 24 kHz device rate. A short take is discarded and native cleanup removes the aged fixture WAV. A separate detector test supplies synthetic RMS values to verify onset grace, playback bleed rejection and a sustained playback trip. |
+| `tools.voice_mode.transcribe_recording` and push-to-talk cleanup | The recorder parks a synthetic terminal stream object for the recorded WAV. A nonempty successful stream result is returned directly. Empty and failed stream envelopes fall through to the registered synthetic file ASR. The `pre_transcription` hook receives `source="voice_mode"`, and the selected language reaches the provider. The direct helper leaves the WAV for its caller. The native push-to-talk wrapper removes that recording on either file success or failure and preserves an unrelated WAV. |
+| Native `voice-live` prompt admission and receipt | The attached fixture session queues one durable admission with its voice context. The same submission ID and content replay the queued receipt through a second attached connection, and `prompt.receipt` returns the same record. A changed voice context under the same ID conflicts. The authority refuses a submission from an unattached connection, a receipt read by another subject in the same profile, a voice hint on the wrong surface and an absent staged attachment. No transcript or turn execution occurs in this fixture. |
+
+The native backend receipt covers admission for the caller's submission ID. Desktop provider-event deduplication, real audio device behavior, delegated execution and downstream effect receipts require separate evidence.
+
 ## 5. Tests and Remaining Gates
 
 The repository checker runs offline unit tests, Ruff, ty, bilingual checks, native provider contracts and the actual top-level CLI in a guarded subprocess. Test inputs are generated fixtures. No socket listener, microphone permission, real audio, model weights, account or paid API is required for this slice.

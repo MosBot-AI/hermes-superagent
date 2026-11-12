@@ -130,28 +130,32 @@ def audio_messages(app, path, frames, *, ticket=None, query=b"", origin=None):
 
 
 def run_audio_app(app, scope, receive, send):
+    run_native_async(app(scope, receive, send))
+
+
+def run_native_async(coroutine):
     async def drive():
-        task = asyncio.create_task(app(scope, receive, send))
+        task = asyncio.create_task(coroutine)
         try:
             async with asyncio.timeout(5):
                 # The test loop stays runnable when sandbox thread wakeups are delayed.
                 while not task.done():
                     await asyncio.sleep(0.002)
-                await task
+                return await task
         finally:
             pending = asyncio.all_tasks() - {asyncio.current_task()}
             for pending_task in pending:
                 pending_task.cancel()
             if pending:
                 _, remaining = await asyncio.wait(pending, timeout=1)
-                assert not remaining, "Native audio left pending ASGI tasks"
+                assert not remaining, "Native contract left pending asyncio tasks"
 
     # Keep executor shutdown synchronous and avoid a TestClient thread portal.
     with ThreadPoolExecutor(max_workers=2) as executor:
         loop = asyncio.SelectorEventLoop(SelectSelector())
         loop.set_default_executor(executor)
         try:
-            loop.run_until_complete(drive())
+            return loop.run_until_complete(drive())
         finally:
             loop.close()
 

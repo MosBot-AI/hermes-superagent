@@ -119,6 +119,18 @@ adapter 是单线程的。`append_input`/`append_output` 将夹具加入队列�
 
 界面测试使用本地夹具票据验证响应策略。浏览器登录、部署环境中的凭据交付、可信远程身份、真实网络和 WebRTC 传输，以及真实设备和在线 provider 验收仍待完成。
 
+### 当前固定版本的原生捕获、转写交接与语音准入
+
+[捕获](../tests/contracts/test_native_voice_capture.py)、[转写交接](../tests/contracts/test_native_voice_transcription_handoff.py)和[语音准入](../tests/contracts/test_native_voice_admission.py)契约在临时 profile 中验证干净的 Hermes 固定版本 `2281116525106e3c109993ccb5dc74d02bfc1427`。录音测试为合成 PCM 提供输入流、时钟和最小数值夹具，保留原生 RMS 计算、录音回调和 WAV 写入。准入测试使用由已兑换的本地票据派生的夹具连接身份，并阻止轮次调度。
+
+| 原生路径 | 覆盖行为 |
+| --- | --- |
+| `tools.voice_mode.AudioRecorder` 与播放打断检测器 | 持续的合成 PCM 后进入静音，会触发录音停止通知。调用停止后，以夹具的 24 kHz 设备采样率写出预期的单声道 16 位 WAV。短录音被丢弃，原生清理会删除过期的夹具 WAV。独立的检测器测试用合成 RMS 值验证播放起始宽限、播放漏音抑制和持续输入触发播放打断。 |
+| `tools.voice_mode.transcribe_recording` 与按键通话清理 | 录音器将合成的流式终态对象与录制的 WAV 关联。流式结果成功且非空时直接返回，空结果或失败结果会转入已注册的合成文件 ASR。`pre_transcription` 钩子收到 `source="voice_mode"`，选定的语言传给 provider。直接调用的辅助函数把 WAV 留给调用方。原生按键通话包装器在文件转写成功或失败后均删除本次录音，并保留无关 WAV。 |
+| 原生 `voice-live` 提示准入与回执 | 已附加的夹具会话将一条包含语音上下文的准入记录持久化并排队。通过第二条已附加连接用同一提交 ID 与内容重试时，会返回原排队回执，`prompt.receipt` 也返回同一记录。同一 ID 下更改语音上下文会冲突。授权层拒绝未附加连接的提交、同一 profile 下其他主体读取回执、错误界面提交语音提示，以及缺少暂存附件的请求。此夹具不会产生对话记录或执行轮次。 |
+
+原生后端回执证明调用方提交 ID 的准入结果。Desktop provider 事件去重、真实音频设备行为、委派执行和下游副作用回执均需另行取证。
+
 ## 5. 测试与剩余门禁
 
 仓库检查器运行离线单元测试、Ruff、ty、双语检查、原生 provider 契约，以及带网络防护的真实顶层 CLI 子进程。输入全部是生成的夹具，本切片不需要 socket listener、麦克风权限、真实音频、模型权重、账户或付费 API。
