@@ -68,7 +68,19 @@ The [file-dispatch contracts](../tests/contracts/test_voice_provider_contracts.p
 | `tools.tts_tool.check_tts_requirements` | Listing readiness returns false for the unavailable fixture and for an unregistered name. Direct file synthesis can still run in both cases, so the listing result is insufficient to establish direct-call behavior. |
 | Built-in file TTS fallback | An unregistered configured name can select Edge synthesis while the success response still reports the configured name. If Edge is unavailable, the dispatcher can select local NeuTTS and report `neutts`. If neither is available, it returns an error. |
 
-A file TTS caller needs to validate the configured route before dispatch when changing the engine or sending text to an online service requires consent. The reported provider can differ from the engine that ran. The tests call the native dispatchers directly and qualify the file paths in the table. Streaming, cancellation, actual speech output, hosted audio transport, device behavior and online-provider acceptance remain open.
+A file TTS caller needs to validate the configured route before dispatch when changing the engine or sending text to an online service requires consent. The reported provider can differ from the engine that ran. The tests call the native dispatchers directly and qualify the file paths in the table.
+
+### Current-Pin Streaming Consumers
+
+The [streaming contracts](../tests/contracts/test_voice_provider_contracts.py) use the same clean Hermes pin and temporary profile setup as the file contracts. Native consumers call synthetic providers registered by the real plugin manager in `in_process` and `host` modes. The fixtures use generated PCM and text.
+
+| Native path | Behavior covered |
+| --- | --- |
+| `tools.transcription_streaming.streaming_available` and `open_streaming_session` | A selected plugin with `streaming_capable` can pass the probe and open a session even when its availability check returns false. Disabled streaming, disabled STT, a file-only provider and a missing provider return no stream. In process, the fixture returns partial and final transcripts for 16 kHz mono s16le input. The worker also converts 32 kHz input to 16 kHz, and the fixture receives the expected pairwise-averaged samples. In `host` mode, the consumer can open its wrapper and then return an empty-transcript failure when it accesses the projected session object. |
+| ASR session cancellation | In process, cancelling while the synthetic provider is blocked in `finalize` makes the wrapper report cancellation. The provider can still finish after it is released. Its late result is suppressed by the wrapper in this tested sequence. |
+| `tools.tts_streaming.resolve_streaming_provider` | A ready fixture resolves at its declared 22,050 Hz mono s16le rate. Its configured voice, model and speed reach the provider with the PCM format. In process the consumer reads the expected chunks. In `host` mode the call reaches the provider subprocess, then the first pull raises because the projected generator cannot be iterated. An explicitly selected unavailable, invalid-rate, file-only or missing streamer returns no streamer and does not substitute the configured ready provider. |
+
+The ASR wrapper and TTS resolver are native consumer entry points for these tests. The plugin registration methods remain the public provider extension surface. A streaming capability, successful open or successful resolution alone gives insufficient evidence of usable audio in `host` mode. Playback, provider-side and native-turn cancellation, web audio and credential transport, real devices and online-provider acceptance remain open.
 
 ## 5. Tests and Remaining Gates
 
