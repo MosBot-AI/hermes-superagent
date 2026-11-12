@@ -54,3 +54,5 @@ python "$ARTIFACT/run_tests.py" --checkout "$DISPOSABLE_HOST" --python "$PREPARE
 [Issue #133](https://github.com/MosBot-AI/hermes-superagent/issues/133) 新增 `capture_retained_snapshot`、`execute_retained_snapshot` 和 `test_acceptance.py`。在操作员另外明确确认后，捕获操作选择一个完整原始行（最多 2,048 字符），保留其原始角色及稳定的存储/会话/消息身份，准备调用方持有的明文和仅含元数据的恢复查询。调用方在分别通过实际 Memory SDK/SQLite 后端执行暂存和接受之前，必须保留该查询。不会自动重试，也不会根据来源状态推断权限。
 
 这个后续消费端仅能按独立保留快照语义写入规范记忆；前述来源读取器和恢复日志仍仅负责读取/记账。捕获后原生来源被删除，不会自行撤销已授权的独立保留，也不会遗忘规范记忆。待处理槽顺序、规范抑制、历史结果及独立来源游标详见[实际接受协议](../../docs/96-retained-source-acceptance-zh.md)。原生与规范提交仍然独立。宿主补丁保持不变、未提交上游且未启用；不新增生产生命周期钩子或模型调用。
+
+保留来源发现集成更新经过审查的规范源码绑定，包括可选发现模块，但不改变主机补丁、暂存树或完整性检查。单元检查也会验证当前实验源码绑定，无需运行提议主机；源码变化必须经过明确审查并更新对应清单，绝不跳过校验和保护。 已审查项目源码为已发布提交 `9f5e02be2cc4d7bba78f4292c55c4dcd9167759e`（树 `87b0041bb7f5e176e702bf65d10c446d65b56565`）。

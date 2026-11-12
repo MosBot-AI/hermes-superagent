@@ -6,6 +6,10 @@ This file distinguishes design work, development changes, and released capabilit
 
 ## Unreleased
 
+### Fixed
+
+- Refresh the inactive checkpoint-source proposal’s reviewed canonical source bindings for retained-source discovery and add unit checks that catch stale experiment checksums before host testing; patch/tree integrity guards remain unchanged.
+
 - Add deterministic retained-source deadline, reviewed cleanup and recovery acceptance through registered native recall, including legacy/observed provenance, historical retries and cross-route suppression; runtime behavior and frozen relevance labels remain unchanged (#149).
 
 - Anchor recognized automatic-recall questions to all literal subject/attribute terms, preserving names inside clear slots and legacy behavior for ambiguous syntax; explicit search/recall and one-read budgets stay unchanged. Add frozen development and independent confirmation evaluations with disclosed limits (#147).
