@@ -1,9 +1,8 @@
 /** Overlay in the pinned Hermes apps/desktop/e2e/core directory. */
 import * as fs from 'node:fs'
 import * as path from 'node:path'
-import { DatabaseSync } from 'node:sqlite'
 
-import { expect, type ElectronApplication, type Page, test } from '@playwright/test'
+import { expect, type ElectronApplication, test } from '@playwright/test'
 
 import {
   type Gateway,
@@ -15,6 +14,15 @@ import {
   stopGateway,
   waitForEndpoint
 } from './desktop_native_gateway_fixture'
+import {
+  focus,
+  installCanonicalObserver,
+  lookup,
+  observeWire,
+  phaseFor,
+  readAudit,
+  storedChats
+} from './desktop_bot_canonical_observer'
 import { composer, createCoreSandbox, launchCoreApp, sandboxProcesses } from './harness'
 import { startScriptedProvider } from './provider'
 
@@ -27,137 +35,6 @@ const defaultChat = 'fixture-canonical-default'
 const selectors = { profile, title, includeHidden: true, limit: 200 }
 const openMethods = new Set(['session.resume', 'session.activate'])
 const writeMethods = new Set(['session.create', 'prompt.submit'])
-
-type Phase = 'refusal' | 'empty' | 'retry'
-interface WireFrame {
-  port: string
-  method: string
-  profile?: string
-  sessionId?: string
-  title?: string
-  includeHidden?: boolean
-  limit?: number
-  reply?: { code?: number; reason?: string }
-}
-
-interface AuditFrame {
-  phase: Phase
-  direction: 'request' | 'reply'
-  method: string
-  profile: string | null
-  sessionId: string | null
-  title: string | null
-  includeHidden: boolean | null
-  limit: number | null
-  code?: number | null
-  reason?: string | null
-  ids?: string[][]
-  storedTitle?: string | null
-  archived?: boolean | null
-  profileName?: string | null
-  targetAuthority?: boolean
-}
-
-interface Focus {
-  id: string | null
-  owner: { connectionId: string; profile: string } | null
-}
-
-declare global {
-  interface Window {
-    __E07_CANONICAL_FOCUS__?: () => Focus
-  }
-}
-
-function observeWire(page: Page): WireFrame[] {
-  const frames: WireFrame[] = []
-  page.on('websocket', socket => {
-    const url = new URL(socket.url())
-    if (url.pathname !== '/api/ws') {
-      return
-    }
-    const pending = new Map<string, WireFrame>()
-    socket.on('framesent', event => {
-      try {
-        const message = JSON.parse(String(event.payload))
-        if (message?.id === undefined || typeof message.method !== 'string') {
-          return
-        }
-        const { profile, session_id, title, include_hidden, limit } = message.params ?? {}
-        const frame: WireFrame = {
-          port: url.port,
-          method: message.method,
-          profile,
-          sessionId: session_id,
-          title,
-          includeHidden: include_hidden,
-          limit
-        }
-        frames.push(frame)
-        pending.set(String(message.id), frame)
-      } catch {
-        // A non-JSON frame is not an RPC.
-      }
-    })
-    socket.on('framereceived', event => {
-      try {
-        const message = JSON.parse(String(event.payload))
-        const frame = pending.get(String(message?.id))
-        if (frame) {
-          frame.reply = { code: message.error?.code, reason: message.error?.data?.reason }
-          pending.delete(String(message.id))
-        }
-      } catch {
-        // A non-JSON frame is not an RPC response.
-      }
-    })
-  })
-  return frames
-}
-
-function readAudit(control: string, phase: Phase): AuditFrame[] {
-  return fs
-    .readFileSync(path.join(control, 'wire.jsonl'), 'utf8')
-    .trim()
-    .split('\n')
-    .map(line => JSON.parse(line) as AuditFrame)
-    .filter(frame => frame.phase === phase)
-}
-
-function phaseFor(control: string, phase: Phase) {
-  const temp = path.join(control, 'phase.new')
-  fs.writeFileSync(temp, phase, { mode: 0o600 })
-  fs.renameSync(temp, path.join(control, 'phase'))
-  if (phase !== 'retry') {
-    fs.writeFileSync(path.join(control, `arm-${phase}`), '', { flag: 'wx', mode: 0o600 })
-  }
-}
-
-function storedChats(home: string) {
-  return [home, path.join(home, 'profiles', profile)].map(dir => {
-    const db = new DatabaseSync(path.join(dir, 'state.db'), { readOnly: true })
-    try {
-      db.exec('BEGIN')
-      return {
-        sessions: db.prepare('SELECT id,title,hidden,parent_session_id FROM sessions ORDER BY id').all(),
-        messages: db.prepare('SELECT id,session_id,role,content FROM messages ORDER BY id').all(),
-        admissions: db
-          .prepare('SELECT admission_id,request_id,status,outcome FROM session_admissions ORDER BY admission_id')
-          .all()
-      }
-    } finally {
-      db.close()
-    }
-  })
-}
-
-function focus(page: Page) {
-  return page.evaluate(() => window.__E07_CANONICAL_FOCUS__!())
-}
-
-function lookup(frame: WireFrame | AuditFrame) {
-  return frame.method === 'session.list' && frame.title === title
-}
 
 test('Bot Mode refuses uncertain canonical lookups then opens the existing chat', async () => {
   test.setTimeout(180_000)
@@ -178,23 +55,7 @@ test('Bot Mode refuses uncertain canonical lookups then opens the existing chat'
     seedInstall(box, env, provider.url, profile, 'canonical', '3'.repeat(32))
     runPython(env, `from ${fixtureModule} import seed_side; seed_side()`)
     expect(Buffer.byteLength(path.join(box.hermesHome, 'gateway.sock'))).toBeLessThan(104)
-    const plugin = path.join(box.hermesHome, 'desktop-plugins', 'e07-canonical-observer')
-    fs.mkdirSync(plugin, { recursive: true })
-    fs.writeFileSync(
-      path.join(plugin, 'plugin.js'),
-      `
-import { host } from '@hermes/plugin-sdk'
-export default {
-  id: 'e07-canonical-observer',
-  register() {
-    globalThis.__E07_CANONICAL_FOCUS__ = () => ({
-      id: host.state.focusedStoredSessionId.get(),
-      owner: host.state.focusedSessionOwner.get()
-    })
-  }
-}
-`
-    )
+    installCanonicalObserver(box.hermesHome)
     gateway = startGateway(box, { ...env, HERMES_BOT_CANONICAL_CONTROL: control }, ['-m', fixtureModule])
     const endpoint = await waitForEndpoint(gateway, profile)
     const port = new URL(endpoint.origin).port
@@ -220,7 +81,7 @@ export default {
     const chatMarker = (id: string) => viewport.getByText(id, { exact: true })
     const beforeFocus = await focus(page)
     expect(beforeFocus.id).not.toBe(canonical)
-    const before = storedChats(box.hermesHome)
+    const before = storedChats(box.hermesHome, profile)
     expect(before[0]!.sessions).toEqual([{ id: defaultChat, title, hidden: 1, parent_session_id: null }])
     expect(before[1]!.sessions).toEqual([
       { id: canonical, title, hidden: 1, parent_session_id: null },
@@ -299,7 +160,7 @@ export default {
       expect(wire.slice(from).filter(frame => openMethods.has(frame.method) || writeMethods.has(frame.method))).toEqual(
         []
       )
-      expect(storedChats(box.hermesHome)).toEqual(before)
+      expect(storedChats(box.hermesHome, profile)).toEqual(before)
     }
 
     const from = wire.length
@@ -327,7 +188,7 @@ export default {
     ).toBe(true)
     expect(retry.filter(frame => writeMethods.has(frame.method))).toEqual([])
     expect(wire.slice(from).filter(frame => writeMethods.has(frame.method))).toEqual([])
-    expect(storedChats(box.hermesHome)).toEqual(before)
+    expect(storedChats(box.hermesHome, profile)).toEqual(before)
     expect(provider.completions.length).toBe(0)
     expect(readEndpoint(gateway, profile)).toEqual(endpoint)
     completed = true

@@ -83,6 +83,8 @@ This file distinguishes design work, development changes, and released capabilit
 - Run runtime artifact acceptance on exact pull-request heads with read-only credentials; keep downloadable artifact publication push-only.
 ### Changed
 
+- Verify the saved Webapp token Bot Mode lookup on the clean Hermes pin and a separate proposed build. The proposal scopes the existing chat probe to the selected backend profile and restores the retry prompt after an uncertain empty lookup (#33).
+
 - Add real Linux Electron acceptance for Bot Mode canonical chat refusal and retry. The fixture checks that permission refusal and an uncertain empty lookup leave the current view intact before an ordinary retry opens the existing chat (#33).
 
 - Add exact-pin contracts for profile-scoped plugin state and parent-bound subagent handles through native in-process and hosted dispatch. Document the remaining Primary Bot adapter gates (#33).

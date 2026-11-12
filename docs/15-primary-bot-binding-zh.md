@@ -42,7 +42,8 @@
 | --- | --- | --- |
 | 规范会话发现与谱系 | 使用合成的限定范围票据，经 ASGI 调用原生 `profiles.list`，覆盖隐藏 Bot Chat 的根会话、压缩后末端以及不可用或歧义的名册条目。[名册证据](#当前固定版本的原生-bot-chat-名册) | 每条启用的路由都需要经过授权，精确查询根会话和当前谱系。身份缺失或不确定时应报告不可用。按精确标题查询的 `session.list` 回退路径可能接管旧会话。其他发现模式、压缩后会话的界面附加及规范会话移交需要独立证据。 |
 | Desktop 来源选择 | 在 Linux 上运行真实的 Electron 源码构建，通过私有本地票据和已保存的环回 Webapp token 连接，验证 `host.profileRoutes()` 与 `host.requestProfile()`。[Electron 证据](#当前固定版本的-electron-profile-路由) | 分别验证 Desktop 安装包及任何启用的 SSH 或 OAuth 路由。 |
-| Bot Mode 规范会话打开 | 源码构建的 Linux 名册在查询返回类型化错误时拒绝打开会话，在查询返回空结果但原生指针探测确认已有会话时也拒绝。重试时打开同一个本地未压缩会话。[Bot Mode 界面证据](#当前固定版本的-bot-mode-规范会话拒绝与重试) | Desktop 安装包、压缩后会话的界面附加、已保存的 Webapp 连接、SSH 和 OAuth 界面路由以及经认证的 owner 绑定需要独立证据。 |
+| Bot Mode 规范会话打开 | 源码构建的 Linux 名册在查询返回类型化错误时拒绝打开会话，在查询返回空结果但原生指针探测确认已有会话时也拒绝。重试时打开同一个本地未压缩会话。[本地 Bot Mode 证据](#当前固定版本的-bot-mode-规范会话拒绝与重试) | Desktop 安装包、压缩后会话的界面附加、SSH 和 OAuth 界面路由以及经认证的 owner 绑定需要独立证据。 |
+| 已保存 Webapp 令牌的回退 | 干净 Linux Electron 构建在命名 profile 查询返回空结果时探测远程启动 authority，并在同一次点击中通过第二次查询打开原会话。单独构建的提案探测命名 authority，拒绝不确定的打开操作，并在明确重试后打开原会话。[已保存 Webapp 证据](#当前固定版本的已保存-webapp-bot-mode-路由) | 干净固定版本仍有回退作用域缺口。受支持的使用需要已修正的宿主修订及该模式的专项验收。 |
 | Profile 与安装连续性 | 停机状态下的原生 profile CLI 和备份导入路径覆盖重命名、克隆、删除、同名重建、拒绝向已占用的 profile 导入，以及恢复后目标的 epoch 下限。[Profile 生命周期](#当前固定版本的原生-profile-生命周期) · [备份与恢复](#当前固定版本的原生备份与恢复) | 运行时切换和经认证的连续性需要当前目标、登记、规范谱系与冲突证据。复制的标记和名称无法消除安装实例的歧义。 |
 | 本地调用方与接收 Bot | Linux 同 UID 控制票据证明本地操作者准入。干净宿主上的 owner 入口夹具在缺少受支持的接收侧适配器上下文时拒绝。[本地 Gateway](#当前固定版本的本地-bot-传输与重启) · [Owner 入口契约](../tests/contracts/test_owner_entry_contracts.py) | 受保护的原生命令和渠道入口需要宿主以受支持的方式证明原始调用方、接收方及会话，再校验当前 owner 和 grant。[命令上下文实验](23-host-command-context-experiment-zh.md)仍仅供评审。 |
 | 插件状态与子代理角色 | 公开 `ctx.subagent_lifecycle` 覆盖 `in_process` 和 `host` 两种隔离模式下的进程内父子关联。`ctx.state` 在两种模式下均经过验证，其中托管模式覆盖两个命名 profile。[子代理证据](#当前固定版本的子代理关联) | 受管 WorkerChannel 和 Kanban 接管需要各自的来源、grant 和撤销校验。[E0.4](13-enforcement-contracts-zh.md)覆盖独立的配置冻结和故障排查安全模式 worker 路径。 |
@@ -130,11 +131,31 @@ python -m acceptance.live.run_desktop_profile_routing \
 
 两次失败点击均保留原焦点，未显示任何夹具会话标记，也未发出 `session.create`、`prompt.submit`、`session.resume` 或 `session.activate`。测试通过界面关闭每条重试通知。三次点击前后，SQLite 只读快照中的会话 ID、标题、隐藏标记、父会话关联、消息及准入记录保持一致，服务商记录到零次补全。
 
-两种故障均在经过授权的原生查询之后注入，用于验证 Desktop 对不确定结果的处理。用例覆盖源码构建应用中本地且未压缩的会话。压缩后会话的界面附加、已保存的 Webapp 连接、SSH 和 OAuth 界面路由、Desktop 安装包、经认证的 owner 绑定和规范会话移交仍需独立证据。
+两种故障均在经过授权的原生查询之后注入，用于验证 Desktop 对不确定结果的处理。用例覆盖源码构建应用中本地且未压缩的会话。[已保存 Webapp 用例](#当前固定版本的已保存-webapp-bot-mode-路由)覆盖独立的凭据模式。压缩后会话的界面附加、SSH 和 OAuth 界面路由、Desktop 安装包、经认证的 owner 绑定和规范会话移交仍需独立证据。
 
 在上面的[验收运行器命令](#当前固定版本的-electron-profile-路由)中添加 `--case bot-canonical` 即可复现此用例。
 
 在 Hermes `2281116525106e3c109993ccb5dc74d02bfc1427` 中，点击 Bot Mode 名册条目时，应用先准备该条目的来源，再以确切标题 `Bot Chat` 和 `include_hidden: true` 发出 `session.list` 请求。查询报错时，本次打开操作在进入会话创建路径前结束，名册会显示错误通知。查询返回现有规范记录时，界面优先打开其 `resolved_id`，缺失时使用 `id`。查询成功但返回空结果且名册保留会话指针时，会另行执行 `session.info` 检查。[名册点击](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/apps/desktop/src/plugins/hermes-bots/bot-row.tsx#L217-L247) · [打开与错误路径](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/apps/desktop/src/plugins/hermes-bots/roster-actions.ts#L308-L372) · [注册表查询](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/apps/desktop/src/plugins/hermes-bots/canonical-chat.ts#L314-L405) · [打开现有会话](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/apps/desktop/src/plugins/hermes-bots/canonical-chat.ts#L680-L721)
+
+### 当前固定版本的已保存 Webapp Bot Mode 路由
+
+在 Hermes `2281116525106e3c109993ccb5dc74d02bfc1427` 上，已保存的 Webapp 令牌连接经原生 Webapp 监听器认证，并从具有宿主作用域的启动 authority 开始。指明 profile 的浏览器票据通过独立准入路径绑定到该 authority。宿主作用域的分派器在请求带有 `profile` 参数时，将规范 RPC 路由到提供服务的同级 profile。[Webapp 套接字准入](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_cli/web_routers/chat_ws.py#L650-L706) · [Profile 分派](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/gateway/session_controls.py#L287-L324)
+
+Bot Mode 的确切标题 `session.list` 查询携带所选后端 profile。列表为空且名册有规范会话 ID 时，回退的 `session.info` 只发送 ID。Bot Mode 路由函数会改写已有的 `profile` 参数。回退逻辑将 `not_found` 解释为缺失，随后可能进入创建或打开路径，该路径在请求创建前会再次检查注册表。以上为源码路径。[查询与回退](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/apps/desktop/src/plugins/hermes-bots/canonical-chat.ts#L314-L405) · [限定作用域的请求参数](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/apps/desktop/src/plugins/hermes-bots/routing.ts#L151-L161) · [创建前复查](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/apps/desktop/src/plugins/hermes-bots/canonical-chat.ts#L523-L558)
+
+[Linux Electron 夹具](../tests/desktop/desktop_bot_saved_token_refusal.spec.ts)在当前主连接为已保存 Webapp 令牌连接时点击内置名册的 `spare::scout` 条目。两个隔离的原生 Gateway 使用独立安装，分别提供命名的远程会话及同名的本地干扰项。夹具让远程原生 `session.list` 找到原有的隐藏 Bot Chat，再将该次响应的记录清空一次。渲染进程帧、原生 authority 观测、SDK 焦点状态和 SQLite 只读快照记录结果。
+
+#### 干净固定版本的观测
+
+干净构建使用名册会话 ID 发送 `session.info`，省略 `profile` 参数。原生审计识别到具有宿主作用域的已保存令牌连接，并确认远程 `default` 处理器收到该请求。其 `4001 not_found` 响应使同一次点击再次以 `profile: scout` 按确切标题查询。第二次查询找到并打开原有 `spare::scout` 会话，未显示重试通知。夹具未观察到 `session.create`、`prompt.submit`、本地回退或打开其他会话。四份 SQLite 快照中的会话、消息和准入记录保持不变，服务商记录到零次补全。
+
+#### 仅供评审的作用域提案
+
+候选变更在回退的 `session.info` 中传入与确切标题查询相同的后端 profile。当前固定版本的分派器选中对应 authority 后，会在校验该会话方法的封闭参数集前消费 `profile` 参数。这是客户端作用域变更提案。[限定作用域的分派](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/gateway/session_controls.py#L310-L334)
+
+单独构建的提案在回退探测中发送 `profile: scout`。原生审计确认凭据仍为相同类别的已保存令牌，请求由命名的 `scout` 处理器处理。成功响应识别出未归档的现有 Bot Chat。注入故障的点击显示重试通知并保留原焦点，未发出打开、创建或提交提示词的 RPC。之后明确点击重试时，正常查询打开原有的 `spare::scout` 会话。SQLite 快照保持不变，服务商记录到零次补全。[仅供评审的补丁、构建与证据](../experiments/bot-webapp-canonical/README-zh.md)
+
+[验收运行器](../acceptance/live/run_desktop_profile_routing.py)通过 `--case bot-canonical-saved-token` 复现干净基线，并在验证独立源码树时添加 `--review-proposal`。两次运行均检查 Desktop 和 Webapp 构建产物是否为当前源码所生成。干净兼容性固定版本保持不变。上游采用、打包、压缩后会话的界面附加、其他凭据模式和经认证的 owner 绑定仍需独立验收。
 
 ### 当前固定版本的原生 Profile 生命周期
 

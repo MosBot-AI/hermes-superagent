@@ -14,6 +14,8 @@ The [voice IPC experiment](experiments/voice-ipc/README.md) contains a review-on
 
 The [command-context experiment](experiments/command-context/README.md) likewise includes a review-only upstream-derived patch, with the original MIT notice in [LICENSE.hermes-agent](experiments/command-context/LICENSE.hermes-agent). It is not installed or applied, grants no owner authority and has not been submitted upstream.
 
+The [saved Webapp token Bot Chat experiment](experiments/bot-webapp-canonical/README.md) contains a review-only Hermes patch with upstream source context. It preserves the original [Hermes MIT notice](experiments/bot-webapp-canonical/LICENSE.hermes-agent).
+
 Development and CI environments resolve the pinned Hermes `uv.lock`, including its `dev` and `test` groups. Those dependencies retain their own licenses and are not bundled into the plugin. The workflow uses SHA-pinned official `actions/checkout` and `actions/setup-python`.
 
 DSH Superagent, Switchyard, LiteLLM and vLLM Semantic Router are research references in `docs/`. Their implementation code is not included or executed by this foundation slice.

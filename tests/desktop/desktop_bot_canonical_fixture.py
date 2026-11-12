@@ -55,16 +55,37 @@ def run_gateway():
     from hermes_constants import get_hermes_home
     from hermes_state_runtime import RuntimeStoreError
 
+    default = str(get_hermes_home().resolve())
     target = str((get_hermes_home() / "profiles" / PROFILE).resolve())
     control = Path(os.environ["HERMES_BOT_CANONICAL_CONTROL"])
     phase_file = control / "phase"
+    saved_token_probe = os.environ.get("HERMES_BOT_CANONICAL_TRANSPORT") == "saved-token"
     nested = ContextVar("fixture_dispatch", default=False)
     native_list = AuthorityConnection.list_sessions
     native_dispatch = AuthorityConnection.dispatch
+    native_info = AuthorityConnection.info
 
     def append_audit(record):
         with (control / "wire.jsonl").open("a", encoding="utf-8") as stream:
             stream.write(json.dumps(record) + "\n")
+
+    async def info(self, ref, params):
+        if nested.get() and params.get("session_id") == CANONICAL:
+            authority = {default: "default", target: PROFILE}.get(
+                self.authority.profile_id, "other"
+            )
+            append_audit(
+                {
+                    "direction": "handler",
+                    "phase": phase_file.read_text(encoding="utf-8"),
+                    "method": "session.info",
+                    "sessionId": CANONICAL,
+                    "handlerAuthority": authority,
+                    "savedToken": self._identity.get("provider") == "session-token",
+                    "hostScoped": self.host_scoped,
+                }
+            )
+        return await native_info(self, ref, params)
 
     async def list_sessions(self, ref, params):
         result = await native_list(self, ref, params)
@@ -138,6 +159,8 @@ def run_gateway():
 
     AuthorityConnection.list_sessions = list_sessions
     AuthorityConnection.dispatch = dispatch
+    if saved_token_probe:
+        AuthorityConnection.info = info
     main()
 
 
