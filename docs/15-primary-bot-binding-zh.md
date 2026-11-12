@@ -4,7 +4,7 @@
 
 **状态：可选后续设计，尚未实现，不是 profile-first 本地 MVP 的前置条件。** 若选择此能力，用户选择一个现有的 Hermes **Bot Mode Bot** 作为个人 super agent。这不会创建另一套 agent loop、改变 Hermes 的全局/默认 Bot，也不会授予新权限。下文所有绑定记录、服务方法、角色、事件和能力标志均属于这套拟议插件设计。当前 CLI 任务收件箱是一项独立的本地功能，不能证明 Bot 绑定或 owner 身份认证已经实现。
 
-本设计的源码基线为 Hermes `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`。[当前固定版本的名册证据](#当前固定版本的原生-bot-chat-名册)和 [Desktop 路由证据](#当前固定版本的-desktop-profile-路由)记录兼容性验证。请结合 [03](03-native-architecture-zh.md)、[06](06-plugins-mcp-and-security-zh.md)、[11](11-worker-model-routing-zh.md) 和 [14](14-client-api-contracts-zh.md) 阅读本合同。
+本设计的源码基线为 Hermes `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`。当前固定版本的[名册](#当前固定版本的原生-bot-chat-名册)、[Desktop 路由](#当前固定版本的-desktop-profile-路由)和[原生 profile 生命周期](#当前固定版本的原生-profile-生命周期)小节记录兼容性验证。请结合 [03](03-native-architecture-zh.md)、[06](06-plugins-mcp-and-security-zh.md)、[11](11-worker-model-routing-zh.md) 和 [14](14-client-api-contracts-zh.md) 阅读本合同。
 
 准备性代码与契约证据见[文档 18](18-owner-entry-and-read-authorization-zh.md)：只读评估器已实现，但公开接收 Bot 身份缺失，该远程/Bot 路线的生产 owner context 和私人读取仍关闭。以下绑定流程仍为设计。
 
@@ -76,7 +76,28 @@ Authority 名册使用 `reopen=False` 读取现有会话存储。精确标题的
 
 同一固定版本使用 Vitest `4.1.12`、Node.js `26.12.1` 和 pnpm `12.15.0` 通过 261 项不同的上游用例。UI 项目通过 157 项上游用例。Bot Mode 的四个测试文件 `routing.test.ts`、`data.identity.test.ts`、`data.roster.test.tsx` 和 `canonical-chat-registry.test.ts` 共 81 项。SDK 的 `profile-routing.test.ts` 和渲染进程的 `gateway-profile-request.test.ts` 分别为 49 项和 27 项，与本项目独立的连接池夹具一同运行。基于 Node 的 `electron` 项目在 `connection-registry.test.ts` 中通过 104 项。这些专项测试使用合成输入。实际 Electron IPC 和真实网关连接仍待验证。[Bot Mode 测试](https://github.com/NousResearch/hermes-agent/tree/2281116525106e3c109993ccb5dc74d02bfc1427/apps/desktop/src/plugins/hermes-bots) · [SDK 路由测试](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/apps/desktop/src/sdk/profile-routing.test.ts) · [渲染进程请求测试](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/apps/desktop/src/store/gateway-profile-request.test.ts) · [注册表测试](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/apps/desktop/electron/connection-registry.test.ts)
 
-E0.7 仍需验证 Desktop 运行时的路由连续性、profile 重命名、删除、重建及克隆或恢复歧义、受支持的调用方与 worker 来源证明，以及原生投递和准入回执。可选 HTTP 入口仍依赖 E0.6。经 owner 授权的登记、激活绑定及对账仍是 E1.6 和 E3.6 的独立工作。[Issue #33](https://github.com/MosBot-AI/hermes-superagent/issues/33)
+### 当前固定版本的原生 Profile 生命周期
+
+生命周期测试使用干净的 Hermes `2281116525106e3c109993ccb5dc74d02bfc1427` 和合成 profile。CLI 夹具在已停止的 home 中运行原生 profile 参数解析和分派，并替换服务管理、shell 别名及技能同步子进程。测试限制网络连接、监听器和 SDK 安装。独立的拒绝用例在控制调用边界替换运行中多路复用器的响应。[原生 profile 生命周期测试](../tests/contracts/test_native_profile_lifecycle.py) · [身份清理测试](../tests/contracts/test_native_profile_identity_settlement.py)
+
+原生重命名先移动命名 profile 的 home，再按新名称迁移会话与路由身份。`previous_names` 是尽力写入的元数据。目录移动成功后，身份迁移仍可能未完成。原生命令 `profile migrate-identity <old> <new>` 可独立重试持久化迁移。重命名默认 profile 只更改显示名称。[原生 profile 生命周期](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_cli/profiles.py#L2213-L2310) · [Profile 身份迁移](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_cli/profile_identity.py#L29-L85)
+
+删除会在移除命名 profile 的 home 前写入删除标记。身份清理单独处理以名称为键的路由、心跳与投递记录。若该名称重新成为有效 profile，清理会拒绝。同名重建可以复用安装内的定位信息。原生 `--clone-all` 可以复制展示元数据，同时排除会话历史、检查点及 cron 数据。[原生创建与删除](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_cli/profiles.py) · [身份清理](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_cli/profile_identity.py#L55-L138)
+
+| 停止状态 CLI 夹具场景 | 观察结果 |
+| --- | --- |
+| 重命名已有 Bot profile | 旧 slug 不再解析，活动 profile 随目录迁移。隐藏的精确 `Bot Chat` 保留根会话、压缩末端及消息。根会话和压缩末端两条记录的 `profile_name` 及共享路由使用新 slug，无关的共享路由保持原样。 |
+| 用 `--clone-all` 克隆到旧 slug | 克隆与重命名后的 profile 有相同的显示标签和 `previous_names`，并复制合成插件数据标记。克隆排除源 `state.db` 及预置的 `cron/jobs.json`。两个 profile 各自在列表中出现。 |
+| 删除含有已写入本地数据库的重命名 profile | CLI 以状态 `1` 退出并报告身份清理未完成，因为删除标记阻止清理流程打开命名 profile 的数据库。目录已经移除，活动 profile 重置为 `default`，共享路由已清理，无关路由仍保留。移除后执行 `profile purge-identity` 成功。 |
+| 清理完成后重建同一 slug | 新 profile 使用相同路径和安装标记，并清除删除标记。其 `previous_names` 列表为空。合成插件数据标记及原规范根会话和末端均不存在。 |
+
+替身多路复用器拒绝清理身份时，原生删除在移除已标记的 profile 后报告 `ProfileIdentitySettlementPending`。此时共享根目录中的路由、心跳和历史会话记录保持原样。停止状态下两次调用 `profile purge-identity`，以幂等方式清理确切的已删除名称，并保留名称相近的路由、心跳以及共享会话历史。重建同一 slug 并使其重新有效后，再次清理以状态 `1` 退出，并保留同一键下的新路由。[身份清理测试](../tests/contracts/test_native_profile_identity_settlement.py)
+
+迁移后的数据库中存在目标路由键冲突时，重命名会留下部分完成的状态。目录已移动，共享根数据库已迁移，CLI 发出警告，迁移后的 profile 数据库保持原样。冲突存在时，显式重试 `profile migrate-identity` 以状态 `1` 退出。夹具移除合成的冲突记录后，同一原生命令迁移 profile 的会话字段与路由，保留规范会话谱系和消息。再次重试保持幂等。[身份清理测试](../tests/contracts/test_native_profile_identity_settlement.py)
+
+停止状态安装复制夹具在复制合成根目录前关闭 authority 和会话数据库。原件与副本独立、依次启动，并使用新签发的本地票据。`profiles.list` 返回相同的安装标记、profile 标签和规范会话摘要，包括相同的根会话及压缩末端。夹具中经准入的 `runtime.describe` 调用返回不同的运行时实例 ID 和 profile 路径。名册读取前后，每次启动所记录的数据库快照保持一致。安装标记与规范会话谱系相同，仍无法确定应信任哪个 authority。[停止状态安装的名册夹具](../tests/contracts/test_native_bot_roster_asgi.py) · [身份识别限制](#33-必须明确展示身份识别的限制)
+
+真实运行环境下的 Desktop 路由与 profile 生命周期转换、经权威证明的恢复连续性、受支持的调用方与 worker 来源证明及原生投递与准入回执，仍属 E0.7 的开放事项。可选 HTTP 入口仍依赖 E0.6。经 owner 授权的登记、激活绑定及对账仍是 E1.6 和 E3.6 的独立工作。[Issue #33](https://github.com/MosBot-AI/hermes-superagent/issues/33)
 
 ## 3. 身份、存储与作用域
 
@@ -279,7 +300,7 @@ Payload 携带 ID、修订号、epoch 和原因码，不包含会话记录、non
 
 | ID | 状态与依赖 | 交付物 |
 |---|---|---|
-| E0.7 Verify Primary Bot Contracts | M0，In Progress。依赖 E0.1/E0.2，并使用 E0.4 发现。 | [当前固定版本的名册证据](#当前固定版本的原生-bot-chat-名册)和 [Desktop 路由证据](#当前固定版本的-desktop-profile-路由)。仍需验证 profile、运行时路由、来源和回执，并记录受支持的适配器。可选 HTTP 还需要 E0.6。 |
+| E0.7 Verify Primary Bot Contracts | M0，In Progress。依赖 E0.1/E0.2，并使用 E0.4 发现。 | 当前固定版本的[名册](#当前固定版本的原生-bot-chat-名册)、[Desktop 路由](#当前固定版本的-desktop-profile-路由)和[原生 profile 生命周期](#当前固定版本的原生-profile-生命周期)证据。仍需验证运行时路由、来源与回执，并记录受支持的适配器。可选 HTTP 还需要 E0.6。 |
 | E1.6 Bind Primary Bot | 可选后续；Backlog；E0.7、E1.1–E1.5、E2.1 | Owner 确认的登记与恢复、唯一 active 绑定、修订号/epoch 栅栏、审计和角色策略；不无条件启用写入 |
 | E3.6 Reconcile Primary Bot Sessions | 启用 Bot 绑定路径时为 M1 门禁，M2 继续扩展；Backlog；E1.6、E3.2/E3.5、E4.3/E4.4 | 规范会话解析、worker handoff 关联、投递/恢复和原生回执对账 |
 
