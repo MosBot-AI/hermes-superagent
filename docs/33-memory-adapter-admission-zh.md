@@ -43,3 +43,8 @@ python scripts/check.py --hermes ../hermes-agent --hermes-python ../hermes-test-
 [36](36-bounded-memory-recall-zh.md)增加可选的 `bounded_recall` 能力，用于带完整记录 JSON 预算的显式单快照字面检索。缺少能力会拒绝，不启用自动原生召回。
 
 [85](85-local-memory-sdk-zh.md)新增独立显式调用的版本化本地 SDK 外观层及可复用标准库合规运行器，面向已审查的显式记录适配器。上述普通插件路径不变；完整 E2.6 及加载/迁移门禁仍保持开放。
+
+
+## 托管资源生命周期
+
+[107](107-managed-memory-sessions-zh.md) 增加版本化的显式可信本地工厂/资源契约及托管 SDK 会话。两个内置生产打开器共享资源清理，同时保留 SQLite 特定的路径/配置目录/维护权威及现有后端接口。原生读取器不增加 SDK 导出探测。这仅完成本地资源生命周期切片，不代表提议的通用加载器、迁移或后端替换 ABI。

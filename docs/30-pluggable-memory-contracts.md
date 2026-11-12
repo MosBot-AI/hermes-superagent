@@ -324,3 +324,8 @@ Start with explicit local records and deterministic retrieval, add tested source
 - M10: [Memory nudge](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/agent/turn_context.py#L798-L808) and [post-turn review gates](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/agent/turn_finalizer.py#L591-L617).
 - M11: [Actual provider installation and ABI guide](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/website/docs/developer-guide/memory-provider-plugin.md).
 - M12: [Native CJK index capabilities and fallbacks](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/hermes_state_fts.py#L1-L32).
+
+
+## Managed resource lifetime
+
+[107](107-managed-memory-sessions.md) adds the versioned explicit trusted-local factory/resource contract and managed SDK sessions. Both bundled production openers share resource cleanup while retaining SQLite-specific path/profile/maintenance authority and their existing backend interface. Native readers do not gain SDK export probes. This completes only the local resource-lifetime slice, not the proposed general loader, migration or backend replacement ABI.

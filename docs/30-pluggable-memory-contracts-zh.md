@@ -324,3 +324,8 @@ Token 核算包括包装文本、引用和元数据。可用时使用所选模�
 - M10: [记忆提示](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/agent/turn_context.py#L798-L808) 和 [回合后复盘门槛](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/agent/turn_finalizer.py#L591-L617).
 - M11: [真实 provider 安装与 ABI 指南](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/website/docs/developer-guide/memory-provider-plugin.md).
 - M12: [原生 CJK 索引能力与回退](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/hermes_state_fts.py#L1-L32).
+
+
+## 托管资源生命周期
+
+[107](107-managed-memory-sessions-zh.md) 增加版本化的显式可信本地工厂/资源契约及托管 SDK 会话。两个内置生产打开器共享资源清理，同时保留 SQLite 特定的路径/配置目录/维护权威及现有后端接口。原生读取器不增加 SDK 导出探测。这仅完成本地资源生命周期切片，不代表提议的通用加载器、迁移或后端替换 ABI。

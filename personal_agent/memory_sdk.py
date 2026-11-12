@@ -6,8 +6,9 @@ backend and its binding. Python objects are not a malicious-code sandbox.
 
 import json
 import re
+import sys
+from contextlib import contextmanager
 from copy import deepcopy
-from dataclasses import dataclass
 from datetime import datetime
 
 from .memory_backend import (
@@ -21,6 +22,8 @@ from .memory_backend import (
 )
 from .memory_mutation_status import mutation_request_identity as mutation_request_identity
 from .memory_mutation_status import validate_result as validate_mutation_status
+from .memory_sessions import LocalBinding as LocalBinding
+from .memory_sessions import MemoryFactory, SessionMode, managed_backend
 from .retained_sources import OPERATIONS as SOURCE_OPERATIONS
 from .retained_sources import WRITES as SOURCE_WRITES
 from .retained_sources import source_request_identity as source_request_identity
@@ -90,21 +93,6 @@ _RECORD = frozenset(
 )
 
 
-@dataclass(frozen=True)
-class LocalBinding:
-    """Host assertion of local routing, not proof of remote owner identity."""
-
-    namespace_id: str
-    session_ref: str
-    source_kind: str = "explicit_local_operator"
-
-    def __post_init__(self):
-        _text(self.namespace_id, 256)
-        _text(self.session_ref, 256)
-        if self.source_kind not in {"explicit_local_operator", "activated_session_model"}:
-            raise MemoryError("invalid_request")
-
-
 def _require(condition):
     if not condition:
         raise MemoryError("invalid_result")
@@ -169,6 +157,8 @@ class LocalMemorySDK:
     def __init__(self, backend: MemoryBackend, binding: LocalBinding):
         if type(binding) is not LocalBinding:
             raise MemoryError("invalid_request")
+        self._managed_close = None
+        self._readonly = False
         self._binding = binding
         self._service = MemoryService(backend)
         self._closed = False
@@ -181,6 +171,25 @@ class LocalMemorySDK:
             self._closed = True
             raise MemoryError("unsupported_backend") from None
 
+    @classmethod
+    @contextmanager
+    def session(cls, factory: MemoryFactory, binding: LocalBinding, *, mode: SessionMode):
+        """Acquire a reviewed factory and own admission through final cleanup.
+
+        The already-open constructor keeps its original ownership contract.
+        Native backend openers use managed_backend without SDK export admission.
+        """
+        with managed_backend(factory, binding, mode=mode) as (backend, resources):
+            sdk = cls(backend, binding)
+            sdk._readonly = mode == "readonly"
+            sdk._managed_close = resources.close
+            try:
+                yield sdk
+            finally:
+                # ResourceScope owns backend cleanup even if admission failed.
+                # Do not call close here: it would mask a primary body failure.
+                sdk._closed = True
+
     @property
     def binding(self):
         return self._binding
@@ -190,6 +199,8 @@ class LocalMemorySDK:
             raise MemoryError("closed")
         if type(operation) is not str or operation not in OPERATIONS:
             raise MemoryError("unsupported_operation")
+        if self._readonly and operation in _WRITES:
+            raise MemoryError("read_only")
         request = validate_request(operation, payload)
         self._service.descriptor.check_request(operation, request)
         if (
@@ -495,6 +506,9 @@ class LocalMemorySDK:
     def close(self):
         if not self._closed:
             self._closed = True
+            if self._managed_close is not None:
+                self._managed_close(primary=sys.exception())
+                return
             try:
                 self._service.backend.close()
             except Exception:

@@ -550,3 +550,31 @@ def run_retained_source_conformance(factory, *, isolated_synthetic=False) -> Con
             "independent_cursor",
         ),
     )
+
+
+def run_managed_conformance(factory, binding, *, isolated_synthetic=False):
+    """Exercise an explicit reviewed factory on ONE fresh synthetic store.
+
+    Includes existing durable CRUD/replay gates, escaped-handle invalidation,
+    repeated explicit close and readonly refusal. Fault injection and real
+    native opener integration remain separate required tests.
+    """
+    from .memory_sdk import LocalMemorySDK
+
+    report = run_conformance(
+        lambda: LocalMemorySDK.session(factory, binding, mode="writable"),
+        isolated_synthetic=isolated_synthetic,
+    )
+    with LocalMemorySDK.session(factory, binding, mode="writable") as sdk:
+        sdk.close()
+        sdk.close()
+        _reject(sdk, "list", {}, "closed")
+    _reject(sdk, "list", {}, "closed")
+    with LocalMemorySDK.session(factory, binding, mode="readonly") as reader:
+        _reject(reader, "remember", {"content": "must not write", "request_id": "ro"}, "read_only")
+        reader.execute("list", {})
+    _reject(reader, "list", {}, "closed")
+    return ConformanceReport(
+        sdk_version=report.sdk_version,
+        passed=report.passed + ("managed_close", "escaped_handle", "readonly_session"),
+    )

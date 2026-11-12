@@ -43,3 +43,8 @@ No new package is installed or selected, no production profile is modified, and 
 [36](36-bounded-memory-recall.md) adds the optional `bounded_recall` capability for explicit, single-snapshot literal retrieval with a whole-record JSON budget. Missing capability fails closed; it does not enable automatic native recall.
 
 [85](85-local-memory-sdk.md) adds a separately invoked versioned local SDK facade and reusable standard-library conformance runner for reviewed explicit-record adapters. The ordinary plugin path described above remains unchanged; full E2.6 and loading/migration gates remain open.
+
+
+## Managed resource lifetime
+
+[107](107-managed-memory-sessions.md) adds the versioned explicit trusted-local factory/resource contract and managed SDK sessions. Both bundled production openers share resource cleanup while retaining SQLite-specific path/profile/maintenance authority and their existing backend interface. Native readers do not gain SDK export probes. This completes only the local resource-lifetime slice, not the proposed general loader, migration or backend replacement ABI.
