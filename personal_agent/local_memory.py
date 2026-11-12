@@ -16,6 +16,7 @@ from . import (
     memory_fts,
     memory_mutation_status,
     memory_projection,
+    memory_record_origin,
     memory_retention,
     memory_sources,
     retained_sources,
@@ -135,6 +136,7 @@ class LocalMemoryBackend:
                 "metadata_changes",
                 "durable_consumer_cursor",
                 "local_metadata_checkpoint",
+                "record_origin",
                 "mutation_receipt_status",
                 "retained_source_acceptance",
                 "retained_source_discovery",
@@ -409,7 +411,10 @@ class LocalMemoryBackend:
 
     def execute(self, operation: str, payload: dict) -> dict:
         request = validate_request(operation, payload)
-        if operation == "source_discover" and self._source_kind == "activated_session_model":
+        if (
+            operation in {"record_origin", "source_discover"}
+            and self._source_kind == "activated_session_model"
+        ):
             raise MemoryError("source_scope_required")
         if operation.startswith("index_"):
             raise MemoryError("index_maintenance_required")
@@ -475,6 +480,7 @@ class LocalMemoryBackend:
             conn.execute("SELECT id FROM namespace").fetchone()
             memory_fts.validate_index_config(conn)
             if operation not in {
+                "record_origin",
                 "mutation_receipt_status",
                 "source_status",
                 "source_cursor",
@@ -482,7 +488,9 @@ class LocalMemoryBackend:
             }:
                 memory_sources.validate(conn)
             now = datetime.fromisoformat(memory_expiry.utc_now())
-            if operation in retained_sources.OPERATIONS:
+            if operation == "record_origin":
+                result = memory_record_origin.inspect_origin(self, conn, request, now)
+            elif operation in retained_sources.OPERATIONS:
                 result = retained_sources.execute(self, conn, operation, request, now)
             elif operation in {"expired_preview", "forget_expired"}:
                 result = memory_retention.execute(self, conn, operation, request, now)

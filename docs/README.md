@@ -192,3 +192,5 @@ See [79. Explicit consistent local memory snapshots](79-local-memory-snapshots.m
 106. [Retained-source recovery discovery](106-retained-source-discovery.md): bounded metadata-only operator pages, snapshot-fenced continuations and exact-key recovery without native text.
 
 107. [Managed local memory sessions](107-managed-memory-sessions.md): explicit reviewed factories, exhaustive cleanup and readonly SDK sessions; no production backend replacement.
+
+108. [Inspect memory record origins](108-memory-record-origins.md): readonly original acceptance metadata, distinct from current state and latest editing route; no payload reconstruction or authority.

@@ -37,7 +37,7 @@ OPERATIONS = (
     | PROGRESS_OPERATIONS
     | CHECKPOINT_OPERATIONS
     | SOURCE_OPERATIONS
-    | {"mutation_receipt_status"}
+    | {"mutation_receipt_status", "record_origin"}
 )
 _RECORD_WRITES = frozenset({"remember", "correct", "forget"})
 _WRITES = _RECORD_WRITES | {"consumer_advance", "checkpoint_create"} | SOURCE_WRITES
@@ -212,7 +212,7 @@ class LocalMemorySDK:
                 if operation == "checkpoint_create"
                 else "consumer_scope_required"
             )
-        if (operation in SOURCE_WRITES or operation == "source_discover") and (
+        if (operation in SOURCE_WRITES or operation in {"record_origin", "source_discover"}) and (
             self.binding.source_kind != "explicit_local_operator"
         ):
             raise MemoryError("source_scope_required")
@@ -252,6 +252,13 @@ class LocalMemorySDK:
         _keys(result, {"data", "replayed"})
         _require(type(result["replayed"]) is bool)
         data = result["data"]
+        if operation == "record_origin":
+            from .memory_record_origin import validate_result
+
+            _require(result["replayed"] is False)
+            validate_result(request, data)
+            _require(data["namespace_id"] == self.binding.namespace_id)
+            return
         if operation in SOURCE_OPERATIONS:
             if operation not in SOURCE_WRITES:
                 _require(result["replayed"] is False)

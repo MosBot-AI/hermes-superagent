@@ -60,3 +60,8 @@ The SQLite operation uses one read transaction, existing bounded canonical/retai
 Synthetic tests exercise exact page boundaries through the 1,000-decision bound, filters and token tampering, namespace binding, separate-connection changes, expiry crossings, malformed/oversized metadata and SDK replies, old-schema refusal, missing stores, safe command quoting and SQL authorizers that deny payload reads/writes. Fresh-process tests discover unknown identities before and after normal/interrupted repack, then inspect and explicitly discard pending decisions and verify exact-source anti-resurrection.
 
 Native contracts run against Hermes `2281116525106e3c109993ccb5dc74d02bfc1427`, with synthetic profiles and no model/provider calls. They cover disabled/foreign/remote admission, actual source loss and reload recovery, explicit pending discard, and human/JSON entry. Use the [development checks](../README.md#development-checks) for the pinned-host setup. Focused suites include `test_retained_source_discovery.py`, `test_source_discovery_recovery.py`, `test_source_discovery_commands.py` and `tests/contracts/test_source_discovery.py`. Exact-source executed checks, independent review and package evidence belong to the PR; test implementation alone is not production acceptance. Frozen recall fixtures and semantics are unchanged.
+
+
+## Record origin inspection
+
+[108](108-memory-record-origins.md) adds explicit local-operator `record_origin` metadata inspection, separating historical acceptance, current state and latest editing route. The optional capability requires `explicit_records`; shared REST, schema and recall semantics are unchanged. SDK export admission can still read payload; metadata-only applies to this operation and the native readonly path.

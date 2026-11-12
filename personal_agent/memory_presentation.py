@@ -7,6 +7,9 @@ import unicodedata
 from .memory_backend import _identifier
 
 _ERRORS = {
+    "memory_store_missing": (
+        "No existing local memory store is available. This read created nothing."
+    ),
     "source_store_identity_unavailable": (
         "The native store has no supported stable UUID. "
         "Retention was refused; no repair was attempted."
@@ -230,6 +233,58 @@ def _render(envelope: dict, operation: str | None, payload: dict) -> str:
     if envelope["status"] != "ok" or type(envelope["replayed"]) is not bool:
         raise ValueError("unsupported result")
     data = envelope["data"]
+    if operation == "record_origin":
+        current, origin = data["current"], data["origin"]
+        lines = [
+            "Memory origin (metadata only)",
+            "Memory " + _identifier(data["record_id"]),
+            "Evaluated at: " + _quoted(data["evaluated_at"]),
+            "Current state:",
+            "Revision: " + _integer(current["revision"]),
+            "Status: " + _quoted(current["status"]),
+            "Expires at: " + (_quoted(current["expires_at"]) if current["expires_at"] else "none"),
+            "Expired: " + ("yes" if current["expired"] else "no"),
+            "Latest editing route: "
+            + (
+                _quoted(data["current_editing_route"])
+                if data["current_editing_route"]
+                else "unavailable"
+            ),
+            "Original accepted origin:",
+            "Kind: " + _quoted(origin["kind"]),
+        ]
+        if origin["kind"] == "unavailable":
+            lines.append("Reason: " + _quoted(origin["reason"]))
+        else:
+            if origin["kind"] == "reviewed_candidate":
+                lines.append("Candidate ID: " + _identifier(origin["candidate_id"]))
+            else:
+                lines.extend(
+                    [
+                        "Source role: " + _quoted(origin["role"]),
+                        "Consumer ID: " + _quoted(origin["consumer_id"]),
+                        "Source sequence: " + _integer(origin["source_sequence"]),
+                    ]
+                )
+            accepted = origin["acceptance"]
+            lines.extend(
+                [
+                    "Historical acceptance (not current state):",
+                    "Revision: " + _integer(accepted["revision"]),
+                    "Status: " + _quoted(accepted["status"]),
+                    "Event sequence: " + _integer(accepted["event_sequence"]),
+                    "Exact source suppressed: " + ("yes" if origin["suppressed"] else "no"),
+                ]
+            )
+        lines.extend(
+            [
+                "Source availability is not checked.",
+                "Source roles do not verify authorship, truth or authority.",
+                "Suppression does not mean the record is currently forgotten.",
+                data["notice"],
+            ]
+        )
+        return "\n".join(lines)
     if operation == "source_discover":
         lines = [
             _escape_controls(json.dumps(envelope, ensure_ascii=False, indent=2, sort_keys=True)),

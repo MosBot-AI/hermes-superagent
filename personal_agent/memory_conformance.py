@@ -578,3 +578,64 @@ def run_managed_conformance(factory, binding, *, isolated_synthetic=False):
         sdk_version=report.sdk_version,
         passed=report.passed + ("managed_close", "escaped_handle", "readonly_session"),
     )
+
+
+def run_record_origin_conformance(factory, *, isolated_synthetic=False):
+    """Optional origin contract on ONE empty synthetic store; writes deliberate fixtures.
+
+    Exercises direct-record absence of durable lineage and historical replay across
+    correction, forgetting and reopening. Source-family lineage and corruption
+    require adapter-specific fixtures, not fabricated universal source support.
+    """
+    if isolated_synthetic is not True:
+        raise MemoryError("synthetic_store_required")
+    with factory() as sdk:
+        page = sdk.execute("export", {"limit": 1})["data"]
+        if page["items"] or page["has_more"] or page["watermark"] != 0:
+            raise MemoryError("empty_store_required")
+        request = {"content": "Origin conformance synthetic record", "request_id": "origin-create"}
+        receipt = sdk.execute("remember", request)["data"]
+        rid = receipt["record_id"]
+        first = sdk.execute("record_origin", {"record_id": rid})["data"]
+        _check(first["origin"] == {"kind": "unavailable", "reason": "no_durable_lineage"})
+        _check(first["current"]["revision"] == 1 and first["current"]["status"] == "active")
+        _check(first["current_editing_route"] == "explicit_local_operator")
+    with factory() as sdk:
+        sdk.execute(
+            "correct",
+            {
+                "record_id": rid,
+                "expected_revision": 1,
+                "content": "Corrected synthetic record",
+                "request_id": "origin-edit",
+            },
+        )
+        corrected = sdk.execute("record_origin", {"record_id": rid})["data"]
+        _check(corrected["origin"] == first["origin"] and corrected["current"]["revision"] == 2)
+        sdk.execute(
+            "forget", {"record_id": rid, "expected_revision": 2, "request_id": "origin-forget"}
+        )
+    with factory() as sdk:
+        _check(sdk.execute("remember", request) == {"data": receipt, "replayed": True})
+        forgotten = sdk.execute("record_origin", {"record_id": rid})["data"]
+        _check(forgotten["origin"] == first["origin"])
+        _check(
+            forgotten["current"]
+            == {
+                "record_id": rid,
+                "revision": 3,
+                "status": "forgotten",
+                "expires_at": None,
+                "expired": False,
+            }
+        )
+        _check(forgotten["current_editing_route"] is None)
+    return ConformanceReport(
+        1,
+        (
+            "direct_origin_unavailable",
+            "reopen_correction",
+            "terminal_origin",
+            "historical_replay_without_reconstruction",
+        ),
+    )
