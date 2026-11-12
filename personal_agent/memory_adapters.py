@@ -33,6 +33,7 @@ _CAPABILITIES = frozenset(
         "durable_consumer_cursor",
         "local_metadata_checkpoint",
         "mutation_receipt_status",
+        "record_origin",
         "retained_source_acceptance",
         "retained_source_discovery",
     }
@@ -87,6 +88,7 @@ _OPERATION_CAPABILITIES = {
     "source_discover": {"retained_source_discovery", "explicit_records"},
     "source_status": {"retained_source_acceptance", "explicit_records"},
     "source_cursor": {"retained_source_acceptance", "explicit_records"},
+    "record_origin": {"explicit_records", "record_origin"},
     "mutation_receipt_status": {"explicit_records", "mutation_receipt_status"},
     "expired_preview": {"explicit_records", "record_expiry", "reviewed_expired_cleanup"},
     "forget_expired": {

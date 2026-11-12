@@ -48,3 +48,8 @@ No new package is installed or selected, no production profile is modified, and 
 ## Managed resource lifetime
 
 [107](107-managed-memory-sessions.md) adds the versioned explicit trusted-local factory/resource contract and managed SDK sessions. Both bundled production openers share resource cleanup while retaining SQLite-specific path/profile/maintenance authority and their existing backend interface. Native readers do not gain SDK export probes. This completes only the local resource-lifetime slice, not the proposed general loader, migration or backend replacement ABI.
+
+
+## Record origin inspection
+
+[108](108-memory-record-origins.md) adds explicit local-operator `record_origin` metadata inspection, separating historical acceptance, current state and latest editing route. The optional capability requires `explicit_records`; shared REST, schema and recall semantics are unchanged. SDK export admission can still read payload; metadata-only applies to this operation and the native readonly path.

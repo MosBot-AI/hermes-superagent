@@ -115,6 +115,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Add explicit LOCAL `origin RECORD_ID` and optional SDK `record_origin` inspection, separating historical acceptance, current state and latest editing route through bounded readonly metadata without reconstructing forgotten payload or claiming authorship/authority (#157).
+
 - Add optional operator-only retained-source discovery and native LOCAL recovery pages with snapshot-fenced pagination, exact status identities and metadata-only reads; no schema migration or automatic replay/discard.
 
 - Add an opt-in readable native handoff/result-review workbench via leading `--text`, while preserving default JSON output unchanged and retaining explicit `--json`. Existing output-parsing scripts need no migration. Add a complete isolated packaged-Gateway operator journey; parked cards never imply worker dispatch or automatic local completion (#141).

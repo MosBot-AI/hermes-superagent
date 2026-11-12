@@ -61,6 +61,10 @@ def validate_request(operation: str, payload: dict) -> dict:
         from .retained_sources import validate
 
         return validate(operation, payload)
+    if operation == "record_origin":
+        from .memory_record_origin import validate
+
+        return validate(payload)
     if operation == "mutation_receipt_status":
         from .memory_mutation_status import validate_query
 

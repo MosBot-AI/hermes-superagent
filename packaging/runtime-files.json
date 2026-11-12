@@ -45,6 +45,7 @@
     "personal_agent/memory_progress.py",
     "personal_agent/memory_projection.py",
     "personal_agent/memory_query.py",
+    "personal_agent/memory_record_origin.py",
     "personal_agent/memory_retention.py",
     "personal_agent/memory_sdk.py",
     "personal_agent/memory_sdk_example.py",

@@ -84,3 +84,8 @@ with TemporaryDirectory() as directory:
 ## 托管资源生命周期
 
 [107](107-managed-memory-sessions-zh.md) 增加版本化的显式可信本地工厂/资源契约及托管 SDK 会话。两个内置生产打开器共享资源清理，同时保留 SQLite 特定的路径/配置目录/维护权威及现有后端接口。原生读取器不增加 SDK 导出探测。这仅完成本地资源生命周期切片，不代表提议的通用加载器、迁移或后端替换 ABI。
+
+
+## 记录来源检查
+
+[108](108-memory-record-origins-zh.md) 新增显式本地操作者 `record_origin` 元数据检查，区分历史接受、当前状态与最近编辑路径。可选能力要求 `explicit_records`；不改变共享 REST、模式或召回语义。SDK 导出准入仍可能读取载荷，仅元数据保证限于该操作与原生只读路径。

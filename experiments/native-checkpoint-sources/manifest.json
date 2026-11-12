@@ -15,20 +15,21 @@
     "test_checkpoint_sources.py": "71af473f9559133dceb4898658a3e5140ffe408f490844f23885c1b2d8342a21",
     "../../personal_agent/checkpoint_evidence.py": "21ae6c7bc11521a408d2ab17ffb7c1ec7af92f8fabf320c0f0531e4a553c306f",
     "../../personal_agent/native_source_resolution.py": "030d3d86ee9d40b6772d9cc844b9c44d44eb3bc72b7e21f99522e28e4b0d35f2",
-    "../../personal_agent/memory_backend.py": "63ded729f8601c254adbb79c1e58dd1e1179ea4b27b7349c0067f5b466b79dba",
+    "../../personal_agent/memory_backend.py": "45a8d9ce9cf3b98ad9d4c7602d6eb2c9ae174083e90fa9a102739703ff4c1f12",
     "../../personal_agent/__init__.py": "18d45546de86a949e6b4645694d71f4136cca36e5b3ceea56e3dd23778eb3222",
     "recovery.py": "e7706e78bf2003915ea4d700828c974d58aa0b51b0f5980b838edb3aa06a3f93",
     "test_recovery.py": "aec695c126f6d4d0e92f5861511cb1ba61c2f0d977612a91793a60426713fd80",
     "test_source_reads.py": "37b9331d1321d545265399e819bebe7f7dc17af3283f683d78400ba30978d8e5",
     "test_acceptance.py": "6e9a50439828c1c6fa16246a68a5a37adbf8c45c01b8e87f588542ed85e2a50c",
-    "../../personal_agent/local_memory.py": "3833d91a15953930a980b03f49b6b1141e86af57668a8d6102471be4e9ccfaad",
+    "../../personal_agent/local_memory.py": "f3ecc75b74d1e0706bc2a1b9af1367d4b61f775979cf9c0866e32629901df7e2",
     "../../personal_agent/retained_sources.py": "c6badfe96c17d3c4321f0d58064b01ead8d5f05444b6acc7225fb8f91e6e7640",
     "../../personal_agent/memory_sources.py": "aee6ed1a3bbfbc157902154149748614dfd6b22113acdd24e748b3b3aea82b6a",
-    "../../personal_agent/memory_sdk.py": "5f090c3bceca52d46e9d9f927188920a7b21d7c898197383808fd0282f23854b",
-    "../../personal_agent/memory_adapters.py": "c794f534f1f9673b0bf68f5e3d58efa38c09806a754c56386daec5456031a061",
+    "../../personal_agent/memory_sdk.py": "cc688dde85911de43d194c6e7484b33638e21cf21be47904111fff584c011df2",
+    "../../personal_agent/memory_adapters.py": "3e46e57aedc8cee61f81ec6ba8ed746a5a863deb7105bf47c47eb46554a68540",
     "../../personal_agent/memory_mutation_status.py": "306bb8e1ce6e926d4dcdf80087f90cd7d4db41c8ef612dad55e639d87f09b6d7",
     "../../personal_agent/retained_source_discovery.py": "bd1b4eba8599b803265c370eb9f1d905c5754f7f46589e9b37f5ecadd372faa6",
-    "../../personal_agent/memory_sessions.py": "2358e38483bf1dfaa41155efb8be0f17c77846bec234b7436aaff63a57bc8795"
+    "../../personal_agent/memory_sessions.py": "2358e38483bf1dfaa41155efb8be0f17c77846bec234b7436aaff63a57bc8795",
+    "../../personal_agent/memory_record_origin.py": "8ce189dd7825a2804093d86c5699a45ef66b801bfda54d99cdbd5985f6241eed"
   },
   "artifact_files": [
     "LICENSE.hermes-agent",
@@ -65,5 +66,5 @@
   "production_activated": false,
   "live_model_calls": false,
   "external_delivery": false,
-  "project_source_base": "9f5e02be2cc4d7bba78f4292c55c4dcd9167759e"
+  "project_source_base": "72a75218c01d03e47a36afc84484d10a3d7de390"
 }

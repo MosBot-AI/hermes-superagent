@@ -23,7 +23,7 @@ from .memory_maintenance import validate as validate_maintenance
 from .memory_presentation import render_memory_result
 from .memory_snapshot import snapshot
 from .memory_snapshot import validate as validate_snapshot
-from .memory_storage import open_memory_backend
+from .memory_storage import open_existing_memory_reader, open_memory_backend
 from .native_source_workbench import OPERATIONS as SOURCE_REVIEW_OPERATIONS
 from .native_source_workbench import run as review_native_sources
 from .native_source_workbench import validate as validate_source_review
@@ -61,6 +61,9 @@ HELP = (
     'search "Text" [--include-expired --limit N --after ID]; show ID; '
     'search-terms "Term" ["Other term" ...] [--include-expired --limit N --after ID]; '
     'recall "Keyword" ["Other keyword" ...] [--limit N --max-chars N]; '
+    "origin ID inspects metadata-only original accepted lineage separately from current state. "
+    "Source availability is not checked; no native source or record text is opened. "
+    "Source roles do not verify authorship, truth or authority; suppression is not forgetting. "
     "changes [--after-sequence N --through-sequence N --limit N]; "
     "checkpoint --expected-watermark N [--request-id KEY]; checkpoint-status ID; "
     'correct ID [--text "Replacement"] [--topic LABEL] [--expires-at UTC | --clear-expiry] '
@@ -205,6 +208,8 @@ def parse_command(raw_args: str) -> tuple[str, dict]:
     cursor.add_argument("--consumer-id", required=True)
     show = commands.add_parser("show")
     show.add_argument("record_id")
+    origin = commands.add_parser("origin")
+    origin.add_argument("record_id")
     commands.add_parser("maintenance-preview")
     for operation in (
         "maintenance-prepare",
@@ -311,6 +316,8 @@ def parse_command(raw_args: str) -> tuple[str, dict]:
             )
     payload = vars(parser.parse_args(tokens))
     operation = payload.pop("operation")
+    if operation == "origin":
+        operation = "record_origin"
     if operation == "show":
         operation = "get"
     operation = {"checkpoint": "checkpoint_create", "checkpoint-status": "checkpoint_status"}.get(
@@ -458,6 +465,9 @@ class LocalMemoryCommands:
                 request_id = payload.get("request_id")
                 if operation == "help":
                     result = {"data": {"help": HELP}, "replayed": False}
+                elif operation == "record_origin":
+                    with open_existing_memory_reader(self._home, session_id) as backend:
+                        result = MemoryService(backend).execute(operation, payload)
                 elif operation in SOURCE_RETENTION_OPERATIONS:
                     result = retain_native_source(self._home, session_id, operation, payload)
                 elif operation in SOURCE_REVIEW_OPERATIONS:
