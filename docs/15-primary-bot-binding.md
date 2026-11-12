@@ -4,7 +4,7 @@ English | [简体中文](15-primary-bot-binding-zh.md)
 
 **Status: optional future design, not implemented; not a prerequisite for the profile-first local MVP.** If this capability is chosen, the user selects an existing Hermes **Bot Mode Bot** to act as the personal super agent. This does not create another agent loop, change Hermes's global/default Bot, or grant new permissions. All binding records, service methods, roles, events and capability flags below belong to this proposed plugin design. The current CLI task inbox is a separate local feature, not proof of Bot binding or owner authentication.
 
-Source baseline: Hermes `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`. Source inspection is not deployment certification. Read [03](03-native-architecture.md), [06](06-plugins-mcp-and-security.md), [11](11-worker-model-routing.md) and [14](14-client-api-contracts.md) alongside this contract.
+The design source baseline is Hermes `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`. The [current-pin roster evidence](#current-pin-canonical-bot-chat-roster) records the separate native compatibility checks. Read [03](03-native-architecture.md), [06](06-plugins-mcp-and-security.md), [11](11-worker-model-routing.md) and [14](14-client-api-contracts.md) alongside this contract.
 
 Preparatory code and contract evidence are in [18](18-owner-entry-and-read-authorization.md): the read evaluator exists, but missing public receiving-Bot identity keeps production owner contexts and private reads in this remote/Bot lane disabled. The binding flows below remain a design.
 
@@ -33,6 +33,28 @@ The designation is a plugin responsibility, not Hermes's reserved `@hermes` alia
 | Cron can target `bot-chat[:profile]` through native authority admission [B9] | Reuse native receipts and scheduling; never run a second writer against a Bot Chat |
 
 These are reference contracts, not permission to import private modules as a supported plugin API. In particular, the canonical registry implementation, profile-rename internals and Bot delivery mailbox are **source evidence**, not new `ctx` methods. E0.7 must prove supported adapters or report a generic upstream seam. Do not manufacture `ctx.bind_main_bot`, `ctx.current_owner`, or a native immutable `bot_uuid`.
+
+### Current-Pin Canonical Bot Chat Roster
+
+The roster fixture drives the native gateway `/api/ws` ASGI boundary and the OpenRPC `profiles.list` method at clean Hermes `2281116525106e3c109993ccb5dc74d02bfc1427`. It uses synthetic local tickets and temporary profile and session stores without a real listener, Desktop client, model or account. The exchange negotiates `hermes-gateway-v1` and receives `gateway.ready` with `session_authority: true`. [Roster contract tests](../tests/contracts/test_native_bot_roster_asgi.py) · [Gateway OpenRPC](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/apps/shared/src/gateway-contract.openrpc.json)
+
+| Fixture case | Observed result |
+| --- | --- |
+| Host-scoped ticket explicitly selects a served sibling | Both profiles share a display label and return distinct canonical IDs. The selected profile appears first. Its hidden exact `Bot Chat` supplies `canonical_session.id`. `resolved_id` and preview come from the compression tip. `last_session` and `worker_session` refer to the separate numbered chat and worker. |
+| Profile-scoped interactive ticket | The ticket profile exposes its session fields, including a canonical chat whose stored owner differs from the ticket subject. The sibling exposes discovery metadata without `canonical_session`, `last_session` or `worker_session`. An explicit request for that sibling returns `profile_mismatch`. |
+| `worker-adoption` ticket | `profiles.list` returns `permission_denied`. |
+| Host-scoped roster after a sibling begins retiring | The retiring sibling becomes metadata-only. The serving profile still returns its canonical chat. |
+| Unbound legacy or recoverably auto-archived exact-title chat | The authorized roster returns `canonical_session: null`. The numbered chat remains recent and no row is created, adopted or restored. |
+| Two isolated ASGI endpoints with distinct runtime instance IDs and the same seeded `install_id`, profile slug and display label | Each endpoint's own ticket returns its own profile path, canonical root, compression tip and preview. The repeated install observation does not identify which endpoint owns a session. |
+| Unreadable install ID | The fixture supplies an unreadable marker as a directory. The roster returns an empty `install_id` and still reports the authorized canonical chat. |
+
+The fixture fences execution, socket connections and listeners, and unrelated gateway background activity. It compares session, message, admission and state metadata rows before and after requests and checks that the native authority has no remaining connections or attached sessions. The preseeded install marker is unchanged and no new install lock file appears. The unreadable marker remains an empty directory. [Roster contract tests](../tests/contracts/test_native_bot_roster_asgi.py)
+
+The native admission path grants operator access to a redeemed local `interactive` ticket. The ticket's `profile` or `host` scope independently determines whether a request can reach sibling authorities. This verifies the local operator contract only. Verified human ownership, remote authentication and public plugin caller context require their own proof. [Native gateway admission](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/gateway/run_api.py#L452-L490) · [Current-pin owner evidence limits](78-enrollment-ceremony.md)
+
+The authority roster reads the existing session stores with `reopen=False`. The exact-title `session.list` path can adopt an eligible legacy row and needs separate verification before use as discovery. The roster's `install_id` is an observation from the serving Hermes root. The resolver can mint it on a writable root when it is absent or malformed. An ID can survive a filesystem copy, so host continuity requires separate evidence. [Roster implementation](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/gateway/session_group_controls.py#L389-L450) · [Legacy adoption fixture](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/tests/gateway/test_bot_roster_fleet.py#L94-L102) · [Install identity resolver](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_cli/install_identity.py)
+
+E0.7 still requires evidence for Desktop routes across connections and aliases, profile rename/delete/recreation and clone/restore ambiguity, supported caller and worker provenance, and native delivery and admission receipts. Optional HTTP still depends on E0.6. Owner-authorized enrollment, active binding and reconciliation remain separate work under E1.6 and E3.6. [Issue #33](https://github.com/MosBot-AI/hermes-superagent/issues/33)
 
 ## 3. Identity, Storage and Scope
 
@@ -235,7 +257,7 @@ Older hosts may lack route descriptors, canonical fields or normalized provenanc
 
 | ID | Status and dependencies | Deliverable |
 |---|---|---|
-| E0.7 Verify Primary Bot Contracts | M0; Backlog; E0.1/E0.2, using E0.4 findings | Profile/route/registry/lineage/provenance/receipt probes; supported adapter map and explicit gaps; optional HTTP also needs E0.6 |
+| E0.7 Verify Primary Bot Contracts | M0, In Progress. Depends on E0.1/E0.2 and uses E0.4 findings. | [Current-pin roster evidence](#current-pin-canonical-bot-chat-roster), with remaining profile/route/provenance/receipt probes and supported adapter map. Optional HTTP also needs E0.6. |
 | E1.6 Bind Primary Bot | Optional future; Backlog; E0.7, E1.1–E1.5, E2.1 | Owner-confirmed enrollment and recovery, unique active binding, revision/epoch fence, audit and role policy; no unconditional write enablement |
 | E3.6 Reconcile Primary Bot Sessions | M1 gate for enabled Bot-bound paths, extended in M2; Backlog; E1.6, E3.2/E3.5, E4.3/E4.4 | Canonical resolution, worker handoff correlation, delivery/recovery and native receipt reconciliation |
 
