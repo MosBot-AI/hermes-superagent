@@ -34,6 +34,7 @@ _CAPABILITIES = frozenset(
         "local_metadata_checkpoint",
         "mutation_receipt_status",
         "retained_source_acceptance",
+        "retained_source_discovery",
     }
 )
 _LIMITS = {
@@ -83,6 +84,7 @@ _OPERATION_CAPABILITIES = {
         "durable_write",
         "idempotency",
     },
+    "source_discover": {"retained_source_discovery", "explicit_records"},
     "source_status": {"retained_source_acceptance", "explicit_records"},
     "source_cursor": {"retained_source_acceptance", "explicit_records"},
     "mutation_receipt_status": {"explicit_records", "mutation_receipt_status"},

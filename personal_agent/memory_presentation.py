@@ -11,6 +11,9 @@ _ERRORS = {
         "The native store has no supported stable UUID. "
         "Retention was refused; no repair was attempted."
     ),
+    "source_discovery_changed": (
+        "Recovery metadata changed. Restart source-discover at offset zero and review again."
+    ),
     "source_preview_changed": (
         "The reviewed retention request changed or its digest does not match. Nothing was staged. "
         "Inspect any earlier pending outcome, then preview and review again."
@@ -227,6 +230,41 @@ def _render(envelope: dict, operation: str | None, payload: dict) -> str:
     if envelope["status"] != "ok" or type(envelope["replayed"]) is not bool:
         raise ValueError("unsupported result")
     data = envelope["data"]
+    if operation == "source_discover":
+        lines = [
+            _escape_controls(json.dumps(envelope, ensure_ascii=False, indent=2, sort_keys=True)),
+            "Terminal decisions are historical; current canonical metadata is separate.",
+            "Discovery and absence describe only this read snapshot. An unobserved writer "
+            "may still commit later. The snapshot token grants no authority or future write fence.",
+            "Inspect an exact saved request before deliberately retrying or discarding; "
+            "discovery never replays or discards automatically.",
+        ]
+        for item in data["items"]:
+            query = item["query"]
+            lines.append(
+                shlex.join(
+                    [
+                        "/personal-memory",
+                        "source-status",
+                        "--expected-digest=" + query["expected_digest"],
+                        "--",
+                        query["request_id"],
+                    ]
+                )
+            )
+        if data["next_offset"] is not None:
+            args = [
+                "/personal-memory",
+                "source-discover",
+                "--state=" + data["state"],
+                "--limit=" + str(data["limit"]),
+                "--offset=" + str(data["next_offset"]),
+                "--expected-snapshot=" + data["snapshot"],
+            ]
+            if data["consumer_id"] is not None:
+                args.append("--consumer-id=" + data["consumer_id"])
+            lines.append("Next page: " + shlex.join(args))
+        return "\n".join(lines)
     if operation in {
         "source_preview",
         "source_retain",

@@ -48,8 +48,12 @@ HELP = (
     "Preview the complete row, provenance and retention, and save the exact request ID/digest "
     "before explicit retain. Retention copies one untrusted source independently to canonical "
     "memory; native deletion does not forget it. At most 2048 content characters; no truncation. "
+    "source-discover [--state pending|accepted|discarded|all] [--consumer-id ID] "
+    "[--limit N] [--offset N --expected-snapshot SHA256]. Metadata-only recovery discovery; "
+    "defaults to pending. Snapshot tokens grant no authority or future write fence. "
     "source-status KEY --expected-digest SHA256; source-discard KEY --expected-digest SHA256; "
-    "source-cursor --consumer-id ID. Status/cursor never open native text or migrate memory. "
+    "source-cursor --consumer-id ID. Discovery/status/cursor never open native text "
+    "or migrate memory. "
     "After any uncertain write, inspect the saved exact key/digest before doing anything else. "
     "Discard terminally suppresses the exact pending source; it does not forget accepted records. "
     'remember "Text" [--topic LABEL] [--expires-at UTC] [--request-id KEY]; '
@@ -189,6 +193,14 @@ def parse_command(raw_args: str) -> tuple[str, dict]:
         command = commands.add_parser(operation)
         command.add_argument("request_id")
         command.add_argument("--expected-digest", required=True)
+    discovery = commands.add_parser("source-discover")
+    discovery.add_argument(
+        "--state", choices=["pending", "accepted", "discarded", "all"], default="pending"
+    )
+    discovery.add_argument("--consumer-id", default=None)
+    discovery.add_argument("--limit", type=int, default=20)
+    discovery.add_argument("--offset", type=int, default=0)
+    discovery.add_argument("--expected-snapshot", default=None)
     cursor = commands.add_parser("source-cursor")
     cursor.add_argument("--consumer-id", required=True)
     show = commands.add_parser("show")
@@ -335,6 +347,7 @@ def parse_command(raw_args: str) -> tuple[str, dict]:
         "source-status": "source_status",
         "source-discard": "source_discard",
         "source-cursor": "source_cursor",
+        "source-discover": "source_discover",
         "candidate-list": "candidate_list",
         "candidate-show": "candidate_get",
         "candidate-accept": "candidate_accept",

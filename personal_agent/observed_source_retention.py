@@ -14,14 +14,21 @@ from .retained_sources import source_request_identity
 from .retained_sources import validate as validate_source
 
 OPERATIONS = frozenset(
-    {"source_preview", "source_retain", "source_status", "source_discard", "source_cursor"}
+    {
+        "source_preview",
+        "source_retain",
+        "source_status",
+        "source_discard",
+        "source_cursor",
+        "source_discover",
+    }
 )
 
 
 def validate(operation, payload):
     if type(operation) is not str or operation not in OPERATIONS or type(payload) is not dict:
         raise MemoryError("invalid_request")
-    if operation in {"source_status", "source_discard", "source_cursor"}:
+    if operation in {"source_status", "source_discard", "source_cursor", "source_discover"}:
         return validate_source(operation, payload)
     fields = {
         "message_uid",
@@ -75,7 +82,7 @@ def validate(operation, payload):
 def run(home, session_id, operation, payload):
     """Called only after native LOCAL/configuration admission; no model entry."""
     payload = validate(operation, payload)
-    if operation in {"source_status", "source_cursor", "source_discard"}:
+    if operation in {"source_status", "source_cursor", "source_discard", "source_discover"}:
         opener = (
             open_memory_backend if operation == "source_discard" else open_existing_memory_reader
         )
