@@ -42,6 +42,7 @@ _REJECTIONS = frozenset(
     {
         "idempotency_conflict",
         "source_scope_required",
+        "source_discovery_changed",
         "source_pending",
         "source_not_staged",
         "source_identity_conflict",
@@ -200,7 +201,9 @@ class LocalMemorySDK:
                 if operation == "checkpoint_create"
                 else "consumer_scope_required"
             )
-        if operation in SOURCE_WRITES and self.binding.source_kind != "explicit_local_operator":
+        if (operation in SOURCE_WRITES or operation == "source_discover") and (
+            self.binding.source_kind != "explicit_local_operator"
+        ):
             raise MemoryError("source_scope_required")
         try:
             result = self._service.execute(operation, deepcopy(request))
@@ -242,6 +245,8 @@ class LocalMemorySDK:
             if operation not in SOURCE_WRITES:
                 _require(result["replayed"] is False)
             validate_source_result(operation, request, data)
+            if operation == "source_discover":
+                _require(data["namespace_id"] == self.binding.namespace_id)
             return
         if operation == "mutation_receipt_status":
             _require(result["replayed"] is False)

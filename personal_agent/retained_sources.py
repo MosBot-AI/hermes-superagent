@@ -13,7 +13,14 @@ from .memory_backend import MemoryError, _text, validate_expiry
 from .memory_mutation_status import _unique_object, normalized_request_digest, receipt_valid
 
 OPERATIONS = frozenset(
-    {"source_stage", "source_accept", "source_discard", "source_status", "source_cursor"}
+    {
+        "source_stage",
+        "source_accept",
+        "source_discard",
+        "source_status",
+        "source_cursor",
+        "source_discover",
+    }
 )
 WRITES = frozenset({"source_stage", "source_accept", "source_discard"})
 SCHEMA_V12 = {
@@ -87,6 +94,10 @@ def _sequence(value):
 def validate(operation, payload):
     if type(operation) is not str or operation not in OPERATIONS or type(payload) is not dict:
         raise MemoryError("invalid_request")
+    if operation == "source_discover":
+        from .retained_source_discovery import validate as validate_discovery
+
+        return validate_discovery(payload)
     if operation == "source_cursor":
         fields = {"consumer_id"}
     elif operation in {"source_status", "source_discard"}:
@@ -180,6 +191,10 @@ def _decision(value):
 
 def validate_result(operation, request, data):
     """Validate additive SDK result data; envelope/replay classification is separate."""
+    if operation == "source_discover":
+        from .retained_source_discovery import validate_result as validate_discovery_result
+
+        return validate_discovery_result(request, data)
     if operation in WRITES:
         _decision(data)
         _require(data["request_id"] == request["request_id"])
@@ -415,6 +430,10 @@ def execute(backend, conn, operation, request, now):
 
     validate_metadata(backend, conn, now)
     rows, cursors = validate_store(conn, now)
+    if operation == "source_discover":
+        from .retained_source_discovery import discover
+
+        return discover(backend, conn, request, now, rows)
     if operation == "source_cursor":
         return cursors.get(
             request["consumer_id"],

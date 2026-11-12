@@ -137,6 +137,7 @@ class LocalMemoryBackend:
                 "local_metadata_checkpoint",
                 "mutation_receipt_status",
                 "retained_source_acceptance",
+                "retained_source_discovery",
             ],
             "unsupported": [
                 "vector",
@@ -408,6 +409,8 @@ class LocalMemoryBackend:
 
     def execute(self, operation: str, payload: dict) -> dict:
         request = validate_request(operation, payload)
+        if operation == "source_discover" and self._source_kind == "activated_session_model":
+            raise MemoryError("source_scope_required")
         if operation.startswith("index_"):
             raise MemoryError("index_maintenance_required")
         if self._read_only and (
@@ -471,7 +474,12 @@ class LocalMemoryBackend:
             # sampling time so lock waits cannot admit an already expired row.
             conn.execute("SELECT id FROM namespace").fetchone()
             memory_fts.validate_index_config(conn)
-            if operation not in {"mutation_receipt_status", "source_status", "source_cursor"}:
+            if operation not in {
+                "mutation_receipt_status",
+                "source_status",
+                "source_cursor",
+                "source_discover",
+            }:
                 memory_sources.validate(conn)
             now = datetime.fromisoformat(memory_expiry.utc_now())
             if operation in retained_sources.OPERATIONS:
