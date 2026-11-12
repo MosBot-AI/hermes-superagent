@@ -4,7 +4,7 @@
 
 **状态：可选后续设计，尚未实现，不是 profile-first 本地 MVP 的前置条件。** 若选择此能力，用户选择一个现有的 Hermes **Bot Mode Bot** 作为个人 super agent。这不会创建另一套 agent loop、改变 Hermes 的全局/默认 Bot，也不会授予新权限。下文所有绑定记录、服务方法、角色、事件和能力标志均属于这套拟议插件设计。当前 CLI 任务收件箱是一项独立的本地功能，不能证明 Bot 绑定或 owner 身份认证已经实现。
 
-本设计的源码基线为 Hermes `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`。当前固定版本的[名册](#当前固定版本的原生-bot-chat-名册)、[Desktop 路由](#当前固定版本的-desktop-profile-路由)和[原生 profile 生命周期](#当前固定版本的原生-profile-生命周期)小节记录兼容性验证。请结合 [03](03-native-architecture-zh.md)、[06](06-plugins-mcp-and-security-zh.md)、[11](11-worker-model-routing-zh.md) 和 [14](14-client-api-contracts-zh.md) 阅读本合同。
+本设计的源码基线为 Hermes `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`。当前固定版本的兼容性验证涵盖[名册](#当前固定版本的原生-bot-chat-名册)、[Desktop 路由](#当前固定版本的-desktop-profile-路由)、[原生 profile 生命周期](#当前固定版本的原生-profile-生命周期)和 [Bot Chat 延后投递](#当前固定版本的-bot-chat-延后投递)。请结合 [03](03-native-architecture-zh.md)、[06](06-plugins-mcp-and-security-zh.md)、[11](11-worker-model-routing-zh.md) 和 [14](14-client-api-contracts-zh.md) 阅读本合同。
 
 准备性代码与契约证据见[文档 18](18-owner-entry-and-read-authorization-zh.md)：只读评估器已实现，但公开接收 Bot 身份缺失，该远程/Bot 路线的生产 owner context 和私人读取仍关闭。以下绑定流程仍为设计。
 
@@ -97,7 +97,7 @@ Authority 名册使用 `reopen=False` 读取现有会话存储。精确标题的
 
 停止状态安装复制夹具在复制合成根目录前关闭 authority 和会话数据库。原件与副本独立、依次启动，并使用新签发的本地票据。`profiles.list` 返回相同的安装标记、profile 标签和规范会话摘要，包括相同的根会话及压缩末端。夹具中经准入的 `runtime.describe` 调用返回不同的运行时实例 ID 和 profile 路径。名册读取前后，每次启动所记录的数据库快照保持一致。安装标记与规范会话谱系相同，仍无法确定应信任哪个 authority。[停止状态安装的名册夹具](../tests/contracts/test_native_bot_roster_asgi.py) · [身份识别限制](#33-必须明确展示身份识别的限制)
 
-真实运行环境下的 Desktop 路由与 profile 生命周期转换、经权威证明的恢复连续性、受支持的调用方与 worker 来源证明及原生投递与准入回执，仍属 E0.7 的开放事项。可选 HTTP 入口仍依赖 E0.6。经 owner 授权的登记、激活绑定及对账仍是 E1.6 和 E3.6 的独立工作。[Issue #33](https://github.com/MosBot-AI/hermes-superagent/issues/33)
+真实运行环境下的 Desktop 路由与 profile 生命周期转换、经权威证明的恢复连续性、受支持的调用方与 worker 来源证明及更广泛的投递回执对账，仍属 E0.7 的开放事项。可选 HTTP 入口仍依赖 E0.6。经 owner 授权的登记、激活绑定及对账仍是 E1.6 和 E3.6 的独立工作。[Issue #33](https://github.com/MosBot-AI/hermes-superagent/issues/33)
 
 ## 3. 身份、存储与作用域
 
@@ -246,11 +246,26 @@ V1 **不支持自动跨 profile/跨宿主接管**。应使用 E8.3 下经过单�
 
 每次投递只设一个负责方。领域通知在准入前保存其预期绑定/epoch、目标、内容修订号、策略 scope 和稳定的 effect ID。派发时解析当前规范/传输目标，并重新检查权限。目标变化时，应暂停/审阅旧 effect，而不是默默改投新目标。原生 cron 投递与插件 outbox 不能同时发送同一结果。
 
-原生 `bot-chat[:profile]` 投递仅限本机，并进入既有 Bot authority。在该固定版本中，owner 不可用时，调度器可以持久化延后**从未获准接纳**的投递，然后在后续 tick 使用相同投递 ID 重试。移交/准入不代表完成；已认领工作若结果不确定，不代表可以使用新 ID 重试 [B9]。保留原生投递/准入引用，并区分排队、运行中、等待、完成、失败和未知结果。必须针对固定版本实现测试该行为；较旧的文字说明可能落后于实现。跨机器 Bot 投递需要经过单独验证、已获授权的传输，不能把 `bot-chat:<name>` 解释为远端地址。绝不把启动一个针对同一会话记录的 CLI 写入者作为后备方案。
+原生 `bot-chat[:profile]` 投递仅限本机，并进入既有 Bot authority。owner 不可用时，调度器可将尚未准入的投递持久化并延后，在后续 tick 使用相同投递 ID 重试。如果准入响应丢失，即使 authority 已提交准入，调度器的待投递记录仍可保持 `queued`。保留原生投递和准入引用，区分移交、准入及排队、运行中、等待、完成、失败和未知等执行结果。已认领工作若结果不确定，须沿用现有标识对账 [B9]。跨机器 Bot 投递需要单独验证且已获授权的传输。禁止以针对同一会话记录的 CLI 写入者作为后备方案。[当前固定版本的回执证据](#当前固定版本的-bot-chat-延后投递)
 
-`ctx.inject_message(..., session_key=...)` 可能适用于经过独立验证的某种模式，但其布尔返回值不提供持久化回执/幂等保证。对结果不确定的布尔值提交，不得以新回合的形式重试。如果受支持的适配器无法对稳定的投递身份进行对账，持久化主动投递的启用就必须保持阻塞；应报告最小的、携带回执的上游接口缺口，而不是调用私有邮箱代码。
+`ctx.inject_message(..., session_key=...)` 返回布尔值，接口既不接受调用方指定的投递 ID，也不提供持久化回执查询。当前固定版本的上游网关调度器测试中，调度器返回 `True`，随后异步派发抛出错误。结果不确定的提交须通过提供稳定回执的适配器才能安全对账。缺少受支持的适配器时，持久化主动投递仍无法启用。[插件 API](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_cli/plugins_context.py#L395-L402) · [上游调度器测试](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/tests/gateway/test_plugin_message_injection.py#L341-L368)
 
 计划任务和 specialist 的输出必须保留来源归属。例行任务不能把自己的内容标记为 owner 的直接请求来获取权限。对 owner 的提醒和第三方服务上的操作仍是不同的 effect，各自需要独立的 grant。Bot 绑定不自动授权主动联系、跨 Bot 共享、新增费用或外部写入。
+
+### 当前固定版本的 Bot Chat 延后投递
+
+在 Hermes `2281116525106e3c109993ccb5dc74d02bfc1427`，如果投递抛出错误，cron 排空流程会将待投递文件保持为 `queued`。收到成功响应后，它将记录标为 `transferred`，并把响应状态写入 `receipt_status`。authority 在返回该投递 ID 的既有回执前，会核对消息、提交主体、作者和通知类别。`transferred` 记录调度器的移交结果。回执记录 authority 的处置结果，回合执行和完成另有各自结果。[原生 cron 排空流程](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/cron/bot_chat_legacy.py#L64-L123) · [原生回执处理](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/gateway/session_bot.py#L795-L876)
+
+契约测试夹具把合成 cron 结果投递给同一个本地 profile。它经过原生 cron 投递辅助函数和排空流程、`GatewayClient`、私有 `session-ticket` 处理器和 `/api/ws` 的票据核销，以及原生 authority 上的 `bot_relay.deliver`。夹具提供端点发现结果和本地对端主体，在内存中桥接控制请求和 WebSocket 流量，并通过带超时的测试驱动运行两个事件循环。[延后投递回执契约测试](../tests/contracts/test_native_bot_deferred_receipt.py) · [原生 authority 客户端](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/tools/bot_live_delivery.py#L71-L119) · [私有控制处理器](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/gateway/control_socket.py#L333-L410)
+
+| 夹具步骤 | 观测到的状态 |
+| --- | --- |
+| 端点报告已停止 | Cron 按执行与目标派生的投递 ID 持久化一条 `queued` 记录。authority 邮箱和规范会话准入队列均为空。 |
+| 端点报告已就绪，随后首次成功响应被丢弃 | Gateway 发出 `queued` 回执，随后桥接层丢弃响应。邮箱与规范会话 FIFO 条目 `bot:<delivery_id>` 对应同一个准入 ID。客户端观测到断开，cron 记录逐字节保持不变，状态仍为 `queued`。 |
+| 后续排空流程重放投递 | 客户端使用新的 `interactive` 票据发送相同的投递 ID、profile、规范会话和消息。authority 返回既有回执，cron 记录变为 `transferred`，并带有 `receipt_status: queued`。 |
+| 再次运行排空流程 | 已移交的记录不再触发移交。夹具仍只有一个规范会话、一份回执、一条排队中的 FIFO 准入记录和一次调度请求。准入条目没有终态结果，规范会话的消息记录仍为空。 |
+
+夹具让已准入的回合保持排队状态，覆盖合成本地 operator 准入及回执处理。安装环境中的 Gateway 与操作系统对端验证、模型执行及回合完成、外部投递、重启及更广泛的投递对账仍需单独验收。公开插件 API 提供上文所述的布尔值注入路径。
 
 ## 9. 事件、错误与客户端恢复
 
@@ -300,7 +315,7 @@ Payload 携带 ID、修订号、epoch 和原因码，不包含会话记录、non
 
 | ID | 状态与依赖 | 交付物 |
 |---|---|---|
-| E0.7 Verify Primary Bot Contracts | M0，In Progress。依赖 E0.1/E0.2，并使用 E0.4 发现。 | 当前固定版本的[名册](#当前固定版本的原生-bot-chat-名册)、[Desktop 路由](#当前固定版本的-desktop-profile-路由)和[原生 profile 生命周期](#当前固定版本的原生-profile-生命周期)证据。仍需验证运行时路由、来源与回执，并记录受支持的适配器。可选 HTTP 还需要 E0.6。 |
+| E0.7 Verify Primary Bot Contracts | M0，In Progress。依赖 E0.1/E0.2，并使用 E0.4 发现。 | 当前固定版本的[名册](#当前固定版本的原生-bot-chat-名册)、[Desktop 路由](#当前固定版本的-desktop-profile-路由)、[原生 profile 生命周期](#当前固定版本的原生-profile-生命周期)和 [Bot Chat 延后投递](#当前固定版本的-bot-chat-延后投递)证据。运行时路由、来源证明、更广泛的回执对账和受支持适配器清单仍待完成。可选 HTTP 还需要 E0.6。 |
 | E1.6 Bind Primary Bot | 可选后续；Backlog；E0.7、E1.1–E1.5、E2.1 | Owner 确认的登记与恢复、唯一 active 绑定、修订号/epoch 栅栏、审计和角色策略；不无条件启用写入 |
 | E3.6 Reconcile Primary Bot Sessions | 启用 Bot 绑定路径时为 M1 门禁，M2 继续扩展；Backlog；E1.6、E3.2/E3.5、E4.3/E4.4 | 规范会话解析、worker handoff 关联、投递/恢复和原生回执对账 |
 
