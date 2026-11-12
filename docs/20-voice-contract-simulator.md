@@ -80,7 +80,20 @@ The [streaming contracts](../tests/contracts/test_voice_provider_contracts.py) u
 | ASR session cancellation | In process, cancelling while the synthetic provider is blocked in `finalize` makes the wrapper report cancellation. The provider can still finish after it is released. Its late result is suppressed by the wrapper in this tested sequence. |
 | `tools.tts_streaming.resolve_streaming_provider` | A ready fixture resolves at its declared 22,050 Hz mono s16le rate. Its configured voice, model and speed reach the provider with the PCM format. In process the consumer reads the expected chunks. In `host` mode the call reaches the provider subprocess, then the first pull raises because the projected generator cannot be iterated. An explicitly selected unavailable, invalid-rate, file-only or missing streamer returns no streamer and does not substitute the configured ready provider. |
 
-The ASR wrapper and TTS resolver are native consumer entry points for these tests. The plugin registration methods remain the public provider extension surface. A streaming capability, successful open or successful resolution alone gives insufficient evidence of usable audio in `host` mode. Playback, provider-side and native-turn cancellation, web audio and credential transport, real devices and online-provider acceptance remain open.
+The ASR wrapper and TTS resolver are native consumer entry points for these tests. The plugin registration methods remain the public provider extension surface. A streaming capability, successful open or successful resolution alone gives insufficient evidence of usable audio in `host` mode.
+
+### Current-Pin Playback and Interruption
+
+The [speaker contracts](../tests/contracts/test_voice_provider_contracts.py) and [voice control contracts](../tests/contracts/test_native_voice_control.py) exercise the clean Hermes pin `2281116525106e3c109993ccb5dc74d02bfc1427` with synthetic PCM, a fake player and fake agents. The speaker contracts route through the native temporary WAV path and read the submitted file in the fake player.
+
+| Native path | Behavior covered |
+| --- | --- |
+| `tools.tts_tool_speaker.stream_tts_to_speaker` | In process, the fake player receives the three expected 22,050 Hz mono 16-bit PCM frames. In `host` mode, iteration fails after the registered provider receives the call, yet the fake player receives a valid WAV header with zero frames. Both paths remove the temporary WAV and set the pipeline completion event. The failure stays on the streaming path, with no file-synthesis call in this test. |
+| Local speaker stop during synthesis | The stop flag does not release the blocked synthetic provider. After the test releases it, the player receives no late PCM. A second WAV whose drain had already started reaches the fake player with zero frames. |
+| TUI sidecar full-duplex interruption | Playback-phase interruption stops streaming and fallback media, then emits the interruption event. Generation-phase interruption also asks both running agents in the sidecar process to interrupt after stopping media. The idle agent receives no request. |
+| TUI LOCAL typed-stop helper | The helper changes the target LOCAL session's voice mode. Stopping another session leaves the active capture callback usable. Stopping the capture's own session fences later callbacks. Both stops request TTS stop through the shared sidecar function. The test invokes the helper directly. Wire authorization and admission require separate evidence. |
+
+The pipeline completion event and player invocation can both occur without any PCM reaching the player. Device playback acknowledgement, provider-side cancellation, confirmed native-turn cancellation, web audio and credential transport, real devices and online-provider acceptance remain open.
 
 ## 5. Tests and Remaining Gates
 

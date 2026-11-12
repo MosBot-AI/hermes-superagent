@@ -5,5 +5,5 @@
   "python": "3.14",
   "status": "development_baseline",
   "semver_support_range": null,
-  "note": "No broad requires_hermes range is claimed from one tested commit. Offline native voice file dispatch and streaming consumer boundaries are verified against 2281116525106e3c109993ccb5dc74d02bfc1427 by tests/contracts/test_voice_provider_contracts.py (Issue #36)."
+  "note": "No broad requires_hermes range is claimed from one tested commit. Offline native voice file dispatch, stream consumption, temporary-WAV playback and sidecar interruption boundaries are verified against 2281116525106e3c109993ccb5dc74d02bfc1427 by tests/contracts/test_voice_provider_contracts.py and tests/contracts/test_native_voice_control.py (Issue #36)."
 }
