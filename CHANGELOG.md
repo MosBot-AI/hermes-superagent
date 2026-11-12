@@ -83,6 +83,8 @@ This file distinguishes design work, development changes, and released capabilit
 - Run runtime artifact acceptance on exact pull-request heads with read-only credentials; keep downloadable artifact publication push-only.
 ### Changed
 
+- Add real Linux Electron acceptance for copied installation markers and stopped synthetic home copies. When Desktop discovery shows only the primary route, explicitly scoped reads still reach each Gateway's own transcript, including copies with equal session IDs (#33).
+
 - Verify live retirement and same-name hot serve over retained native Gateway and Linux Electron WebSockets. The Desktop Bot Mode click shows retry while the named profile is absent and opens its original chat after hot serve (#33).
 
 - Verify the saved Webapp token Bot Mode lookup on the clean Hermes pin and a separate proposed build. The proposal scopes the existing chat probe to the selected backend profile and restores the retry prompt after an uncertain empty lookup (#33).

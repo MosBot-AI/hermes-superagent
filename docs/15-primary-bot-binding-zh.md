@@ -42,6 +42,7 @@
 | --- | --- | --- |
 | 规范会话发现与谱系 | 使用合成的限定范围票据，经 ASGI 调用原生 `profiles.list`，覆盖隐藏 Bot Chat 的根会话、压缩后末端以及不可用或歧义的名册条目。[名册证据](#当前固定版本的原生-bot-chat-名册) | 每条启用的路由都需要经过授权，精确查询根会话和当前谱系。身份缺失或不确定时应报告不可用。按精确标题查询的 `session.list` 回退路径可能接管旧会话。其他发现模式、压缩后会话的界面附加及规范会话移交需要独立证据。 |
 | Desktop 来源选择 | 在 Linux 上运行真实的 Electron 源码构建，通过私有本地票据和已保存的环回 Webapp token 连接，验证 `host.profileRoutes()` 与 `host.requestProfile()`。原生 profile 退役并同名热上线时，已保存的连接保持原路由作用域。[Electron 证据](#当前固定版本的-electron-profile-路由) · [Desktop 运行时转换](#当前固定版本的-desktop-profile-退役) | 分别验证 Desktop 安装包及任何启用的 SSH 或 OAuth 路由。 |
+| 安装复制观测 | 两个 Gateway 均可达时，Electron 将安装标记和 profile 相同的条目归并到主连接。显式注册路由仍返回各自的对话记录，停止状态 home 副本保留相同规范会话 ID 时也是如此。[安装复制证据](#当前固定版本的安装复制歧义) | 恢复或重新绑定前需要独立、经认证的安装和 owner 证据。清单无法消除复制标记的歧义。 |
 | Bot Mode 规范会话打开 | 源码构建的 Linux 名册在查询返回类型化错误时拒绝打开会话，在查询返回空结果但原生指针探测确认已有会话时也拒绝。重试时打开同一个本地未压缩会话。[本地 Bot Mode 证据](#当前固定版本的-bot-mode-规范会话拒绝与重试) | Desktop 安装包、压缩后会话的界面附加、SSH 和 OAuth 界面路由以及经认证的 owner 绑定需要独立证据。 |
 | 已保存 Webapp 令牌的回退 | 干净 Linux Electron 构建在命名 profile 查询返回空结果时探测远程启动 authority，并在同一次点击中通过第二次查询打开原会话。单独构建的提案探测命名 authority，拒绝不确定的打开操作，并在明确重试后打开原会话。[已保存 Webapp 证据](#当前固定版本的已保存-webapp-bot-mode-路由) | 干净固定版本仍有回退作用域缺口。受支持的使用需要已修正的宿主修订及该模式的专项验收。 |
 | Profile 与安装连续性 | 停机状态下的原生 profile CLI 和备份导入路径覆盖重命名、克隆、删除、同名重建、拒绝向已占用的 profile 导入，以及恢复后目标的 epoch 下限。在同一运行中的安装实例内，保留原有 host 作用域 WebSocket，覆盖 profile 退役及同名热上线。[Profile 生命周期](#当前固定版本的原生-profile-生命周期) · [保留的路由](#当前固定版本保留的原生-profile-路由) · [备份与恢复](#当前固定版本的原生备份与恢复) | 其他运行时切换和经认证的安装连续性需要当前目标、登记、规范谱系与冲突证据。复制的标记和名称无法消除安装实例的歧义。 |
@@ -118,6 +119,21 @@ python -m acceptance.live.run_desktop_profile_routing \
   --hermes-python /path/to/pinned/python \
   --node /path/to/pinned/node
 ```
+
+### 当前固定版本的安装复制歧义
+
+两个 [Linux Electron 用例](../tests/desktop/desktop_install_ambiguity_ipc.spec.ts)在干净的 Hermes `2281116525106e3c109993ccb5dc74d02bfc1427` Desktop 和 Webapp 源码构建产物、Electron `44.9.3` 和 Node.js `26.12.1` 上通过。两项用例均启动两个独立的原生 Gateway。Desktop 使用本地私有票据连接及已保存的回环 Webapp 令牌连接。两个安装均提供 `scout`，并报告同一个非空 `install_id`。两者的 PID、运行时实例 ID、profile home 和监听地址均不同。
+
+| 夹具场景 | 两个原生来源各自提供的内容 |
+| --- | --- |
+| 复制安装标记 | 夹具分别预置两个独立 home，启动前只复制 `install_id`。每个 `scout` 都有各自的规范 Bot Chat ID 和对话记录。 |
+| 复制停止状态的合成安装 | 夹具在任一 Gateway 启动之前复制临时 Hermes home，比较逻辑快照，再在两侧分别追加一条不同的合成消息。两个 `scout` profile 保留相同的未压缩规范 `id` 和 `resolved_id`，存储的对话记录不同。 |
+
+两项用例中，`host.agents()` 均报告两个可达来源和一个 `scout` agent。Preload 和 Desktop SDK 路由清单只为该 profile 暴露配置为本地主连接的路由。原生客户端使用 profile 票据分别调用各来源的 `session.list` 和 `session.transcript`。为访问路由清单中省略的已保存来源，夹具在显式描述符中提供该来源已知的注册连接 ID 和确切 profile。Preload 的 `getConnectionFor()` 将本地和已保存来源的描述符解析到各自的原生监听器。渲染进程通过 `host.requestProfile()` 读取两个来源，对话读取依次使用本地连接、已保存连接，再回到本地连接。WebSocket 帧确认预期的监听器和 profile，只有已保存的 Webapp 套接字带有令牌查询参数。仅提供 `scout` 的请求因缺少描述符被拒绝，带该次探测标记的查询未出现在通信帧中。探测期间，所比较的 SQLite 会话、消息和准入字段保持不变。渲染进程未发送 `session.create` 或 `prompt.submit`，服务商记录到零次补全。
+
+Desktop 按非空安装标记和 profile 名称归并清单条目，随后在组内优先选择已配置的主连接。即使规范会话 ID 相同，独立的原生结果仍显示该投影存在歧义。停止状态夹具直接复制文件。[原生归档用例](#当前固定版本的原生备份与恢复)覆盖独立的备份和导入路径。经认证的连续性、经 owner 授权的恢复或重新绑定、已安装的 Desktop 及其他凭据模式需要独立证据。[注册表归并](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/apps/desktop/electron/connection-registry.ts#L781-L892) · [安装标记读取](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_cli/install_identity.py#L61-L108)
+
+在上面的[验收运行器命令](#当前固定版本的-electron-profile-路由)中添加 `--case install-marker-collision` 或 `--case install-copy-ambiguity`。
 
 ### 当前固定版本的 Bot Mode 规范会话拒绝与重试
 
