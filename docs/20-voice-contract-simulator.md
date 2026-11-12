@@ -137,4 +137,6 @@ The repository checker runs offline unit tests, Ruff, ty, bilingual checks, nati
 
 The separate local identity prototype is not bundled or imported. Its unverified socket-dependent tests remain blocked and were not retried by this work. The production [owner boundary](18-owner-entry-and-read-authorization.md), Primary Bot binding and private reads remain disabled.
 
-Before real voice: implement and verify the selected ASR/TTS or realtime bridge, identity/session binding, recipient and budget admission, controllable input/output leases, trustworthy playback accounting, native-turn cancellation and recovery. Then obtain any needed provider-specific credential through a secure handoff and run authorized device/live-provider tests. E0.8/E7.5 are partial work, E7.6/E7.7 remain Backlog, and no voice release gate is complete.
+The [E0.8 compatibility inventory](voice-compatibility-inventory.md) consolidates the exact-pin offline results and the [provider protocol comparison](voice-provider-protocol-comparison.md). E7.5 remains at the synthetic precursor stage. E7.6/E7.7 remain Backlog.
+
+Before enabling a real voice mode, implement and verify its selected ASR/TTS or realtime bridge, identity/session binding, recipient and budget admission, controllable input/output leases, trustworthy playback accounting, native-turn cancellation and recovery. Obtain any needed provider credential through a secure handoff and run authorized device and live-provider tests.

@@ -35,7 +35,7 @@
 
 - E0.7：Verify Primary Bot Contracts（M0，Backlog）：依赖 E0.1/E0.2，采用 E0.4 发现。核验原生 profile/route/canonical registry 与 lineage、author/worker provenance 和 receipt；HTTP 模式另需 E0.6。见 [15](15-primary-bot-binding-zh.md)。
 
-- E0.8：Verify Voice Provider Contracts（M0，In progress，仅离线子集）：依赖 E0.1/E0.2，适用时采用 E0.4/E0.7 身份发现。核验固定 ASR/TTS、原生音频/live 协议、凭据、取消和流式契约，列明公开 adapter seam 与不支持模式。见 [19](19-unified-voice-provider-contracts-zh.md)。
+- E0.8 Verify Voice Provider Contracts（M0，离线验证）依赖 E0.1/E0.2，并采用适用的 E0.4/E0.7 发现。[当前固定版本兼容性清单](voice-compatibility-inventory-zh.md)和[带日期的协议对照](voice-provider-protocol-comparison-zh.md)记录逐模式的验收证据及剩余发布门禁。
 
 - E0.9：Verify Memory Provider Contracts（M0，Done；有界原生契约核验）：依赖 E0.1/E0.2/E0.5。核验真实原生加载/生命周期/单外部 provider、profile/cron/worker 上下文、压缩 checkpoint 与来源引用契约，包括不支持的隔离模式。此门禁仅适用于启用个人记忆，不阻塞已有本地任务闭环。见 [30](30-pluggable-memory-contracts-zh.md)。
 
@@ -171,11 +171,11 @@ E6.1–E6.7 保留适用的 E1.1/E3/E4 远程/手机依赖。E6.8/E6.9 是下述
 - E7.6：Implement Local and Online Voice Adapters（M3，Backlog）：依赖 E7.5、E7.1–E7.3；启用动作另需 E1.3 及相关 E0.4 覆盖。实现一条本地/混合 pipeline 与一个明确选定的在线 realtime adapter，不泛化协议兼容。
 - E7.7：Validate Duplex Recovery and Voice Quality（M3，Backlog）：依赖 E7.6、E6.4、E8.1/E8.2 harness；关联任务/effect 的恢复另需 E3.5/E4.4。验证设备、延迟、准确率、barge-in、播放对账、重连、预算和隐私。
 
-[文档 19](19-unified-voice-provider-contracts-zh.md)统一 E7.1–E7.4 的配置与安全语义，同时保留语音消息 MVP 和实时双工的独立门禁。[离线模拟器](20-voice-contract-simulator-zh.md)已实现窄范围合成先导切片及公开 ASR/TTS 契约探测。E0.8/E7.5 仍未完成，生产接口、在线传输与主 Bot 权限均未启用。
+[文档 19](19-unified-voice-provider-contracts-zh.md)统一 E7.1–E7.4 的配置与安全语义，同时保留语音消息 MVP 和实时双工的独立门禁。[离线模拟器](20-voice-contract-simulator-zh.md)已实现窄范围合成先导切片及公开 ASR/TTS 契约探测。E7.5 仍处于合成先导阶段。生产接口、在线传输与主 Bot 权限各有独立的启用门禁。
 
 验收：误识别不造成高影响外发；同任务可在文字/语音切换；断网或停止语音不会伪报外部动作已取消。实时语音是单独 gate，不阻塞已完成的语音消息 MVP。
 
-[原生语音 IPC 实验](21-native-voice-ipc-experiment-zh.md)以审阅工件保留独立测试的宿主适配。项目不会安装它，不改变正式固定版本，不完成 E0.8/E7.5，也不启用 E7.6/E7.7。
+[原生语音 IPC 实验](21-native-voice-ipc-experiment-zh.md)以审阅工件保留基于历史固定版本单独测试的宿主适配。当前兼容性清单使用未经补丁修改的正式固定版本。
 
 ### E8. 完成运维评测发布（P0/P1，横贯 M0–M4）
 

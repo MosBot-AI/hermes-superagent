@@ -137,4 +137,6 @@ adapter 是单线程的。`append_input`/`append_output` 将夹具加入队列�
 
 独立本地身份原型没有打包或导入，其未验证的 socket 相关测试仍受阻，本轮未重试。正式 [owner 边界](18-owner-entry-and-read-authorization-zh.md)、主 Bot 绑定和私人读取仍然关闭。
 
-真实语音启用前，需要实现并验证所选 ASR/TTS 或 realtime bridge、身份/会话绑定、接收方与预算准入、可控输入/输出 lease、可信播放计数、原生 turn 取消及恢复。之后再通过安全交接取得所需的特定 provider 凭据，并进行获准的设备/真实 provider 测试。E0.8/E7.5 仅部分推进，E7.6/E7.7 仍为 Backlog，没有完成任何语音发布门禁。
+[E0.8 兼容性清单](voice-compatibility-inventory-zh.md)汇总确切固定版本的离线结果，并关联[提供方协议对照](voice-provider-protocol-comparison-zh.md)。E7.5 仍处于合成先导阶段。E7.6/E7.7 仍为 Backlog。
+
+启用真实语音模式前，需要实现并验证该模式选定的 ASR/TTS 或 realtime bridge、身份/会话绑定、接收方与预算准入、可控输入/输出 lease、可信播放统计、原生 turn 取消及恢复。通过安全交接取得所需的 provider 凭据，并进行获准的设备和真实 provider 测试。

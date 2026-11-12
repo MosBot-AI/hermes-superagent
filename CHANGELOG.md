@@ -83,6 +83,8 @@ This file distinguishes design work, development changes, and released capabilit
 - Run runtime artifact acceptance on exact pull-request heads with read-only credentials; keep downloadable artifact publication push-only.
 ### Changed
 
+- Document exact-pin offline voice compatibility and dated GPT-Live, OpenAI Realtime and Gemini Live protocol differences, with separate readiness states and release gates for each mode (#36).
+
 - Recognize bounded Chinese possessive naming questions with literal subject/attribute slots; fail closed for marker-only slots while preserving one-read budgets and explicit retrieval (#151).
 
 - Reconcile original E2.7 local-memory acceptance with independent review and exact-main CI; broader memory adapters, lifecycle, migration and deployment remain open.

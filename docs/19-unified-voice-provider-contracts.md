@@ -8,6 +8,8 @@ This scope is an in-app live voice conversation and voice messages, not a PSTN d
 
 A separate [review-only host patch](21-native-voice-ipc-experiment.md) demonstrates typed streaming across the existing pipe in a disposable prototype. It is not integrated or activated by this plugin; official-pin findings below remain unchanged.
 
+See the [E0.8 current-pin inventory](voice-compatibility-inventory.md) for tested and skipped modes and the [dated provider comparison](voice-provider-protocol-comparison.md) for the current official protocol findings. Section 2 records the earlier design source baseline.
+
 ## 1. Decision: One Contract, Explicit Capabilities
 
 Unify **session lifecycle, audio metadata, events, cancellation, recovery, authorization and metering**, not vendors' wire protocols or quality claims. Three adapter families share the contract:
@@ -255,14 +257,14 @@ Use fake transports/engines and synthetic audio first; record exact adapter/nati
 
 | ID | Status and narrow dependencies | Deliverable |
 |---|---|---|
-| E0.8 Verify Voice Provider Contracts | M0; In progress (offline contracts only); E0.1/E0.2; use E0.4/E0.7 identity findings where applicable | Pinned ASR/TTS/native audio/live-protocol matrix, credential/cancel/stream probes, public adapter seams and unsupported modes |
+| E0.8 Verify Voice Provider Contracts | M0, offline verification; E0.1/E0.2 with applicable E0.4/E0.7 findings | [Pinned per-mode inventory](voice-compatibility-inventory.md) and [dated provider comparison](voice-provider-protocol-comparison.md) record results, public seams and unsupported modes. |
 | E7.5 Define Unified Voice Session Contract | M2 (M1 design prework); In progress (synthetic precursor only); E0.8, E1.1/E1.2/E1.4/E1.5; E0.6 only for optional HTTP facade | Versioned profiles/capabilities, audio/control schemas, leases, author/turn ownership, budget and privacy policy; synthetic reference adapters |
 | E7.6 Implement Local and Online Voice Adapters | M3; Backlog; E7.5, E7.1/E7.2/E7.3; E1.3 and relevant E0.4 coverage for enabled actions | One local/mixed pipeline and one explicitly selected online realtime adapter, native integration and capability-specific controls; no broad provider equivalence |
 | E7.7 Validate Duplex Recovery and Voice Quality | M3; Backlog; E7.6, E6.4, E8.1/E8.2 harness; E3.5/E4.4 for linked task/effect recovery | Device/latency/accuracy, barge-in, playback repair, reconnect, budgets and privacy tests; documented per-mode release gates |
 
 Extend E7.1–E7.4 rather than replacing the working voice-message plan: unify their ASR/TTS configuration and safety semantics, keep voice-message MVP and live duplex separate, and retain optional realtime validation. E9 remains worker-model routing; voice providers do not silently select that backend. Bot-bound calls additionally need the applicable E0.7/E1.6/E3.6 gates, without making every voice message depend on optional Bot enrollment.
 
-This design does not block the local task inbox or require a custom mobile app. E0.8/E7.5 now have a partial offline precursor; neither package nor a production mode is complete. E7.6/E7.7 remain Backlog. Start with a capability-negotiated pipeline, add one verified online realtime family, then expand adapters only with protocol/privacy/cost evidence. Complete the plan and document interfaces now; do not enable microphone capture, paid sessions, new grants or runtime features merely because the design is approved.
+The local task inbox can ship independently of voice or a custom mobile app. The E0.8 evidence is offline. E7.5 remains at the synthetic precursor stage, and E7.6/E7.7 remain Backlog. Start with a capability-negotiated pipeline, add one verified online realtime family, then expand adapters only with protocol, privacy and cost evidence. Enabling microphone capture, paid sessions, new grants or runtime features requires the applicable authorization and release evidence.
 
 ## 13. Evidence and Version Notes
 
