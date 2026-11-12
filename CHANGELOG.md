@@ -83,6 +83,8 @@ This file distinguishes design work, development changes, and released capabilit
 - Run runtime artifact acceptance on exact pull-request heads with read-only credentials; keep downloadable artifact publication push-only.
 ### Changed
 
+- Verify same-name profile routing in the pinned Linux Electron source build through real Desktop SDK, IPC and WebSocket calls. A removed route is refused while its backend and the surviving route remain reachable (#33).
+
 - Add manual acceptance for native Bot delivery over the pinned Gateway's Unix control socket and loopback WebSocket. Verify terminal receipt repair and same-ID replay after restart using a synthetic loopback model (#33).
 
 - Verify native backup and import at the pinned Hermes revision. Import refuses an owned destination before publication. Stopped restore preserves the destination runtime epoch floor and carries the installation marker and Bot Chat lineage from the archive (#33).
