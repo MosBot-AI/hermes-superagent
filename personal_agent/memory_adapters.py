@@ -29,6 +29,7 @@ _CAPABILITIES = frozenset(
         "multi_term_fts",
         "bounded_record_export",
         "bounded_recall",
+        "epistemic_labels",
         "metadata_changes",
         "durable_consumer_cursor",
         "local_metadata_checkpoint",
@@ -184,6 +185,10 @@ class BackendDescriptor:
         if ("expires_at" in payload or "include_expired" in payload) and (
             "record_expiry" not in self.capabilities
         ):
+            raise MemoryError("capability_unavailable")
+        if (
+            "assertion_kind" in payload or "record_format" in payload
+        ) and "epistemic_labels" not in self.capabilities:
             raise MemoryError("capability_unavailable")
         limits = dict(self.limits)
         for field in ("content", "topic", "query"):
