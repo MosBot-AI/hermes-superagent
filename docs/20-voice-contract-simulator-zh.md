@@ -68,7 +68,19 @@ adapter 是单线程的。`append_input`/`append_output` 将夹具加入队列�
 | `tools.tts_tool.check_tts_requirements` | 工具列表的就绪检查对不可用的夹具及未注册的名称返回 false。两种情况下直接调用仍可能合成文件，因此列表的检查结果不足以判断直接调用的行为。 |
 | 内置文件 TTS 回退 | 配置中未注册的名称可能选用 Edge 合成，成功响应仍报告配置中的名称。Edge 不可用时，分发器可以选用本地 NeuTTS，并报告 `neutts`。两者均不可用时返回错误。 |
 
-如果切换引擎或向在线服务发送文本需要同意，文件 TTS 调用方须在分发前验证配置中的路由。响应报告的 provider 可能与实际运行的引擎不同。测试直接调用原生分发器，覆盖表中的文件路径。流式传输、取消、真实语音输出、托管音频传输、设备行为及在线 provider 验收仍待完成。
+如果切换引擎或向在线服务发送文本需要同意，文件 TTS 调用方须在分发前验证配置中的路由。响应报告的 provider 可能与实际运行的引擎不同。测试直接调用原生分发器，覆盖表中的文件路径。
+
+### 当前固定版本的流式消费者
+
+[流式契约](../tests/contracts/test_voice_provider_contracts.py)沿用文件契约的干净 Hermes 固定版本及临时 profile 环境。原生消费者在 `in_process` 和 `host` 模式下调用由真实插件管理器注册的合成 provider。夹具使用生成的 PCM 和文本。
+
+| 原生路径 | 覆盖行为 |
+| --- | --- |
+| `tools.transcription_streaming.streaming_available` 和 `open_streaming_session` | 所选插件声明 `streaming_capable` 时，即使可用性检查返回 false，也能通过探测并打开会话。流式传输关闭、STT 关闭、provider 仅支持文件或 provider 缺失时，均不返回流。进程内传入 16 kHz 单声道 s16le 会产生夹具的部分转写和最终转写。后台 worker 也会将 32 kHz 输入重采样为 16 kHz，夹具收到预期的两两平均样本。在 `host` 模式下，消费者可以打开包装会话，但访问投影后的会话对象时会返回失败，转写为空。 |
+| ASR 会话取消 | 进程内的合成 provider 阻塞在 `finalize` 时，取消会使包装会话返回取消结果。释放后 provider 仍能完成操作。在这一已测顺序中，包装会话会丢弃迟到的结果。 |
+| `tools.tts_streaming.resolve_streaming_provider` | 就绪夹具以其声明的 22,050 Hz 单声道 s16le 速率解析。配置中的音色、模型和语速与 PCM 格式一同传给 provider。进程内消费者读到预期的音频块。在 `host` 模式下，调用到达 provider 子进程，但首次读取因投影后的生成器不可迭代而抛出异常。显式选择不可用、采样率无效、仅支持文件或缺失的流式 provider 时，解析器不返回流，也不会改用配置中的就绪 provider。 |
+
+测试使用原生 ASR 包装会话和 TTS 解析器作为消费者入口。插件的注册方法仍是 provider 的公开扩展入口。声明支持流式传输、成功打开或成功解析，均不足以证明 `host` 模式中的音频可以消费。播放、provider 侧和原生轮次取消、Web 音频和凭据传输、真实设备及在线 provider 验收仍待完成。
 
 ## 5. 测试与剩余门禁
 

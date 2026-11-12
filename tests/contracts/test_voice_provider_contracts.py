@@ -8,6 +8,8 @@ import json
 import os
 import wave
 from pathlib import Path
+from struct import pack
+from threading import Event
 
 import pytest
 
@@ -16,6 +18,7 @@ NAME = "synthetic-voice-contract"
 READY_ASR = "synthetic-ready-asr"
 
 PLUGIN = """
+import json
 import os
 from pathlib import Path
 from agent.transcription_provider import TranscriptionProvider, TranscriptionStreamSession
@@ -38,7 +41,7 @@ class Utterance(TranscriptionStreamSession):
         self.closed = True
         return {"success": True, "transcript": "synthetic final",
                 "provider": "synthetic-voice-contract",
-                "bytes": len(self.audio)}
+                "bytes": len(self.audio), "pcm_hex": self.audio.hex()}
 
 class ASR(TranscriptionProvider):
     name = "synthetic-voice-contract"
@@ -91,10 +94,30 @@ class Speech(TTSProvider):
         yield b"\\x00\\x00"
         yield b"\\x01\\x00"
 
+class ReadySpeech(Speech):
+    name = "synthetic-ready-tts"
+    stream_sample_rate = 22050
+    def is_available(self):
+        return True
+    def stream(self, text, *, voice=None, model=None, format="opus", **extra):
+        home = Path(os.environ["HERMES_HOME"])
+        received = {"text": text, "voice": voice, "model": model, "format": format,
+                    "speed": extra.get("speed"), "pid": os.getpid()}
+        (home / "tts-stream-opened.json").write_text(json.dumps(received), encoding="utf-8")
+        return self._chunks(home)
+    def _chunks(self, home):
+        (home / "tts-stream-iterated").touch()
+        yield b"\\x00\\x00"
+        yield b"\\x01\\x00\\x02\\x00"
+
+class InvalidRateSpeech(ReadySpeech):
+    name = "synthetic-invalid-rate-tts"
+    stream_sample_rate = True
+
 class FileASR(TranscriptionProvider):
     name = "synthetic-file-only"
     def is_available(self):
-        return False
+        return True
     def transcribe(self, file_path, **extra):
         return {"success": True, "transcript": "file only", "provider": self.name}
 
@@ -105,12 +128,20 @@ class FileSpeech(TTSProvider):
     def synthesize(self, text, output_path, **extra):
         return output_path
 
+class ReadyFileSpeech(FileSpeech):
+    name = "synthetic-ready-file-tts"
+    def is_available(self):
+        return True
+
 def register(ctx):
     asr = ASR()
     asr.unknown_capability = ctx.has_capability("voice.synthetic.unknown")
     ctx.register_transcription_provider(asr)
     ctx.register_transcription_provider(ReadyASR())
     ctx.register_tts_provider(Speech())
+    ctx.register_tts_provider(ReadySpeech())
+    ctx.register_tts_provider(InvalidRateSpeech())
+    ctx.register_tts_provider(ReadyFileSpeech())
     ctx.register_transcription_provider(FileASR())
     ctx.register_tts_provider(FileSpeech())
     collision_asr = ASR()
@@ -256,6 +287,7 @@ def test_optional_stream_return_values(voice_host):
         "transcript": "synthetic final",
         "provider": NAME,
         "bytes": 4,
+        "pcm_hex": "00000100",
     }
     assert session.finalize()["success"] is False
     with pytest.raises(RuntimeError, match="already finalized"):
@@ -372,6 +404,132 @@ def test_stt_file_dispatch_does_not_fall_back(
         assert result["error_type"] == "provider_not_registered"
 
 
+@pytest.fixture
+def stt_streaming(monkeypatch):
+    from tools import transcription_streaming, transcription_tools
+
+    monkeypatch.setattr(transcription_streaming, "_builtin_session", unexpected_backend)
+    monkeypatch.setattr(transcription_tools, "_detect_local_backend", unexpected_backend)
+    return transcription_streaming
+
+
+@pytest.mark.parametrize(
+    "config",
+    [
+        {"provider": NAME},
+        {"provider": NAME, "streaming": True, "enabled": False},
+        {"provider": "synthetic-missing", "streaming": True},
+        {"provider": "synthetic-file-only", "streaming": True},
+    ],
+    ids=["not-opted-in", "disabled", "unregistered", "file-only"],
+)
+def test_stt_streaming_consumer_refuses_unavailable_routes(voice_config, stt_streaming, config):
+    voice_config(stt=config)
+    assert stt_streaming.streaming_available() is False
+    assert stt_streaming.open_streaming_session() is None
+
+
+@pytest.mark.parametrize(
+    ("voice_host", "input_rate"),
+    [("in_process", 16000), ("in_process", 32000), ("host", 16000)],
+    indirect=["voice_host"],
+)
+def test_stt_streaming_consumer_delivers_pcm_or_reports_host_projection(
+    voice_config, voice_host, stt_streaming, input_rate
+):
+    mode, _, manager = voice_host
+    asr, _ = providers(manager)
+    assert asr.is_available() is False
+    voice_config(stt={"provider": NAME, "streaming": True})
+    assert stt_streaming.streaming_available() is True
+
+    received_partial = Event()
+    partials = []
+
+    def on_partial(text):
+        partials.append(text)
+        received_partial.set()
+
+    session = stt_streaming.open_streaming_session(on_partial=on_partial)
+    assert session is not None
+    worker = session._worker
+    assert worker is not None
+    expected_pcm = pack("<h", 500) * 160  # 10 ms of mono s16le at 16 kHz
+    input_pcm = pack("<2h", 300, 700) * 160 if input_rate == 32000 else expected_pcm
+    try:
+        session.set_input_rate(input_rate)
+        session.push_audio(input_pcm)
+        if mode == "in_process":
+            assert received_partial.wait(3)
+            assert session.partial_transcript() == "synthetic partial"
+            assert session.finalize(timeout=3) == {
+                "success": True,
+                "transcript": "synthetic final",
+                "provider": NAME,
+                "bytes": len(expected_pcm),
+                "pcm_hex": expected_pcm.hex(),
+            }
+            assert partials == ["synthetic partial"]
+        else:
+            result = session.finalize(timeout=3)
+            assert result["success"] is False
+            assert result["transcript"] == ""
+            assert result["provider"] == NAME
+            assert result["error"].startswith("live transcription failed:")
+            assert "not available inside the plugin host" in result["error"]
+            assert partials == []
+    finally:
+        session.cancel()
+        worker.join(timeout=3)
+    assert not worker.is_alive()
+
+
+@pytest.mark.parametrize("voice_host", ["in_process"], indirect=True)
+def test_stt_streaming_cancel_settles_local_result_before_provider_finishes(
+    voice_config, voice_host, stt_streaming, monkeypatch
+):
+    _, _, manager = voice_host
+    asr, _ = providers(manager)
+    utterance = asr.open_stream_session()
+    original_finalize = utterance.finalize
+    finalizing = Event()
+    release = Event()
+    provider_results = []
+
+    def blocked_finalize():
+        finalizing.set()
+        if not release.wait(10):
+            raise RuntimeError("Synthetic finalize was not released")
+        result = original_finalize()
+        provider_results.append(result)
+        return result
+
+    monkeypatch.setattr(utterance, "finalize", blocked_finalize)
+    monkeypatch.setattr(asr, "open_stream_session", lambda **hints: utterance)
+    voice_config(stt={"provider": NAME, "streaming": True})
+    session = stt_streaming.open_streaming_session()
+    assert session is not None
+    worker = session._worker
+    assert worker is not None
+    cancelled = {"success": False, "transcript": "", "provider": NAME, "error": "cancelled"}
+    try:
+        session.end_audio()
+        assert finalizing.wait(3)
+        session.cancel()
+        assert session.finalize(timeout=3) == cancelled
+        assert worker.is_alive()
+        assert provider_results == []
+    finally:
+        if not finalizing.is_set():
+            session.cancel()
+        release.set()
+        worker.join(timeout=3)
+    assert not worker.is_alive()
+    assert len(provider_results) == 1
+    assert provider_results[0]["success"] is True
+    assert session.finalize(timeout=3) == cancelled
+
+
 def test_tts_file_dispatch_uses_configured_plugin_despite_listing_readiness(
     voice_config,
     voice_host,
@@ -424,6 +582,69 @@ def test_tts_plugin_failure_discards_partial_output_and_preserves_existing_file(
     assert "synthetic partial TTS failure" in result["error"]
     assert output.read_bytes() == b"existing"
     assert list(directory.iterdir()) == [output]
+
+
+@pytest.fixture
+def resolve_tts_streamer(voice_config, monkeypatch):
+    from tools import tts_streaming, tts_tool
+
+    for provider in tts_streaming._REGISTRY.values():
+        monkeypatch.setattr(provider, "available", staticmethod(unexpected_backend))
+
+    def resolve(**config):
+        voice_config(tts=config)
+        return tts_streaming.resolve_streaming_provider(tts_tool._load_tts_config())
+
+    return resolve
+
+
+def test_tts_stream_resolves_pcm_provider_but_host_cannot_iterate(resolve_tts_streamer, voice_host):
+    mode, home, _ = voice_host
+    opened = home / "tts-stream-opened.json"
+    iterated = home / "tts-stream-iterated"
+    streamer = resolve_tts_streamer(
+        provider="synthetic-ready-tts",
+        voice="fixture-voice",
+        model="fixture-model",
+        speed=1.25,
+    )
+    assert streamer is not None
+    assert (streamer.sample_rate, streamer.channels, streamer.sample_width) == (22050, 1, 2)
+    chunks = streamer.stream("synthetic text")
+    assert not opened.exists()
+    if mode == "in_process":
+        assert list(chunks) == [b"\x00\x00", b"\x01\x00\x02\x00"]
+        assert iterated.exists()
+    else:
+        with pytest.raises(TypeError, match="Opaque.*not iterable"):
+            next(chunks)
+        assert not iterated.exists()
+
+    received = json.loads(opened.read_text(encoding="utf-8"))
+    assert (received.pop("pid") == os.getpid()) is (mode == "in_process")
+    assert received == {
+        "text": "synthetic text",
+        "voice": "fixture-voice",
+        "model": "fixture-model",
+        "format": "pcm",
+        "speed": 1.25,
+    }
+
+
+@pytest.mark.parametrize(
+    "name",
+    [NAME, "synthetic-invalid-rate-tts", "synthetic-ready-file-tts", "synthetic-missing"],
+    ids=["unavailable", "invalid-rate", "file-only", "unregistered"],
+)
+def test_tts_stream_unusable_explicit_selection_has_no_substitute(
+    resolve_tts_streamer,
+    voice_host,
+    name,
+):
+    _, home, _ = voice_host
+    streamer = resolve_tts_streamer(provider="synthetic-ready-tts", streaming={"provider": name})
+    assert streamer is None
+    assert not (home / "tts-stream-opened.json").exists()
 
 
 @pytest.mark.parametrize(
