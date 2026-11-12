@@ -65,6 +65,7 @@
 | 本地语音播放与打断 | `22811165` 的 `tools/tts_tool_speaker.py` 和 `tui_gateway/methods_voice.py`。 | [播放与打断](20-voice-contract-simulator-zh.md#当前固定版本的播放与打断)覆盖 WAV 内容和清理、本地停止后的迟到 PCM，以及进程范围的生成打断。设备播放回执和已确认的原生轮次取消仍待完成。 |
 | 原生音频 WebSocket 准入 | `22811165` 的 `gateway/run_api.py`、`gateway/runtime_bootstrap.py` 和 `hermes_cli/web_routers/audio.py`。 | [音频 ASGI 契约](20-voice-contract-simulator-zh.md#当前固定版本的原生音频-websocket-准入)覆盖本地票据、限定于 profile 的 provider 调用，以及流式媒体或回退响应。真实监听器和凭据交付仍需取证。 |
 | 原生 HTTP 语音配置与 SDP | `22811165` 的 `hermes_cli/web_routers/audio.py`、`tools/voice_client_config.py` 和 `tools/voice_live.py`。 | [HTTP 语音契约](20-voice-contract-simulator-zh.md#当前固定版本的原生-http-语音配置与-sdp)覆盖限定于 profile 的合成直连与 relay 响应、本地票据拒绝和模拟 GPT-Live 交换。部署环境中的凭据交付及真实 WebRTC 仍需取证。 |
+| 原生语音捕获、交接与准入 | `22811165` 的 `tools/voice_mode.py`、`hermes_cli/voice.py` 和 `gateway/session_controls.py`。 | [捕获、转写与准入](20-voice-contract-simulator-zh.md#当前固定版本的原生捕获转写交接与语音准入)覆盖合成 RMS/WAV 生命周期、文件回退和排队回执重放。设备行为、委派执行及下游副作用需另行取证。 |
 | Dashboard、客户端 API 与移动端登录 | `hermes_cli/web_server_dashboard.py`、`hermes_cli/dashboard_auth/routes.py`、`tui_gateway/contracts/canonical_sessions.py` | [传输源码审查](14-client-api-contracts-zh.md)确认回环回调及授权主体和文件边界的缺口。领域 API 层、受支持的原生手机回调、撤销和部署后的传输验收仍待完成。 |
 | 委派后端与模型、推理强度路由 | `agent/delegation_provider.py`、`tools/delegate_tool_routes.py`、`agent/reasoning_effort.py` | [路由契约](../tests/contracts/test_worker_routing_contracts.py)覆盖 schema、显式空回退列表和无效路由拒绝。[离线影子测试](../tests/unit/test_routing_shadow.py)覆盖合成约束。可信的线上路由上下文、服务商实际请求证据和持久预算准入仍待完成。 |
 
