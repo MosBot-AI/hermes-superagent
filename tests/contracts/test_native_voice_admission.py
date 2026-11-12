@@ -10,9 +10,13 @@ from test_native_voice_audio_asgi import run_native_async
 def test_voice_live_admission_replays_queued_receipt_on_second_connection(tmp_path, monkeypatch):
     home = tmp_path / "profile"
     home.mkdir()
+    bundled = tmp_path / "empty-bundled"
+    bundled.mkdir()
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("HERMES_HOME", str(home))
     monkeypatch.setenv("HERMES_RUNTIME_DIR", str(tmp_path / "runtime"))
+    monkeypatch.setenv("HERMES_BUNDLED_PLUGINS", str(bundled))
+    monkeypatch.setenv("HERMES_ENABLE_PROJECT_PLUGINS", "0")
     for name in ("OPENAI_API_KEY", "VOICE_TOOLS_OPENAI_KEY", "HERMES_VOICE", "HERMES_VOICE_TTS"):
         monkeypatch.delenv(name, raising=False)
     (home / "config.yaml").write_text(
@@ -25,8 +29,23 @@ def test_voice_live_admission_replays_queued_receipt_on_second_connection(tmp_pa
     def unexpected_execution(*args, **kwargs):
         pytest.fail("This admission contract cannot run a turn, install an SDK or use the network")
 
+    bind = socket.socket.bind
+
+    def bind_ipv6_probe(sock, address):
+        # Native session inventory imports urllib3, which checks local IPv6 without listening.
+        if (
+            sock.family != socket.AF_INET6
+            or sock.type != socket.SOCK_STREAM
+            or address != ("::1", 0)
+        ):
+            unexpected_execution()
+        return bind(sock, address)
+
     monkeypatch.setattr(pm, "ensure_import", unexpected_execution)
-    monkeypatch.setattr(socket.socket, "bind", unexpected_execution)
+    monkeypatch.setattr(socket, "create_connection", unexpected_execution)
+    monkeypatch.setattr(socket.socket, "bind", bind_ipv6_probe)
+    monkeypatch.setattr(socket.socket, "connect", unexpected_execution)
+    monkeypatch.setattr(socket.socket, "connect_ex", unexpected_execution)
     monkeypatch.setattr(socket.socket, "listen", unexpected_execution)
     with monkeypatch.context() as startup:
         # Suppress startup reads of the pinned checkout's optional developer .env.
