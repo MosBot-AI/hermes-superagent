@@ -70,12 +70,17 @@ jobs:
           cd "$upstream"
           python -m pm.build_env --source . --out "$RUNNER_TEMP/hermes-test-venv" \
             --group dev --group test --python "$(command -v python)"
-      - name: Check the plugin and real native contracts
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '26.12.1'
+          package-manager-cache: false
+      - name: Check the plugin, native contracts and Desktop routes
         shell: bash
         run: |
           "$RUNNER_TEMP/hermes-test-venv/bin/python" scripts/check.py \
             --hermes "$RUNNER_TEMP/hermes" \
-            --hermes-python "$RUNNER_TEMP/hermes-test-venv/bin/python"
+            --hermes-python "$RUNNER_TEMP/hermes-test-venv/bin/python" \
+            --hermes-node "$(command -v node)"
       - name: Verify exact-key cron creation on a disposable proposed host
         shell: bash
         run: |

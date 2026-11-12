@@ -72,13 +72,42 @@ def record_environment(checkout: Path, interpreter: Path, env: dict[str, str]) -
     print("Compatibility environment: " + json.dumps(evidence, sort_keys=True), flush=True)
 
 
+def check_desktop_routes(checkout: Path, node: Path, env: dict[str, str]) -> None:
+    lock = (checkout / "pm" / "lock.json").read_bytes()
+    expected = json.loads(lock)["packages"]["node"]["version"]
+    version = subprocess.check_output(
+        [str(node), "--version"], cwd=ROOT, env=env, text=True, timeout=10
+    ).strip()
+    if version != f"v{expected}":
+        raise ValueError(f"Hermes Desktop routing checks require Node {expected}, got {version}")
+    evidence = {"node": expected, "hermes_pm_lock_sha256": hashlib.sha256(lock).hexdigest()}
+    print("Desktop route environment: " + json.dumps(evidence, sort_keys=True), flush=True)
+    run(
+        [
+            str(node),
+            "--permission",
+            f"--allow-fs-read={ROOT}",
+            f"--allow-fs-read={checkout}",
+            "--test",
+            "--test-isolation=none",
+            "tests/desktop/test_profile_route_composition.mjs",
+        ],
+        cwd=ROOT,
+        env={**env, "HERMES_DESKTOP_CHECKOUT": str(checkout)},
+        timeout=60,
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--hermes", type=Path, help="Exact pinned Hermes source checkout")
     parser.add_argument("--hermes-python", type=Path, help="Its PM-built test interpreter")
+    parser.add_argument("--hermes-node", type=Path, help="Its pinned Node for Desktop route checks")
     args = parser.parse_args()
     if bool(args.hermes) != bool(args.hermes_python):
         parser.error("--hermes and --hermes-python are required together")
+    if args.hermes_node and not args.hermes:
+        parser.error("--hermes-node requires --hermes and --hermes-python")
     with tempfile.TemporaryDirectory(prefix="personal-agent-check-") as home:
         env = {
             "PATH": os.environ.get("PATH", ""),
@@ -110,6 +139,8 @@ def main() -> int:
         if args.hermes:
             checkout = args.hermes.resolve()
             verify_checkout(checkout)
+            if args.hermes_node:
+                check_desktop_routes(checkout, args.hermes_node.absolute(), env)
             record_environment(checkout, args.hermes_python.absolute(), env)
             env["HERMES_PYTHON"] = str(args.hermes_python.absolute())
             run(
@@ -135,6 +166,8 @@ def main() -> int:
             print("Unit, lint, type, bilingual docs and pinned Hermes contract checks passed.")
         else:
             print("Unit/lint/type/docs checks passed. Hermes compatibility NOT RUN; use --hermes.")
+        if not args.hermes_node:
+            print("Hermes Desktop route contracts NOT RUN; use --hermes-node with the pinned host.")
     return 0
 
 
