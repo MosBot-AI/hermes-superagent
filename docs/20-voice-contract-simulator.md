@@ -105,7 +105,19 @@ The [audio ASGI contracts](../tests/contracts/test_native_voice_audio_asgi.py) s
 | `/api/audio/transcribe-stream` | The registered in-process STT fixture receives the submitted 16 kHz PCM and configured hints. The route sends the final transcript envelope and closes. |
 | `/api/audio/speak-stream` | The registered in-process TTS fixture receives the text and configured settings. The route declares 22,050 Hz mono output and sends the expected PCM chunks and end message. In `host` mode the provider receives the call, then stream projection fails at the first pull. The route sends a `fallback` message and closes. File synthesis and PCM output are absent in that exchange. |
 
-The tests exercise the app boundary with in-memory ASGI messages. Ticket issuance by a trusted remote authority, a real listener, device playback, credential delivery, and live provider or device acceptance require separate evidence.
+The tests exercise the app boundary with in-memory ASGI messages. Ticket issuance by a trusted remote authority, a real listener, device playback and live provider or device acceptance require separate evidence.
+
+### Current-Pin Native HTTP Voice Configuration and SDP
+
+The [voice configuration contracts](../tests/contracts/test_native_voice_http_asgi.py) and [GPT-Live contracts](../tests/contracts/test_native_voice_live_asgi.py) use native HTTP ticket admission and the app in memory on clean Hermes `2281116525106e3c109993ccb5dc74d02bfc1427`. Fabricated credential values distinguish the launch and ticket profiles. A recorder replaces the GPT-Live vendor request.
+
+| Native path | Behavior covered |
+| --- | --- |
+| `GET /api/audio/voice-config` | With direct voice enabled, the `gateway`, `dashboard` and `serve` surface fixtures return the ticket profile's STT and TTS direct configuration with its synthetic keys. The `webapp` surface and a profile with `voice.client_direct` disabled return relay configuration without keys in the response. Missing, consumed and wrong-purpose tickets receive `401`. A request selecting a different existing profile receives `403`. All four denials precede the voice configuration resolver. |
+| `GET /api/audio/voice-live/status` | The response reports configured mode, model, voice and whether the profile credential resolves. The tested status response contains no key and initiates no vendor request. |
+| `POST /api/audio/voice-live/session` | Both tested modes, `gpt-live` and `chained`, can reach the mocked exchange with an admitted request and a resolvable key. The outbound request carries the ticket profile's fabricated bearer, exact SDP including CRLF, synthetic history and client delegation. A blank offer returns `400`. A missing ticket-profile key returns `503` even when the launch profile has a key. Those two refusals send no request to the recorder. A synthetic upstream `429` becomes a `502` response carrying the fixture error detail. |
+
+The surface tests use local fixture tickets to exercise response policy. Browser sign-in, deployment-specific credential delivery, trusted remote identity, real network and WebRTC transport, and live device/provider acceptance remain open.
 
 ## 5. Tests and Remaining Gates
 

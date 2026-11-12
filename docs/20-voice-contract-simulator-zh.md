@@ -105,7 +105,19 @@ adapter 是单线程的。`append_input`/`append_output` 将夹具加入队列�
 | `/api/audio/transcribe-stream` | 已注册的进程内 STT 夹具收到提交的 16 kHz PCM 及配置中的提示。路由发送最终转写响应并关闭连接。 |
 | `/api/audio/speak-stream` | 已注册的进程内 TTS 夹具收到文本及配置参数。路由声明 22,050 Hz 单声道输出，并发送预期的 PCM 块和结束消息。在 `host` 模式下，调用到达 provider，但投影后的流在首次读取时失败。路由发送 `fallback` 消息后关闭连接。这次交互未进行文件合成，也未输出 PCM。 |
 
-测试通过内存 ASGI 消息验证应用边界。可信远程授权方签发票据、真实监听器、设备播放、凭据交付，以及在线 provider 或真实设备验收均需另行取证。
+测试通过内存 ASGI 消息验证应用边界。可信远程授权方签发票据、真实监听器、设备播放，以及在线 provider 或真实设备验收均需另行取证。
+
+### 当前固定版本的原生 HTTP 语音配置与 SDP
+
+[语音配置契约](../tests/contracts/test_native_voice_http_asgi.py)和 [GPT-Live 契约](../tests/contracts/test_native_voice_live_asgi.py)在干净的 Hermes 固定版本 `2281116525106e3c109993ccb5dc74d02bfc1427` 上，通过内存应用与原生 HTTP 票据准入验证行为。合成凭据用于区分启动 profile 和票据所属 profile。GPT-Live 的上游请求由替身记录。
+
+| 原生路径 | 覆盖行为 |
+| --- | --- |
+| `GET /api/audio/voice-config` | 启用直连语音时，`gateway`、`dashboard` 和 `serve` 界面夹具返回票据所属 profile 的 STT 和 TTS 直连配置及其合成密钥。`webapp` 界面和关闭 `voice.client_direct` 的 profile 返回 relay 配置，响应不携带密钥。缺失、已消费或用途不符的票据收到 `401`，选择另一个已存在的 profile 收到 `403`。四类拒绝均发生在调用语音配置解析器之前。 |
+| `GET /api/audio/voice-live/status` | 响应返回配置中的模式、模型和音色，以及 profile 凭据能否解析。已测状态响应不携带密钥，也不发起上游请求。 |
+| `POST /api/audio/voice-live/session` | 在请求获准且凭据可解析时，已测的 `gpt-live` 和 `chained` 模式均可进入模拟交换。出站请求携带票据所属 profile 的合成 bearer、包含 CRLF 的原始 SDP、合成历史和客户端委派配置。空 offer 返回 `400`。票据所属 profile 缺少密钥时，即使启动 profile 有密钥也返回 `503`。这两类拒绝均未向替身发送请求。合成上游 `429` 会转换为 `502`，响应携带夹具的错误详情。 |
+
+界面测试使用本地夹具票据验证响应策略。浏览器登录、部署环境中的凭据交付、可信远程身份、真实网络和 WebRTC 传输，以及真实设备和在线 provider 验收仍待完成。
 
 ## 5. 测试与剩余门禁
 
