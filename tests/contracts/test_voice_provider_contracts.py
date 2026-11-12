@@ -6,10 +6,12 @@ Private manager observations verify discovery/cleanup, not a supported plugin AB
 
 import json
 import os
+import tempfile
 import wave
 from pathlib import Path
+from queue import Queue
 from struct import pack
-from threading import Event
+from threading import Event, Thread
 
 import pytest
 
@@ -585,15 +587,21 @@ def test_tts_plugin_failure_discards_partial_output_and_preserves_existing_file(
 
 
 @pytest.fixture
-def resolve_tts_streamer(voice_config, monkeypatch):
-    from tools import tts_streaming, tts_tool
+def offline_tts_streaming(monkeypatch):
+    from tools import tts_streaming
 
     for provider in tts_streaming._REGISTRY.values():
         monkeypatch.setattr(provider, "available", staticmethod(unexpected_backend))
+    return tts_streaming
+
+
+@pytest.fixture
+def resolve_tts_streamer(voice_config, offline_tts_streaming):
+    from tools import tts_tool
 
     def resolve(**config):
         voice_config(tts=config)
-        return tts_streaming.resolve_streaming_provider(tts_tool._load_tts_config())
+        return offline_tts_streaming.resolve_streaming_provider(tts_tool._load_tts_config())
 
     return resolve
 
@@ -645,6 +653,166 @@ def test_tts_stream_unusable_explicit_selection_has_no_substitute(
     streamer = resolve_tts_streamer(provider="synthetic-ready-tts", streaming={"provider": name})
     assert streamer is None
     assert not (home / "tts-stream-opened.json").exists()
+
+
+@pytest.fixture
+def speaker_wavs(tmp_path, monkeypatch, offline_tts_streaming):
+    from tools import tts_tool, voice_mode
+
+    media_dir = tmp_path / "temporary-media"
+    media_dir.mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", str(media_dir))
+    played = []
+    file_synthesis_called = Event()
+
+    def unavailable_device():
+        raise ImportError("Synthetic probe has no audio output device")
+
+    def refuse_file_synthesis(*args, **kwargs):
+        file_synthesis_called.set()
+        raise AssertionError("Streaming unexpectedly fell back to file synthesis")
+
+    def inspect_wav(path):
+        assert Path(path).parent == media_dir
+        with wave.open(path, "rb") as stream:
+            played.append((stream.getparams(), stream.readframes(stream.getnframes())))
+        return True
+
+    monkeypatch.setattr(tts_tool, "_import_sounddevice", unavailable_device)
+    monkeypatch.setattr(tts_tool, "text_to_speech_tool", refuse_file_synthesis)
+    monkeypatch.setattr(voice_mode, "_import_audio", unexpected_backend)
+    monkeypatch.setattr(voice_mode, "_play_audio_file_impl", unexpected_backend)
+    monkeypatch.setattr(voice_mode, "play_audio_file", inspect_wav)
+    yield played
+    assert not file_synthesis_called.is_set()
+    assert list(media_dir.iterdir()) == []
+
+
+def start_speaker(text, stop, done):
+    from tools.tts_tool_speaker import stream_tts_to_speaker
+
+    speaker = Thread(target=stream_tts_to_speaker, args=(text, stop, done), daemon=True)
+    speaker.start()
+    return speaker
+
+
+def test_native_tts_speaker_done_can_follow_empty_host_wav(
+    voice_config,
+    voice_host,
+    speaker_wavs,
+    caplog,
+):
+    mode, home, _ = voice_host
+    voice_config(
+        tts={
+            "provider": "synthetic-ready-tts",
+            "voice": "fixture-voice",
+            "model": "fixture-model",
+            "speed": 1.25,
+        },
+    )
+    sentence = "The synthetic sentence is long enough."
+    text = Queue()
+    text.put(sentence)
+    text.put(None)
+    stop, done = Event(), Event()
+
+    speaker = start_speaker(text, stop, done)
+    try:
+        speaker.join(5)
+        assert not speaker.is_alive(), "native speaker did not finish"
+    finally:
+        if speaker.is_alive():
+            stop.set()
+            speaker.join(1)
+
+    assert done.is_set() and not stop.is_set()
+    assert text.empty()
+    ((params, pcm),) = speaker_wavs
+    assert (params.framerate, params.nchannels, params.sampwidth) == (22050, 1, 2)
+    received = json.loads((home / "tts-stream-opened.json").read_text(encoding="utf-8"))
+    assert (received.pop("pid") == os.getpid()) is (mode == "in_process")
+    assert received == {
+        "text": sentence,
+        "voice": "fixture-voice",
+        "model": "fixture-model",
+        "speed": 1.25,
+        "format": "pcm",
+    }
+    iterated = home / "tts-stream-iterated"
+    if mode == "in_process":
+        assert params.nframes == 3
+        assert pcm == b"\x00\x00\x01\x00\x02\x00"
+        assert iterated.is_file()
+        assert "prefetch failed" not in caplog.text
+    else:
+        assert params.nframes == 0 and pcm == b""
+        assert not iterated.exists()
+        assert "prefetch failed mid-sentence" in caplog.text
+        assert "Opaque" in caplog.text
+
+
+@pytest.mark.parametrize("voice_host", ["in_process"], indirect=True)
+def test_native_tts_speaker_stop_discards_late_pcm_without_unblocking_provider(
+    voice_config,
+    voice_host,
+    speaker_wavs,
+    monkeypatch,
+):
+    from tools import tts_tool_speaker
+
+    _, _, manager = voice_host
+    _, provider = providers(manager, "synthetic-ready-tts")
+    assert provider is not None
+    first = "The first synthetic sentence is long enough."
+    second = "The second synthetic sentence is long enough."
+    first_pcm, late_pcm = b"\x01\x00", b"\x02\x00"
+    provider_waiting, drain_entered, release, late_offered = Event(), Event(), Event(), Event()
+
+    def synthetic_stream(text, *, format, **_):
+        assert format == "pcm"
+        if text == first:
+            yield first_pcm
+            return
+        assert text == second
+        provider_waiting.set()
+        assert release.wait(10), "test did not release the synthetic provider"
+        late_offered.set()
+        yield late_pcm
+
+    drain_chunks = tts_tool_speaker._drain_chunks
+    drains = 0
+
+    def observe_drain(chunk_queue):
+        nonlocal drains
+        drains += 1
+        if drains == 2:
+            drain_entered.set()
+        return drain_chunks(chunk_queue)
+
+    monkeypatch.setattr(provider, "stream", synthetic_stream)
+    # Observe the native drain without changing its behavior, so stop lands after it starts.
+    monkeypatch.setattr(tts_tool_speaker, "_drain_chunks", observe_drain)
+    voice_config(tts={"provider": "synthetic-ready-tts"})
+    text = Queue()
+    text.put(f"{first} {second}")
+    text.put(None)
+    stop, done = Event(), Event()
+    speaker = start_speaker(text, stop, done)
+    try:
+        assert provider_waiting.wait(3), "second provider stream did not block"
+        assert drain_entered.wait(3), "second sentence did not reach the native drain"
+        assert [pcm for _, pcm in speaker_wavs] == [first_pcm]
+        stop.set()
+        assert speaker.is_alive() and not done.is_set()
+        assert not late_offered.is_set()
+    finally:
+        release.set()
+        speaker.join(5)
+
+    assert not speaker.is_alive()
+    assert done.is_set() and late_offered.is_set()
+    assert [(params.nframes, pcm) for params, pcm in speaker_wavs] == [(1, first_pcm), (0, b"")]
 
 
 @pytest.mark.parametrize(
