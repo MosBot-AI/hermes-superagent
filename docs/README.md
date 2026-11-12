@@ -186,3 +186,5 @@ See [79. Explicit consistent local memory snapshots](79-local-memory-snapshots.m
 103. [Literal slots in automatic recall](103-automatic-recall-slots.md): conservative current-input subject/attribute matching, explicit fallback limits and independently frozen synthetic evaluations.
 
 104. [Retained-source expiry and cleanup recovery](104-retained-source-expiry.md): original retained deadlines, read-only automatic exclusion, reviewed cleanup, historical receipt/cursor preservation and restart/repack suppression evidence.
+
+105. [Literal naming slots in automatic recall](105-naming-recall-slots.md): bounded possessive naming questions, marker-only refusal, unchanged read budgets and reconstructed recovery validation boundaries.

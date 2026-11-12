@@ -330,3 +330,47 @@ def test_optional_provider_uses_required_slots_without_extra_reads(lifecycle):
     assert state["reads"] == 1
     assert instance.prefetch("Comet unknown 谁管理", session_id="s1") == ""
     assert state["reads"] == 2
+
+
+def test_naming_provider_one_read_missing_subject_and_forgetting(lifecycle):
+    instance, backend, conn, _, state, home = lifecycle
+    target = save(backend, content="云杉负责人是景明", key="naming-target")
+    save(backend, content="云杉预算为五百", key="naming-budget")
+    save(backend, content="白桦负责人是秋叶", key="naming-other")
+    initialize(instance, home)
+    before = conn.total_changes
+    output = instance.prefetch("云杉的负责人叫什么名字？", session_id="s1")
+    data = json.loads(output)["memory"]
+    assert 0 < len(output) <= 6000
+    assert [item["record_id"] for item in data["items"]] == [target]
+    assert data["automatic_filter"]["required_query_indices"] == [0, 1]
+    assert data["omitted_records"] == 2 and state["reads"] == 1
+    assert conn.total_changes == before
+    assert instance.prefetch("榆树的负责人叫什么？", session_id="s1") == ""
+    assert state["reads"] == 2 and conn.total_changes == before
+    backend.execute(
+        "forget", {"record_id": target, "expected_revision": 1, "request_id": "naming-forget"}
+    )
+    before = conn.total_changes
+    assert instance.prefetch("云杉的负责人叫什么名字？", session_id="s1") == ""
+    assert state["reads"] == 3 and conn.total_changes == before
+    assert instance.recall_count() == 0
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "云杉的___叫什么？",
+        "---的经理叫什么？",
+        "___的---叫什么名字呢？",
+        "请问云杉的 - _ 叫什么名字？",
+        "我的___叫什么？",
+    ],
+)
+def test_naming_marker_only_slots_do_not_open_provider_reader(lifecycle, query):
+    instance, backend, conn, _, state, home = lifecycle
+    save(backend, content="云杉经理是景明", key="naming-marker")
+    initialize(instance, home)
+    before = conn.total_changes
+    assert instance.prefetch(query, session_id="s1") == ""
+    assert state["reads"] == 0 and conn.total_changes == before
