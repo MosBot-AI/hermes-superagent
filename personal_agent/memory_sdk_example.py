@@ -15,6 +15,7 @@ from uuid import uuid4
 
 from .memory_adapters import validate_backend_descriptor
 from .memory_backend import MemoryError, validate_request
+from .memory_sessions import LocalBinding, ResourceScope, SessionMode
 
 
 class SyntheticMemoryAdapter:
@@ -22,7 +23,19 @@ class SyntheticMemoryAdapter:
 
     def __init__(self, directory: Path):
         # The caller owns this test directory; never accept a model-provided path.
-        self._connection = sqlite3.connect(Path(directory) / "synthetic-memory.sqlite3")
+        connection = sqlite3.connect(Path(directory) / "synthetic-memory.sqlite3")
+        resources = ResourceScope()
+        resources.register(connection.close)
+        self._owns_connection = True
+        try:
+            self._initialize(connection)
+        except BaseException as error:
+            resources.close(primary=error)
+            raise
+
+    def _initialize(self, connection):
+        self._connection = connection
+        self._closed = False
         self._connection.execute("PRAGMA synchronous=FULL")
         self._connection.execute("PRAGMA secure_delete=ON")
         with self._connection:
@@ -34,7 +47,6 @@ class SyntheticMemoryAdapter:
                 "INSERT OR IGNORE INTO synthetic_state VALUES (1, ?)",
                 (json.dumps({"records": [], "receipts": {}, "sequence": 0}),),
             )
-        self._closed = False
 
     def describe(self) -> dict:
         return {
@@ -67,8 +79,10 @@ class SyntheticMemoryAdapter:
         }
 
     def close(self) -> None:
-        self._connection.close()
-        self._closed = True
+        if not self._closed:
+            self._closed = True
+            if self._owns_connection:
+                self._connection.close()
 
     def execute(self, operation: str, payload: dict) -> dict:
         if self._closed:
@@ -194,3 +208,25 @@ class SyntheticMemoryAdapter:
                 restorable=False,
             )
         return result
+
+
+class SyntheticMemoryFactory:
+    """Independent factory for an explicitly isolated synthetic directory only."""
+
+    factory_version = 1
+
+    def __init__(self, directory: Path):
+        self.directory = directory
+
+    def acquire(self, resources: ResourceScope, binding: LocalBinding, mode: SessionMode):
+        if binding != LocalBinding("synthetic-example", "synthetic-session"):
+            raise MemoryError("namespace_mismatch")
+        connection = sqlite3.connect(self.directory / "synthetic-memory.sqlite3")
+        resources.register(connection.close)
+        backend = SyntheticMemoryAdapter.__new__(SyntheticMemoryAdapter)
+        # Managed use detaches the backend and closes its connection separately.
+        backend._closed = False
+        backend._owns_connection = False
+        resources.register(backend.close)
+        backend._initialize(connection)
+        return backend

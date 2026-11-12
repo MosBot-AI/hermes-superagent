@@ -8,7 +8,7 @@ The project-owned local SDK is an explicit facade for **already reviewed and ope
 
 The supported scope is `trusted_profile_local`. A trusted opener owns store selection, resource lifetime and profile binding. SDK admission requires a bounded export read and checks its namespace against the binding before permitting operations; adapters without export capability are not admitted. This catches ordinary mismatched routing, not a dishonest adapter that lies about its namespace. Passing a Python binding object is not proof of human identity, tenant authorization or malicious-code containment. Request payloads cannot choose an owner, namespace, arbitrary filesystem path, URL or SQL statement. Reviewed in-process Python remains trusted code.
 
-The ordinary plugin's existing `MemoryService` and SQLite storage remain unchanged. No configured provider is switched, no production profile is opened by conformance tests, and no credentials, network recipients or paid model calls are introduced.
+The ordinary plugin retains its existing `MemoryService` and SQLite storage semantics; [107](107-managed-memory-sessions.md) changes resource lifetime management. No configured provider is switched, no production profile is opened by conformance tests, and no credentials, network recipients or paid model calls are introduced.
 
 ## Contract and failure semantics
 
@@ -31,27 +31,19 @@ Passing these gates is bounded evidence about the exercised backend and fixture.
 From the repository root, or with the installed runtime package on the import path, run this standard-library-only example. Each run creates and cleans up its own synthetic directory. A real adapter author supplies a separately reviewed opener and must not replace this temporary path with a production store.
 
 ```python
-from contextlib import contextmanager
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from personal_agent.memory_conformance import run_conformance
-from personal_agent.memory_sdk import LocalBinding, LocalMemorySDK
-from personal_agent.memory_sdk_example import SyntheticMemoryAdapter
+from personal_agent.memory_conformance import run_managed_conformance
+from personal_agent.memory_sdk import LocalBinding
+from personal_agent.memory_sdk_example import SyntheticMemoryFactory
 
 with TemporaryDirectory() as directory:
-    @contextmanager
-    def open_synthetic():
-        backend = SyntheticMemoryAdapter(Path(directory))
-        sdk = LocalMemorySDK(
-            backend, LocalBinding("synthetic-example", "synthetic-session")
-        )
-        try:
-            yield sdk
-        finally:
-            sdk.close()
-
-    print(run_conformance(open_synthetic, isolated_synthetic=True))
+    print(run_managed_conformance(
+        SyntheticMemoryFactory(Path(directory)),
+        LocalBinding("synthetic-example", "synthetic-session"),
+        isolated_synthetic=True,
+    ))
 ```
 
 ## Optional durable progress extension
@@ -82,8 +74,13 @@ The optional `mutation_receipt_status` operation inspects `remember`, `correct` 
 
 ## Remaining E2.6 work
 
-The broader [#43](https://github.com/MosBot-AI/hermes-superagent/issues/43) remains open: complete versioned source/event and multi-kind contracts, remote reconciliation, replacement activation/migration, a reviewed loading/resource ABI and native lifecycle integration are not delivered by this local facade. The shared client contract in [82](82-shared-client-api.md) is unchanged; a Python SDK does not establish authenticated HTTP availability or cross-backend feature parity.
+The broader [#43](https://github.com/MosBot-AI/hermes-superagent/issues/43) remains open: complete versioned source/event and multi-kind contracts, remote reconciliation, replacement activation/migration, a general reviewed loading/replacement ABI and native lifecycle integration are not delivered by this local facade. The shared client contract in [82](82-shared-client-api.md) is unchanged; a Python SDK does not establish authenticated HTTP availability or cross-backend feature parity.
 
 ## Optional retained-source acceptance
 
 [96](96-retained-source-acceptance.md) adds the optional `retained_source_acceptance` family: `source_stage`, `source_accept`, `source_discard`, `source_status` and `source_cursor`. A metadata-only pending slot binds explicitly authorized independent retention before a real canonical write; acceptance and a distinct source cursor commit together with suppression checks. Source provenance is separate from the existing editing-route field and available through decision/status, not ordinary record `get` or recall. The optional `run_retained_source_conformance` runner uses its own empty synthetic store. Schema-12 migration and the isolated native consumer do not enable automatic lifecycle, checkpoint-v2, a provider switch or production ingestion.
+
+
+## Managed resource lifetime
+
+[107](107-managed-memory-sessions.md) adds the versioned explicit trusted-local factory/resource contract and managed SDK sessions. Both bundled production openers share resource cleanup while retaining SQLite-specific path/profile/maintenance authority and their existing backend interface. Native readers do not gain SDK export probes. This completes only the local resource-lifetime slice, not the proposed general loader, migration or backend replacement ABI.

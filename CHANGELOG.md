@@ -8,6 +8,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Fixed
 
+- Manage local memory resources across constructor, admission and cleanup failures, preserving primary errors, reporting deferred cleanup failures on successful exit and attempting all registered cleanup. Add explicit reviewed factory SDK sessions with readonly enforcement and durable synthetic conformance (#155).
+
 - Refresh the inactive checkpoint-source proposal’s reviewed canonical source bindings for retained-source discovery and add unit checks that catch stale experiment checksums before host testing; patch/tree integrity guards remain unchanged.
 
 - Add deterministic retained-source deadline, reviewed cleanup and recovery acceptance through registered native recall, including legacy/observed provenance, historical retries and cross-route suppression; runtime behavior and frozen relevance labels remain unchanged (#149).

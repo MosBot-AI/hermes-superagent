@@ -12,6 +12,7 @@ from pathlib import Path
 
 from . import PLUGIN_ID
 from .memory_backend import MemoryError
+from .memory_sessions import ResourceScope
 from .task_cli import _private_storage_directory
 from .tasks import TaskError
 
@@ -44,8 +45,9 @@ def memory_lock(
     if not bound_home.is_dir() or current_profile_home() != bound_home:
         raise MemoryError("profile_context_changed")
     directory = bound_home / "plugin-data" / PLUGIN_ID / "memory"
-    fd = None
+    resources = ResourceScope()
     entered = False
+    primary = None
     try:
         for item in (bound_home, directory.parent.parent, directory.parent, directory):
             _private_storage_directory(item)
@@ -57,6 +59,7 @@ def memory_lock(
             raise MemoryError("memory_store_missing")
         path = directory / LOCK_NAME
         fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
+        resources.register(lambda: os.close(fd))
         info = os.fstat(fd)
         if (
             not stat.S_ISREG(info.st_mode)
@@ -88,16 +91,20 @@ def memory_lock(
         entered = True
         yield directory
     except TaskError as error:
+        primary = error
         if entered:
             raise
         raise MemoryError(error.code) from None
-    except OSError:
+    except OSError as error:
+        primary = error
         if entered:
             raise
         raise MemoryError("memory_coordination_unavailable") from None
+    except BaseException as error:
+        primary = error
+        raise
     finally:
-        if fd is not None:
-            os.close(fd)
+        resources.close(primary=primary)
 
 
 @contextmanager

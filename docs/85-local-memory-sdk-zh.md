@@ -8,7 +8,7 @@
 
 支持范围为 `trusted_profile_local`。可信打开方负责存储选择、资源生命周期和配置档案绑定。SDK 准入需要有界 export 读取，先核对其 namespace 与绑定一致，再允许操作；不具备 export 能力的适配器不会准入。这能发现普通路由误绑定，不能发现谎报 namespace 的不诚实适配器。传入 Python 绑定对象不证明真人身份、租户授权，也不能隔离恶意代码。请求载荷不能选择 owner、namespace、任意文件路径、URL 或 SQL 语句。经过审查的进程内 Python 仍是可信代码。
 
-普通插件现有的 `MemoryService` 和 SQLite 存储保持不变。不会切换已配置 provider，合规测试不会打开生产配置档案，也不引入凭据、网络接收方或付费模型调用。
+普通插件保留现有 `MemoryService` 和 SQLite 存储语义；[107](107-managed-memory-sessions-zh.md) 改进资源生命周期管理。不会切换已配置 provider，合规测试不会打开生产配置档案，也不引入凭据、网络接收方或付费模型调用。
 
 ## 契约及失败语义
 
@@ -31,27 +31,19 @@
 在仓库根目录，或已安装的运行时包位于导入路径时，运行这个仅依赖标准库的示例。每次运行会创建并清理专用合成目录。真实适配器作者需提供单独审查的打开方，不得将临时路径替换为生产存储。
 
 ```python
-from contextlib import contextmanager
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from personal_agent.memory_conformance import run_conformance
-from personal_agent.memory_sdk import LocalBinding, LocalMemorySDK
-from personal_agent.memory_sdk_example import SyntheticMemoryAdapter
+from personal_agent.memory_conformance import run_managed_conformance
+from personal_agent.memory_sdk import LocalBinding
+from personal_agent.memory_sdk_example import SyntheticMemoryFactory
 
 with TemporaryDirectory() as directory:
-    @contextmanager
-    def open_synthetic():
-        backend = SyntheticMemoryAdapter(Path(directory))
-        sdk = LocalMemorySDK(
-            backend, LocalBinding("synthetic-example", "synthetic-session")
-        )
-        try:
-            yield sdk
-        finally:
-            sdk.close()
-
-    print(run_conformance(open_synthetic, isolated_synthetic=True))
+    print(run_managed_conformance(
+        SyntheticMemoryFactory(Path(directory)),
+        LocalBinding("synthetic-example", "synthetic-session"),
+        isolated_synthetic=True,
+    ))
 ```
 
 ## 可选持久进度扩展
@@ -82,8 +74,13 @@ with TemporaryDirectory() as directory:
 
 ## 剩余 E2.6 工作
 
-更广的 [#43](https://github.com/MosBot-AI/hermes-superagent/issues/43) 保持开放：本地外观层并未交付完整的版本化来源/事件及多类型契约、远程对账、替换激活/迁移、经过审查的加载/资源 ABI 或原生生命周期集成。[82](82-shared-client-api-zh.md) 中共享客户端契约不变；Python SDK 不证明已提供认证 HTTP 或跨后端功能等价。
+更广的 [#43](https://github.com/MosBot-AI/hermes-superagent/issues/43) 保持开放：本地外观层并未交付完整的版本化来源/事件及多类型契约、远程对账、替换激活/迁移、通用的已审查加载/替换 ABI 或原生生命周期集成。[82](82-shared-client-api-zh.md) 中共享客户端契约不变；Python SDK 不证明已提供认证 HTTP 或跨后端功能等价。
 
 ## 可选的保留来源接受
 
 [96](96-retained-source-acceptance-zh.md) 新增可选的 `retained_source_acceptance` 操作族：`source_stage`、`source_accept`、`source_discard`、`source_status` 和 `source_cursor`。仅含元数据的待处理槽在实际规范写入前绑定明确授权的独立保留；接受、独立来源游标及抑制检查在同一个事务内提交。来源信息与现有编辑路径字段分开，通过决定/状态查看，而不附加到普通记录 `get` 或召回中。可选的 `run_retained_source_conformance` 入口使用单独的空合成存储。Schema-12 迁移和隔离原生消费端不启用自动生命周期、checkpoint-v2、提供方切换或生产摄取。
+
+
+## 托管资源生命周期
+
+[107](107-managed-memory-sessions-zh.md) 增加版本化的显式可信本地工厂/资源契约及托管 SDK 会话。两个内置生产打开器共享资源清理，同时保留 SQLite 特定的路径/配置目录/维护权威及现有后端接口。原生读取器不增加 SDK 导出探测。这仅完成本地资源生命周期切片，不代表提议的通用加载器、迁移或后端替换 ABI。

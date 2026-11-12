@@ -48,6 +48,7 @@
     "personal_agent/memory_retention.py",
     "personal_agent/memory_sdk.py",
     "personal_agent/memory_sdk_example.py",
+    "personal_agent/memory_sessions.py",
     "personal_agent/memory_snapshot.py",
     "personal_agent/memory_sources.py",
     "personal_agent/memory_storage.py",
