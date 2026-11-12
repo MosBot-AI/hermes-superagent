@@ -296,6 +296,15 @@ export default {
     const localPort = new URL(localEndpoint.origin).port
     const token = fs.readFileSync(path.join(remoteBox.hermesHome, 'webapp', 'session-token'), 'utf8').trim()
     expect(/^[A-Za-z0-9_-]{43}$/.test(token), 'native test Webapp token is available').toBe(true)
+    // Confirm the actual saved source inventory supplies the row that Desktop will collapse.
+    const response = await fetch(new URL('/api/profiles', remoteEndpoint.origin), {
+      headers: { 'X-Hermes-Session-Token': token },
+      redirect: 'error',
+      signal: AbortSignal.timeout(8_000)
+    })
+    expect(response.status, 'authenticated remote profile inventory').toBe(200)
+    const inventory = (await response.json()) as { profiles: { name: string }[] }
+    expect(inventory.profiles.filter(row => row.name === profile)).toHaveLength(1)
     fs.writeFileSync(
       path.join(localBox.userDataDir, 'connections.json'),
       JSON.stringify({
