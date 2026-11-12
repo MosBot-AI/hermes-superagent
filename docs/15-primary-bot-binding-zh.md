@@ -4,7 +4,7 @@
 
 **状态：可选后续设计，尚未实现，不是 profile-first 本地 MVP 的前置条件。** 若选择此能力，用户选择一个现有的 Hermes **Bot Mode Bot** 作为个人 super agent。这不会创建另一套 agent loop、改变 Hermes 的全局/默认 Bot，也不会授予新权限。下文所有绑定记录、服务方法、角色、事件和能力标志均属于这套拟议插件设计。当前 CLI 任务收件箱是一项独立的本地功能，不能证明 Bot 绑定或 owner 身份认证已经实现。
 
-本设计的源码基线为 Hermes `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`。当前固定版本的兼容性验证涵盖[名册](#当前固定版本的原生-bot-chat-名册)、[Desktop 路由](#当前固定版本的-desktop-profile-路由)、[原生 profile 生命周期](#当前固定版本的原生-profile-生命周期)、[原生备份与恢复](#当前固定版本的原生备份与恢复)、[同一安装内 Bot 消息](#当前固定版本的同一安装内-bot-消息)和 [Bot Chat 延后投递](#当前固定版本的-bot-chat-延后投递)。请结合 [03](03-native-architecture-zh.md)、[06](06-plugins-mcp-and-security-zh.md)、[11](11-worker-model-routing-zh.md) 和 [14](14-client-api-contracts-zh.md) 阅读本合同。
+本设计的源码基线为 Hermes `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`。当前固定版本的兼容性验证涵盖[名册](#当前固定版本的原生-bot-chat-名册)、[Desktop 路由](#当前固定版本的-desktop-profile-路由)、[原生 profile 生命周期](#当前固定版本的原生-profile-生命周期)、[原生备份与恢复](#当前固定版本的原生备份与恢复)、[同一安装内 Bot 消息](#当前固定版本的同一安装内-bot-消息)、[Bot Chat 延后投递](#当前固定版本的-bot-chat-延后投递)和[本地 Bot 传输与重启](#当前固定版本的本地-bot-传输与重启)。请结合 [03](03-native-architecture-zh.md)、[06](06-plugins-mcp-and-security-zh.md)、[11](11-worker-model-routing-zh.md) 和 [14](14-client-api-contracts-zh.md) 阅读本合同。
 
 准备性代码与契约证据见[文档 18](18-owner-entry-and-read-authorization-zh.md)：只读评估器已实现，但公开接收 Bot 身份缺失，该远程/Bot 路线的生产 owner context 和私人读取仍关闭。以下绑定流程仍为设计。
 
@@ -264,7 +264,7 @@ V1 **不支持自动跨 profile/跨宿主接管**。应使用 E8.3 下经过单�
 | 命名 Bot Chat 向 `@hermes` 发送 | 默认 profile 的规范 Bot Chat 收到一条排队中的准入记录。消息以 `Message from 🤖 Scout Fixture (@scout): [no reply needed]` 开头，结构化作者为 `bot:scout`，名称为 `scout`，`is_bot: true`。本地票据主体和 FIFO 生产者分别记录。 |
 | 持久化回执与事件还原 | 工具返回 `queued` 和 `expects_reply: false`。投递 ID 与已固定的意图、邮箱回执及 FIFO 请求 `bot:<delivery_id>` 一致。原生还原函数从该排队条目返回相同的作者和内部事件标记。发送方临时载荷和意图已清理。参与比较的发送方数据库记录保持不变，接收方的会话消息记录仍为空，authority 记录一次调度请求。 |
 
-夹具让接收方回合保持排队状态，并拦截回复等待进程。证据覆盖同一安装内的 Bot 作者归属和本地 operator 准入。已验证的人类 owner、受支持的插件调用方和 worker 来源证明、模型执行、回复送达、安装环境中的传输及跨机器消息均需单独验证。
+夹具让接收方回合保持排队状态，并拦截回复等待进程。证据覆盖同一安装内的 Bot 作者归属和本地 operator 准入。另有夹具验证本地进程传输和终态回执。已验证的人类 owner、受支持的插件调用方和 worker 来源证明、真实服务商执行、回复送达、已安装发行包及跨机器消息均需单独验证。[本地 Bot 传输与重启](#当前固定版本的本地-bot-传输与重启)
 
 ## 7. 跨设备与平台连续性
 
@@ -299,7 +299,27 @@ V1 **不支持自动跨 profile/跨宿主接管**。应使用 E8.3 下经过单�
 | 后续排空流程重放投递 | 客户端使用新的 `interactive` 票据发送相同的投递 ID、profile、规范会话和消息。authority 返回既有回执，cron 记录变为 `transferred`，并带有 `receipt_status: queued`。 |
 | 再次运行排空流程 | 已移交的记录不再触发移交。夹具仍只有一个规范会话、一份回执、一条排队中的 FIFO 准入记录和一次调度请求。准入条目没有终态结果，规范会话的消息记录仍为空。 |
 
-夹具让已准入的回合保持排队状态，覆盖合成本地 operator 准入及回执处理。安装环境中的 Gateway 与操作系统对端验证、模型执行及回合完成、外部投递、重启及更广泛的投递对账仍需单独验收。公开插件 API 提供上文所述的布尔值注入路径。
+夹具让已准入的回合保持排队状态，覆盖 cron 的合成本地 operator 准入及回执处理。公开插件 API 提供上文所述的布尔值注入路径。
+
+### 当前固定版本的本地 Bot 传输与重启
+
+在 Linux 上运行 Hermes `2281116525106e3c109993ccb5dc74d02bfc1427` 时，原生私有 Unix 控制连接检查监听进程的用户。Gateway 核对内核提供的调用方 UID，并为当前运行时实例和 profile 签发 `interactive` 票据。原生回环 `/api/ws` 连接核销该票据并获得本地 operator 权限。邮箱主体来自票据授权。投递信封携带 Bot 作者作为归属信息。[私有客户端对端检查](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_cli/gateway_runtime_discovery.py#L106-L140) · [控制票据与调用方 UID](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/gateway/control_socket.py#L381-L436) · [原生票据核销](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/gateway/run_api.py#L450-L490)
+
+邮箱将已提交完成的准入投影为 `settled`，并从该准入的已保存结果取得回复。原生启动可从同一准入重建该投影，使用相同参数重放 `bot_relay.deliver` 会读取既有回执。重放会核对消息、提交主体、作者和通知类别。[终态结果投影](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/gateway/session_bot.py#L408-L442) · [启动时邮箱恢复](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/gateway/session_bot.py#L728-L751) · [重放标识与回执](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/gateway/session_bot.py#L795-L861)
+
+Linux 验收夹具在临时独立 home 中两次启动原生 `gateway.run` 入口。合成的命名发送方在夹具进程中运行，使用真实会话数据库和原生内联 `message_agent` 路径。客户端使用原生发现、私有 Unix 套接字和真实回环 WebSocket。回环脚本模型返回固定的合成回复。记录器对 `/v1/chat/completions` 计数，并单独处理有界的模型元数据探测。夹具提供虚构的模型凭据。Python 套接字审计栅栏将 Gateway 子进程的出站连接限制在夹具 Unix 套接字与该模型端点。[本地 Bot 回执验收测试](../acceptance/live/test_native_bot_receipt.py)
+
+| 夹具步骤 | 观测结果 |
+| --- | --- |
+| 打开本地 Gateway | 私有发现识别出夹具持有的 Gateway 进程。无票据的 WebSocket 升级被拒绝。原生交互式票据打开 `/api/ws`，并可创建默认 profile 的隐藏 Bot Chat。 |
+| 向默认 profile 发送仅通知消息 | 命名 Bot Chat 向 `@hermes` 发送。工具返回投递 ID 和 `expects_reply: false`。接收方分别存储 `bot:scout` 与本地 UID 主体，并在 FIFO 的回合作者元数据中保留 `bot:scout`。SQLite 准入达到 `terminal`，`outcome: completed`。邮箱变为 `settled`，包含同一准入 ID 和已保存的确切回复。 |
+| 停止 Gateway 并使邮箱投影过时 | 两次计划停机均成功退出，移除 PID 标记，发现结果显示进程已不存在，监听器已关闭。两个进程交替期间，夹具将邮箱状态改为 `queued` 并清除投影中的回复。已提交的 SQLite 结果仍保存原始回复。 |
+| 在同一 home 重启 | 原生发现报告新的运行时实例和更高的 epoch。就绪时，启动流程已恢复完全相同的原 `settled` 回执，此时夹具尚未请求新票据或重放投递。私有控制套接字拒绝为上一实例签发票据的请求。 |
+| 使用原投递 ID 重放 | 使用新的本地票据进行精确重放会返回修复后的回执。使用同一投递 ID 更改消息会返回 `admission_conflict`。只读 SQLite 检查仍只报告同一条准入记录。记录器在两个进程运行期间共计一次携带 Bot 消息的合成补全请求。 |
+
+夹具观察到本地 operator 凭据、一次合成接收回合及同一 home 正常重启后的回执恢复。该凭据模式提供当前运行时的访问。经认证的人类 owner、跨安装连续性、已安装包的 Bot 回执行为、Electron IPC、其他操作系统的控制传输、远程 token、OAuth 和 SSH 模式、worker 来源证明及对用户的回复送达仍需单独取证。[恢复身份限制](#33-必须明确展示身份识别的限制)
+
+手动工作流在确切固定版本上以独立步骤运行本用例。只有产生非空、全部通过且无跳过的结果时，才暂存干净的 `bot-receipt.xml`。常规拉取请求和推送检查覆盖内存 Bot 契约。已安装包的任务、记忆和 handoff 检查在工作流中各有独立步骤。[Native Gateway 验收工作流](../.github/workflows/native-gateway.yml)
 
 ## 9. 事件、错误与客户端恢复
 
@@ -349,7 +369,7 @@ Payload 携带 ID、修订号、epoch 和原因码，不包含会话记录、non
 
 | ID | 状态与依赖 | 交付物 |
 |---|---|---|
-| E0.7 Verify Primary Bot Contracts | M0，In Progress。依赖 E0.1/E0.2，并使用 E0.4 发现。 | 当前固定版本的[名册](#当前固定版本的原生-bot-chat-名册)、[Desktop 路由](#当前固定版本的-desktop-profile-路由)、[原生 profile 生命周期](#当前固定版本的原生-profile-生命周期)、[原生备份与恢复](#当前固定版本的原生备份与恢复)、[同一安装内 Bot 消息](#当前固定版本的同一安装内-bot-消息)和 [Bot Chat 延后投递](#当前固定版本的-bot-chat-延后投递)证据。真实传输与 profile 转换、恢复前后经认证的连续性、受支持的作者、调用方与 worker 来源证明、其余回执模式和适配器清单仍待完成。可选 HTTP 还需要 E0.6。 |
+| E0.7 Verify Primary Bot Contracts | M0，In Progress。依赖 E0.1/E0.2，并使用 E0.4 发现。 | 当前固定版本的[名册](#当前固定版本的原生-bot-chat-名册)、[Desktop 路由](#当前固定版本的-desktop-profile-路由)、[原生 profile 生命周期](#当前固定版本的原生-profile-生命周期)、[原生备份与恢复](#当前固定版本的原生备份与恢复)、[同一安装内 Bot 消息](#当前固定版本的同一安装内-bot-消息)、[Bot Chat 延后投递](#当前固定版本的-bot-chat-延后投递)和[本地 Bot 传输与重启](#当前固定版本的本地-bot-传输与重启)证据。实际 Electron IPC、已安装发行包和远程传输、运行中的 profile 转换、恢复前后经认证的连续性、受支持的作者、调用方与 worker 来源证明、其余回执模式和适配器清单仍待完成。可选 HTTP 还需要 E0.6。 |
 | E1.6 Bind Primary Bot | 可选后续；Backlog；E0.7、E1.1–E1.5、E2.1 | Owner 确认的登记与恢复、唯一 active 绑定、修订号/epoch 栅栏、审计和角色策略；不无条件启用写入 |
 | E3.6 Reconcile Primary Bot Sessions | 启用 Bot 绑定路径时为 M1 门禁，M2 继续扩展；Backlog；E1.6、E3.2/E3.5、E4.3/E4.4 | 规范会话解析、worker handoff 关联、投递/恢复和原生回执对账 |
 

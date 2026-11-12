@@ -32,6 +32,39 @@ jobs:
           cd "$upstream"
           python -m pm.build_env --source . --out "$RUNNER_TEMP/hermes-test-venv" \
             --group dev --group test --python "$(command -v python)"
+      - name: Verify the native Bot terminal receipt and restart over real sockets
+        timeout-minutes: 6
+        shell: bash
+        run: |
+          set -euo pipefail
+          upstream="$RUNNER_TEMP/hermes"
+          test_python="$RUNNER_TEMP/hermes-test-venv/bin/python"
+          pin="$(python -c 'import json; print(json.load(open("compatibility.json"))["hermes_commit"])')"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git -C "$upstream" rev-parse HEAD)" = "$pin"
+          sandbox="$(mktemp -d "$RUNNER_TEMP/native-bot.XXXXXX")"
+          mkdir -p "$sandbox/home" "$sandbox/tmp"
+          result="$sandbox/bot-receipt.xml"
+          env -i PATH="$PATH" LANG=C.UTF-8 HOME="$sandbox/home" TMPDIR="$sandbox/tmp" \
+            XDG_CONFIG_HOME="$sandbox/config" XDG_CACHE_HOME="$sandbox/cache" \
+            HERMES_HOME="$sandbox/hermes" HERMES_RUNTIME_DIR="$sandbox/runtime" \
+            HERMES_TEST_ROOT="$upstream" PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
+            "$test_python" -m pytest -q -p no:cacheprovider --show-capture=no \
+            -o junit_logging=no --basetemp="$sandbox/pytest" --junitxml="$result" \
+            acceptance/live/test_native_bot_receipt.py
+
+          # Stage evidence only after pytest succeeds and records actual passing cases.
+          "$test_python" - "$result" <<'PY'
+          import sys
+          from xml.etree import ElementTree
+
+          result = ElementTree.parse(sys.argv[1])
+          excluded = ("error", "failure", "skipped", "system-out", "system-err")
+          if not result.findall(".//testcase") or any(result.findall(f".//{tag}") for tag in excluded):
+              raise SystemExit("Native Bot receipt did not produce a clean passing JUnit result")
+          PY
+          mkdir -p "$RUNNER_TEMP/native-gateway-evidence"
+          install -m 600 "$result" "$RUNNER_TEMP/native-gateway-evidence/bot-receipt.xml"
       - name: Verify pinned native Gateway lifecycle without provider credentials
         timeout-minutes: 8
         shell: bash

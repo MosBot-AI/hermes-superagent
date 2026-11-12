@@ -83,6 +83,8 @@ This file distinguishes design work, development changes, and released capabilit
 - Run runtime artifact acceptance on exact pull-request heads with read-only credentials; keep downloadable artifact publication push-only.
 ### Changed
 
+- Add manual acceptance for native Bot delivery over the pinned Gateway's Unix control socket and loopback WebSocket. Verify terminal receipt repair and same-ID replay after restart using a synthetic loopback model (#33).
+
 - Verify native backup and import at the pinned Hermes revision. Import refuses an owned destination before publication. Stopped restore preserves the destination runtime epoch floor and carries the installation marker and Bot Chat lineage from the archive (#33).
 
 - Verify same-install `message_agent` admission at the pinned Hermes revision. The receiving authority records the Bot author and the local ticket principal separately, and an ordinary session is refused before handoff (#33).

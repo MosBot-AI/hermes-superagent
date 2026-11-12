@@ -33,7 +33,7 @@
 - E0.5：建立离线合成 source/connector fixtures，测试不依赖真实个人账号。
 - E0.6：在固定宿主上核验客户端传输契约：dashboard API 注册、可信 principal/profile 透传、canonical session RPC、认证/隔离/文件边界及明确不支持模式。依赖 E0.1/E0.2 并采用 E0.4 发现，不代表完整写路径覆盖已完成。见 [14](14-client-api-contracts-zh.md)。
 
-- E0.7 Verify Primary Bot Contracts（M0，In Progress）依赖 E0.1/E0.2，并采用 E0.4 发现。[原生名册](15-primary-bot-binding-zh.md#当前固定版本的原生-bot-chat-名册)、[Desktop 路由组合](15-primary-bot-binding-zh.md#当前固定版本的-desktop-profile-路由)、[停机 profile 生命周期](15-primary-bot-binding-zh.md#当前固定版本的原生-profile-生命周期)、[原生备份与恢复](15-primary-bot-binding-zh.md#当前固定版本的原生备份与恢复)、[同一安装内 Bot 消息](15-primary-bot-binding-zh.md#当前固定版本的同一安装内-bot-消息)和 [Bot Chat 延后投递](15-primary-bot-binding-zh.md#当前固定版本的-bot-chat-延后投递)记录当前固定版本的证据。剩余工作包括实际 Desktop IPC 和传输、跨恢复的已认证安装连续性与恢复流程、受支持的调用方与 worker 来源，以及更广泛的作者归因与回执对账。HTTP 模式另需 E0.6。
+- E0.7 Verify Primary Bot Contracts（M0，In Progress）依赖 E0.1/E0.2，并采用 E0.4 发现。[原生名册](15-primary-bot-binding-zh.md#当前固定版本的原生-bot-chat-名册)、[Desktop 路由组合](15-primary-bot-binding-zh.md#当前固定版本的-desktop-profile-路由)、[停机 profile 生命周期](15-primary-bot-binding-zh.md#当前固定版本的原生-profile-生命周期)、[原生备份与恢复](15-primary-bot-binding-zh.md#当前固定版本的原生备份与恢复)、[同一安装内 Bot 消息](15-primary-bot-binding-zh.md#当前固定版本的同一安装内-bot-消息)、[Bot Chat 延后投递](15-primary-bot-binding-zh.md#当前固定版本的-bot-chat-延后投递)和[本地 Bot 传输与重启](15-primary-bot-binding-zh.md#当前固定版本的本地-bot-传输与重启)记录当前固定版本的证据。剩余工作包括实际 Desktop IPC 和传输、跨恢复的已认证安装连续性与恢复流程、受支持的调用方与 worker 来源，以及更广泛的作者归因与回执对账。HTTP 模式另需 E0.6。
 
 - E0.8 Verify Voice Provider Contracts（M0，离线验证）依赖 E0.1/E0.2，并采用适用的 E0.4/E0.7 发现。[当前固定版本兼容性清单](voice-compatibility-inventory-zh.md)和[带日期的协议对照](voice-provider-protocol-comparison-zh.md)记录逐模式的验收证据及剩余发布门禁。
 
