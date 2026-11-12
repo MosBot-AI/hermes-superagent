@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "status": "Review-only, unsubmitted and not activated",
+  "source_repository": "https://github.com/NousResearch/hermes-agent",
+  "base": "2281116525106e3c109993ccb5dc74d02bfc1427",
+  "proposal_commit_observed": "14c1a21fc4601de51000cba05d61894902773524",
+  "proposal_tree": "49ff33f721dd356bc1ea853dde8a1623c460ac05",
+  "patch_file": "bot-webapp-canonical.patch",
+  "patch_sha256": "e50e573140b1de21d9c8b5ddeb3a82ed0bd898e53b1fcdb345863fbe9cecbf80",
+  "patch_files": [
+    "apps/desktop/src/plugins/hermes-bots/canonical-chat-registry.test.ts",
+    "apps/desktop/src/plugins/hermes-bots/canonical-chat.ts"
+  ],
+  "artifact_files": [
+    "LICENSE.hermes-agent",
+    "README-zh.md",
+    "README.md",
+    "bot-webapp-canonical.patch",
+    "manifest.json"
+  ],
+  "verification": {
+    "platform": "linux",
+    "electron": "44.9.3",
+    "node": "26.12.1",
+    "pnpm": "12.15.0",
+    "python": "3.14.9",
+    "patch_apply_check": "passed",
+    "clean_source_electron_cases_passed": 1,
+    "proposal_source_electron_cases_passed": 1,
+    "proposal_vitest_files": {
+      "canonical-chat-registry.test.ts": 15,
+      "data.roster.test.tsx": 20,
+      "routing.test.ts": 17
+    },
+    "clean_pointer_authority": "default",
+    "clean_pointer_reason": "not_found",
+    "proposal_pointer_authority": "scout",
+    "proposal_faulted_click": "retry_notification",
+    "proposal_unarmed_retry": "opened_existing_chat",
+    "seeded_sqlite_projections_unchanged": true,
+    "model_completions": 0,
+    "full_upstream_suite": false
+  },
+  "submitted_upstream": false,
+  "production_activated": false
+}

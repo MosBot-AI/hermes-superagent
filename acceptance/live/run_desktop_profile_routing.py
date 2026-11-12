@@ -1,6 +1,7 @@
 """Run a real Electron acceptance case from a prepared Hermes checkout."""
 
 import argparse
+import hashlib
 import json
 import os
 import shutil
@@ -14,6 +15,10 @@ from scripts.check import ROOT, verify_checkout
 
 DESKTOP_TESTS = ROOT / "tests/desktop"
 GATEWAY_FIXTURE = "desktop_native_gateway_fixture.ts"
+CANONICAL_FIXTURE = "desktop_bot_canonical_fixture.py"
+CANONICAL_OBSERVER = "desktop_bot_canonical_observer.ts"
+SAVED_TOKEN_CASE = "bot-canonical-saved-token"
+PROPOSAL = ROOT / "experiments/bot-webapp-canonical"
 CASES = {
     "profile-routing": (
         "desktop_profile_route_ipc.spec.ts",
@@ -22,8 +27,13 @@ CASES = {
     ),
     "bot-canonical": (
         "desktop_bot_canonical_refusal.spec.ts",
-        (GATEWAY_FIXTURE, "desktop_bot_canonical_fixture.py"),
+        (GATEWAY_FIXTURE, CANONICAL_FIXTURE, CANONICAL_OBSERVER),
         "Bot Mode canonical chat",
+    ),
+    SAVED_TOKEN_CASE: (
+        "desktop_bot_saved_token_refusal.spec.ts",
+        (GATEWAY_FIXTURE, CANONICAL_FIXTURE, CANONICAL_OBSERVER),
+        "saved Webapp token Bot Mode",
     ),
 }
 CONFIG = """export default {
@@ -52,9 +62,56 @@ exit $?
 """
 
 
-def verify_build(host, python, node, env):
-    verify_checkout(host)
+def verify_proposal(host, base, env):
+    manifest = json.loads((PROPOSAL / "manifest.json").read_bytes())
+    patch = (PROPOSAL / "bot-webapp-canonical.patch").read_bytes()
+    if manifest["base"] != base or hashlib.sha256(patch).hexdigest() != manifest["patch_sha256"]:
+        raise ValueError(
+            "Saved-token proposal manifest does not match the compatibility pin and patch"
+        )
+
+    def git(*args):
+        return subprocess.check_output(
+            ["git", "--no-replace-objects", "-C", host, *args], env=env, timeout=10
+        )
+
+    ancestry = git("rev-list", "--parents", "-n", "1", "HEAD").decode().split()
+    if len(ancestry) != 2 or ancestry[1] != base:
+        raise ValueError(
+            "Prepared proposal must be a direct single-parent commit on the Hermes pin"
+        )
+    commit = ancestry[0]
+    if git("rev-parse", "HEAD^{tree}").decode().strip() != manifest["proposal_tree"]:
+        raise ValueError("Prepared proposal tree does not match the reviewed source")
+    if git("status", "--porcelain", "--untracked-files=normal") or any(
+        not entry.startswith(b"H ") for entry in git("ls-files", "-v", "-z").split(b"\0") if entry
+    ):
+        raise ValueError("Prepared proposal checkout must be clean with a normal tracked index")
+    actual_patch = git(
+        "diff",
+        "--no-ext-diff",
+        "--no-textconv",
+        "--binary",
+        "--full-index",
+        "--no-renames",
+        "--src-prefix=a/",
+        "--dst-prefix=b/",
+        base,
+        commit,
+        "--",
+    )
+    if actual_patch != patch:
+        raise ValueError("Prepared proposal commit does not contain the exact reviewed patch")
+    return commit
+
+
+def verify_build(host, python, node, env, *, review_proposal=False):
     compatibility = json.loads((ROOT / "compatibility.json").read_text(encoding="utf-8"))
+    expected_commit = compatibility["hermes_commit"]
+    if review_proposal:
+        expected_commit = verify_proposal(host, expected_commit, env)
+    else:
+        verify_checkout(host)
     node_version = json.loads((host / "pm/lock.json").read_text(encoding="utf-8"))["packages"][
         "node"
     ]["version"]
@@ -72,11 +129,26 @@ def verify_build(host, python, node, env):
 
     desktop = host / "apps/desktop"
     stamp = json.loads((desktop / "build/install-stamp.json").read_text(encoding="utf-8"))
-    if stamp["commit"] != compatibility["hermes_commit"] or stamp["dirty"] is not False:
-        raise ValueError("Desktop build stamp must match the clean pinned Hermes commit")
-    for asset in ("dist/electron-main.mjs", "dist-webapp/index.html"):
-        if not (desktop / asset).is_file():
-            raise ValueError(f"Prepared Hermes checkout is missing {asset}")
+    if stamp["commit"] != expected_commit or stamp["dirty"] is not False:
+        raise ValueError("Desktop build stamp must match the verified clean source commit")
+    for product, output in (("desktop", "dist"), ("webapp", "dist-webapp")):
+        current = subprocess.check_output(
+            [
+                node,
+                host / "scripts/build/freshness.mjs",
+                "--source",
+                host,
+                "--product",
+                product,
+                "--out",
+                desktop / output,
+            ],
+            cwd=host,
+            env=env,
+            timeout=30,
+        )
+        if current.strip() != b"true":
+            raise ValueError(f"Prepared Hermes {product} build is missing or stale")
     subprocess.run(
         [node, host / "scripts/build/electron-runtime.mjs", "--source", host, "--no-install"],
         cwd=host,
@@ -137,9 +209,11 @@ def stage_probe(core, spec, fixtures):
         yield config.name
 
 
-def run_probe(host, python, node, work, spec, fixtures):
+def run_probe(host, python, node, work, spec, fixtures, *, review_proposal=False):
     env = isolated_environment(work, python, node)
-    desktop = verify_build(host, python, node, env)
+    if spec == CASES[SAVED_TOKEN_CASE][0]:
+        env["HERMES_E2E_BOT_WEBAPP_EXPECTATION"] = "proposal" if review_proposal else "baseline"
+    desktop = verify_build(host, python, node, env, review_proposal=review_proposal)
     cli = desktop / "node_modules/@playwright/test/cli.js"
     if not cli.is_file():
         raise ValueError("Install the pinned Desktop workspace dependencies before running")
@@ -200,9 +274,16 @@ def main():
     parser.add_argument("--node", type=Path, required=True, help="Pinned Hermes Node executable")
     parser.add_argument("--scratch", type=Path, default=Path("/var/tmp"), help="Short temp parent")
     parser.add_argument("--case", choices=CASES, default="profile-routing", help="Acceptance case")
+    parser.add_argument(
+        "--review-proposal",
+        action="store_true",
+        help="Verify a separately built saved-token proposal",
+    )
     args = parser.parse_args()
     if sys.platform != "linux":
         parser.error("This acceptance requires Linux namespaces and Xvfb")
+    if args.review_proposal and args.case != SAVED_TOKEN_CASE:
+        parser.error(f"--review-proposal requires --case {SAVED_TOKEN_CASE}")
     inputs = (args.hermes, args.hermes_python, args.node, args.scratch)
     if any(
         location.is_relative_to("/tmp")
@@ -221,13 +302,15 @@ def main():
             work,
             spec,
             fixtures,
+            review_proposal=args.review_proposal,
         )
     except (OSError, ValueError, subprocess.SubprocessError) as exc:
         parser.exit(1, f"{exc}\nPrivate diagnostics: {work}\n")
     except KeyboardInterrupt:
         parser.exit(130, f"Acceptance interrupted. Private diagnostics: {work}\n")
     shutil.rmtree(work)
-    print(f"One real Electron {description} case passed")
+    variant = " proposal" if args.review_proposal else ""
+    print(f"One real Electron {description}{variant} case passed")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,61 @@
+diff --git a/apps/desktop/src/plugins/hermes-bots/canonical-chat-registry.test.ts b/apps/desktop/src/plugins/hermes-bots/canonical-chat-registry.test.ts
+index ef3d9ee458fe9ef8cf4e79e18579afb079a24212..53d81636298b93bec60823dee9caf8b589525e92 100644
+--- a/apps/desktop/src/plugins/hermes-bots/canonical-chat-registry.test.ts
++++ b/apps/desktop/src/plugins/hermes-bots/canonical-chat-registry.test.ts
+@@ -54,12 +54,12 @@ vi.mock('./routing', () => ({
+ vi.mock('./data', () => ({
+   $botMeta: { get: () => ({}), set: vi.fn() },
+   botMetaKey: (bot: { name?: string }) => bot?.name ?? '',
+-  // Local bots carry no route, so everything resolves onto the ambient
+-  // request — the single-connection shape these tests pin.
++  // Test rows may carry an explicit registry route. String owners keep the
++  // legacy ambient request path.
+   botOwner: (owner: RosterRow | string) =>
+     typeof owner === 'string'
+       ? { bot: { name: owner }, key: owner, name: owner, route: null }
+-      : { bot: owner, key: owner?.name, name: owner?.name, route: null },
++      : { bot: owner, key: owner?.name, name: owner?.name, route: owner?.route ?? null },
+   persistBotMetaSnapshot: persistMock,
+   saveBotMeta: saveBotMetaMock
+ }))
+@@ -344,6 +344,24 @@ describe('a failed lookup fails CLOSED — never "no chat exists"', () => {
+     expect(calls.find(call => call.method === 'session.info')?.params).toEqual({ session_id: 'forever-chat' })
+   })
+ 
++  it('probes the existing roster id on the routed backend profile after an empty lookup', async () => {
++    const calls = respondWith(method =>
++      method === 'session.list' ? { sessions: [] } : { title: 'Bot Chat', archived: false }
++    )
++    const bot: RosterRow = {
++      name: 'scout-alias',
++      canonical_session: { id: 'forever-chat' },
++      route: { connectionId: 'spare', mode: 'remote', profile: 'scout-alias', targetProfile: 'scout' }
++    }
++    const { openBotCanonicalChat } = await loadModule()
++
++    await expect(openBotCanonicalChat(bot)).rejects.toThrow(/Could not confirm scout-alias's Bot Chat registry/)
++    expect(calls.map(call => call.method)).toEqual(['session.list', 'session.info'])
++    expect(calls[0]?.params.profile).toBe('scout')
++    expect(calls[1]?.params).toEqual({ session_id: 'forever-chat', profile: 'scout' })
++    expect(hostMock.openSession).not.toHaveBeenCalled()
++  })
++
+   it('refuses to mint when the roster-id probe itself throws', async () => {
+     const calls = respondWith(method => {
+       if (method === 'session.list') {
+diff --git a/apps/desktop/src/plugins/hermes-bots/canonical-chat.ts b/apps/desktop/src/plugins/hermes-bots/canonical-chat.ts
+index f5f21690e022ef96244248a7ce1e3aab3dced6a1..865966d5a1e5c616b62f022adfa91a98a5cdaf38 100644
+--- a/apps/desktop/src/plugins/hermes-bots/canonical-chat.ts
++++ b/apps/desktop/src/plugins/hermes-bots/canonical-chat.ts
+@@ -386,7 +386,10 @@ async function findExistingCanonicalChat(owner: RosterRow | string): Promise<Can
+       probe = await requestForBot(
+         bot,
+         'session.info',
+-        { session_id: bot.canonical_session.id },
++        {
++          session_id: bot.canonical_session.id,
++          ...(route ? { profile: backendTargetProfile(route, name) } : {})
++        },
+         { spawnPriority: 'foreground' }
+       )
+     } catch (error) {
