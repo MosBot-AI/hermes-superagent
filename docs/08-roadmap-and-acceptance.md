@@ -33,7 +33,7 @@ Original profile-first deterministic local M1 acceptance is recorded at the fixe
 - E0.5: Build offline synthetic source/connector fixtures so tests do not depend on real personal accounts.
 - E0.6: Verify client transport contracts at the pinned host: dashboard API registration, trusted principal/profile propagation, canonical session RPCs, auth/isolation/file boundaries, and explicit unsupported modes. Depends on E0.1/E0.2 and uses E0.4 findings; this is not a claim that full write coverage is complete. See [14](14-client-api-contracts.md).
 
-- E0.7: Verify Primary Bot Contracts (M0, Backlog): depends on E0.1/E0.2 and uses E0.4 findings. Verify native profile/route/canonical registry and lineage, author/worker provenance and receipts. HTTP modes additionally require E0.6. See [15](15-primary-bot-binding.md).
+- E0.7 Verify Primary Bot Contracts (M0, In Progress) depends on E0.1/E0.2 and uses E0.4 findings. The [current-pin canonical Bot Chat roster evidence](15-primary-bot-binding.md#current-pin-canonical-bot-chat-roster) covers native discovery and scope. The remaining work covers Desktop routes and install continuity, supported author and worker provenance, and native receipts. HTTP modes additionally require E0.6.
 
 - E0.8 Verify Voice Provider Contracts (M0, offline verification) depends on E0.1/E0.2 and uses E0.4/E0.7 findings where applicable. The [current-pin compatibility inventory](voice-compatibility-inventory.md) and [dated protocol comparison](voice-provider-protocol-comparison.md) record the acceptance evidence and outstanding release gates by mode.
 

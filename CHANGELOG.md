@@ -83,6 +83,8 @@ This file distinguishes design work, development changes, and released capabilit
 - Run runtime artifact acceptance on exact pull-request heads with read-only credentials; keep downloadable artifact publication push-only.
 ### Changed
 
+- Verify the native Bot Chat roster on the pinned Hermes host using synthetic local tickets, including canonical root and compression tip, profile scope, and unavailable targets (#33).
+
 - Document exact-pin offline voice compatibility and dated GPT-Live, OpenAI Realtime and Gemini Live protocol differences, with separate readiness states and release gates for each mode (#36).
 
 - Recognize bounded Chinese possessive naming questions with literal subject/attribute slots; fail closed for marker-only slots while preserving one-read budgets and explicit retrieval (#151).

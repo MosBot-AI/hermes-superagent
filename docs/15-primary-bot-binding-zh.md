@@ -4,7 +4,7 @@
 
 **状态：可选后续设计，尚未实现，不是 profile-first 本地 MVP 的前置条件。** 若选择此能力，用户选择一个现有的 Hermes **Bot Mode Bot** 作为个人 super agent。这不会创建另一套 agent loop、改变 Hermes 的全局/默认 Bot，也不会授予新权限。下文所有绑定记录、服务方法、角色、事件和能力标志均属于这套拟议插件设计。当前 CLI 任务收件箱是一项独立的本地功能，不能证明 Bot 绑定或 owner 身份认证已经实现。
 
-源码基线：Hermes `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`。检查源码不等于部署认证。请结合 [03](03-native-architecture-zh.md)、[06](06-plugins-mcp-and-security-zh.md)、[11](11-worker-model-routing-zh.md) 和 [14](14-client-api-contracts-zh.md) 阅读本合同。
+本设计的源码基线为 Hermes `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`。[当前固定版本的名册证据](#当前固定版本的原生-bot-chat-名册)单独记录原生兼容性验证。请结合 [03](03-native-architecture-zh.md)、[06](06-plugins-mcp-and-security-zh.md)、[11](11-worker-model-routing-zh.md) 和 [14](14-client-api-contracts-zh.md) 阅读本合同。
 
 准备性代码与契约证据见[文档 18](18-owner-entry-and-read-authorization-zh.md)：只读评估器已实现，但公开接收 Bot 身份缺失，该远程/Bot 路线的生产 owner context 和私人读取仍关闭。以下绑定流程仍为设计。
 
@@ -33,6 +33,28 @@
 | Cron 可通过原生权限准入机制以 `bot-chat[:profile]` 为目标 [B9] | 复用原生回执和调度；绝不对同一个 Bot Chat 运行第二个写入者 |
 
 这些是参考合同，不代表可以把私有模块导入作为受支持的插件 API。尤其是规范会话注册表实现、profile 重命名内部机制和 Bot 投递邮箱，它们都是**源码证据**，不是新增的 `ctx` 方法。E0.7 必须证明受支持的适配器可用，或报告通用的上游接口缺口。不得虚构 `ctx.bind_main_bot`、`ctx.current_owner` 或原生不可变的 `bot_uuid`。
+
+### 当前固定版本的原生 Bot Chat 名册
+
+名册夹具在干净的 Hermes `2281116525106e3c109993ccb5dc74d02bfc1427` 上经由原生网关 `/api/ws` ASGI 边界调用 OpenRPC 方法 `profiles.list`。夹具使用合成本地票据和临时 profile 及会话存储，无需真实监听器、桌面客户端、模型或账户。连接协商 `hermes-gateway-v1`，并收到带 `session_authority: true` 的 `gateway.ready`。[名册契约测试](../tests/contracts/test_native_bot_roster_asgi.py) · [网关 OpenRPC](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/apps/shared/src/gateway-contract.openrpc.json)
+
+| 夹具场景 | 观察结果 |
+| --- | --- |
+| 宿主作用域的票据显式选择已提供服务的同级 profile | 两个 profile 使用相同的显示标签，返回不同的规范会话 ID。被选中的 profile 排在首位，其隐藏的精确 `Bot Chat` 提供 `canonical_session.id`。`resolved_id` 和预览来自压缩末端。`last_session` 和 `worker_session` 分别指向独立的编号会话和 worker。 |
+| Profile 作用域的交互票据 | 票据所属 profile 返回自身的会话字段，包括存储的会话所有者与票据主体不同的规范会话。同级 profile 仅返回发现元数据，省略 `canonical_session`、`last_session` 和 `worker_session`。显式请求该同级 profile 返回 `profile_mismatch`。 |
+| `worker-adoption` 票据 | `profiles.list` 返回 `permission_denied`。 |
+| 同级 profile 开始退役后的宿主作用域名册 | 退役中的同级 profile 只返回元数据，仍提供服务的 profile 继续返回自己的规范会话。 |
+| 未绑定的历史精确标题会话，或可恢复的自动归档精确标题会话 | 经授权的名册返回 `canonical_session: null`。编号会话仍为近期会话，未新建、收编或恢复记录。 |
+| 两个隔离 ASGI 端点使用不同的运行时实例 ID，但使用相同的预置 `install_id`、profile slug 和显示标签 | 各端点用自己的票据返回自身的 profile 路径、规范会话根、压缩末端及预览。相同的安装观测值无法确定会话属于哪个端点。 |
+| 安装 ID 不可读 | 夹具用目录模拟不可读的标记。名册返回空的 `install_id`，仍报告经授权的规范会话。 |
+
+夹具隔离执行、套接字连接及监听和无关的网关后台活动。它在请求前后比较会话、消息、准入和状态元数据记录，并检查原生 authority 上没有遗留连接或已附加会话。预置的安装标记保持原样，也未出现新的安装锁文件。不可读标记仍为空目录。[名册契约测试](../tests/contracts/test_native_bot_roster_asgi.py)
+
+原生准入路径为成功核销的本地 `interactive` 票据授予 operator 权限。票据的 `profile` 或 `host` 作用域独立决定请求能否到达同一进程中的其他 authority。此验证覆盖本地 operator 契约。人的 owner 身份、远程认证和公开插件调用方上下文各需独立证明。[原生网关准入](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/gateway/run_api.py#L452-L490) · [当前固定版本的 owner 证据边界](78-enrollment-ceremony-zh.md)
+
+Authority 名册使用 `reopen=False` 读取现有会话存储。精确标题的 `session.list` 路径可能收编满足条件的历史记录，用于发现前需单独验证。名册的 `install_id` 来自提供服务的 Hermes 根目录。缺少 ID 或格式有误时，解析器可在可写根目录生成 ID。文件系统副本可以保留同一 ID，因此宿主连续性需要独立证据。[名册实现](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/gateway/session_group_controls.py#L389-L450) · [历史会话收编夹具](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/tests/gateway/test_bot_roster_fleet.py#L94-L102) · [安装身份解析器](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_cli/install_identity.py)
+
+E0.7 仍需验证跨连接和别名的桌面端路由、profile 重命名、删除、重建及克隆或恢复歧义、受支持的调用方与 worker 来源证明，以及原生投递和准入回执。可选 HTTP 入口仍依赖 E0.6。经 owner 授权的登记、激活绑定及对账仍是 E1.6 和 E3.6 的独立工作。[Issue #33](https://github.com/MosBot-AI/hermes-superagent/issues/33)
 
 ## 3. 身份、存储与作用域
 
@@ -235,7 +257,7 @@ Payload 携带 ID、修订号、epoch 和原因码，不包含会话记录、non
 
 | ID | 状态与依赖 | 交付物 |
 |---|---|---|
-| E0.7 Verify Primary Bot Contracts | M0；Backlog；E0.1/E0.2，使用 E0.4 发现 | Profile/路由/注册表/谱系/来源/回执探针；受支持的适配器映射和明确缺口；可选 HTTP 还需要 E0.6 |
+| E0.7 Verify Primary Bot Contracts | M0，In Progress。依赖 E0.1/E0.2，并使用 E0.4 发现。 | [当前固定版本的名册证据](#当前固定版本的原生-bot-chat-名册)。仍需验证 profile、路由、来源和回执，并记录受支持的适配器。可选 HTTP 还需要 E0.6。 |
 | E1.6 Bind Primary Bot | 可选后续；Backlog；E0.7、E1.1–E1.5、E2.1 | Owner 确认的登记与恢复、唯一 active 绑定、修订号/epoch 栅栏、审计和角色策略；不无条件启用写入 |
 | E3.6 Reconcile Primary Bot Sessions | 启用 Bot 绑定路径时为 M1 门禁，M2 继续扩展；Backlog；E1.6、E3.2/E3.5、E4.3/E4.4 | 规范会话解析、worker handoff 关联、投递/恢复和原生回执对账 |
 
