@@ -93,7 +93,19 @@ The [speaker contracts](../tests/contracts/test_voice_provider_contracts.py) and
 | TUI sidecar full-duplex interruption | Playback-phase interruption stops streaming and fallback media, then emits the interruption event. Generation-phase interruption also asks both running agents in the sidecar process to interrupt after stopping media. The idle agent receives no request. |
 | TUI LOCAL typed-stop helper | The helper changes the target LOCAL session's voice mode. Stopping another session leaves the active capture callback usable. Stopping the capture's own session fences later callbacks. Both stops request TTS stop through the shared sidecar function. The test invokes the helper directly. Wire authorization and admission require separate evidence. |
 
-The pipeline completion event and player invocation can both occur without any PCM reaching the player. Device playback acknowledgement, provider-side cancellation, confirmed native-turn cancellation, web audio and credential transport, real devices and online-provider acceptance remain open.
+The pipeline completion event and player invocation can both occur without any PCM reaching the player. Device playback acknowledgement, provider-side cancellation and confirmed native-turn cancellation remain open.
+
+### Current-Pin Native Audio WebSocket Admission
+
+The [audio ASGI contracts](../tests/contracts/test_native_voice_audio_asgi.py) send synthetic frames to the native dashboard app through `GatewayRuntimeAPI` on clean Hermes `2281116525106e3c109993ccb5dc74d02bfc1427`. The harness uses the actual native ticket store and two temporary profiles. It mints synthetic local interactive tickets through the store and supplies a ready runner fixture.
+
+| Native path | Behavior covered |
+| --- | --- |
+| Local WebSocket admission | A fresh interactive ticket opens the stream and negotiates `hermes-gateway-v1`. Missing and already-consumed tickets receive close code `4401` before any new provider call. The STT route also refuses a ticket with the wrong purpose, a selector for a different profile and an Origin-bearing local handshake. Synthetic provider markers identify the ticket's profile and its scoped configuration. |
+| `/api/audio/transcribe-stream` | The registered in-process STT fixture receives the submitted 16 kHz PCM and configured hints. The route sends the final transcript envelope and closes. |
+| `/api/audio/speak-stream` | The registered in-process TTS fixture receives the text and configured settings. The route declares 22,050 Hz mono output and sends the expected PCM chunks and end message. In `host` mode the provider receives the call, then stream projection fails at the first pull. The route sends a `fallback` message and closes. File synthesis and PCM output are absent in that exchange. |
+
+The tests exercise the app boundary with in-memory ASGI messages. Ticket issuance by a trusted remote authority, a real listener, device playback, credential delivery, and live provider or device acceptance require separate evidence.
 
 ## 5. Tests and Remaining Gates
 
