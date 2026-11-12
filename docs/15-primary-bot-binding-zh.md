@@ -74,7 +74,33 @@ Authority 名册使用 `reopen=False` 读取现有会话存储。精确标题的
 
 复现此可选测试时，使用可丢弃的 Hermes 检出，确认提交与固定版本一致且跟踪文件无改动。设置隔离的 `HOME` 和 `HERMES_RUNTIME_DIR`，并使用 Node.js `26.12.1` 和 pnpm `12.15.0`。在 Hermes 根目录运行 `pnpm install --frozen-lockfile --ignore-scripts --filter . --filter '{./apps/desktop}...'`。将本仓库的 `tests/desktop/desktop_profile_route_pool.test.ts` 复制到 `apps/desktop/src/store/`，运行 `pnpm --dir apps/desktop run test:ui src/store/desktop_profile_route_pool.test.ts`，运行结束后移除复制的测试文件。CI 单独运行无需依赖的 Node 组合检查。
 
-同一固定版本使用 Vitest `4.1.12`、Node.js `26.12.1` 和 pnpm `12.15.0` 通过 261 项不同的上游用例。UI 项目通过 157 项上游用例。Bot Mode 的四个测试文件 `routing.test.ts`、`data.identity.test.ts`、`data.roster.test.tsx` 和 `canonical-chat-registry.test.ts` 共 81 项。SDK 的 `profile-routing.test.ts` 和渲染进程的 `gateway-profile-request.test.ts` 分别为 49 项和 27 项，与本项目独立的连接池夹具一同运行。基于 Node 的 `electron` 项目在 `connection-registry.test.ts` 中通过 104 项。这些专项测试使用合成输入。实际 Electron IPC 和真实网关连接仍待验证。[Bot Mode 测试](https://github.com/NousResearch/hermes-agent/tree/2281116525106e3c109993ccb5dc74d02bfc1427/apps/desktop/src/plugins/hermes-bots) · [SDK 路由测试](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/apps/desktop/src/sdk/profile-routing.test.ts) · [渲染进程请求测试](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/apps/desktop/src/store/gateway-profile-request.test.ts) · [注册表测试](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/apps/desktop/electron/connection-registry.test.ts)
+同一固定版本使用 Vitest `4.1.12`、Node.js `26.12.1` 和 pnpm `12.15.0` 通过 261 项不同的上游用例。UI 项目通过 157 项上游用例。Bot Mode 的四个测试文件 `routing.test.ts`、`data.identity.test.ts`、`data.roster.test.tsx` 和 `canonical-chat-registry.test.ts` 共 81 项。SDK 的 `profile-routing.test.ts` 和渲染进程的 `gateway-profile-request.test.ts` 分别为 49 项和 27 项，与本项目独立的连接池夹具一同运行。基于 Node 的 `electron` 项目在 `connection-registry.test.ts` 中通过 104 项。这些专项测试使用合成输入，未启动 Electron 或连接运行中的网关。[Bot Mode 测试](https://github.com/NousResearch/hermes-agent/tree/2281116525106e3c109993ccb5dc74d02bfc1427/apps/desktop/src/plugins/hermes-bots) · [SDK 路由测试](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/apps/desktop/src/sdk/profile-routing.test.ts) · [渲染进程请求测试](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/apps/desktop/src/store/gateway-profile-request.test.ts) · [注册表测试](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/apps/desktop/electron/connection-registry.test.ts)
+
+### 当前固定版本的 Electron Profile 路由
+
+一项 [Electron profile 路由用例](../tests/desktop/desktop_profile_route_ipc.spec.ts)在 Linux 上通过，使用干净的 Hermes `2281116525106e3c109993ccb5dc74d02bfc1427` 及其 Desktop 和 Webapp 源码构建产物，以及 Electron `44.9.3`、Node.js `26.12.1` 和 Python `3.14`。临时应用 home 中的本地磁盘插件将实际 Desktop SDK 暴露给测试。两个原生 `gateway.run` 进程使用独立的 home 和不同的夹具安装标记。每个 home 都有名为 `scout` 的 profile 和默认 profile。每个 profile 都预置自己的隐藏 `Bot Chat` 及合成对话记录标记。Desktop 使用私有 Unix 控制套接字签发的原生票据连接本地网关。已保存的 URL 连接使用生成的夹具令牌访问第二个网关的回环 Webapp 监听器。
+
+| 夹具步骤 | 观察结果 |
+| --- | --- |
+| 枚举两个连接中的同名 profile | 实际 SDK 和 preload 返回相同的两个不含凭据的 `scout` 描述符。本地主连接与已保存的 URL 连接具有不同的 `connectionId`。主进程按各自作用域将两个描述符解析到各自的原生监听器。 |
+| 读取各自的隐藏 Bot Chat | 每次 `host.requestProfile()` 调用都在预期的 WebSocket 端口发送一次按确切标题查询的 `session.list` 请求，后端参数为 `profile: scout`，并返回对应安装中预置的命名 profile 会话 ID 和解析后的 ID。已保存连接的 WebSocket URL 也限定在 `scout`。各请求的 `limit` 值不同，以区分后台流量。两次调用均未选中默认 profile 的会话。 |
+| 移除已保存的 URL 连接 | 实际注册表 IPC 移除该连接的描述符，并关闭保留的套接字。原生发现仍返回同一实例与监听器，经令牌认证的状态读取确认被移除的网关仍可访问。 |
+| 再次使用已移除的描述符 | SDK 以 `No connection with id "spare".` 拒绝，preload 查询旧连接时不返回 URL。Preload 也拒绝空的连接 ID。所有记录的 WebSocket 中均未出现匹配的旧路由 SDK 请求。剩余本地描述符仍可读取自己的会话。 |
+
+只读 SQLite 检查确认四条预置 Bot Chat 记录及其消息符合夹具预期，并在移除和重放前后保持一致。脚本化的回环服务商记录到零次补全调用。两个由夹具启动的网关进程均正常停止。
+
+Desktop SDK 的 `host.profileRoutes()` 通过 preload 桥接从主进程获取路由描述符。`host.requestProfile()` 通过渲染进程的网关连接池按显式描述符发送请求。对于已保存的 URL 连接，原生注册表使用相同的 `profile` 和 `targetProfile`。SSH 注册表条目可设置不同的目标。移除已保存的连接时，主进程持久化注册表变更、清除该连接的缓存元数据，并向渲染窗口广播移除事件。[SDK host 方法](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/apps/desktop/src/sdk/index.ts#L1346-L1390) · [Profile 路由投影](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/apps/desktop/electron/plugin-profile-routes.ts#L255-L303) · [注册表移除](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/apps/desktop/electron/main.ts#L14415-L14436)
+
+夹具检查已存在的确切隐藏会话。独立的[规范名册夹具](#当前固定版本的原生-bot-chat-名册)覆盖缺失、无权访问和降级的名册场景。经认证的 owner 绑定、可信调用方和 worker 来源，以及安装复制或恢复前后的连续性，需要独立的宿主证明。通过发行包安装的 Desktop、Bot Mode 界面、SSH 和 OAuth 均不在本次 Electron 路由用例范围内。[身份边界](#33-必须明确展示身份识别的限制)
+
+[验收运行器](../acceptance/live/run_desktop_profile_routing.py)需要可丢弃的固定版本检出，并准备好 Desktop 和 Webapp 构建产物、固定版本的 Python 和 Node.js 运行时、工作区依赖及 Electron。运行器将夹具暂存到上游 Playwright 测试框架中，在私有 Linux 命名空间和仅启用回环接口的网络中通过 Xvfb 运行。运行器会挂载私有 `/tmp`。请将准备好的检出、运行时和暂存目录放在 `/tmp` 之外。暂存目录默认为 `/var/tmp`。从本仓库根目录执行。
+
+```sh
+python -m acceptance.live.run_desktop_profile_routing \
+  --hermes /path/to/prepared/hermes-agent \
+  --hermes-python /path/to/pinned/python \
+  --node /path/to/pinned/node
+```
 
 ### 当前固定版本的原生 Profile 生命周期
 
@@ -317,7 +343,7 @@ Linux 验收夹具在临时独立 home 中两次启动原生 `gateway.run` 入�
 | 在同一 home 重启 | 原生发现报告新的运行时实例和更高的 epoch。就绪时，启动流程已恢复完全相同的原 `settled` 回执，此时夹具尚未请求新票据或重放投递。私有控制套接字拒绝为上一实例签发票据的请求。 |
 | 使用原投递 ID 重放 | 使用新的本地票据进行精确重放会返回修复后的回执。使用同一投递 ID 更改消息会返回 `admission_conflict`。只读 SQLite 检查仍只报告同一条准入记录。记录器在两个进程运行期间共计一次携带 Bot 消息的合成补全请求。 |
 
-夹具观察到本地 operator 凭据、一次合成接收回合及同一 home 正常重启后的回执恢复。该凭据模式提供当前运行时的访问。经认证的人类 owner、跨安装连续性、已安装包的 Bot 回执行为、Electron IPC、其他操作系统的控制传输、远程 token、OAuth 和 SSH 模式、worker 来源证明及对用户的回复送达仍需单独取证。[恢复身份限制](#33-必须明确展示身份识别的限制)
+夹具观察到本地 operator 凭据、一次合成接收回合及同一 home 正常重启后的回执恢复。该凭据模式提供当前运行时的访问。经认证的人类 owner、跨安装连续性、已安装包的 Bot 回执行为、从 Electron 发起的投递、其他操作系统的控制传输、远程 token、OAuth 和 SSH 投递模式、worker 来源证明及对用户的回复送达仍需单独取证。[恢复身份限制](#33-必须明确展示身份识别的限制)
 
 手动工作流在确切固定版本上以独立步骤运行本用例。只有产生非空、全部通过且无跳过的结果时，才暂存干净的 `bot-receipt.xml`。常规拉取请求和推送检查覆盖内存 Bot 契约。已安装包的任务、记忆和 handoff 检查在工作流中各有独立步骤。[Native Gateway 验收工作流](../.github/workflows/native-gateway.yml)
 
@@ -369,7 +395,7 @@ Payload 携带 ID、修订号、epoch 和原因码，不包含会话记录、non
 
 | ID | 状态与依赖 | 交付物 |
 |---|---|---|
-| E0.7 Verify Primary Bot Contracts | M0，In Progress。依赖 E0.1/E0.2，并使用 E0.4 发现。 | 当前固定版本的[名册](#当前固定版本的原生-bot-chat-名册)、[Desktop 路由](#当前固定版本的-desktop-profile-路由)、[原生 profile 生命周期](#当前固定版本的原生-profile-生命周期)、[原生备份与恢复](#当前固定版本的原生备份与恢复)、[同一安装内 Bot 消息](#当前固定版本的同一安装内-bot-消息)、[Bot Chat 延后投递](#当前固定版本的-bot-chat-延后投递)和[本地 Bot 传输与重启](#当前固定版本的本地-bot-传输与重启)证据。实际 Electron IPC、已安装发行包和远程传输、运行中的 profile 转换、恢复前后经认证的连续性、受支持的作者、调用方与 worker 来源证明、其余回执模式和适配器清单仍待完成。可选 HTTP 还需要 E0.6。 |
+| E0.7 Verify Primary Bot Contracts | M0，In Progress。依赖 E0.1/E0.2，并使用 E0.4 发现。 | 当前固定版本的[名册](#当前固定版本的原生-bot-chat-名册)、[Desktop 路由组合](#当前固定版本的-desktop-profile-路由)、[Electron 路由](#当前固定版本的-electron-profile-路由)、[原生 profile 生命周期](#当前固定版本的原生-profile-生命周期)、[原生备份与恢复](#当前固定版本的原生备份与恢复)、[同一安装内 Bot 消息](#当前固定版本的同一安装内-bot-消息)、[Bot Chat 延后投递](#当前固定版本的-bot-chat-延后投递)和[本地 Bot 传输与重启](#当前固定版本的本地-bot-传输与重启)证据。已安装发行包及其他远程传输模式、运行中的 profile 转换、恢复前后经认证的连续性、受支持的作者、调用方与 worker 来源证明、其余回执模式和适配器清单仍待完成。可选 HTTP 还需要 E0.6。 |
 | E1.6 Bind Primary Bot | 可选后续；Backlog；E0.7、E1.1–E1.5、E2.1 | Owner 确认的登记与恢复、唯一 active 绑定、修订号/epoch 栅栏、审计和角色策略；不无条件启用写入 |
 | E3.6 Reconcile Primary Bot Sessions | 启用 Bot 绑定路径时为 M1 门禁，M2 继续扩展；Backlog；E1.6、E3.2/E3.5、E4.3/E4.4 | 规范会话解析、worker handoff 关联、投递/恢复和原生回执对账 |
 
