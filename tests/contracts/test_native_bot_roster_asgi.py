@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import shutil
 import socket
 import sqlite3
 import sys
@@ -18,8 +19,14 @@ SUBJECT = "uid:roster-fixture"
 SESSION_FIELDS = {"canonical_session", "last_session", "worker_session"}
 
 
-def roster_request(
-    native, *, ticket_profile="default", scope="profile", purpose="interactive", **params
+def native_request(
+    native,
+    *,
+    method="profiles.list",
+    ticket_profile="default",
+    scope="profile",
+    purpose="interactive",
+    **params,
 ):
     ticket = native.tickets.mint(
         profile_id=str(native.homes[ticket_profile]),
@@ -28,7 +35,7 @@ def roster_request(
         scope=scope,
     )
     protocols = [PROTOCOL, f"hermes-gateway-ticket.{ticket}"]
-    request = {"jsonrpc": "2.0", "id": "roster", "method": "profiles.list", "params": params}
+    request = {"jsonrpc": "2.0", "id": "fixture", "method": method, "params": params}
     asgi_scope = {
         "type": "websocket",
         "asgi": {"version": "3.0", "spec_version": "2.4"},
@@ -82,25 +89,28 @@ def native_roster(tmp_path, monkeypatch, request):
 
 
 @contextmanager
-def serve_roster(tmp_path, monkeypatch, *, unreadable_id=False):
+def serve_roster(tmp_path, monkeypatch, *, unreadable_id=False, copy_install_from=None):
     root = tmp_path / "install"
     secondary = root / "profiles" / "secondary"
-    secondary.mkdir(parents=True)
+    homes = {"default": root, "secondary": secondary}
+    install_path = root / "install_id"
+    if copy_install_from is not None:
+        shutil.copytree(copy_install_from, root)
+    else:
+        secondary.mkdir(parents=True)
+        for home in homes.values():
+            (home / "config.yaml").write_text('{"model":"synthetic"}', encoding="utf-8")
+            (home / "profile.yaml").write_text(
+                '{"display_name":"Shared fixture label"}', encoding="utf-8"
+            )
+        if unreadable_id:
+            install_path.mkdir()
+            # Keep the native lock path from adding a fixture file during the read.
+            (root / ".install_id.lock").touch()
+        else:
+            install_path.write_text(f"{INSTALL_ID}\n", encoding="utf-8")
     bundled = tmp_path / "empty-bundled"
     bundled.mkdir()
-    homes = {"default": root, "secondary": secondary}
-    for home in homes.values():
-        (home / "config.yaml").write_text('{"model":"synthetic"}', encoding="utf-8")
-        (home / "profile.yaml").write_text(
-            '{"display_name":"Shared fixture label"}', encoding="utf-8"
-        )
-    install_path = root / "install_id"
-    if unreadable_id:
-        install_path.mkdir()
-        # Keep the native lock path from adding a fixture file during the read.
-        (root / ".install_id.lock").touch()
-    else:
-        install_path.write_text(f"{INSTALL_ID}\n", encoding="utf-8")
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("HERMES_HOME", str(root))
     monkeypatch.setenv("HERMES_RUNTIME_DIR", str(tmp_path / "runtime"))
@@ -262,7 +272,7 @@ def test_native_roster_separates_hidden_canonical_lineage_from_recent_and_worker
     seed_chat(target, "worker-row", "Worker work", source="kanban")
     before = durable_state(native)
 
-    rows = profiles(roster_request(native, scope="host", profile="secondary"))
+    rows = profiles(native_request(native, scope="host", profile="secondary"))
 
     assert list(rows) == ["secondary", "default"]
     assert (
@@ -296,21 +306,21 @@ def test_native_roster_keeps_profile_scope_and_retiring_siblings_metadata_only(n
     )
     before = durable_state(native)
 
-    restricted = profiles(roster_request(native, ticket_profile="secondary"))
+    restricted = profiles(native_request(native, ticket_profile="secondary"))
     assert restricted["secondary"]["canonical_session"]["id"] == "local-secondary"
     assert not SESSION_FIELDS & restricted["default"].keys()
-    refused = roster_request(native, ticket_profile="secondary", profile="default")
+    refused = native_request(native, ticket_profile="secondary", profile="default")
     assert refused["error"]["data"]["reason"] == "profile_mismatch"
     assert "result" not in refused
 
-    worker = roster_request(native, purpose="worker-adoption")
+    worker = native_request(native, purpose="worker-adoption")
     assert worker["error"]["data"]["reason"] == "permission_denied"
     assert "result" not in worker
 
-    fleet = profiles(roster_request(native, scope="host"))
+    fleet = profiles(native_request(native, scope="host"))
     assert fleet["secondary"]["canonical_session"]["id"] == "local-secondary"
     native.authorities["secondary"].retiring = True
-    degraded = profiles(roster_request(native, scope="host"))
+    degraded = profiles(native_request(native, scope="host"))
     assert degraded["default"]["canonical_session"]["id"] == "local-default"
     assert not SESSION_FIELDS & degraded["secondary"].keys()
     assert durable_state(native) == before
@@ -329,7 +339,7 @@ def test_native_roster_leaves_unbound_and_recoverable_chats_unresolved(native_ro
     seed_chat(target, "local-numbered", "Bot Chat #2")
     before = durable_state(native)
 
-    rows = profiles(roster_request(native, scope="host"))
+    rows = profiles(native_request(native, scope="host"))
 
     assert rows["default"]["canonical_session"] is None
     assert rows["secondary"]["canonical_session"] is None
@@ -343,7 +353,7 @@ def test_native_roster_leaves_unreadable_install_identity_empty(native_roster):
     seed_chat(native.authorities["default"].db, "local-root", "Bot Chat", hidden=True)
     before = durable_state(native)
 
-    rows = profiles(roster_request(native), install_id="")
+    rows = profiles(native_request(native), install_id="")
 
     assert rows["default"]["canonical_session"]["id"] == "local-root"
     assert not SESSION_FIELDS & rows["secondary"].keys()
@@ -365,7 +375,7 @@ def test_native_roster_resolves_same_named_profile_on_each_fixture_endpoint(tmp_
             seed_chat(db, tip_id, "Bot Chat continued", hidden=True, parent=root_id)
             before = durable_state(native)
 
-            reply = roster_request(native, ticket_profile="secondary", profile="secondary")
+            reply = native_request(native, ticket_profile="secondary", profile="secondary")
             row = profiles(reply)["secondary"]
 
             assert row["display_name"] == "Shared fixture label"
@@ -374,3 +384,38 @@ def test_native_roster_resolves_same_named_profile_on_each_fixture_endpoint(tmp_
             assert row["canonical_session"]["resolved_id"] == tip_id
             assert row["canonical_session"]["preview"] == f"Synthetic marker for {tip_id}"
             assert durable_state(native) == before
+
+
+def test_native_roster_markers_can_match_after_a_stopped_install_copy(tmp_path, monkeypatch):
+    with monkeypatch.context() as isolated, serve_roster(tmp_path / "source", isolated) as source:
+        db = source.authorities["secondary"].db
+        seed_chat(db, "local-copied-root", "Bot Chat", hidden=True)
+        db.end_session("local-copied-root", "compression")
+        seed_chat(db, "copied-tip", "Bot Chat continued", hidden=True, parent="local-copied-root")
+        before = durable_state(source)
+        source_row = profiles(native_request(source, ticket_profile="secondary"))["secondary"]
+        source_runtime = native_request(
+            source, method="runtime.describe", ticket_profile="secondary"
+        )["result"]
+        assert source_runtime["profile_id"] == source_row["path"] == str(source.homes["secondary"])
+        assert source_row["canonical_session"]["id"] == "local-copied-root"
+        assert source_row["canonical_session"]["resolved_id"] == "copied-tip"
+        assert durable_state(source) == before
+        source_install = source.homes["default"]
+
+    # Copy the synthetic install only after the original authority and stores have closed.
+    with (
+        monkeypatch.context() as isolated,
+        serve_roster(tmp_path / "clone", isolated, copy_install_from=source_install) as clone,
+    ):
+        before = durable_state(clone)
+        clone_row = profiles(native_request(clone, ticket_profile="secondary"))["secondary"]
+        clone_runtime = native_request(
+            clone, method="runtime.describe", ticket_profile="secondary"
+        )["result"]
+        assert clone_runtime["profile_id"] == clone_row["path"] == str(clone.homes["secondary"])
+        assert clone_runtime["instance_id"] != source_runtime["instance_id"]
+        assert clone_row["path"] != source_row["path"]
+        assert clone_row["display_name"] == source_row["display_name"] == "Shared fixture label"
+        assert clone_row["canonical_session"] == source_row["canonical_session"]
+        assert durable_state(clone) == before
