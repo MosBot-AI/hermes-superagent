@@ -19,6 +19,11 @@ export interface WireFrame {
   reply?: { code?: number; reason?: string }
 }
 
+export interface WireSocket {
+  closed: boolean
+  savedToken: boolean
+}
+
 export interface AuditFrame {
   phase: Phase
   direction: 'request' | 'reply' | 'handler'
@@ -52,13 +57,17 @@ declare global {
   }
 }
 
-export function observeWire(page: Page): WireFrame[] {
+export function observeWire(page: Page, sockets?: Map<WireFrame, WireSocket>): WireFrame[] {
   const frames: WireFrame[] = []
   page.on('websocket', socket => {
     const url = new URL(socket.url())
     if (url.pathname !== '/api/ws') {
       return
     }
+    const observed = { closed: socket.isClosed(), savedToken: url.searchParams.has('token') }
+    socket.on('close', () => {
+      observed.closed = true
+    })
     const pending = new Map<string, WireFrame>()
     socket.on('framesent', event => {
       try {
@@ -77,6 +86,7 @@ export function observeWire(page: Page): WireFrame[] {
           limit
         }
         frames.push(frame)
+        sockets?.set(frame, observed)
         pending.set(String(message.id), frame)
       } catch {
         // A non-JSON frame is not an RPC.
