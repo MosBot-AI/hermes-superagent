@@ -17,6 +17,7 @@ DESKTOP_TESTS = ROOT / "tests/desktop"
 GATEWAY_FIXTURE = "desktop_native_gateway_fixture.ts"
 CANONICAL_FIXTURE = "desktop_bot_canonical_fixture.py"
 CANONICAL_OBSERVER = "desktop_bot_canonical_observer.ts"
+INSTALL_AMBIGUITY_SPEC = "desktop_install_ambiguity_ipc.spec.ts"
 SAVED_TOKEN_CASE = "bot-canonical-saved-token"
 PROPOSAL = ROOT / "experiments/bot-webapp-canonical"
 CASES = {
@@ -40,6 +41,22 @@ CASES = {
         (GATEWAY_FIXTURE, "desktop_profile_retirement_fixture.py", CANONICAL_OBSERVER),
         "saved Webapp profile retirement",
     ),
+    "install-marker-collision": (
+        INSTALL_AMBIGUITY_SPEC,
+        (GATEWAY_FIXTURE, CANONICAL_OBSERVER),
+        "copied installation marker",
+    ),
+    "install-copy-ambiguity": (
+        INSTALL_AMBIGUITY_SPEC,
+        (GATEWAY_FIXTURE, CANONICAL_OBSERVER),
+        "stopped installation copy",
+    ),
+}
+CASE_TITLE_FILTERS = {
+    "install-marker-collision": (
+        "copied install marker collapses discovery while exact sources stay distinct$"
+    ),
+    "install-copy-ambiguity": "stopped home copy scopes equal canonical IDs to distinct sources$",
 }
 CONFIG = """export default {
   testDir: '.',
@@ -214,7 +231,9 @@ def stage_probe(core, spec, fixtures):
         yield config.name
 
 
-def run_probe(host, python, node, work, spec, fixtures, *, review_proposal=False):
+def run_probe(
+    host, python, node, work, spec, fixtures, *, title_filter=None, review_proposal=False
+):
     env = isolated_environment(work, python, node)
     if spec == CASES[SAVED_TOKEN_CASE][0]:
         env["HERMES_E2E_BOT_WEBAPP_EXPECTATION"] = "proposal" if review_proposal else "baseline"
@@ -248,6 +267,7 @@ def run_probe(host, python, node, work, spec, fixtures, *, review_proposal=False
                 "test",
                 "--config",
                 config,
+                *(("--grep", title_filter) if title_filter else ()),
             ],
             cwd=desktop,
             env=env,
@@ -307,6 +327,7 @@ def main():
             work,
             spec,
             fixtures,
+            title_filter=CASE_TITLE_FILTERS.get(args.case),
             review_proposal=args.review_proposal,
         )
     except (OSError, ValueError, subprocess.SubprocessError) as exc:
