@@ -4,7 +4,7 @@
 
 **状态：可选后续设计，尚未实现，不是 profile-first 本地 MVP 的前置条件。** 若选择此能力，用户选择一个现有的 Hermes **Bot Mode Bot** 作为个人 super agent。这不会创建另一套 agent loop、改变 Hermes 的全局/默认 Bot，也不会授予新权限。下文所有绑定记录、服务方法、角色、事件和能力标志均属于这套拟议插件设计。当前 CLI 任务收件箱是一项独立的本地功能，不能证明 Bot 绑定或 owner 身份认证已经实现。
 
-本设计的源码基线为 Hermes `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`。当前固定版本的兼容性验证涵盖[名册](#当前固定版本的原生-bot-chat-名册)、[Desktop 路由](#当前固定版本的-desktop-profile-路由)、[原生 profile 生命周期](#当前固定版本的原生-profile-生命周期)、[同一安装内 Bot 消息](#当前固定版本的同一安装内-bot-消息)和 [Bot Chat 延后投递](#当前固定版本的-bot-chat-延后投递)。请结合 [03](03-native-architecture-zh.md)、[06](06-plugins-mcp-and-security-zh.md)、[11](11-worker-model-routing-zh.md) 和 [14](14-client-api-contracts-zh.md) 阅读本合同。
+本设计的源码基线为 Hermes `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`。当前固定版本的兼容性验证涵盖[名册](#当前固定版本的原生-bot-chat-名册)、[Desktop 路由](#当前固定版本的-desktop-profile-路由)、[原生 profile 生命周期](#当前固定版本的原生-profile-生命周期)、[原生备份与恢复](#当前固定版本的原生备份与恢复)、[同一安装内 Bot 消息](#当前固定版本的同一安装内-bot-消息)和 [Bot Chat 延后投递](#当前固定版本的-bot-chat-延后投递)。请结合 [03](03-native-architecture-zh.md)、[06](06-plugins-mcp-and-security-zh.md)、[11](11-worker-model-routing-zh.md) 和 [14](14-client-api-contracts-zh.md) 阅读本合同。
 
 准备性代码与契约证据见[文档 18](18-owner-entry-and-read-authorization-zh.md)：只读评估器已实现，但公开接收 Bot 身份缺失，该远程/Bot 路线的生产 owner context 和私人读取仍关闭。以下绑定流程仍为设计。
 
@@ -97,7 +97,25 @@ Authority 名册使用 `reopen=False` 读取现有会话存储。精确标题的
 
 停止状态安装复制夹具在复制合成根目录前关闭 authority 和会话数据库。原件与副本独立、依次启动，并使用新签发的本地票据。`profiles.list` 返回相同的安装标记、profile 标签和规范会话摘要，包括相同的根会话及压缩末端。夹具中经准入的 `runtime.describe` 调用返回不同的运行时实例 ID 和 profile 路径。名册读取前后，每次启动所记录的数据库快照保持一致。安装标记与规范会话谱系相同，仍无法确定应信任哪个 authority。[停止状态安装的名册夹具](../tests/contracts/test_native_bot_roster_asgi.py) · [身份识别限制](#33-必须明确展示身份识别的限制)
 
-真实运行环境下的 Desktop 路由与 profile 生命周期转换、经权威证明的恢复连续性、受支持的调用方与 worker 来源证明及更广泛的投递回执对账，仍属 E0.7 的开放事项。可选 HTTP 入口仍依赖 E0.6。经 owner 授权的登记、激活绑定及对账仍是 E1.6 和 E3.6 的独立工作。[Issue #33](https://github.com/MosBot-AI/hermes-superagent/issues/33)
+### 当前固定版本的原生备份与恢复
+
+在 Hermes `2281116525106e3c109993ccb5dc74d02bfc1427`，原生完整备份可将常规 `install_id` 文件与 SQLite 会话存储一同归档。原生导入在写入归档内容前，为所有受影响的目标 home 获取独占维护锁。若运行时已保留目标 home，导入会被拒绝。导入会跳过 `gateway.lock` 和 `gateway_state.json` 等易失文件。[完整归档选择规则](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_cli/backup.py#L318-L360) · [导入锁定范围](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_cli/backup.py#L916-L936) · [原生维护栅栏](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/gateway/runtime_ownership.py#L330-L351) · [导入排除规则](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_cli/backup.py#L1007-L1037)
+
+原地恢复 `state.db` 会保留归档 epoch 与可读取的目标 epoch 中较高的值。目标 epoch 较高时，Hermes 在写入数据库前将该 epoch 和实例标记 `offline-restore` 写入暂存映像。新的 authority 在提供服务前推进 epoch，并对账旧 epoch 中已开始的准入记录。其中的交互式准入沿用原准入 ID，状态变为 `unknown`。[Epoch 暂存](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_cli/backup_restore.py#L196-L238) · [Authority 启动](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/gateway/session_authority.py#L1441-L1464) · [准入恢复](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_state_runtime.py#L453-L464)
+
+夹具在可丢弃的本地 home 上，在进程内运行原生 `backup` 和 `import` 子命令的解析器及后端回调。它使用真实的完整 ZIP 归档、原生 profile 所有权锁和原生 authority 启动流程。它直接调用原生名册读取器，并提供合成的 profile 范围内调用主体与实例 ID。夹具替换服务恢复启动，并阻止子进程、网络和回合执行。[原生备份与恢复契约测试](../tests/contracts/test_native_bot_backup_restore.py)
+
+| 夹具场景 | 观测结果 |
+| --- | --- |
+| 为合成安装创建完整归档 | 归档包含 `install_id` 以及默认和命名 profile 的会话数据库。它也包含源 `gateway_state.json` 和命名 profile 的 `gateway.lock`，导入时会跳过这两个文件。 |
+| 命名目标的运行时所有权锁被持有 | `import --force` 在写入归档内容前以状态 `1` 退出。参与比较的根配置、标记、运行时状态和两个数据库文件逐字节保持不变。命名 profile 仍被持有时，根目录的锁已可重新获取。 |
+| 在停止状态下导入原根目录 | 恢复归档的配置、数据标记和会话消息。已有 `gateway_state.json` 与命名 profile 的锁 inode 保持原样。命名 profile 的数据库保留较新的目标 epoch，实例标记为 `offline-restore`。 |
+| 在停止状态下导入独立根目录 | 恢复后的根目录带有同一个安装标记，命名 profile 的数据库从归档 epoch 起步。命名 profile 的锁记录新 home，目标中没有源 `gateway_state.json`，归档字节保持不变。 |
+| 在两个恢复后的根目录启动 | Authority 使用不同的夹具实例 ID 依次启动，各自推进本地 epoch 下限。两边的限定作用域名册读取均返回相同的隐藏 Bot Chat 根会话和压缩末端。已获授权的逻辑根会话仍解析到该物理末端。原来已开始的准入沿用原 ID，变为 `unknown`，其后的条目保持 `queued`。旧 epoch 的认领返回 `stale_epoch`。未解决条目阻挡 FIFO 时，当前 epoch 的认领返回 `unknown_execution`。 |
+
+每个原生维护锁约束各自的目标 home，epoch 约束该目标数据库中的认领操作。恢复到不同根目录后的自动连续性需要独立认证和位于复制数据之外的栅栏。拟议的绑定策略要求有歧义的恢复经 owner 审阅。[身份识别限制](#33-必须明确展示身份识别的限制)
+
+真实运行环境下的 Desktop 路由与 profile 生命周期转换、恢复前后经认证的连续性、受支持的调用方与 worker 来源证明及更广泛的投递回执对账，仍属 E0.7 的开放事项。可选 HTTP 入口仍依赖 E0.6。经 owner 授权的登记、激活绑定及对账仍是 E1.6 和 E3.6 的独立工作。[Issue #33](https://github.com/MosBot-AI/hermes-superagent/issues/33)
 
 ## 3. 身份、存储与作用域
 
@@ -142,7 +160,7 @@ Authority 名册使用 `reopen=False` 读取现有会话存储。精确标题的
 
 ### 3.3 必须明确展示身份识别的限制
 
-安装 ID 文件或插件登记记录可能随备份一起被复制。两者都不能证明恢复/克隆后的宿主就是原宿主。`previous_names`、路径和相同标签都不能证明 profile 的连续性。使用旧名称的新 profile，绝不能仅凭名称继承登记。
+安装 ID 文件或插件登记记录可能随备份一起被复制。验证恢复或克隆后的宿主需要独立的连续性证据。`previous_names`、路径和相同标签是定位元数据。使用旧名称的新 profile，绝不能仅凭名称继承登记。[原生备份与恢复证据](#当前固定版本的原生备份与恢复)
 
 自动恢复要求具备当前已认证的目标证据、可读取且符合预期的安装身份、预期登记、规范会话谱系，并且不存在冲突的权威方观测结果。profile 定位信息变化、登记丢失、安装不匹配、身份重复或无法解释的谱系，都需要 owner 审阅恢复。如果宿主无法区分克隆与原件，就报告 `identity_ambiguous`，不得虚构确定性。防范同一用户权限下的恶意代码或并发运行的克隆磁盘，需要外部 fencing 权威服务和操作系统隔离，不在 v1 范围内。
 
@@ -331,7 +349,7 @@ Payload 携带 ID、修订号、epoch 和原因码，不包含会话记录、non
 
 | ID | 状态与依赖 | 交付物 |
 |---|---|---|
-| E0.7 Verify Primary Bot Contracts | M0，In Progress。依赖 E0.1/E0.2，并使用 E0.4 发现。 | 当前固定版本的[名册](#当前固定版本的原生-bot-chat-名册)、[Desktop 路由](#当前固定版本的-desktop-profile-路由)、[原生 profile 生命周期](#当前固定版本的原生-profile-生命周期)、[同一安装内 Bot 消息](#当前固定版本的同一安装内-bot-消息)和 [Bot Chat 延后投递](#当前固定版本的-bot-chat-延后投递)证据。真实传输与 profile 转换、受支持的作者、调用方与 worker 来源证明、其余回执模式和适配器清单仍待完成。可选 HTTP 还需要 E0.6。 |
+| E0.7 Verify Primary Bot Contracts | M0，In Progress。依赖 E0.1/E0.2，并使用 E0.4 发现。 | 当前固定版本的[名册](#当前固定版本的原生-bot-chat-名册)、[Desktop 路由](#当前固定版本的-desktop-profile-路由)、[原生 profile 生命周期](#当前固定版本的原生-profile-生命周期)、[原生备份与恢复](#当前固定版本的原生备份与恢复)、[同一安装内 Bot 消息](#当前固定版本的同一安装内-bot-消息)和 [Bot Chat 延后投递](#当前固定版本的-bot-chat-延后投递)证据。真实传输与 profile 转换、恢复前后经认证的连续性、受支持的作者、调用方与 worker 来源证明、其余回执模式和适配器清单仍待完成。可选 HTTP 还需要 E0.6。 |
 | E1.6 Bind Primary Bot | 可选后续；Backlog；E0.7、E1.1–E1.5、E2.1 | Owner 确认的登记与恢复、唯一 active 绑定、修订号/epoch 栅栏、审计和角色策略；不无条件启用写入 |
 | E3.6 Reconcile Primary Bot Sessions | 启用 Bot 绑定路径时为 M1 门禁，M2 继续扩展；Backlog；E1.6、E3.2/E3.5、E4.3/E4.4 | 规范会话解析、worker handoff 关联、投递/恢复和原生回执对账 |
 

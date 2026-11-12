@@ -83,6 +83,8 @@ This file distinguishes design work, development changes, and released capabilit
 - Run runtime artifact acceptance on exact pull-request heads with read-only credentials; keep downloadable artifact publication push-only.
 ### Changed
 
+- Verify native backup and import at the pinned Hermes revision. Import refuses an owned destination before publication. Stopped restore preserves the destination runtime epoch floor and carries the installation marker and Bot Chat lineage from the archive (#33).
+
 - Verify same-install `message_agent` admission at the pinned Hermes revision. The receiving authority records the Bot author and the local ticket principal separately, and an ordinary session is refused before handoff (#33).
 
 - Verify deferred cron Bot Chat recovery at the pinned Hermes revision. After a successful native admission reply is lost, a same-ID retry recovers the queued receipt and leaves one durable admission (#33).
