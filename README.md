@@ -120,6 +120,8 @@ The checker forwards both source roots through pytest configuration after the ho
 
 `python scripts/check.py` alone runs repository unit tests, Ruff, ty, and bilingual document structure/link and JSON-example syntax checks, and explicitly reports Hermes compatibility **NOT RUN**. Test-tool versions come from the pinned Hermes dev group, not plugin runtime dependencies.
 
+Append `--hermes-node /absolute/path/to/node` to the pinned-host command to run the Desktop route composition tests. The checker requires the Node version in the pinned Hermes `pm/lock.json` and runs the fixtures with filesystem reads scoped to the two source checkouts and network access disabled. GitHub CI includes this check. Local runs without `--hermes-node` report that the Desktop route checks were skipped. This suite uses Node's built-in runner and needs no Desktop workspace dependencies or Electron. See the [Desktop route evidence](docs/15-primary-bot-binding.md#current-pin-desktop-profile-routing).
+
 Successful push builds now attach a [verified offline runtime package](docs/runtime-distribution.md#downloadable-push-build-package): deterministic archive, full official static-scan findings and cold actual-package CLI/reload acceptance. This is a downloadable development artifact, not a release or permission to retry installation.
 
 ## Try it in an isolated Hermes profile

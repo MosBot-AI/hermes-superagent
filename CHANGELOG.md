@@ -83,6 +83,8 @@ This file distinguishes design work, development changes, and released capabilit
 - Run runtime artifact acceptance on exact pull-request heads with read-only credentials; keep downloadable artifact publication push-only.
 ### Changed
 
+- Verify pinned Desktop profile route composition for same-name profiles, connection aliases, stale inventory and failed scoped requests. Run the dependency-free Node fixture in foundation CI (#33).
+
 - Verify the native Bot Chat roster on the pinned Hermes host using synthetic local tickets, including canonical root and compression tip, profile scope, and unavailable targets (#33).
 
 - Document exact-pin offline voice compatibility and dated GPT-Live, OpenAI Realtime and Gemini Live protocol differences, with separate readiness states and release gates for each mode (#36).

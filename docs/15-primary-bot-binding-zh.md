@@ -4,7 +4,7 @@
 
 **状态：可选后续设计，尚未实现，不是 profile-first 本地 MVP 的前置条件。** 若选择此能力，用户选择一个现有的 Hermes **Bot Mode Bot** 作为个人 super agent。这不会创建另一套 agent loop、改变 Hermes 的全局/默认 Bot，也不会授予新权限。下文所有绑定记录、服务方法、角色、事件和能力标志均属于这套拟议插件设计。当前 CLI 任务收件箱是一项独立的本地功能，不能证明 Bot 绑定或 owner 身份认证已经实现。
 
-本设计的源码基线为 Hermes `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`。[当前固定版本的名册证据](#当前固定版本的原生-bot-chat-名册)单独记录原生兼容性验证。请结合 [03](03-native-architecture-zh.md)、[06](06-plugins-mcp-and-security-zh.md)、[11](11-worker-model-routing-zh.md) 和 [14](14-client-api-contracts-zh.md) 阅读本合同。
+本设计的源码基线为 Hermes `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`。[当前固定版本的名册证据](#当前固定版本的原生-bot-chat-名册)和 [Desktop 路由证据](#当前固定版本的-desktop-profile-路由)记录兼容性验证。请结合 [03](03-native-architecture-zh.md)、[06](06-plugins-mcp-and-security-zh.md)、[11](11-worker-model-routing-zh.md) 和 [14](14-client-api-contracts-zh.md) 阅读本合同。
 
 准备性代码与契约证据见[文档 18](18-owner-entry-and-read-authorization-zh.md)：只读评估器已实现，但公开接收 Bot 身份缺失，该远程/Bot 路线的生产 owner context 和私人读取仍关闭。以下绑定流程仍为设计。
 
@@ -54,7 +54,29 @@
 
 Authority 名册使用 `reopen=False` 读取现有会话存储。精确标题的 `session.list` 路径可能收编满足条件的历史记录，用于发现前需单独验证。名册的 `install_id` 来自提供服务的 Hermes 根目录。缺少 ID 或格式有误时，解析器可在可写根目录生成 ID。文件系统副本可以保留同一 ID，因此宿主连续性需要独立证据。[名册实现](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/gateway/session_group_controls.py#L389-L450) · [历史会话收编夹具](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/tests/gateway/test_bot_roster_fleet.py#L94-L102) · [安装身份解析器](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_cli/install_identity.py)
 
-E0.7 仍需验证跨连接和别名的桌面端路由、profile 重命名、删除、重建及克隆或恢复歧义、受支持的调用方与 worker 来源证明，以及原生投递和准入回执。可选 HTTP 入口仍依赖 E0.6。经 owner 授权的登记、激活绑定及对账仍是 E1.6 和 E3.6 的独立工作。[Issue #33](https://github.com/MosBot-AI/hermes-superagent/issues/33)
+### 当前固定版本的 Desktop Profile 路由
+
+五项 [Desktop 路由组合测试](../tests/desktop/test_profile_route_composition.mjs)在 Node.js `26.12.1` 上通过。测试使用合成输入以及替代的状态存储和传输边界，运行干净的 Hermes `2281116525106e3c109993ccb5dc74d02bfc1427` 中的名册、路由生成、SDK 请求和 Bot Mode 路由模块。组合测试未涉及 Electron IPC、渲染进程的网关连接池、后端连通性或 owner 连续性。
+
+| 夹具场景 | 观察结果 |
+| --- | --- |
+| 两个连接暴露同名的 Desktop profile，各自映射到不同的后端 profile | 清单保留两条带来源的路由，且不暴露凭据。Bot Mode 按各自的 `connectionId` 和 Desktop `profile` 发送请求，并将 RPC 的 `profile` 参数改为对应的 `targetProfile`。直接调用 SDK 时保留传入的 RPC 参数。 |
+| 已缓存的离线 SSH profile 和尚未拨号的 SSH 清单 | 缓存 profile 和初始 `default` 路由各发出一次请求，使用各自的连接和后端 profile。两个替代网关均拒绝。请求日志中只有这两次限定来源的尝试。 |
+| 描述符不完整或单独提供的 profile 存在歧义 | SDK 在调用替代网关前拒绝。 |
+| 已注册路由、替换目标和移除来源 | 精确注册检查接受字段相同的描述符，并拒绝 `targetProfile` 已变更及来源已移除的描述符。显式使用已移除的描述符请求 SDK 时，仅到达原来的替代网关并被拒绝。 |
+| 安装标记缺失或被复制 | 两个来源均缺少安装标记时保留两条路由。同一 profile 具有相同的非空标记时，两条记录合并至配置的主连接。 |
+
+固定版本的 Desktop preload 提供 `getProfileRoutes` 和限定连接范围的拨号桥接。主进程根据连接注册表和名册构建路由清单。SDK 首次发送显式请求时校验描述符的三个字段，并将调用转交网关状态模块。SDK 在显式路由的 hydration 重试前核对注册表中的三个字段，只重试一次。已保存的连接可以保留 ID 并更换端点，因此该比较无法单独证明后端连续性。[Preload 桥接](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/apps/desktop/electron/preload.ts#L53-L64) · [注册表路由清单](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/apps/desktop/electron/main.ts#L14284-L14358) · [SDK 请求与注册检查](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/apps/desktop/src/sdk/profile-request.ts) · [Hydration 重试](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/apps/desktop/src/sdk/index.ts#L1098-L1116) · [连接编辑](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/apps/desktop/electron/main.ts#L8568-L8589)
+
+渲染进程可以复用匹配的主连接，也可以为同一来源的其他 profile 复用共享的主后端。探测 profile 的服务范围失败时，远程主连接也可能继续为同一来源提供服务。清单可能包含缓存的本地 profile，或尚待拨号的 SSH 初始路由。复制的安装标记可能让不同端点在 Desktop 清单中合并，即使各端点在独立测试中会返回各自的规范会话。[主连接复用](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/apps/desktop/src/store/gateway.ts#L348-L409) · [路由清单生成](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/apps/desktop/electron/main.ts#L14294-L14351) · [原生端点夹具](#当前固定版本的原生-bot-chat-名册)
+
+可选的[渲染进程网关连接池测试](../tests/desktop/desktop_profile_route_pool.test.ts)在 Vitest 中通过一项用例。它运行固定版本的注册表、路由生成、Bot Mode 路由逻辑、SDK 请求函数和渲染进程网关状态模块。测试用 SDK 门面将请求转交实际的请求函数。Desktop 桥接和网关传输使用替身。两个同名的非主来源路由打开各自的连接池条目，使用替代桥接各自返回的新 WebSocket URL，并发送对应的后端 profile 参数。夹具从替代注册表中移除一个来源，并调用渲染进程的清理入口。该条目关闭。后续向该来源发出的请求在限定来源的连接解析阶段失败，早于 WebSocket URL 查找和 RPC 调用。另一个条目保持打开，主连接、当前活跃网关和旧版请求路径均未被调用。
+
+复现此可选测试时，使用可丢弃的 Hermes 检出，确认提交与固定版本一致且跟踪文件无改动。设置隔离的 `HOME` 和 `HERMES_RUNTIME_DIR`，并使用 Node.js `26.12.1` 和 pnpm `12.15.0`。在 Hermes 根目录运行 `pnpm install --frozen-lockfile --ignore-scripts --filter . --filter '{./apps/desktop}...'`。将本仓库的 `tests/desktop/desktop_profile_route_pool.test.ts` 复制到 `apps/desktop/src/store/`，运行 `pnpm --dir apps/desktop run test:ui src/store/desktop_profile_route_pool.test.ts`，运行结束后移除复制的测试文件。CI 单独运行无需依赖的 Node 组合检查。
+
+同一固定版本使用 Vitest `4.1.12`、Node.js `26.12.1` 和 pnpm `12.15.0` 通过 261 项不同的上游用例。UI 项目通过 157 项上游用例。Bot Mode 的四个测试文件 `routing.test.ts`、`data.identity.test.ts`、`data.roster.test.tsx` 和 `canonical-chat-registry.test.ts` 共 81 项。SDK 的 `profile-routing.test.ts` 和渲染进程的 `gateway-profile-request.test.ts` 分别为 49 项和 27 项，与本项目独立的连接池夹具一同运行。基于 Node 的 `electron` 项目在 `connection-registry.test.ts` 中通过 104 项。这些专项测试使用合成输入。实际 Electron IPC 和真实网关连接仍待验证。[Bot Mode 测试](https://github.com/NousResearch/hermes-agent/tree/2281116525106e3c109993ccb5dc74d02bfc1427/apps/desktop/src/plugins/hermes-bots) · [SDK 路由测试](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/apps/desktop/src/sdk/profile-routing.test.ts) · [渲染进程请求测试](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/apps/desktop/src/store/gateway-profile-request.test.ts) · [注册表测试](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/apps/desktop/electron/connection-registry.test.ts)
+
+E0.7 仍需验证 Desktop 运行时的路由连续性、profile 重命名、删除、重建及克隆或恢复歧义、受支持的调用方与 worker 来源证明，以及原生投递和准入回执。可选 HTTP 入口仍依赖 E0.6。经 owner 授权的登记、激活绑定及对账仍是 E1.6 和 E3.6 的独立工作。[Issue #33](https://github.com/MosBot-AI/hermes-superagent/issues/33)
 
 ## 3. 身份、存储与作用域
 
@@ -257,7 +279,7 @@ Payload 携带 ID、修订号、epoch 和原因码，不包含会话记录、non
 
 | ID | 状态与依赖 | 交付物 |
 |---|---|---|
-| E0.7 Verify Primary Bot Contracts | M0，In Progress。依赖 E0.1/E0.2，并使用 E0.4 发现。 | [当前固定版本的名册证据](#当前固定版本的原生-bot-chat-名册)。仍需验证 profile、路由、来源和回执，并记录受支持的适配器。可选 HTTP 还需要 E0.6。 |
+| E0.7 Verify Primary Bot Contracts | M0，In Progress。依赖 E0.1/E0.2，并使用 E0.4 发现。 | [当前固定版本的名册证据](#当前固定版本的原生-bot-chat-名册)和 [Desktop 路由证据](#当前固定版本的-desktop-profile-路由)。仍需验证 profile、运行时路由、来源和回执，并记录受支持的适配器。可选 HTTP 还需要 E0.6。 |
 | E1.6 Bind Primary Bot | 可选后续；Backlog；E0.7、E1.1–E1.5、E2.1 | Owner 确认的登记与恢复、唯一 active 绑定、修订号/epoch 栅栏、审计和角色策略；不无条件启用写入 |
 | E3.6 Reconcile Primary Bot Sessions | 启用 Bot 绑定路径时为 M1 门禁，M2 继续扩展；Backlog；E1.6、E3.2/E3.5、E4.3/E4.4 | 规范会话解析、worker handoff 关联、投递/恢复和原生回执对账 |
 

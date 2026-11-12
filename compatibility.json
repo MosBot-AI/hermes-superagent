@@ -5,5 +5,5 @@
   "python": "3.14",
   "status": "development_baseline",
   "semver_support_range": null,
-  "note": "No broad requires_hermes range is claimed from one tested commit. Issue #36 offline voice evidence against 2281116525106e3c109993ccb5dc74d02bfc1427 is indexed by mode in docs/voice-compatibility-inventory.md. Native fixture results and disabled modes are recorded separately from the dated official protocol research in docs/voice-provider-protocol-comparison.md. Issue #33 synthetic native Bot Chat roster evidence at the same pin is recorded in docs/15-primary-bot-binding.md. This baseline makes no deployment, live voice or owner certification claim."
+  "note": "No broad requires_hermes range is claimed from one tested commit. Issue #36 offline voice evidence against 2281116525106e3c109993ccb5dc74d02bfc1427 is indexed by mode in docs/voice-compatibility-inventory.md. Native fixture results and disabled modes are recorded separately from the dated official protocol research in docs/voice-provider-protocol-comparison.md. Issue #33 synthetic native Bot Chat roster and Desktop route composition evidence at the same pin is recorded in docs/15-primary-bot-binding.md. This baseline makes no deployment, live voice or owner certification claim."
 }
