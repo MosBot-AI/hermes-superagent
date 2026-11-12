@@ -1,4 +1,4 @@
-"""Run the real Electron profile routing probe from a prepared Hermes checkout."""
+"""Run a real Electron acceptance case from a prepared Hermes checkout."""
 
 import argparse
 import json
@@ -7,15 +7,28 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
 
 from scripts.check import ROOT, verify_checkout
 
-SPEC = ROOT / "tests/desktop/desktop_profile_route_ipc.spec.ts"
+DESKTOP_TESTS = ROOT / "tests/desktop"
+GATEWAY_FIXTURE = "desktop_native_gateway_fixture.ts"
+CASES = {
+    "profile-routing": (
+        "desktop_profile_route_ipc.spec.ts",
+        (GATEWAY_FIXTURE,),
+        "profile routing",
+    ),
+    "bot-canonical": (
+        "desktop_bot_canonical_refusal.spec.ts",
+        (GATEWAY_FIXTURE, "desktop_bot_canonical_fixture.py"),
+        "Bot Mode canonical chat",
+    ),
+}
 CONFIG = """export default {
   testDir: '.',
-  testMatch: 'desktop_profile_route_ipc.spec.ts',
+  testMatch: %s,
   outputDir: process.env.HERMES_E2E_OUTPUT,
   timeout: 150_000,
   expect: { timeout: 15_000 },
@@ -106,30 +119,32 @@ def isolated_environment(work, python, node):
 
 
 @contextmanager
-def stage_probe(core):
-    spec = core / SPEC.name
-    with spec.open("xb") as stream:
-        try:
-            stream.write(SPEC.read_bytes())
-            stream.flush()
-            with tempfile.NamedTemporaryFile(
-                mode="w", encoding="utf-8", dir=core, prefix=".e07-routing-", suffix=".ts"
-            ) as config:
-                config.write(CONFIG)
-                config.flush()
-                yield config.name
-        finally:
-            spec.unlink()
+def stage_probe(core, spec, fixtures):
+    with ExitStack() as cleanup:
+        for name in (*fixtures, spec):
+            data = (DESKTOP_TESTS / name).read_bytes()
+            destination = core / name
+            with destination.open("xb") as stream:
+                cleanup.callback(destination.unlink)
+                stream.write(data)
+        config = cleanup.enter_context(
+            tempfile.NamedTemporaryFile(
+                mode="w", encoding="utf-8", dir=core, prefix=".e07-desktop-", suffix=".ts"
+            )
+        )
+        config.write(CONFIG % json.dumps(spec))
+        config.flush()
+        yield config.name
 
 
-def run_probe(host, python, node, work):
+def run_probe(host, python, node, work, spec, fixtures):
     env = isolated_environment(work, python, node)
     desktop = verify_build(host, python, node, env)
     cli = desktop / "node_modules/@playwright/test/cli.js"
     if not cli.is_file():
         raise ValueError("Install the pinned Desktop workspace dependencies before running")
     with (
-        stage_probe(desktop / "e2e/core") as config,
+        stage_probe(desktop / "e2e/core", spec, fixtures) as config,
         (work / "playwright.json").open("xb") as report,
         (work / "launcher.log").open("xb") as diagnostics,
     ):
@@ -148,7 +163,7 @@ def run_probe(host, python, node, work):
                 "-eu",
                 "-c",
                 NAMESPACE_SETUP,
-                "desktop-profile-routing",
+                "desktop-acceptance",
                 node,
                 cli,
                 "test",
@@ -175,7 +190,7 @@ def run_probe(host, python, node, work):
     if stats.get("expected") != 1 or any(
         stats.get(key) != 0 for key in ("unexpected", "flaky", "skipped")
     ):
-        raise ValueError("Expected one passing Electron routing case")
+        raise ValueError("Expected one passing Electron acceptance case")
 
 
 def main():
@@ -184,6 +199,7 @@ def main():
     parser.add_argument("--hermes-python", type=Path, required=True, help="Hermes interpreter")
     parser.add_argument("--node", type=Path, required=True, help="Pinned Hermes Node executable")
     parser.add_argument("--scratch", type=Path, default=Path("/var/tmp"), help="Short temp parent")
+    parser.add_argument("--case", choices=CASES, default="profile-routing", help="Acceptance case")
     args = parser.parse_args()
     if sys.platform != "linux":
         parser.error("This acceptance requires Linux namespaces and Xvfb")
@@ -195,15 +211,23 @@ def main():
     ):
         parser.error("Keep the checkout, tools and scratch outside the fixture's private /tmp")
 
+    spec, fixtures, description = CASES[args.case]
     work = Path(tempfile.mkdtemp(prefix="e07-ipc-", dir=args.scratch)).resolve()
     try:
-        run_probe(args.hermes.resolve(), args.hermes_python.absolute(), args.node.absolute(), work)
+        run_probe(
+            args.hermes.resolve(),
+            args.hermes_python.absolute(),
+            args.node.absolute(),
+            work,
+            spec,
+            fixtures,
+        )
     except (OSError, ValueError, subprocess.SubprocessError) as exc:
         parser.exit(1, f"{exc}\nPrivate diagnostics: {work}\n")
     except KeyboardInterrupt:
         parser.exit(130, f"Acceptance interrupted. Private diagnostics: {work}\n")
     shutil.rmtree(work)
-    print("One real Electron profile routing case passed")
+    print(f"One real Electron {description} case passed")
 
 
 if __name__ == "__main__":

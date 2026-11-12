@@ -83,6 +83,8 @@ This file distinguishes design work, development changes, and released capabilit
 - Run runtime artifact acceptance on exact pull-request heads with read-only credentials; keep downloadable artifact publication push-only.
 ### Changed
 
+- Add real Linux Electron acceptance for Bot Mode canonical chat refusal and retry. The fixture checks that permission refusal and an uncertain empty lookup leave the current view intact before an ordinary retry opens the existing chat (#33).
+
 - Add exact-pin contracts for profile-scoped plugin state and parent-bound subagent handles through native in-process and hosted dispatch. Document the remaining Primary Bot adapter gates (#33).
 
 - Verify same-name profile routing in the pinned Linux Electron source build through real Desktop SDK, IPC and WebSocket calls. A removed route is refused while its backend and the surviving route remain reachable (#33).

@@ -40,8 +40,9 @@
 
 | 复用点 | 已测试的适配器与模式 | 剩余关卡 |
 | --- | --- | --- |
-| 规范会话发现与谱系 | 使用合成的限定范围票据，经 ASGI 调用原生 `profiles.list`，覆盖隐藏 Bot Chat 的根会话、压缩后末端以及不可用或歧义的名册条目。[名册证据](#当前固定版本的原生-bot-chat-名册) | 每条启用的路由都需要经过授权，精确查询根会话和当前谱系。身份缺失或不确定时应报告不可用。按精确标题查询的 `session.list` 回退路径可能接管旧会话。将它用于发现，以及附加或移交到规范会话，都需要独立证据。 |
-| Desktop 来源选择 | 在 Linux 上运行真实的 Electron 源码构建，通过私有本地票据和已保存的环回 Webapp token 连接，验证 `host.profileRoutes()` 与 `host.requestProfile()`。[Electron 证据](#当前固定版本的-electron-profile-路由) | 分别验证 Desktop 安装包、Bot Mode 界面及任何启用的 SSH 或 OAuth 路由。 |
+| 规范会话发现与谱系 | 使用合成的限定范围票据，经 ASGI 调用原生 `profiles.list`，覆盖隐藏 Bot Chat 的根会话、压缩后末端以及不可用或歧义的名册条目。[名册证据](#当前固定版本的原生-bot-chat-名册) | 每条启用的路由都需要经过授权，精确查询根会话和当前谱系。身份缺失或不确定时应报告不可用。按精确标题查询的 `session.list` 回退路径可能接管旧会话。其他发现模式、压缩后会话的界面附加及规范会话移交需要独立证据。 |
+| Desktop 来源选择 | 在 Linux 上运行真实的 Electron 源码构建，通过私有本地票据和已保存的环回 Webapp token 连接，验证 `host.profileRoutes()` 与 `host.requestProfile()`。[Electron 证据](#当前固定版本的-electron-profile-路由) | 分别验证 Desktop 安装包及任何启用的 SSH 或 OAuth 路由。 |
+| Bot Mode 规范会话打开 | 源码构建的 Linux 名册在查询返回类型化错误时拒绝打开会话，在查询返回空结果但原生指针探测确认已有会话时也拒绝。重试时打开同一个本地未压缩会话。[Bot Mode 界面证据](#当前固定版本的-bot-mode-规范会话拒绝与重试) | Desktop 安装包、压缩后会话的界面附加、已保存的 Webapp 连接、SSH 和 OAuth 界面路由以及经认证的 owner 绑定需要独立证据。 |
 | Profile 与安装连续性 | 停机状态下的原生 profile CLI 和备份导入路径覆盖重命名、克隆、删除、同名重建、拒绝向已占用的 profile 导入，以及恢复后目标的 epoch 下限。[Profile 生命周期](#当前固定版本的原生-profile-生命周期) · [备份与恢复](#当前固定版本的原生备份与恢复) | 运行时切换和经认证的连续性需要当前目标、登记、规范谱系与冲突证据。复制的标记和名称无法消除安装实例的歧义。 |
 | 本地调用方与接收 Bot | Linux 同 UID 控制票据证明本地操作者准入。干净宿主上的 owner 入口夹具在缺少受支持的接收侧适配器上下文时拒绝。[本地 Gateway](#当前固定版本的本地-bot-传输与重启) · [Owner 入口契约](../tests/contracts/test_owner_entry_contracts.py) | 受保护的原生命令和渠道入口需要宿主以受支持的方式证明原始调用方、接收方及会话，再校验当前 owner 和 grant。[命令上下文实验](23-host-command-context-experiment-zh.md)仍仅供评审。 |
 | 插件状态与子代理角色 | 公开 `ctx.subagent_lifecycle` 覆盖 `in_process` 和 `host` 两种隔离模式下的进程内父子关联。`ctx.state` 在两种模式下均经过验证，其中托管模式覆盖两个命名 profile。[子代理证据](#当前固定版本的子代理关联) | 受管 WorkerChannel 和 Kanban 接管需要各自的来源、grant 和撤销校验。[E0.4](13-enforcement-contracts-zh.md)覆盖独立的配置冻结和故障排查安全模式 worker 路径。 |
@@ -116,6 +117,24 @@ python -m acceptance.live.run_desktop_profile_routing \
   --hermes-python /path/to/pinned/python \
   --node /path/to/pinned/node
 ```
+
+### 当前固定版本的 Bot Mode 规范会话拒绝与重试
+
+一项 [Bot Mode 界面用例](../tests/desktop/desktop_bot_canonical_refusal.spec.ts)在 Linux 上通过。用例运行固定版本 Hermes 的源码构建，并启动一个由夹具控制的原生 Gateway，为临时安装中的 `scout` 提供服务。Electron 使用原生本地私有票据和回环 WebSocket。夹具点击内置名册的 `local::scout` 条目，小型夹具插件读取公开 SDK 的焦点状态。测试预置命名 profile 的隐藏 Bot Chat、`scout` 中可见的旁支会话和默认 profile 中的隐藏干扰会话。原生客户端在初次快照之前查询规范记录，以便 Gateway 接管按 CLI 形式预置的会话。[Gateway 夹具](../tests/desktop/desktop_bot_canonical_fixture.py)
+
+| 名册点击 | 观察结果 |
+| --- | --- |
+| 确切标题查询返回类型化错误 | 夹具先让真实命名 authority 找到预置会话，再在查询边界抛出一次 `permission_denied`。渲染进程收到错误码 `4001`，原因是 `permission_denied`。界面提示重试，并且未对该会话发出 `session.info` 探测。 |
+| 确切标题查询成功但返回空列表 | 同一原生查询先找到预置会话，再由夹具将返回记录改为空列表。渲染进程用 `session.info` 探测名册中的现有会话 ID。RPC 省略 `profile` 参数，authority 审计与响应共同确认请求在同一监听器上指向 `scout` 及其仍有效且未归档的 `Bot Chat`。界面再次提示重试。 |
+| 用户重新点击同一条目 | 未经修改的原生查询返回预置的 `id` 和 `resolved_id`。渲染进程和 Gateway 仅观察到 `scout` 路由上针对该 ID 的打开请求。界面聚焦该会话并显示已存标记。同一 profile 的旁支会话与默认 profile 的干扰会话均未打开。 |
+
+两次失败点击均保留原焦点，未显示任何夹具会话标记，也未发出 `session.create`、`prompt.submit`、`session.resume` 或 `session.activate`。测试通过界面关闭每条重试通知。三次点击前后，SQLite 只读快照中的会话 ID、标题、隐藏标记、父会话关联、消息及准入记录保持一致，服务商记录到零次补全。
+
+两种故障均在经过授权的原生查询之后注入，用于验证 Desktop 对不确定结果的处理。用例覆盖源码构建应用中本地且未压缩的会话。压缩后会话的界面附加、已保存的 Webapp 连接、SSH 和 OAuth 界面路由、Desktop 安装包、经认证的 owner 绑定和规范会话移交仍需独立证据。
+
+在上面的[验收运行器命令](#当前固定版本的-electron-profile-路由)中添加 `--case bot-canonical` 即可复现此用例。
+
+在 Hermes `2281116525106e3c109993ccb5dc74d02bfc1427` 中，点击 Bot Mode 名册条目时，应用先准备该条目的来源，再以确切标题 `Bot Chat` 和 `include_hidden: true` 发出 `session.list` 请求。查询报错时，本次打开操作在进入会话创建路径前结束，名册会显示错误通知。查询返回现有规范记录时，界面优先打开其 `resolved_id`，缺失时使用 `id`。查询成功但返回空结果且名册保留会话指针时，会另行执行 `session.info` 检查。[名册点击](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/apps/desktop/src/plugins/hermes-bots/bot-row.tsx#L217-L247) · [打开与错误路径](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/apps/desktop/src/plugins/hermes-bots/roster-actions.ts#L308-L372) · [注册表查询](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/apps/desktop/src/plugins/hermes-bots/canonical-chat.ts#L314-L405) · [打开现有会话](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/apps/desktop/src/plugins/hermes-bots/canonical-chat.ts#L680-L721)
 
 ### 当前固定版本的原生 Profile 生命周期
 
