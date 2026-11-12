@@ -34,6 +34,21 @@
 
 这些是参考合同，不代表可以把私有模块导入作为受支持的插件 API。尤其是规范会话注册表实现、profile 重命名内部机制和 Bot 投递邮箱，它们都是**源码证据**，不是新增的 `ctx` 方法。E0.7 必须证明受支持的适配器可用，或报告通用的上游接口缺口。不得虚构 `ctx.bind_main_bot`、`ctx.current_owner` 或原生不可变的 `bot_uuid`。
 
+### 受支持的适配器状态
+
+下表适用于 Hermes `2281116525106e3c109993ccb5dc74d02bfc1427`。每一行列出实际观测的模式，以及将其扩展到 Primary Bot 能力之前所需的证据。
+
+| 复用点 | 已测试的适配器与模式 | 剩余关卡 |
+| --- | --- | --- |
+| 规范会话发现与谱系 | 使用合成的限定范围票据，经 ASGI 调用原生 `profiles.list`，覆盖隐藏 Bot Chat 的根会话、压缩后末端以及不可用或歧义的名册条目。[名册证据](#当前固定版本的原生-bot-chat-名册) | 每条启用的路由都需要经过授权，精确查询根会话和当前谱系。身份缺失或不确定时应报告不可用。按精确标题查询的 `session.list` 回退路径可能接管旧会话。将它用于发现，以及附加或移交到规范会话，都需要独立证据。 |
+| Desktop 来源选择 | 在 Linux 上运行真实的 Electron 源码构建，通过私有本地票据和已保存的环回 Webapp token 连接，验证 `host.profileRoutes()` 与 `host.requestProfile()`。[Electron 证据](#当前固定版本的-electron-profile-路由) | 分别验证 Desktop 安装包、Bot Mode 界面及任何启用的 SSH 或 OAuth 路由。 |
+| Profile 与安装连续性 | 停机状态下的原生 profile CLI 和备份导入路径覆盖重命名、克隆、删除、同名重建、拒绝向已占用的 profile 导入，以及恢复后目标的 epoch 下限。[Profile 生命周期](#当前固定版本的原生-profile-生命周期) · [备份与恢复](#当前固定版本的原生备份与恢复) | 运行时切换和经认证的连续性需要当前目标、登记、规范谱系与冲突证据。复制的标记和名称无法消除安装实例的歧义。 |
+| 本地调用方与接收 Bot | Linux 同 UID 控制票据证明本地操作者准入。干净宿主上的 owner 入口夹具在缺少受支持的接收侧适配器上下文时拒绝。[本地 Gateway](#当前固定版本的本地-bot-传输与重启) · [Owner 入口契约](../tests/contracts/test_owner_entry_contracts.py) | 受保护的原生命令和渠道入口需要宿主以受支持的方式证明原始调用方、接收方及会话，再校验当前 owner 和 grant。[命令上下文实验](23-host-command-context-experiment-zh.md)仍仅供评审。 |
+| 插件状态与子代理角色 | 公开 `ctx.subagent_lifecycle` 覆盖 `in_process` 和 `host` 两种隔离模式下的进程内父子关联。`ctx.state` 在两种模式下均经过验证，其中托管模式覆盖两个命名 profile。[子代理证据](#当前固定版本的子代理关联) | 受管 WorkerChannel 和 Kanban 接管需要各自的来源、grant 和撤销校验。[E0.4](13-enforcement-contracts-zh.md)覆盖独立的配置冻结和故障排查安全模式 worker 路径。 |
+| 原生 Bot 与 cron 投递 | 同一安装内的 `message_agent` 和 `bot_relay.deliver` 覆盖仅通知的作者归因及本地终态回执恢复。原生 cron 在响应丢失后复用同一个投递 ID，并报告 `transferred` 和 `queued` 回执。[Bot 消息](#当前固定版本的同一安装内-bot-消息) · [重启](#当前固定版本的本地-bot-传输与重启) · [延后投递](#当前固定版本的-bot-chat-延后投递) | 对需要回复、远程和其他生产者模式分别验证回执及作者对账。结果不确定时保留原投递 ID。 |
+| 插件注入 | 原生调度器证据显示，`ctx.inject_message` 可在随后发生派发失败之前返回 `True`。[注入证据](#8-消息例行任务与回执) | 插件负责的持久投递需要受支持的幂等准入与回执查询。使用布尔接口时保持持久主动投递不可用。 |
+| 可选 HTTP | [客户端契约](14-client-api-contracts-zh.md#3-鉴权不等于领域授权)记录原生凭据形态和 E0.6 传输边界。 | 只有受支持的可信主体和 profile 传递、领域授权以及逐能力的传输和恢复验收都完成后，才启用 Primary Bot HTTP 操作。 |
+
 ### 当前固定版本的原生 Bot Chat 名册
 
 名册夹具在干净的 Hermes `2281116525106e3c109993ccb5dc74d02bfc1427` 上经由原生网关 `/api/ws` ASGI 边界调用 OpenRPC 方法 `profiles.list`。夹具使用合成本地票据和临时 profile 及会话存储，无需真实监听器、桌面客户端、模型或账户。连接协商 `hermes-gateway-v1`，并收到带 `session_authority: true` 的 `gateway.ready`。[名册契约测试](../tests/contracts/test_native_bot_roster_asgi.py) · [网关 OpenRPC](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/apps/shared/src/gateway-contract.openrpc.json)
@@ -276,6 +291,25 @@ V1 **不支持自动跨 profile/跨宿主接管**。应使用 E8.3 下经过单�
 
 加载插件可能影响 profile 中的所有会话。初始集成在受支持的创建/重建边界选择最少工具，并在领域 handler 中重新检查角色。失败时放行的 hook，或跳过插件 hook 的 worker，不能成为唯一的角色/授权边界。来源不明时，必须阻止受保护操作。E0.7 必须将任何缺失的规范化会话/作者/worker 上下文明确列为经过测试的适配器或上游缺口。
 
+### 当前固定版本的子代理关联
+
+两项[原生插件契约用例](../tests/contracts/test_native_plugin_subagent_provenance.py)在干净的 Hermes `2281116525106e3c109993ccb5dc74d02bfc1427` 和 Python `3.14` 上通过。夹具在临时命名 profile 中发现合成插件。两个实际 `AIAgent.run_conversation` 回合调用其注册的模型可见工具。第一个回合通过公开 `ctx.subagent_lifecycle` 启动一个原生子代理。`in_process` 插件在 agent 进程内运行。`host` 插件在独立的原生进程中通过 stdio 运行，子代理在 agent 进程中执行。脚本化的非流式推理边界返回合成响应。[夹具代码](../tests/fixtures/native_plugin_subagent_probe.py)
+
+| 实际覆盖的接口 | 观察结果 |
+| --- | --- |
+| 在活跃父回合内启动 | 两种隔离模式下，句柄携带活跃父会话 ID、请求中的关联 ID 和深度为 `1` 的原生 `leaf` 角色。子代理工具清单包含请求的空操作工具，并排除父会话的启动工具。限时等待返回 `SUCCEEDED`，重复读取结果得到相同哈希，在同一活跃父回合中 `reconnect` 成功。SQLite 中有一个子会话，包含预期父会话 ID 和合成回复。 |
+| 父会话不匹配、句柄被改动或回合外调用 | 显式父会话与活跃父会话不一致时拒绝启动。改动句柄的 capability 后，`status` 返回 `UNKNOWN_HANDLE`。回合外的注册表分派可以将同一 `session_id` 传给工具，但因为没有活跃父会话，启动仍被拒绝。 |
+| 另一活跃父会话使用真实句柄 | `status` 返回 `UNKNOWN_HANDLE`，`result` 不提供可用结果，`reconnect` 返回 `RECONNECT_UNAVAILABLE`。两个父回合只创建预期的一个子代理。 |
+| 按 profile 划分的插件状态 | `scout` 在两种模式下都通过 `ctx.state` 写入并读回合成标记。托管模式下，`reviewer` 在同一合成安装下使用新启动的 agent 进程和插件宿主，以相同的插件命名空间和键写入不同值。两个 profile 各自保留自己的 JSON 值，安装根目录没有该插件的状态文件。 |
+
+一次托管沙箱运行在原生 Relay 启动阶段停滞并超时。隔离的 Linux 运行保留原生 Relay，并确认仅应用处于未启用状态的测试配置。逐进程 Python 审计限制约束套接字、DNS 和无关进程启动。夹具在启动原生插件宿主之前，检查其环境是否保留隔离 profile 和审计初始化路径。
+
+固定版本的源码在工具 hook 中提供可用的会话、对话、任务、回合、工具调用及 API 请求标识。`pre_llm_call` 从当前 agent 取得 `parent_session_id` 和 `sender_id`，缺失时使用空字符串。`subagent_start` 提供原生子代理 ID 和实际角色。`subagent_stop` 报告子会话及结果。这些 hook 字段为源码证据。[工具 hook 字段](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/model_tools.py#L664-L676) · [回合 hook 字段](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/agent/turn_context.py#L903-L928) · [委派观察 hook](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/website/docs/user-guide/features/hooks.md#L1181-L1275)
+
+公开 `ctx.state` 接口将插件自己的 JSON 状态存储在当前 profile 的 home 下。宿主隔离模式的状态方法通过 Hermes 侧接口执行。`ctx.profile_name` 根据 home 确定 profile，回退值为 `default`，托管上下文在加载时取得该值。按 profile 划分的存储决定插件读写状态的位置。受保护的读写与角色授权需要独立的调用方和 owner 证明。[公开插件状态](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/website/docs/developer-guide/plugins/index.md#L978-L994) · [状态作用域](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_cli/plugins_state.py#L134-L195) · [进程内 profile](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_cli/plugins_context.py#L207-L216) · [托管上下文](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_cli/plugin_host.py#L230-L246)
+
+原生 `ctx.subagent_lifecycle` 服务按当前父会话和进程注册表检查句柄。子代理在 Hermes 进程内运行，托管插件也通过 Hermes 侧接口访问该服务。跨重启的持久恢复、经认证的调用方、绑定 owner 的 worker 授权以及当前撤销状态，均需独立证据。[现有 E0.4 worker 检查](13-enforcement-contracts-zh.md)覆盖配置冻结及故障排除安全模式的插件抑制。Gateway 管理的 worker 接管和 Kanban worker 来源属于独立的运行路径。[生命周期服务](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/agent/subagent_lifecycle.py#L269-L290) · [句柄检查](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/agent/subagent_lifecycle.py#L389-L400) · [托管接口](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_cli/plugin_isolation.py#L58-L61)
+
 ### 当前固定版本的同一安装内 Bot 消息
 
 在 Hermes `2281116525106e3c109993ccb5dc74d02bfc1427`，注入工具前会检查 Bot Mode 协议设置、精确的 `Bot Chat` 标题和受管理安装标记。工具处理器会重新检查标题和标记。如果调用方有会话数据库，其 home 决定发送方 profile。Profile slug 决定结构化作者 ID `bot:<profile>`，名册提供消息前缀使用的 handle 和显示元数据。这些值来自宿主的调用上下文和名册。[工具资格检查](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/tools/bot_mode_dm.py#L127-L168) · [发送方归属与本地路由](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/tools/bot_mode_dm.py#L239-L364) · [调用 agent 上下文](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/tools/bot_mode_dm.py#L1008-L1025)
@@ -395,7 +429,7 @@ Payload 携带 ID、修订号、epoch 和原因码，不包含会话记录、non
 
 | ID | 状态与依赖 | 交付物 |
 |---|---|---|
-| E0.7 Verify Primary Bot Contracts | M0，In Progress。依赖 E0.1/E0.2，并使用 E0.4 发现。 | 当前固定版本的[名册](#当前固定版本的原生-bot-chat-名册)、[Desktop 路由组合](#当前固定版本的-desktop-profile-路由)、[Electron 路由](#当前固定版本的-electron-profile-路由)、[原生 profile 生命周期](#当前固定版本的原生-profile-生命周期)、[原生备份与恢复](#当前固定版本的原生备份与恢复)、[同一安装内 Bot 消息](#当前固定版本的同一安装内-bot-消息)、[Bot Chat 延后投递](#当前固定版本的-bot-chat-延后投递)和[本地 Bot 传输与重启](#当前固定版本的本地-bot-传输与重启)证据。已安装发行包及其他远程传输模式、运行中的 profile 转换、恢复前后经认证的连续性、受支持的作者、调用方与 worker 来源证明、其余回执模式和适配器清单仍待完成。可选 HTTP 还需要 E0.6。 |
+| E0.7 Verify Primary Bot Contracts | M0，In Progress。依赖 E0.1/E0.2，并使用 E0.4 发现。 | [适配器状态](#受支持的适配器状态)记录当前固定版本的证据与剩余门禁。已安装发行包及其他远程传输、运行中的 profile 转换、恢复前后经认证的连续性、可信调用方和接收端上下文、受管理 worker 的来源与授权，以及更广泛的作者和回执对账仍待完成。可选 HTTP 还需要 E0.6。 |
 | E1.6 Bind Primary Bot | 可选后续；Backlog；E0.7、E1.1–E1.5、E2.1 | Owner 确认的登记与恢复、唯一 active 绑定、修订号/epoch 栅栏、审计和角色策略；不无条件启用写入 |
 | E3.6 Reconcile Primary Bot Sessions | 启用 Bot 绑定路径时为 M1 门禁，M2 继续扩展；Backlog；E1.6、E3.2/E3.5、E4.3/E4.4 | 规范会话解析、worker handoff 关联、投递/恢复和原生回执对账 |
 

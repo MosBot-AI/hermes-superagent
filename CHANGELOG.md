@@ -83,6 +83,8 @@ This file distinguishes design work, development changes, and released capabilit
 - Run runtime artifact acceptance on exact pull-request heads with read-only credentials; keep downloadable artifact publication push-only.
 ### Changed
 
+- Add exact-pin contracts for profile-scoped plugin state and parent-bound subagent handles through native in-process and hosted dispatch. Document the remaining Primary Bot adapter gates (#33).
+
 - Verify same-name profile routing in the pinned Linux Electron source build through real Desktop SDK, IPC and WebSocket calls. A removed route is refused while its backend and the surviving route remain reachable (#33).
 
 - Add manual acceptance for native Bot delivery over the pinned Gateway's Unix control socket and loopback WebSocket. Verify terminal receipt repair and same-ID replay after restart using a synthetic loopback model (#33).
