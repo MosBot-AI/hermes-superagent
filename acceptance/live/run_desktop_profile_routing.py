@@ -35,6 +35,11 @@ CASES = {
         (GATEWAY_FIXTURE, CANONICAL_FIXTURE, CANONICAL_OBSERVER),
         "saved Webapp token Bot Mode",
     ),
+    "profile-retirement": (
+        "desktop_profile_retirement_ipc.spec.ts",
+        (GATEWAY_FIXTURE, "desktop_profile_retirement_fixture.py", CANONICAL_OBSERVER),
+        "saved Webapp profile retirement",
+    ),
 }
 CONFIG = """export default {
   testDir: '.',

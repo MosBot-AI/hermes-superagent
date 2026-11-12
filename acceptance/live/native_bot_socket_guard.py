@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 
-def activate(root, *, model_port=None):
+def activate(root, *, dial_ports=None):
     root = root.resolve()
     active = True
 
@@ -20,8 +20,8 @@ def activate(root, *, model_port=None):
                 host, port = address[:2]
                 if not ipaddress.ip_address(host).is_loopback:
                     raise PermissionError("Native Bot fixture is loopback only")
-                if model_port is not None and event != "socket.bind" and port != model_port:
-                    raise PermissionError("Native Bot fixture only dials its synthetic model")
+                if dial_ports is not None and event != "socket.bind" and port not in dial_ports:
+                    raise PermissionError("Native Bot fixture dial port is not permitted")
             elif peer.family == socket.AF_UNIX:
                 if not isinstance(address, str) or not Path(address).resolve().is_relative_to(root):
                     raise PermissionError("Native Bot fixture Unix paths must be private")
@@ -42,8 +42,8 @@ def activate(root, *, model_port=None):
 
 def activate_child():
     root = Path(os.environ["HERMES_BOT_ACCEPTANCE_ROOT"])
-    model_port = int(os.environ["HERMES_BOT_ACCEPTANCE_MODEL_PORT"])
-    activate(root, model_port=model_port)
+    model_port = os.environ.get("HERMES_BOT_ACCEPTANCE_MODEL_PORT")
+    activate(root, dial_ports=() if model_port is None else (int(model_port),))
     try:
         sys.audit("socket.getaddrinfo", "blocked.invalid")
     except PermissionError:

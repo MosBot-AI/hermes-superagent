@@ -41,10 +41,10 @@
 | 复用点 | 已测试的适配器与模式 | 剩余关卡 |
 | --- | --- | --- |
 | 规范会话发现与谱系 | 使用合成的限定范围票据，经 ASGI 调用原生 `profiles.list`，覆盖隐藏 Bot Chat 的根会话、压缩后末端以及不可用或歧义的名册条目。[名册证据](#当前固定版本的原生-bot-chat-名册) | 每条启用的路由都需要经过授权，精确查询根会话和当前谱系。身份缺失或不确定时应报告不可用。按精确标题查询的 `session.list` 回退路径可能接管旧会话。其他发现模式、压缩后会话的界面附加及规范会话移交需要独立证据。 |
-| Desktop 来源选择 | 在 Linux 上运行真实的 Electron 源码构建，通过私有本地票据和已保存的环回 Webapp token 连接，验证 `host.profileRoutes()` 与 `host.requestProfile()`。[Electron 证据](#当前固定版本的-electron-profile-路由) | 分别验证 Desktop 安装包及任何启用的 SSH 或 OAuth 路由。 |
+| Desktop 来源选择 | 在 Linux 上运行真实的 Electron 源码构建，通过私有本地票据和已保存的环回 Webapp token 连接，验证 `host.profileRoutes()` 与 `host.requestProfile()`。原生 profile 退役并同名热上线时，已保存的连接保持原路由作用域。[Electron 证据](#当前固定版本的-electron-profile-路由) · [Desktop 运行时转换](#当前固定版本的-desktop-profile-退役) | 分别验证 Desktop 安装包及任何启用的 SSH 或 OAuth 路由。 |
 | Bot Mode 规范会话打开 | 源码构建的 Linux 名册在查询返回类型化错误时拒绝打开会话，在查询返回空结果但原生指针探测确认已有会话时也拒绝。重试时打开同一个本地未压缩会话。[本地 Bot Mode 证据](#当前固定版本的-bot-mode-规范会话拒绝与重试) | Desktop 安装包、压缩后会话的界面附加、SSH 和 OAuth 界面路由以及经认证的 owner 绑定需要独立证据。 |
 | 已保存 Webapp 令牌的回退 | 干净 Linux Electron 构建在命名 profile 查询返回空结果时探测远程启动 authority，并在同一次点击中通过第二次查询打开原会话。单独构建的提案探测命名 authority，拒绝不确定的打开操作，并在明确重试后打开原会话。[已保存 Webapp 证据](#当前固定版本的已保存-webapp-bot-mode-路由) | 干净固定版本仍有回退作用域缺口。受支持的使用需要已修正的宿主修订及该模式的专项验收。 |
-| Profile 与安装连续性 | 停机状态下的原生 profile CLI 和备份导入路径覆盖重命名、克隆、删除、同名重建、拒绝向已占用的 profile 导入，以及恢复后目标的 epoch 下限。[Profile 生命周期](#当前固定版本的原生-profile-生命周期) · [备份与恢复](#当前固定版本的原生备份与恢复) | 运行时切换和经认证的连续性需要当前目标、登记、规范谱系与冲突证据。复制的标记和名称无法消除安装实例的歧义。 |
+| Profile 与安装连续性 | 停机状态下的原生 profile CLI 和备份导入路径覆盖重命名、克隆、删除、同名重建、拒绝向已占用的 profile 导入，以及恢复后目标的 epoch 下限。在同一运行中的安装实例内，保留原有 host 作用域 WebSocket，覆盖 profile 退役及同名热上线。[Profile 生命周期](#当前固定版本的原生-profile-生命周期) · [保留的路由](#当前固定版本保留的原生-profile-路由) · [备份与恢复](#当前固定版本的原生备份与恢复) | 其他运行时切换和经认证的安装连续性需要当前目标、登记、规范谱系与冲突证据。复制的标记和名称无法消除安装实例的歧义。 |
 | 本地调用方与接收 Bot | Linux 同 UID 控制票据证明本地操作者准入。干净宿主上的 owner 入口夹具在缺少受支持的接收侧适配器上下文时拒绝。[本地 Gateway](#当前固定版本的本地-bot-传输与重启) · [Owner 入口契约](../tests/contracts/test_owner_entry_contracts.py) | 受保护的原生命令和渠道入口需要宿主以受支持的方式证明原始调用方、接收方及会话，再校验当前 owner 和 grant。[命令上下文实验](23-host-command-context-experiment-zh.md)仍仅供评审。 |
 | 插件状态与子代理角色 | 公开 `ctx.subagent_lifecycle` 覆盖 `in_process` 和 `host` 两种隔离模式下的进程内父子关联。`ctx.state` 在两种模式下均经过验证，其中托管模式覆盖两个命名 profile。[子代理证据](#当前固定版本的子代理关联) | 受管 WorkerChannel 和 Kanban 接管需要各自的来源、grant 和撤销校验。[E0.4](13-enforcement-contracts-zh.md)覆盖独立的配置冻结和故障排查安全模式 worker 路径。 |
 | 原生 Bot 与 cron 投递 | 同一安装内的 `message_agent` 和 `bot_relay.deliver` 覆盖仅通知的作者归因及本地终态回执恢复。原生 cron 在响应丢失后复用同一个投递 ID，并报告 `transferred` 和 `queued` 回执。[Bot 消息](#当前固定版本的同一安装内-bot-消息) · [重启](#当前固定版本的本地-bot-传输与重启) · [延后投递](#当前固定版本的-bot-chat-延后投递) | 对需要回复、远程和其他生产者模式分别验证回执及作者对账。结果不确定时保留原投递 ID。 |
@@ -178,6 +178,27 @@ Bot Mode 的确切标题 `session.list` 查询携带所选后端 profile。列�
 
 停止状态安装复制夹具在复制合成根目录前关闭 authority 和会话数据库。原件与副本独立、依次启动，并使用新签发的本地票据。`profiles.list` 返回相同的安装标记、profile 标签和规范会话摘要，包括相同的根会话及压缩末端。夹具中经准入的 `runtime.describe` 调用返回不同的运行时实例 ID 和 profile 路径。名册读取前后，每次启动所记录的数据库快照保持一致。安装标记与规范会话谱系相同，仍无法确定应信任哪个 authority。[停止状态安装的名册夹具](../tests/contracts/test_native_bot_roster_asgi.py) · [身份识别限制](#33-必须明确展示身份识别的限制)
 
+#### 当前固定版本保留的原生 Profile 路由
+
+在干净的 Hermes `2281116525106e3c109993ccb5dc74d02bfc1427` 上，一个原生 `gateway.run` 进程为合成的 `default`、`scout` 和 `watch` home 提供服务。由同 UID 发出的 Unix 控制请求为一条 Gateway 环回 WebSocket 签发 host 作用域的 `interactive` 票据。三个 home 各自有一个 ID 不同的隐藏会话，标题均为 `Bot Chat`。整个转换过程中，夹具使用同一条已认证的 WebSocket。[真实 Gateway 夹具](../acceptance/live/test_native_profile_retirement.py)
+
+| 阶段 | 观测结果 |
+| --- | --- |
+| 三个 profile 均上线 | 显式指定 profile 的读取返回相应 home 的规范会话 ID。原生发现结果与持久化的上线集合一致，三个所有权锁均由 Gateway 持有。 |
+| `scout` 退役 | 原生 Unix `unserve` 撤下 `scout`，释放它的所有权锁。原 WebSocket 显式读取 `scout` 时收到 `4001`，原因是 `profile_mismatch`。默认 profile 和另一个命名 profile 仍返回原 ID。 |
+| 同名 `scout` 热上线 | 原生 Unix `serve` 在相同 Gateway PID 和实例中恢复命名 authority。原 WebSocket 找到原来的 `scout` 会话 ID。只有 `scout` 的 runtime epoch 增加。 |
+| Gateway 计划停止 | 夹具启动的进程退出，端点消失，三个所有权锁全部释放。 |
+
+夹具使用合成 home、精确标题查询和环回套接字限制。核对的会话、消息和准入行保持原样。[手动 Native Gateway 工作流](../.github/workflows/native-gateway.yml)在独立且清理过环境变量的进程中运行此用例，并在产生一项干净的通过结果后暂存 `profile-retirement.xml`。证据覆盖一条已有的已认证 operator 连接和同一安装实例中的一次所有权转换。凭据撤销、其他运行时 profile 转换以及经 owner 授权的恢复需要各自验收。
+
+#### 当前固定版本的 Desktop Profile 退役
+
+[真实 Electron 夹具](../tests/desktop/desktop_profile_retirement_ipc.spec.ts)运行干净的 Linux 源码构建，使用 Hermes `2281116525106e3c109993ccb5dc74d02bfc1427`、Electron `44.9.3` 和 Node.js `26.12.1`。已保存的 Webapp token 连接 `spare/default` 处于活跃状态。对应 Gateway 同时服务 `scout`，另一独立本地 Gateway 则在同名 profile 下有一个标题相同但 ID 不同的聊天。夹具使用公开 Desktop SDK、内置 Bot Mode 名册和真实的渲染进程 WebSocket。远程 Gateway 的转换由私有 Unix 控制和停放标记驱动。[验收运行器](../acceptance/live/run_desktop_profile_routing.py)通过 `--case profile-retirement` 在仅有环回的命名空间内运行该用例。
+
+`spare/scout` 停放期间，所有权锁已释放，实时和持久化上线集合均只剩 `default`。Desktop 仍列出该已安装 profile 的路由描述符。原生名册行不再包含规范、最近及 worker 会话字段。显式 SDK 查询与 Bot Mode 点击均通过保留的已保存令牌 WebSocket 发送 `profile: scout`，并收到 `4001/profile_mismatch`。点击显示重试提示并保持默认聊天焦点，没有发出打开、创建或提示词提交 RPC。默认路由和本地同名聊天仍各自返回原 ID。
+
+同名热上线在相同 Gateway 进程及实例中恢复 `scout` 的锁，且只有其 epoch 增加。原 Desktop 路由和 WebSocket 再次找到已有的 `scout` 聊天。原生名册恢复规范会话指针，正常点击打开原会话记录。四个存储中核对的会话、消息和准入行保持原样。夹具记录的模型完成数为零。证据覆盖一个安装实例内活跃的已保存令牌源码构建。Desktop 安装包、其他凭据模式和经认证的安装连续性仍需各自验收。
+
 ### 当前固定版本的原生备份与恢复
 
 在 Hermes `2281116525106e3c109993ccb5dc74d02bfc1427`，原生完整备份可将常规 `install_id` 文件与 SQLite 会话存储一同归档。原生导入在写入归档内容前，为所有受影响的目标 home 获取独占维护锁。若运行时已保留目标 home，导入会被拒绝。导入会跳过 `gateway.lock` 和 `gateway_state.json` 等易失文件。[完整归档选择规则](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_cli/backup.py#L318-L360) · [导入锁定范围](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_cli/backup.py#L916-L936) · [原生维护栅栏](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/gateway/runtime_ownership.py#L330-L351) · [导入排除规则](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_cli/backup.py#L1007-L1037)
@@ -196,7 +217,7 @@ Bot Mode 的确切标题 `session.list` 查询携带所选后端 profile。列�
 
 每个原生维护锁约束各自的目标 home，epoch 约束该目标数据库中的认领操作。恢复到不同根目录后的自动连续性需要独立认证和位于复制数据之外的栅栏。拟议的绑定策略要求有歧义的恢复经 owner 审阅。[身份识别限制](#33-必须明确展示身份识别的限制)
 
-真实运行环境下的 Desktop 路由与 profile 生命周期转换、恢复前后经认证的连续性、受支持的调用方与 worker 来源证明及更广泛的投递回执对账，仍属 E0.7 的开放事项。可选 HTTP 入口仍依赖 E0.6。经 owner 授权的登记、激活绑定及对账仍是 E1.6 和 E3.6 的独立工作。[Issue #33](https://github.com/MosBot-AI/hermes-superagent/issues/33)
+其他真实运行环境下的 Desktop 路由与 profile 生命周期转换、恢复前后经认证的连续性、受支持的调用方与 worker 来源证明及更广泛的投递回执对账，仍属 E0.7 的开放事项。可选 HTTP 入口仍依赖 E0.6。经 owner 授权的登记、激活绑定及对账仍是 E1.6 和 E3.6 的独立工作。[Issue #33](https://github.com/MosBot-AI/hermes-superagent/issues/33)
 
 ## 3. 身份、存储与作用域
 
@@ -419,7 +440,7 @@ Linux 验收夹具在临时独立 home 中两次启动原生 `gateway.run` 入�
 
 夹具观察到本地 operator 凭据、一次合成接收回合及同一 home 正常重启后的回执恢复。该凭据模式提供当前运行时的访问。经认证的人类 owner、跨安装连续性、已安装包的 Bot 回执行为、从 Electron 发起的投递、其他操作系统的控制传输、远程 token、OAuth 和 SSH 投递模式、worker 来源证明及对用户的回复送达仍需单独取证。[恢复身份限制](#33-必须明确展示身份识别的限制)
 
-手动工作流在确切固定版本上以独立步骤运行本用例。只有产生非空、全部通过且无跳过的结果时，才暂存干净的 `bot-receipt.xml`。常规拉取请求和推送检查覆盖内存 Bot 契约。已安装包的任务、记忆和 handoff 检查在工作流中各有独立步骤。[Native Gateway 验收工作流](../.github/workflows/native-gateway.yml)
+手动工作流在确切固定版本上以独立进程运行本用例。只有产生一项通过且没有跳过的结果时，才暂存干净的 `bot-receipt.xml`。常规拉取请求和推送检查覆盖内存 Bot 契约。已安装包的任务、记忆和 handoff 检查在工作流中各有独立步骤。[Native Gateway 验收工作流](../.github/workflows/native-gateway.yml)
 
 ## 9. 事件、错误与客户端恢复
 
