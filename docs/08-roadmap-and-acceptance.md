@@ -35,7 +35,7 @@ Original profile-first deterministic local M1 acceptance is recorded at the fixe
 
 - E0.7: Verify Primary Bot Contracts (M0, Backlog): depends on E0.1/E0.2 and uses E0.4 findings. Verify native profile/route/canonical registry and lineage, author/worker provenance and receipts. HTTP modes additionally require E0.6. See [15](15-primary-bot-binding.md).
 
-- E0.8: Verify Voice Provider Contracts (M0, In progress; offline subset only): depends on E0.1/E0.2, using E0.4/E0.7 identity findings where applicable. Verify pinned ASR/TTS, native audio/live protocols, credentials, cancellation/streaming contracts, public adapter seams and unsupported modes. See [19](19-unified-voice-provider-contracts.md).
+- E0.8 Verify Voice Provider Contracts (M0, offline verification) depends on E0.1/E0.2 and uses E0.4/E0.7 findings where applicable. The [current-pin compatibility inventory](voice-compatibility-inventory.md) and [dated protocol comparison](voice-provider-protocol-comparison.md) record the acceptance evidence and outstanding release gates by mode.
 
 - E0.9: Verify Memory Provider Contracts (M0, Done; bounded native-contract verification): depends on E0.1/E0.2/E0.5. Verify actual native loading/lifecycle/single-external-provider, profile/cron/worker context, compression checkpoint and source-reference contracts, including unsupported isolation modes. This gate applies when personal memory is enabled; it does not block the existing local task loop. See [30](30-pluggable-memory-contracts.md).
 
@@ -169,11 +169,11 @@ Production modes depend on applicable native/client identity contracts, E1.3 and
 - E7.6: Implement Local and Online Voice Adapters (M3, Backlog): depends on E7.5 and E7.1–E7.3; enabled actions additionally require E1.3 and relevant E0.4 coverage. Implement one local/mixed pipeline and one explicitly selected online realtime adapter without generalizing protocol compatibility.
 - E7.7: Validate Duplex Recovery and Voice Quality (M3, Backlog): depends on E7.6, E6.4 and E8.1/E8.2 harness; linked task/effect recovery also needs E3.5/E4.4. Validate devices, latency, accuracy, barge-in, playback reconciliation, reconnect, budgets and privacy.
 
-[19](19-unified-voice-provider-contracts.md) unifies E7.1–E7.4 configuration/safety semantics while retaining separate voice-message MVP and realtime-duplex gates. The [offline simulator](20-voice-contract-simulator.md) implements a narrow synthetic precursor and public ASR/TTS contract probes. E0.8/E7.5 remain incomplete; production interfaces, online transmission and Primary Bot authority are not enabled.
+[19](19-unified-voice-provider-contracts.md) unifies E7.1–E7.4 configuration and safety semantics while retaining separate voice-message MVP and realtime-duplex gates. The [offline simulator](20-voice-contract-simulator.md) implements a narrow synthetic precursor and public ASR/TTS contract probes. E7.5 remains at the synthetic precursor stage. Production interfaces, online transmission and Primary Bot authority have separate enablement gates.
 
 Acceptance: Misrecognition does not cause high-impact outbound actions; the same task can switch between text and voice; network loss or stopping voice does not falsely report cancellation of an external action. Real-time voice is a separate gate and does not block a completed voice-message MVP.
 
-The [native voice IPC experiment](21-native-voice-ipc-experiment.md) preserves a separately tested host adaptation as a review artifact. It is not installed by this project, does not change the official pin and does not complete E0.8/E7.5 or enable E7.6/E7.7.
+The [native voice IPC experiment](21-native-voice-ipc-experiment.md) preserves a separately tested host adaptation as a review artifact for a historical pin. The current compatibility inventory uses the official unpatched pin.
 
 ### E8. Complete Operations, Evaluation, and Release (P0/P1, Across M0–M4)
 
