@@ -321,3 +321,44 @@ def test_managed_scope_appearing_during_record_read_discards_pack(
     monkeypatch.setattr(provider._lifecycle, "_reader", read_then_add_scope)
     assert native_manager.prefetch_all("早餐", session_id="session-one") == ""
     assert provider.recall_status() is None
+
+
+def test_entrypoint_naming_recall_fresh_forget_and_shutdown(native_recall, monkeypatch):
+    home, provider, native_manager, _ = native_recall
+    target = save(home, "云杉负责人是景明")
+    with open_memory_backend(home, "operator") as backend:
+        backend.execute("remember", {"content": "云杉预算五百", "request_id": "naming-budget"})
+        backend.execute("remember", {"content": "白桦负责人是秋叶", "request_id": "naming-other"})
+    db = home / "plugin-data/hermes-personal-agent/memory/records.sqlite3"
+    before_config = (home / "config.yaml").read_bytes()
+    original = provider._lifecycle._reader
+    reads = []
+
+    @contextmanager
+    def counted_reader(*args, **kwargs):
+        reads.append(True)
+        with original(*args, **kwargs) as backend:
+            yield backend
+
+    monkeypatch.setattr(provider._lifecycle, "_reader", counted_reader)
+    before = db.read_bytes()
+    output = native_manager.prefetch_all("云杉的负责人叫什么名字？", session_id="session-one")
+    data = json.loads(output)["memory"]
+    assert 0 < len(output) <= 6000
+    assert [item["record_id"] for item in data["items"]] == [target]
+    assert data["automatic_filter"]["required_query_indices"] == [0, 1]
+    assert data["omitted_records"] == 2 and len(reads) == 1
+    assert db.read_bytes() == before
+    assert native_manager.prefetch_all("榆树的负责人叫什么？", session_id="session-one") == ""
+    assert len(reads) == 2 and db.read_bytes() == before
+    with open_memory_backend(home, "operator") as backend:
+        backend.execute(
+            "forget", {"record_id": target, "expected_revision": 1, "request_id": "naming-f"}
+        )
+    before = db.read_bytes()
+    assert native_manager.prefetch_all("云杉的负责人叫什么？", session_id="session-one") == ""
+    assert len(reads) == 3 and db.read_bytes() == before
+    native_manager.shutdown_all()
+    assert native_manager.prefetch_all("云杉的负责人叫什么？", session_id="session-one") == ""
+    assert len(reads) == 3 and provider.recall_status() is None
+    assert (home / "config.yaml").read_bytes() == before_config

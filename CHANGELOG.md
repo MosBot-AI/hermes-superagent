@@ -77,6 +77,8 @@ This file distinguishes design work, development changes, and released capabilit
 - Run runtime artifact acceptance on exact pull-request heads with read-only credentials; keep downloadable artifact publication push-only.
 ### Changed
 
+- Recognize bounded Chinese possessive naming questions with literal subject/attribute slots; fail closed for marker-only slots while preserving one-read budgets and explicit retrieval (#151).
+
 - Reconcile original E2.7 local-memory acceptance with independent review and exact-main CI; broader memory adapters, lifecycle, migration and deployment remain open.
 
 - Verify the actual production package under default/read-only, frozen-worker and safe bootstrap modes using real negative dispatch and blueprint consumers. Preserve explicit local/native-scheduling opt-ins and unsupported text-worker refusal; no controlled-write authority or host-wide sandbox is added.

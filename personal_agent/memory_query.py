@@ -80,6 +80,9 @@ _HAN = re.compile(r"^[\u3400-\u4dbf\u4e00-\u9fff]+$")
 # Recognize whole, single-clause questions before the legacy character splitter.
 # Slots stay verbatim; these are grammatical markers, never domain/name aliases.
 _QUESTION_END = r"(?:[？?！!。]+)?"
+# Require exactly one possessive marker and no literal internal naming verb.
+# Ambiguous names/compound attributes keep their previous interpretation.
+_NAMING = re.compile(r"([^的叫]+?)的([^的叫]+?)叫什么(?:名字)?(?:呢|吗)?" + _QUESTION_END + r"$")
 _WHO = re.compile(r"(.+?)\s*(?:由)?谁\s*([^\W_]+?)(?:呢|吗)?" + _QUESTION_END + r"$")
 _CHOICE = re.compile(
     r"(.+?)(?:喜欢|想要)(?:哪种|哪类|什么类型的)\s*([^\W_]+?)(?:呢|吗)?" + _QUESTION_END + r"$"
@@ -117,8 +120,19 @@ def _question_terms(query):
     text = _PREFIX.sub("", query.strip(), count=1)
     if not _SINGLE_CLAUSE.fullmatch(text):
         return None
+    naming = _NAMING.fullmatch(text)
     match = _WHO.fullmatch(text)
-    if match:
+    if (
+        naming
+        and naming[1].strip()
+        and naming[2].strip()
+        and not _AMBIGUOUS_SLOTS.search(naming[1] + naming[2])
+    ):
+        subject, attribute = naming.groups()
+        # Marker-only slots must not disappear into a broader one-slot query.
+        if not _slot_terms(subject) or not _slot_terms(attribute):
+            return []
+    elif match:
         subject, attribute = match.groups()
         subject = subject.rstrip().removesuffix("的").rstrip()
     else:

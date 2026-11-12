@@ -429,3 +429,82 @@ def test_native_required_attribute_slots_preserve_explicit_literal_recall(host):
         other["record_id"],
     }
     assert "automatic_filter" not in explicit
+
+
+def test_registered_naming_hook_correction_revocation_forget_and_expiry(host, monkeypatch):
+    from contextlib import contextmanager
+
+    module = host.manager._plugins[PLUGIN_ID].module
+    expiry = importlib.import_module(module.__name__ + ".personal_agent.memory_expiry")
+    recall = importlib.import_module(module.__name__ + ".personal_agent.session_memory_recall")
+    clock = ["2030-01-01T00:00:00Z"]
+    monkeypatch.setattr(expiry, "utc_now", lambda: clock[0])
+    target = save(host, "云杉负责人是景明", "naming-target")
+    wrong = save(host, "云杉预算是五百", "naming-budget")
+    other = save(host, "白桦负责人是秋叶", "naming-other")
+    enable(host)
+    before_config = (host.home / "config.yaml").read_bytes()
+    original = recall.open_existing_memory_reader
+    reads = []
+
+    @contextmanager
+    def counted_reader(*args, **kwargs):
+        reads.append(True)
+        with original(*args, **kwargs) as backend:
+            yield backend
+
+    monkeypatch.setattr(recall, "open_existing_memory_reader", counted_reader)
+
+    def fresh():
+        before = memory.database(host.home).read_bytes()
+        count = len(reads)
+        with turn(host):
+            output = collect(host, "云杉的负责人叫什么名字？")
+        assert len(output) <= 6000
+        assert len(reads) == count + 1
+        assert memory.database(host.home).read_bytes() == before
+        return output
+
+    first = json.loads(fresh())["memory"]
+    assert [item["record_id"] for item in first["items"]] == [target["record_id"]]
+    assert first["automatic_filter"]["required_query_indices"] == [0, 1]
+    assert first["omitted_records"] == 2
+    rid = target["record_id"]
+    assert (
+        memory.command(
+            host,
+            f'correct {rid} --text "云杉负责人是溪月" '
+            "--expected-revision 1 --request-id naming-correction",
+        )["status"]
+        == "ok"
+    )
+    corrected = json.loads(fresh())["memory"]["items"]
+    assert [(item["content"], item["revision"]) for item in corrected] == [("云杉负责人是溪月", 2)]
+    assert activate(host, "recall-off")["status"] == "ok"
+    count = len(reads)
+    before = memory.database(host.home).read_bytes()
+    with turn(host):
+        assert collect(host, "云杉的负责人叫什么名字？") == ""
+    assert len(reads) == count and memory.database(host.home).read_bytes() == before
+    assert activate(host, "recall-on")["status"] == "ok"
+    assert (
+        memory.command(host, f"forget {rid} --expected-revision 2 --request-id naming-forget")[
+            "status"
+        ]
+        == "ok"
+    )
+    assert fresh() == ""
+    expiring = save(
+        host, "云杉负责人是临时联系人", "naming-expiring", "--expires-at 2030-01-01T00:01:00Z"
+    )
+    assert expiring["record_id"] in fresh()
+    clock[0] = "2030-01-01T00:01:00Z"
+    assert fresh() == ""
+    # Explicit OR retrieval is not routed through the automatic naming recognizer.
+    explicit = memory.command(host, 'recall "云杉" "负责人"')["data"]
+    assert {item["record_id"] for item in explicit["items"]} == {
+        wrong["record_id"],
+        other["record_id"],
+    }
+    assert "automatic_filter" not in explicit
+    assert (host.home / "config.yaml").read_bytes() == before_config
