@@ -83,6 +83,8 @@ This file distinguishes design work, development changes, and released capabilit
 - Run runtime artifact acceptance on exact pull-request heads with read-only credentials; keep downloadable artifact publication push-only.
 ### Changed
 
+- Verify deferred cron Bot Chat recovery at the pinned Hermes revision. After a successful native admission reply is lost, a same-ID retry recovers the queued receipt and leaves one durable admission (#33).
+
 - Verify the pinned native profile lifecycle and distinguish native profile cloning from a stopped installation copy with matching Bot Chat markers (#33).
 
 - Verify pinned Desktop profile route composition for same-name profiles, connection aliases, stale inventory and failed scoped requests. Run the dependency-free Node fixture in foundation CI (#33).
