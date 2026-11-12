@@ -222,18 +222,26 @@ test('saved Webapp Desktop refuses a parked named profile and reopens its chat a
       .poll(() => page.evaluate(() => window.__E07_RETIREMENT_HOST__?.active()), { timeout: 45_000 })
       .toEqual({ connectionId: source, profile: 'default', gateway: 'open' })
     const routes = () => page.evaluate(() => window.__E07_RETIREMENT_HOST__!.profileRoutes())
-    const initialRoutes = await routes()
-    const routeFor = (connectionId: string, profile: string) => {
-      const route = initialRoutes.find(entry => entry.connectionId === connectionId && entry.profile === profile)
-      expect(route).toMatchObject({ connectionId, profile, targetProfile: profile })
+    const expectedRoutes: Route[] = [
+      { connectionId: source, mode: 'remote', profile, targetProfile: profile },
+      { connectionId: source, mode: 'remote', profile: 'default', targetProfile: 'default' },
+      { connectionId: 'local', mode: 'local', profile, targetProfile: profile }
+    ]
+    let matchedRoutes: Route[][] = []
+    await expect
+      .poll(
+        async () => {
+          const available = await routes()
+          matchedRoutes = expectedRoutes.map(({ connectionId, profile }) =>
+            available.filter(route => route.connectionId === connectionId && route.profile === profile)
+          )
 
-      return route!
-    }
-    const target = routeFor(source, profile)
-    const healthy = routeFor(source, 'default')
-    const decoy = routeFor('local', profile)
-    expect(target.mode).toBe('remote')
-    expect(decoy.mode).toBe('local')
+          return matchedRoutes
+        },
+        { timeout: 30_000, intervals: [250, 500, 1_000] }
+      )
+      .toMatchObject(expectedRoutes.map(route => [route]))
+    const [[target], [healthy], [decoy]] = matchedRoutes
     const canary = (limit: number, port: string, target: Route, reason?: string, from = 0) => {
       const sent = wire.slice(from).filter(frame => lookup(frame) && frame.limit === limit)
       expect(sent).toEqual([
