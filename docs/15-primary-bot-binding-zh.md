@@ -40,10 +40,11 @@
 
 | 复用点 | 已测试的适配器与模式 | 剩余关卡 |
 | --- | --- | --- |
-| 规范会话发现与谱系 | 使用合成的限定范围票据，经 ASGI 调用原生 `profiles.list`，覆盖隐藏 Bot Chat 的根会话、压缩后末端以及不可用或歧义的名册条目。[名册证据](#当前固定版本的原生-bot-chat-名册) | 每条启用的路由都需要经过授权，精确查询根会话和当前谱系。身份缺失或不确定时应报告不可用。按精确标题查询的 `session.list` 回退路径可能接管旧会话。其他发现模式、压缩后会话的界面附加及规范会话移交需要独立证据。 |
+| 规范会话发现与谱系 | 使用合成的限定范围票据，经 ASGI 调用原生 `profiles.list`，覆盖隐藏 Bot Chat 的根会话、压缩后末端以及不可用或歧义的名册条目。[名册证据](#当前固定版本的原生-bot-chat-名册) | 每条启用的路由都需要经过授权，精确查询根会话和当前谱系。身份缺失或不确定时应报告不可用。按精确标题查询的 `session.list` 回退路径可能接管旧会话。其他发现模式及规范会话移交需要独立证据。 |
 | Desktop 来源选择 | 在 Linux 上运行真实的 Electron 源码构建，通过私有本地票据和已保存的环回 Webapp token 连接，验证 `host.profileRoutes()` 与 `host.requestProfile()`。原生 profile 退役并同名热上线时，已保存的连接保持原路由作用域。[Electron 证据](#当前固定版本的-electron-profile-路由) · [Desktop 运行时转换](#当前固定版本的-desktop-profile-退役) | 分别验证 Desktop 安装包及任何启用的 SSH 或 OAuth 路由。 |
 | 安装复制观测 | 两个 Gateway 均可达时，Electron 将安装标记和 profile 相同的条目归并到主连接。显式注册路由仍返回各自的对话记录，停止状态 home 副本保留相同规范会话 ID 时也是如此。[安装复制证据](#当前固定版本的安装复制歧义) | 恢复或重新绑定前需要独立、经认证的安装和 owner 证据。清单无法消除复制标记的歧义。 |
-| Bot Mode 规范会话打开 | 源码构建的 Linux 名册在查询返回类型化错误时拒绝打开会话，在查询返回空结果但原生指针探测确认已有会话时也拒绝。重试时打开同一个本地未压缩会话。[本地 Bot Mode 证据](#当前固定版本的-bot-mode-规范会话拒绝与重试) | Desktop 安装包、压缩后会话的界面附加、SSH 和 OAuth 界面路由以及经认证的 owner 绑定需要独立证据。 |
+| Bot Mode 规范会话打开 | 源码构建的 Linux 名册在查询返回类型化错误时拒绝打开会话，在查询返回空结果但原生指针探测确认已有会话时也拒绝。重试时打开同一个本地未压缩会话。[本地 Bot Mode 证据](#当前固定版本的-bot-mode-规范会话拒绝与重试) | Desktop 安装包、SSH 和 OAuth 界面路由以及经认证的 owner 绑定需要独立证据。 |
+| 本地旧版压缩历史 | 命名 profile 的原生 CLI 检查并接管符合条件的 Gateway 前压缩末端。Linux 源码构建的 Bot Mode 在所选 profile 路由打开该末端，并显示已存储的祖先与末端消息。[压缩历史证据](#当前固定版本的压缩历史接管) | 经 owner 授权的跨安装接管、混合 owner 谱系、其他凭据模式和投递对账需要独立证据。 |
 | 已保存 Webapp 令牌的回退 | 干净 Linux Electron 构建在命名 profile 查询返回空结果时探测远程启动 authority，并在同一次点击中通过第二次查询打开原会话。单独构建的提案探测命名 authority，拒绝不确定的打开操作，并在明确重试后打开原会话。[已保存 Webapp 证据](#当前固定版本的已保存-webapp-bot-mode-路由) | 干净固定版本仍有回退作用域缺口。受支持的使用需要已修正的宿主修订及该模式的专项验收。 |
 | Profile 与安装连续性 | 停机状态下的原生 profile CLI 和备份导入路径覆盖重命名、克隆、删除、同名重建、拒绝向已占用的 profile 导入，以及恢复后目标的 epoch 下限。在同一运行中的安装实例内，保留原有 host 作用域 WebSocket，覆盖 profile 退役及同名热上线。[Profile 生命周期](#当前固定版本的原生-profile-生命周期) · [保留的路由](#当前固定版本保留的原生-profile-路由) · [备份与恢复](#当前固定版本的原生备份与恢复) | 其他运行时切换和经认证的安装连续性需要当前目标、登记、规范谱系与冲突证据。复制的标记和名称无法消除安装实例的歧义。 |
 | 恢复副本的 Webapp 凭据清理 | Linux 原生恢复夹具覆盖完整归档复制浏览器凭据，以及 Webapp 关闭时通过私有 Unix 控制套接字替换恢复目标上的凭据。[恢复后轮换证据](#当前固定版本的恢复副本-webapp-凭据轮换) | 经认证的安装连续性、经 owner 授权的恢复，以及运行中的 Webapp 会话撤销，各自需要独立证据。 |
@@ -148,11 +149,23 @@ Desktop 按非空安装标记和 profile 名称归并清单条目，随后在组
 
 两次失败点击均保留原焦点，未显示任何夹具会话标记，也未发出 `session.create`、`prompt.submit`、`session.resume` 或 `session.activate`。测试通过界面关闭每条重试通知。三次点击前后，SQLite 只读快照中的会话 ID、标题、隐藏标记、父会话关联、消息及准入记录保持一致，服务商记录到零次补全。
 
-两种故障均在经过授权的原生查询之后注入，用于验证 Desktop 对不确定结果的处理。用例覆盖源码构建应用中本地且未压缩的会话。[已保存 Webapp 用例](#当前固定版本的已保存-webapp-bot-mode-路由)覆盖独立的凭据模式。压缩后会话的界面附加、SSH 和 OAuth 界面路由、Desktop 安装包、经认证的 owner 绑定和规范会话移交仍需独立证据。
+两种故障均在经过授权的原生查询之后注入，用于验证 Desktop 对不确定结果的处理。用例覆盖源码构建应用中本地且未压缩的会话。[压缩历史用例](#当前固定版本的压缩历史接管)覆盖原生接管后的本地界面附加。[已保存 Webapp 用例](#当前固定版本的已保存-webapp-bot-mode-路由)覆盖独立的凭据模式。SSH 和 OAuth 界面路由、Desktop 安装包、经认证的 owner 绑定和规范会话移交仍需独立证据。
 
 在上面的[验收运行器命令](#当前固定版本的-electron-profile-路由)中添加 `--case bot-canonical` 即可复现此用例。
 
 在 Hermes `2281116525106e3c109993ccb5dc74d02bfc1427` 中，点击 Bot Mode 名册条目时，应用先准备该条目的来源，再以确切标题 `Bot Chat` 和 `include_hidden: true` 发出 `session.list` 请求。查询报错时，本次打开操作在进入会话创建路径前结束，名册会显示错误通知。查询返回现有规范记录时，界面优先打开其 `resolved_id`，缺失时使用 `id`。查询成功但返回空结果且名册保留会话指针时，会另行执行 `session.info` 检查。[名册点击](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/apps/desktop/src/plugins/hermes-bots/bot-row.tsx#L217-L247) · [打开与错误路径](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/apps/desktop/src/plugins/hermes-bots/roster-actions.ts#L308-L372) · [注册表查询](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/apps/desktop/src/plugins/hermes-bots/canonical-chat.ts#L314-L405) · [打开现有会话](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/apps/desktop/src/plugins/hermes-bots/canonical-chat.ts#L680-L721)
+
+### 当前固定版本的压缩历史接管
+
+在 Hermes `2281116525106e3c109993ccb5dc74d02bfc1427`，原生 `sessions adopt` 命令读取所选 profile 的存储，将符合条件的 Gateway 前历史记录按压缩末端分组，再通过同一操作系统用户的原生 Gateway 连接恢复每个选中的末端。Gateway 校验旧版记录，并在当前宿主主体名下持久化本地策略和旧版接管回执。规范列表提供 `resolved_id` 时，Bot Mode 使用它打开已有会话。限定 profile 的 REST 对话读取可以包含压缩祖先。[候选选择与原生恢复](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_cli/sessions_adopt.py#L20-L89) · [旧版记录校验](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_state_local_migration.py#L89-L137) · [Bot Mode 打开](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/apps/desktop/src/plugins/hermes-bots/canonical-chat.ts#L680-L701) · [REST 对话读取](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_cli/web_routers/sessions.py#L746-L790)
+
+两个 Linux 夹具均获取原生压缩锁，并使用预置合成消息通过原生压缩存储事务发布子会话。[原生验收测试](../acceptance/live/test_native_history_adoption.py)在 `scout` 上运行 `sessions adopt`。预演报告一个候选项，所比较的 SQLite 字段不变。实际执行仅为已有末端添加本地策略和旧版接管回执，将其绑定到原生宿主主体及命名 profile。重复执行报告无待接管项。根会话、默认 profile 干扰会话及被排除的外部主体和调度记录，其比较字段保持不变。已存消息保持不变，准入记录为空。[压缩发布](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_state_compression.py#L373-L400)
+
+真实的原生私有票据客户端按确切标题获取一条 `Bot Chat` 记录，包含根会话 `id` 和末端 `resolved_id`。使用任一 ID 恢复都返回同一末端，原始消息和续接消息按顺序返回。尽管 `default` 含有相同的末端 ID，在该命名连接中显式请求 `default` 仍返回 `4001`，原因为 `profile_mismatch`。恢复带有外部主体标记的记录返回 `4001`，原因为 `not_found`。手动原生 Gateway 工作流在测试通过后发布 `history-adoption.xml`。[手动工作流](../.github/workflows/native-gateway.yml)
+
+[源码构建的 Electron 用例](../tests/desktop/desktop_compressed_adoption.spec.ts)在执行同一原生接管流程后点击内置 `local::scout` 条目。本地私有票据 WebSocket 按确切标题查询隐藏的 `Bot Chat`，并在 `scout` 上针对末端发送 `session.resume`。真实的 `GET /api/sessions/{id}/messages` 请求携带 `profile=scout` 和 `include_compacted=true`，返回 `200`、末端 ID 及按顺序排列的根会话和末端标记。界面在 `local/scout` 聚焦该末端，两条标记各显示一次。隐藏的 `default` 干扰会话拥有相同的末端 ID，其不同内容未出现在响应或视口中。界面打开期间，所比较的已存会话和接管投影保持一致。测试未观察到 `session.create`、`prompt.submit` 或模型补全。在[验收运行器命令](#当前固定版本的-electron-profile-路由)中添加 `--case compressed-history-adoption` 即可复现。[Gateway 夹具](../tests/desktop/desktop_compressed_adoption_fixture.py)
+
+这些观测适用于同一安装、同一操作系统用户的原生操作者及单一 owner 的合成谱系。经认证的 Primary Bot owner 登记及 grant 校验、跨安装移交、混合 owner 谱系、投递对账、已安装的 Desktop 及其他凭据模式需要独立证据。
 
 ### 当前固定版本的已保存 Webapp Bot Mode 路由
 
@@ -172,7 +185,7 @@ Bot Mode 的确切标题 `session.list` 查询携带所选后端 profile。列�
 
 单独构建的提案在回退探测中发送 `profile: scout`。原生审计确认凭据仍为相同类别的已保存令牌，请求由命名的 `scout` 处理器处理。成功响应识别出未归档的现有 Bot Chat。注入故障的点击显示重试通知并保留原焦点，未发出打开、创建或提交提示词的 RPC。之后明确点击重试时，正常查询打开原有的 `spare::scout` 会话。SQLite 快照保持不变，服务商记录到零次补全。[仅供评审的补丁、构建与证据](../experiments/bot-webapp-canonical/README-zh.md)
 
-[验收运行器](../acceptance/live/run_desktop_profile_routing.py)通过 `--case bot-canonical-saved-token` 复现干净基线，并在验证独立源码树时添加 `--review-proposal`。两次运行均检查 Desktop 和 Webapp 构建产物是否为当前源码所生成。干净兼容性固定版本保持不变。上游采用、打包、压缩后会话的界面附加、其他凭据模式和经认证的 owner 绑定仍需独立验收。
+[验收运行器](../acceptance/live/run_desktop_profile_routing.py)通过 `--case bot-canonical-saved-token` 复现干净基线，并在验证独立源码树时添加 `--review-proposal`。两次运行均检查 Desktop 和 Webapp 构建产物是否为当前源码所生成。干净兼容性固定版本保持不变。上游采用、打包、通过已保存 Webapp 路由的压缩会话界面附加、其他凭据模式和经认证的 owner 绑定仍需独立验收。
 
 ### 当前固定版本的原生 Profile 生命周期
 

@@ -83,6 +83,8 @@ This file distinguishes design work, development changes, and released capabilit
 - Run runtime artifact acceptance on exact pull-request heads with read-only credentials; keep downloadable artifact publication push-only.
 ### Changed
 
+- Verify native adoption of existing compressed history in a named profile and its subsequent opening in Linux Desktop Bot Mode. The acceptance checks that Desktop shows the named history when the default profile contains a different chat with the same session ID (#33).
+
 - Verify native backup and restore of a synthetic Webapp credential, followed by target-only rotation with Webapp disabled. The manual Gateway acceptance checks that the stopped source and archive remain unchanged (#33).
 
 - Add real Linux Electron acceptance for copied installation markers and stopped synthetic home copies. When Desktop discovery shows only the primary route, explicitly scoped reads still reach each Gateway's own transcript, including copies with equal session IDs (#33).
