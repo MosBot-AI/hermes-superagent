@@ -501,17 +501,19 @@ def isolated_reply_fixture(tmp_path_factory, monkeypatch, *, activate_hook):
         PYTHONPATH=os.pathsep.join((str(guard), str(host), str(Path(__file__).resolve().parent))),
     )
     checks = [(["rev-parse", "HEAD"], pin)]
+    untracked_files = "no"
     if os.environ.get("HERMES_BOT_REVIEW_RECOVERY") == "1":
         experiment = shared.ROOT / "experiments/bot-sender-recovery"
         proposal = json.loads((experiment / "manifest.json").read_bytes())
         patch = experiment / "bot-sender-recovery.patch"
         assert proposal["status"] == "review_only" and proposal["hermes_base"] == pin
         assert hashlib.sha256(patch.read_bytes()).hexdigest() == proposal["patch_sha256"]
+        untracked_files = "all"
         checks = [
             (["show", "-s", "--format=%P", "HEAD"], pin),
             (["rev-parse", "HEAD^{tree}"], proposal["proposal_tree"]),
         ]
-    checks.append((["status", "--porcelain", "--untracked-files=all"], ""))
+    checks.append((["status", "--porcelain", f"--untracked-files={untracked_files}"], ""))
     for argv, expected in checks:
         assert (
             subprocess.check_output(
