@@ -2,7 +2,7 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 
-import { expect, type ElectronApplication, test } from '@playwright/test'
+import { _electron, expect, type ElectronApplication, test } from '@playwright/test'
 
 import {
   type Gateway,
@@ -36,6 +36,59 @@ const selectors = { profile, title, includeHidden: true, limit: 200 }
 const openMethods = new Set(['session.resume', 'session.activate'])
 const writeMethods = new Set(['session.create', 'prompt.submit'])
 
+async function launchBotDesktop(env: Record<string, string>) {
+  const work = process.env.HERMES_E2E_APPIMAGE_WORK
+  if (!work) return launchCoreApp(env)
+
+  const root = path.join(work, 'squashfs-root')
+  const resources = path.join(root, 'resources')
+  const expectedPin = process.env.HERMES_E2E_PACKAGED_PIN
+  expect(expectedPin).toMatch(/^[0-9a-f]{40}$/)
+  const stamp = JSON.parse(fs.readFileSync(path.join(resources, 'install-stamp.json'), 'utf8'))
+  expect(stamp).toMatchObject({
+    commit: expectedPin,
+    dirty: false,
+    source: 'commit-build',
+    payload: 'bundled',
+    distribution: 'desktop-app',
+    runtime: { commands: { hermes: expect.any(String) } }
+  })
+  const executablePath = path.join(root, 'AppRun')
+  fs.accessSync(executablePath, fs.constants.X_OK)
+  const payload = path.join(resources, 'agent-payload')
+  const launcher = path.resolve(payload, stamp.runtime.commands.hermes)
+  expect(launcher.startsWith(payload + path.sep)).toBe(true)
+  fs.accessSync(launcher, fs.constants.X_OK)
+  const packagedEnv = { ...env }
+  delete packagedEnv.HERMES_DESKTOP_HERMES_ROOT
+  delete packagedEnv.HERMES_DESKTOP_PYTHON
+  const app = await _electron.launch({
+    executablePath,
+    args: ['--disable-gpu', '--no-sandbox'],
+    env: packagedEnv,
+    cwd: root
+  })
+  try {
+    const identity = await app.evaluate(({ app }) => ({
+      packaged: app.isPackaged,
+      executable: process.execPath,
+      resources: process.resourcesPath,
+      appPath: app.getAppPath()
+    }))
+    expect(path.dirname(identity.executable)).toBe(root)
+    expect(identity.executable).not.toBe(executablePath)
+    expect(identity).toMatchObject({
+      packaged: true,
+      resources,
+      appPath: path.join(resources, 'app.asar')
+    })
+    return { app, page: await app.firstWindow() }
+  } catch (error) {
+    await app.close().catch(() => undefined)
+    throw error
+  }
+}
+
 test('Bot Mode refuses uncertain canonical lookups then opens the existing chat', async () => {
   test.setTimeout(180_000)
   expect(process.platform).toBe('linux')
@@ -62,7 +115,7 @@ test('Bot Mode refuses uncertain canonical lookups then opens the existing chat'
     // Let the native named authority adopt the existing CLI-shaped seed before snapshots.
     runPython(env, `import asyncio; from ${fixtureModule} import warm_canonical; asyncio.run(warm_canonical())`)
 
-    const live = await launchCoreApp(env)
+    const live = await launchBotDesktop(env)
     app = live.app
     const { page } = live
     const wire = observeWire(page)

@@ -43,7 +43,7 @@
 | 规范会话发现与谱系 | 使用合成的限定范围票据，经 ASGI 调用原生 `profiles.list`，覆盖隐藏 Bot Chat 的根会话、压缩后末端以及不可用或歧义的名册条目。[名册证据](#当前固定版本的原生-bot-chat-名册) | 每条启用的路由都需要经过授权，精确查询根会话和当前谱系。身份缺失或不确定时应报告不可用。按精确标题查询的 `session.list` 回退路径可能接管旧会话。其他发现模式及规范会话移交需要独立证据。 |
 | Desktop 来源选择 | 在 Linux 上运行真实的 Electron 源码构建，通过私有本地票据和已保存的环回 Webapp token 连接，验证 `host.profileRoutes()` 与 `host.requestProfile()`。原生 profile 退役并同名热上线时，已保存的连接保持原路由作用域。[Electron 证据](#当前固定版本的-electron-profile-路由) · [Desktop 运行时转换](#当前固定版本的-desktop-profile-退役) | 分别验证 Desktop 安装包及任何启用的 SSH 或 OAuth 路由。 |
 | 安装复制观测 | 两个 Gateway 均可达时，Electron 将安装标记和 profile 相同的条目归并到主连接。显式注册路由仍返回各自的对话记录，停止状态 home 副本保留相同规范会话 ID 时也是如此。[安装复制证据](#当前固定版本的安装复制歧义) | 恢复或重新绑定前需要独立、经认证的安装和 owner 证据。清单无法消除复制标记的歧义。 |
-| Bot Mode 规范会话打开 | 源码构建的 Linux 名册在查询返回类型化错误时拒绝打开会话，在查询返回空结果但原生指针探测确认已有会话时也拒绝。重试时打开同一个本地未压缩会话。[本地 Bot Mode 证据](#当前固定版本的-bot-mode-规范会话拒绝与重试) | Desktop 安装包、SSH 和 OAuth 界面路由以及经认证的 owner 绑定需要独立证据。 |
+| Bot Mode 规范会话打开 | 源码构建的 Linux 名册在查询返回类型化错误时拒绝打开会话，在查询返回空结果但原生指针探测确认已有会话时也拒绝。重试时打开同一个本地未压缩会话。同一用例从本地构建的 Linux x64 AppImage 启动时也通过。[本地 Bot Mode 证据](#当前固定版本的-bot-mode-规范会话拒绝与重试) | 已签名的发行安装包、其他平台、SSH 和 OAuth 界面路由以及经认证的 owner 绑定需要独立证据。 |
 | 本地旧版压缩历史 | 命名 profile 的原生 CLI 检查并接管符合条件的 Gateway 前压缩末端。Linux 源码构建的 Bot Mode 在所选 profile 路由打开该末端，并显示已存储的祖先与末端消息。[压缩历史证据](#当前固定版本的压缩历史接管) | 经 owner 授权的跨安装接管、混合 owner 谱系、其他凭据模式和投递对账需要独立证据。 |
 | 已保存 Webapp 令牌的回退 | 干净 Linux Electron 构建在命名 profile 查询返回空结果时探测远程启动 authority，并在同一次点击中通过第二次查询打开原会话。单独构建的提案探测命名 authority，拒绝不确定的打开操作，并在明确重试后打开原会话。[已保存 Webapp 证据](#当前固定版本的已保存-webapp-bot-mode-路由) | 干净固定版本仍有回退作用域缺口。受支持的使用需要已修正的宿主修订及该模式的专项验收。 |
 | Profile 与安装连续性 | 停机状态下的原生 profile CLI 和备份导入路径覆盖重命名、克隆、删除、同名重建、拒绝向已占用的 profile 导入，以及恢复后目标的 epoch 下限。在同一运行中的安装实例内，保留原有 host 作用域 WebSocket，覆盖 profile 退役及同名热上线。[Profile 生命周期](#当前固定版本的原生-profile-生命周期) · [保留的路由](#当前固定版本保留的原生-profile-路由) · [备份与恢复](#当前固定版本的原生备份与恢复) | 其他运行时切换和经认证的安装连续性需要当前目标、登记、规范谱系与冲突证据。复制的标记和名称无法消除安装实例的歧义。 |
@@ -154,9 +154,28 @@ Desktop 按非空安装标记和 profile 名称归并清单条目，随后在组
 
 两次失败点击均保留原焦点，未显示任何夹具会话标记，也未发出 `session.create`、`prompt.submit`、`session.resume` 或 `session.activate`。测试通过界面关闭每条重试通知。三次点击前后，SQLite 只读快照中的会话 ID、标题、隐藏标记、父会话关联、消息及准入记录保持一致，服务商记录到零次补全。
 
-两种故障均在经过授权的原生查询之后注入，用于验证 Desktop 对不确定结果的处理。用例覆盖源码构建应用中本地且未压缩的会话。[压缩历史用例](#当前固定版本的压缩历史接管)覆盖原生接管后的本地界面附加。[已保存 Webapp 用例](#当前固定版本的已保存-webapp-bot-mode-路由)覆盖独立的凭据模式。SSH 和 OAuth 界面路由、Desktop 安装包、经认证的 owner 绑定和规范会话移交仍需独立证据。
+两种故障均在经过授权的原生查询之后注入。源码构建和本地构建的捆绑式 Linux x64 AppImage 均通过了固定版本 Gateway 夹具的验收。安装包用例检查运行中的 Electron 可执行文件、`app.isPackaged`、ASAR 路径、干净提交的安装标记以及可执行的随包 CLI。Desktop 连接至由夹具控制、从固定版本源码检出运行的 Gateway。两次拒绝与显式重试的通信记录和 SQLite 观测结果均与源码对照一致。[压缩历史用例](#当前固定版本的压缩历史接管)覆盖原生接管后的本地界面附加。[已保存 Webapp 用例](#当前固定版本的已保存-webapp-bot-mode-路由)覆盖独立的凭据模式。已签名的发行安装包、其他操作系统、SSH 和 OAuth 界面路由、经认证的 owner 绑定和规范会话移交仍需独立证据。
 
-在上面的[验收运行器命令](#当前固定版本的-electron-profile-路由)中添加 `--case bot-canonical` 即可复现此用例。
+在上面的[验收运行器命令](#当前固定版本的-electron-profile-路由)中添加 `--case bot-canonical` 即可复现源码构建对照。测试安装包时，按下方打包说明，用上游的 `scripts/build-bundle.sh` 命令构建干净的固定版本检出，再在同一验收命令中添加 `--appimage /absolute/path/to/Hermes.AppImage`。请将检出目录、AppImage 和工具放在 `/tmp` 之外。运行器在只有回环接口的命名空间中解包镜像并启动打包后的 Electron 可执行文件，检查运行中的应用路径与随包安装标记后再测试名册。预置数据的 Gateway 仍从固定版本的夹具检出运行。
+
+在这个固定版本，Linux AppImage 的原版构建器可能在 `icon-tool.js` 处报出 `require is not defined in ES module scope` 并停止。Electron Builder 将 CommonJS 工具复制到 Desktop 的 ES 模块包下。通过验收的构建使用了只针对生成的图标工具的 Node 预加载脚本。该脚本在工具入口执行前，将 `{"type":"commonjs"}` 写入工具旁边的 `package.json`。固定版本检出与打包后的应用源码保持干净。请在临时检出中构建，将预加载脚本保存在检出目录之外，并按以下方式传给构建器。
+
+```javascript
+import { writeFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+
+const dir = process.env.HERMES_E07_ICON_TOOL_DIR
+const entry = process.argv[1]
+if (dir && entry && resolve(entry) === resolve(dir, 'icon-tool.js')) {
+  writeFileSync(resolve(dir, 'package.json'), '{"type":"commonjs"}\n')
+}
+```
+
+```sh
+cd "$CLEAN_HERMES"
+HERMES_E07_ICON_TOOL_DIR="$PWD/apps/desktop/build/prepared-packaging-tools/icons" \
+NODE_OPTIONS="--import=$ABSOLUTE_PRELOAD_PATH" scripts/build-bundle.sh
+```
 
 在 Hermes `2281116525106e3c109993ccb5dc74d02bfc1427` 中，点击 Bot Mode 名册条目时，应用先准备该条目的来源，再以确切标题 `Bot Chat` 和 `include_hidden: true` 发出 `session.list` 请求。查询报错时，本次打开操作在进入会话创建路径前结束，名册会显示错误通知。查询返回现有规范记录时，界面优先打开其 `resolved_id`，缺失时使用 `id`。查询成功但返回空结果且名册保留会话指针时，会另行执行 `session.info` 检查。[名册点击](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/apps/desktop/src/plugins/hermes-bots/bot-row.tsx#L217-L247) · [打开与错误路径](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/apps/desktop/src/plugins/hermes-bots/roster-actions.ts#L308-L372) · [注册表查询](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/apps/desktop/src/plugins/hermes-bots/canonical-chat.ts#L314-L405) · [打开现有会话](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/apps/desktop/src/plugins/hermes-bots/canonical-chat.ts#L680-L721)
 
