@@ -199,6 +199,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Verify a saved OpenSSH profile alias from the Desktop SDK through Bot Mode. The source-built and bundled Linux x64 clients keep the connection-local route while opening the remote named chat (#33).
+
 - Verify Bot Mode opens the existing remote named chat over a saved OpenSSH key connection in source-built and bundled Linux x64 Desktop, with a same-name local profile and unchanged chat stores (#33).
 
 - Verify compressed Bot Chat hydration over the saved Webapp token in source-built and bundled Linux x64 Desktop. Same-ID decoys in three other profile stores remain outside the selected transcript (#33).

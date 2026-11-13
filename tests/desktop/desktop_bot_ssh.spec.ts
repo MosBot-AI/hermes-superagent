@@ -4,7 +4,7 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 
-import { expect, type ElectronApplication, test } from '@playwright/test'
+import { expect, type ElectronApplication, type Page, test } from '@playwright/test'
 
 import { launchBotDesktop } from './desktop_bot_appimage'
 import { focus, installCanonicalObserver, lookup, observeWire, storedChats } from './desktop_bot_canonical_observer'
@@ -21,8 +21,70 @@ function shellQuote(value: string) {
   return "'" + value.replaceAll("'", "'\\''") + "'"
 }
 
-test('Bot Mode opens the named canonical chat over OpenSSH', async () => {
-  test.setTimeout(180_000)
+interface ProfileRoute {
+  connectionId: string
+  mode: 'local' | 'remote'
+  profile: string
+  targetProfile: string
+}
+
+interface RouteProbe {
+  profileRoutes(): Promise<ProfileRoute[]>
+  requestProfile(
+    route: ProfileRoute,
+    method: string,
+    params: Record<string, unknown>,
+    timeoutMs: number,
+    options: { spawnPriority: 'foreground' }
+  ): Promise<{ sessions: { id: string; resolved_id: string }[] }>
+}
+
+declare global {
+  interface Window {
+    __E07_SSH_ROUTE_PROBE__?: RouteProbe
+  }
+}
+
+function installRouteProbe(home: string) {
+  const plugin = path.join(home, 'desktop-plugins', 'e07-ssh-route-probe')
+  fs.mkdirSync(plugin, { recursive: true })
+  fs.writeFileSync(
+    path.join(plugin, 'plugin.js'),
+    `
+import { host } from '@hermes/plugin-sdk'
+export default {
+  id: 'e07-ssh-route-probe',
+  register() { globalThis.__E07_SSH_ROUTE_PROBE__ = host }
+}
+`
+  )
+}
+
+async function readAliasedChat(page: Page, routeProfile: string) {
+  await page.waitForFunction(() => typeof window.__E07_SSH_ROUTE_PROBE__?.profileRoutes === 'function')
+  const route = await page.evaluate(
+    async ({ connectionId, routeProfile }) => {
+      const routes = await window.__E07_SSH_ROUTE_PROBE__!.profileRoutes()
+      return routes.find(route => route.connectionId === connectionId && route.profile === routeProfile)
+    },
+    { connectionId, routeProfile }
+  )
+  expect(route).toEqual({ connectionId, mode: 'remote', profile: routeProfile, targetProfile: profile })
+  const ids = await page.evaluate(async route => {
+    const result = await window.__E07_SSH_ROUTE_PROBE__!.requestProfile(
+      route,
+      'session.list',
+      { title: 'Bot Chat', profile: route.targetProfile, include_hidden: true, limit: 17 },
+      25_000,
+      { spawnPriority: 'foreground' }
+    )
+    return result.sessions.map(({ id, resolved_id }) => [id, resolved_id])
+  }, route!)
+  expect(ids).toEqual([[canonical, canonical]])
+}
+
+async function verifySshBotChat(routeProfile: string) {
+  const aliased = routeProfile !== profile
   expect(process.platform).toBe('linux')
   const state = process.env.HERMES_E2E_SSH_STATE
   const python = process.env.HERMES_E2E_PYTHON
@@ -143,6 +205,7 @@ test('Bot Mode opens the named canonical chat over OpenSSH', async () => {
     expect(preflightLogins).toBe(1)
 
     installCanonicalObserver(local.hermesHome)
+    if (aliased) installRouteProbe(local.hermesHome)
     gateway = startGateway(local, localEnv)
     const localEndpoint = await waitForEndpoint(gateway, profile)
     const before = initial()
@@ -161,7 +224,8 @@ test('Bot Mode opens the named canonical chat over OpenSSH', async () => {
             user: sshUser,
             port,
             keyPath: clientKey,
-            remoteHermesPath: remoteLauncher
+            remoteHermesPath: remoteLauncher,
+            ...(aliased ? { remoteProfile: profile } : {})
           }
         ]
       }),
@@ -172,26 +236,37 @@ test('Bot Mode opens the named canonical chat over OpenSSH', async () => {
     const { page } = live
     const wire = observeWire(page)
     await expect(composer(page)).toBeVisible({ timeout: 45_000 })
+    let aliasedPort: string | undefined
+    if (aliased) {
+      const from = wire.length
+      await readAliasedChat(page, routeProfile)
+      const reads = wire.slice(from).filter(frame => lookup(frame) && frame.limit === 17)
+      expect(reads).toHaveLength(1)
+      expect(reads[0]).toMatchObject({ profile, includeHidden: true, reply: {} })
+      aliasedPort = reads[0]!.port
+      expect(aliasedPort).not.toBe(new URL(localEndpoint.origin).port)
+    }
     await page
       .getByRole('button', { name: 'Bots', exact: true })
       .or(page.getByRole('tab', { name: 'Bots', exact: true }))
       .first()
       .click()
     const roster = page.locator('[data-slot="bots-roster"]')
-    const row = roster.locator(`[data-roster-key="${connectionId}::${profile}"]`)
+    const row = roster.locator(`[data-roster-key="${connectionId}::${routeProfile}"]`)
     await expect(row).toBeVisible({ timeout: 45_000 })
-    await expect(roster.locator('[data-roster-key="local::scout"]')).toBeVisible()
+    await expect(roster.locator(`[data-roster-key="local::${routeProfile}"]`)).toBeVisible()
     const from = wire.length
     await row.click()
     const viewport = page.locator('[data-slot="aui_thread-viewport"]').filter({ visible: true }).first()
     await expect(viewport.getByText(canonical, { exact: true })).toBeVisible({ timeout: 55_000 })
-    await expect.poll(() => focus(page)).toEqual({ id: canonical, owner: { connectionId, profile } })
+    await expect.poll(() => focus(page)).toEqual({ id: canonical, owner: { connectionId, profile: routeProfile } })
     for (const decoy of decoys) await expect(viewport.getByText(decoy, { exact: true })).toHaveCount(0)
     const frames = wire.slice(from)
     const reads = frames.filter(lookup)
     expect(reads).toHaveLength(1)
-    expect(reads[0]).toMatchObject({ method: 'session.list', profile, reply: {} })
+    expect(reads[0]).toMatchObject({ method: 'session.list', profile, includeHidden: true, reply: {} })
     expect(reads[0]!.port).not.toBe(new URL(localEndpoint.origin).port)
+    if (aliasedPort) expect(reads[0]!.port).toBe(aliasedPort)
     const opens = frames.filter((frame) => ['session.resume', 'session.activate'].includes(frame.method))
     expect(opens.some((frame) => frame.method === 'session.resume')).toBe(true)
     for (const frame of opens) {
@@ -223,4 +298,14 @@ test('Bot Mode opens the named canonical chat over OpenSSH', async () => {
       }
     }
   }
+}
+
+test('Bot Mode opens the named canonical chat over OpenSSH', async () => {
+  test.setTimeout(180_000)
+  await verifySshBotChat(profile)
+})
+
+test('Bot Mode opens the canonical chat behind an OpenSSH profile alias', async () => {
+  test.setTimeout(180_000)
+  await verifySshBotChat('default')
 })

@@ -23,6 +23,9 @@ CANONICAL_FIXTURES = (GATEWAY_FIXTURE, CANONICAL_FIXTURE, CANONICAL_OBSERVER, AP
 INSTALL_AMBIGUITY_SPEC = "desktop_install_ambiguity_ipc.spec.ts"
 CANONICAL_CASE = "bot-canonical"
 SSH_CASE = "bot-canonical-ssh"
+SSH_ALIAS_CASE = "bot-canonical-ssh-alias"
+SSH_SPEC = "desktop_bot_ssh.spec.ts"
+SSH_FIXTURES = (GATEWAY_FIXTURE, CANONICAL_OBSERVER, APPIMAGE_FIXTURE)
 SAVED_TOKEN_CASE = "bot-canonical-saved-token"
 COMPRESSED_LOCAL_CASE = "compressed-history-adoption"
 COMPRESSED_SAVED_CASE = "compressed-history-saved-token"
@@ -36,6 +39,7 @@ COMPRESSED_FIXTURES = (
 APPIMAGE_CASES = (
     CANONICAL_CASE,
     SSH_CASE,
+    SSH_ALIAS_CASE,
     SAVED_TOKEN_CASE,
     COMPRESSED_LOCAL_CASE,
     COMPRESSED_SAVED_CASE,
@@ -53,11 +57,8 @@ CASES = {
         CANONICAL_FIXTURES,
         "Bot Mode canonical chat",
     ),
-    SSH_CASE: (
-        "desktop_bot_ssh.spec.ts",
-        (GATEWAY_FIXTURE, CANONICAL_OBSERVER, APPIMAGE_FIXTURE),
-        "OpenSSH Bot Mode",
-    ),
+    SSH_CASE: (SSH_SPEC, SSH_FIXTURES, "OpenSSH Bot Mode"),
+    SSH_ALIAS_CASE: (SSH_SPEC, SSH_FIXTURES, "OpenSSH Bot Mode profile alias"),
     SAVED_TOKEN_CASE: (
         "desktop_bot_saved_token_refusal.spec.ts",
         CANONICAL_FIXTURES,
@@ -95,6 +96,8 @@ CASES = {
     ),
 }
 CASE_TITLE_FILTERS = {
+    SSH_CASE: "opens the named canonical chat over OpenSSH$",
+    SSH_ALIAS_CASE: "opens the canonical chat behind an OpenSSH profile alias$",
     COMPRESSED_LOCAL_CASE: "compressed Bot Chat over the local private ticket$",
     COMPRESSED_SAVED_CASE: "compressed Bot Chat over the saved Webapp token$",
     "install-marker-collision": (
@@ -322,7 +325,7 @@ def run_probe(
     env = isolated_environment(work, python, node)
     if chromium is not None:
         env["HERMES_E2E_CHROMIUM"] = str(chromium)
-    if spec == CASES[SSH_CASE][0]:
+    if spec == SSH_SPEC:
         ssh_state = work / "ssh"
         ssh_state.mkdir(mode=0o700)
         (ssh_state / "account").mkdir(mode=0o700)
@@ -414,15 +417,15 @@ def main():
     args = parser.parse_args()
     if sys.platform != "linux":
         parser.error("This acceptance requires Linux namespaces and Xvfb")
-    if args.case == SSH_CASE:
+    if args.case in (SSH_CASE, SSH_ALIAS_CASE):
         if any(
             not shutil.which(command, path="/usr/bin:/bin")
             for command in ("/usr/sbin/sshd", "ssh", "ssh-keygen")
         ):
-            parser.error(f"--case {SSH_CASE} requires OpenSSH server and client")
+            parser.error(f"--case {args.case} requires OpenSSH server and client")
         # The account home is also used as a literal in the OpenSSH configuration.
         if not re.fullmatch(r"[a-zA-Z0-9_./-]+", str(args.scratch.resolve())):
-            parser.error(f"--case {SSH_CASE} requires a simple absolute scratch path")
+            parser.error(f"--case {args.case} requires a simple absolute scratch path")
     if args.review_proposal and args.case != SAVED_TOKEN_CASE:
         parser.error(f"--review-proposal requires --case {SAVED_TOKEN_CASE}")
     if (args.chromium is not None) != (args.case == WEBAPP_SIGNOUT_CASE):
