@@ -199,6 +199,8 @@
 
 ### 新增
 
+- 从 Desktop SDK 到 Bot Mode 验证已保存的 OpenSSH profile 别名。Linux x64 源码版与安装包客户端保留连接内的路由身份，同时打开远端命名会话（#33）。
+
 - 在 Linux x64 Desktop 源码构建和安装包中验证 Bot Mode 通过已保存的 OpenSSH 密钥连接打开远端现有命名会话。测试包含同名本地 profile，且会话存储保持原样（#33）。
 
 - 在源码构建和捆绑式 Linux x64 Desktop 中，通过已保存 Webapp 令牌验证压缩 Bot Chat 的历史加载。其他三个 profile 存储中的同 ID 干扰记录不会进入所选会话历史（#33）。
