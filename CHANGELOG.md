@@ -199,6 +199,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Reproduce the saved Webapp Bot Chat fallback in a bundled Linux x64 AppImage and verify named-profile scoping and explicit retry in the matching review image (#33).
+
 - Verify local Bot Mode refusal and retry from a bundled Linux x64 AppImage built at the pinned Hermes revision. The acceptance checks the running packaged executable and opens the original canonical chat on explicit retry (#33).
 
 - Add explicit LOCAL `origin RECORD_ID` and optional SDK `record_origin` inspection, separating historical acceptance, current state and latest editing route through bounded readonly metadata without reconstructing forgotten payload or claiming authorship/authority (#157).

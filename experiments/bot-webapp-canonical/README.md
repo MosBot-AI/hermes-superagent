@@ -52,4 +52,6 @@ The clean and proposal builds each passed one isolated Linux Electron case with 
 
 Both runs recorded unchanged session, message and admission projections for the four fixture databases, no session creation or prompt submission, and zero model completions. The clean profile-routing and local Bot Mode cases also passed after the fixture refactor. The proposal source passed 52 selected upstream Vitest cases, including 15 canonical chat registry cases with the new alias case, 20 roster cases and 17 routing cases.
 
-Authentication and grants remain governed by the native host. The patch remains a review artifact. Upstream adoption, supported packaging and other credential modes require separate evidence.
+The bundled Linux x64 AppImages reproduced the same two outcomes. The clean image probed `default` before reopening the original chat within that click. The candidate probed `scout`, kept focus and opened the original chat only on explicit retry. Both attached to fixture-owned Gateways and preserved all four SQLite projections, with no new session, prompt or model completion. Passing the clean AppImage in proposal mode failed the exact stamp check before the packaged client launched.
+
+Authentication and grants remain governed by the native host. The patch remains a review artifact. The unsigned local images establish only the saved-token mode on Linux x64. Signed distribution, other credentials and upstream adoption require separate evidence.
