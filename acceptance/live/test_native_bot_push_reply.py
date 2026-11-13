@@ -4,7 +4,7 @@ import asyncio
 import json
 import os
 import sys
-from contextlib import closing, contextmanager
+from contextlib import closing, contextmanager, nullcontext
 from dataclasses import dataclass
 from urllib.parse import urlsplit
 
@@ -14,6 +14,14 @@ from native_profile_cli_fixture import retained_host_client
 from test_native_bot_poll_reply import MESSAGE, NOTICE, isolated_reply_fixture
 from test_native_bot_receipt import AUTHOR
 from test_native_managed_worker import MODEL, ScriptedModel, scripted_model
+from test_packaged_gateway_bot import (
+    ADD,
+    TASK,
+    command,
+    confirm_task,
+    lookup,
+    verify_saved_state,
+)
 
 PROMPT = "Synthetic Bot push request"
 INPUT = "fixture-bot-push-input"
@@ -94,7 +102,7 @@ class BotPushModel(ScriptedModel):
         self.send_completion(body, reply)
 
 
-def create_profiles(home, scout, url):
+def create_profiles(home, scout, url, *, installed):
     config = {
         "gateway": {"multiplex_profiles": True, "managed_workers": False},
         "webapp": {"enabled": False},
@@ -109,7 +117,16 @@ def create_profiles(home, scout, url):
         "telemetry": {"shared_metrics": {"enabled": False}},
     }
     for profile in (home, scout):
-        (profile / "config.yaml").write_text(json.dumps(config), encoding="utf-8")
+        config_path = profile / "config.yaml"
+        if profile == home and installed:
+            from ruamel.yaml import YAML
+
+            yaml = YAML()
+            recipient_config = yaml.load(config_path)
+            recipient_config.update(config)
+            yaml.dump(recipient_config, config_path)
+        else:
+            config_path.write_text(json.dumps(config), encoding="utf-8")
         (profile / "models_dev_cache.json").write_text(
             '{"hermes-test-offline":{"id":"hermes-test-offline","env":[],"models":{}}}',
             encoding="utf-8",
@@ -341,13 +358,14 @@ class BotDelivery:
     receiver_admission: dict
     delivery_id: str
     process_id: str
+    recipient_task: dict | None = None
 
     @property
     def reply_tokens(self):
         return RECEIVER_REPLY, self.delivery_id, self.process_id
 
 
-async def start_delivery(client, home, scout, model):
+async def start_delivery(client, home, scout, model, *, recipient=None):
     ids = {}
     for profile in ("default", "scout"):
         created = await client.rpc(
@@ -363,6 +381,16 @@ async def start_delivery(client, home, scout, model):
         )
         ids[profile] = created["session_id"]
     target, sender = ids["default"], ids["scout"]
+    task = None
+    if recipient is not None:
+        inventory = await recipient.rpc("plugins.list", _timeout=8)
+        (plugin,) = [row for row in inventory["plugins"] if row["key"] == "hermes-personal-agent"]
+        assert plugin["enabled"] and plugin["commands"] > 0 and not plugin["error"]
+        assert await lookup(recipient) == [(target, target)]
+        resumed = await recipient.rpc("session.resume", session_id=target, _timeout=8)
+        assert resumed["session_id"] == resumed["stored_session_id"] == target
+        task = (await command(recipient, target, ADD))["data"]
+        assert task["title"] == TASK and task["revision"] == 1
     await client.rpc("session.resume", profile="scout", session_id=sender, _timeout=8)
     submitted = await client.rpc(
         "prompt.submit",
@@ -384,16 +412,24 @@ async def start_delivery(client, home, scout, model):
     (receiver_admission,) = admissions(home, target)
     assert receiver_admission["request_id"] == f"bot:{delivery_id}"
     assert receiver_admission["status"] == "started"
-    return BotDelivery(sender, target, original, receiver_admission, delivery_id, process_id)
+    return BotDelivery(sender, target, original, receiver_admission, delivery_id, process_id, task)
 
 
-async def exercise_local_reply(endpoint, host, home, scout, model, *, reconnect):
+async def exercise_local_reply(endpoint, host, home, scout, model, *, reconnect, installed):
+    from hermes_cli.gateway_client import connect_gateway
     from websockets.protocol import State
 
     with gateway_dial(home, endpoint) as owner_pid:
         try:
-            async with asyncio.timeout(82), retained_host_client(home, endpoint) as client:
-                delivery = await start_delivery(client, home, scout, model)
+            recipient_connection = (
+                connect_gateway(endpoint=endpoint) if installed else nullcontext()
+            )
+            async with (
+                asyncio.timeout(82),
+                retained_host_client(home, endpoint) as client,
+                recipient_connection as recipient,
+            ):
+                delivery = await start_delivery(client, home, scout, model, recipient=recipient)
                 waiter = await owned_waiter(host, home.parent, owner_pid)
                 if not reconnect:
                     model.release.set()
@@ -406,6 +442,27 @@ async def exercise_local_reply(endpoint, host, home, scout, model, *, reconnect)
                         model,
                     )
                     await verify_recipient(client, home, delivery)
+                    if recipient is not None:
+                        assert await lookup(recipient) == [(delivery.target, delivery.target)]
+                        await confirm_task(recipient, delivery.target, delivery.recipient_task)
+                        repeated = await client.rpc(
+                            "prompt.submit",
+                            profile="scout",
+                            session_id=delivery.sender,
+                            input_id=INPUT,
+                            text=PROMPT,
+                            _timeout=8,
+                        )
+                        assert repeated["admission_id"] == delivery.original
+                        assert (repeated["status"], repeated["outcome"]) == (
+                            "terminal",
+                            "completed",
+                        )
+                        completion_admission(scout, delivery.sender, delivery.original)
+                        while not client.events.empty():
+                            assert not is_completion_event(
+                                client.events.get_nowait(), delivery.sender
+                            )
 
             if reconnect:
                 # Keep the recipient held until the viewer's actual WebSocket has closed.
@@ -429,20 +486,24 @@ async def exercise_local_reply(endpoint, host, home, scout, model, *, reconnect)
                     await verify_recipient(reopened, home, delivery)
             assert not waiter.is_running()
             assert model.recipient_requests == 1 and model.unexpected == 0
+            if delivery.recipient_task is not None:
+                return delivery.target, delivery.recipient_task["id"]
         finally:
             model.release.set()
 
 
 @contextmanager
-def local_reply_fixture(tmp_path_factory, monkeypatch):
+def local_reply_fixture(tmp_path_factory, monkeypatch, *, installed=False):
     with isolated_reply_fixture(
         tmp_path_factory, monkeypatch, activate_hook="native_bot_push_guard:activate_push_child"
-    ) as (_, fixture, scout, env, installed):
-        assert not installed
+    ) as (_, fixture, scout, env, prepared):
+        assert prepared == installed
         host, home, _, _ = fixture
         with scripted_model(handler=BotPushModel) as model:
             model.recipient_requests = 0
-            create_profiles(home, scout, f"http://127.0.0.1:{model.server_port}/v1")
+            create_profiles(
+                home, scout, f"http://127.0.0.1:{model.server_port}/v1", installed=installed
+            )
             child_env = env | {
                 "HERMES_BOT_ACCEPTANCE_ROOT": str(home.parent),
                 "HERMES_BOT_ACCEPTANCE_MODEL_PORT": str(model.server_port),
@@ -450,12 +511,33 @@ def local_reply_fixture(tmp_path_factory, monkeypatch):
             yield host, home, scout, child_env, model
 
 
-def run_local_reply(tmp_path_factory, monkeypatch, *, reconnect):
-    with local_reply_fixture(tmp_path_factory, monkeypatch) as (host, home, scout, env, model):
+def run_local_reply(tmp_path_factory, monkeypatch, *, reconnect, installed=False):
+    with local_reply_fixture(tmp_path_factory, monkeypatch, installed=installed) as (
+        host,
+        home,
+        scout,
+        env,
+        model,
+    ):
         with gateway_daemon(host, home, env, "bot-push") as endpoint:
-            asyncio.run(
-                exercise_local_reply(endpoint, host, home, scout, model, reconnect=reconnect)
+            saved = asyncio.run(
+                exercise_local_reply(
+                    endpoint, host, home, scout, model, reconnect=reconnect, installed=installed
+                )
             )
+        if installed:
+            target, task_id = saved
+            verify_saved_state(
+                home,
+                target,
+                task_id,
+                messages=(("user", MESSAGE), ("assistant", RECEIVER_REPLY)),
+                admission_count=1,
+            )
+
+
+def test_installed_recipient_reply_wakes_viewed_sender_once(tmp_path_factory, monkeypatch):
+    run_local_reply(tmp_path_factory, monkeypatch, reconnect=False, installed=True)
 
 
 def test_native_viewed_bot_reply_wakes_sender_once(tmp_path_factory, monkeypatch):

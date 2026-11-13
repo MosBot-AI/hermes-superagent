@@ -7,6 +7,7 @@ usage() {
     printf '%s\n' \
         'Usage: sh acceptance/live/run_native_bot_poll_reply.sh --hermes CHECKOUT --hermes-python PYTHON [--receipt RESULT.xml] [--installed] [--consume]' \
         '       sh acceptance/live/run_native_bot_poll_reply.sh --hermes CHECKOUT --hermes-python PYTHON [--receipt RESULT.xml] MODE [--review-recovery]' \
+        'Installed mode supports --consume, --push and --install-tool-store DIRECTORY.' \
         'Modes: --push --reconnect --owner-loss --settled-loss --finished-loss --planned-restart' \
         '       --held-waiter-restart --drained-waiter-restart' \
         'Review only: --killed-settled-receipt --mismatched-waiter-receipt' \
@@ -18,6 +19,7 @@ host=
 python=
 receipt=
 installed=0
+install_tool_store=
 review_recovery=0
 mode=poll
 test_file=test_native_bot_poll_reply.py
@@ -61,12 +63,13 @@ while [ "$#" -gt 0 ]; do
                     case_name=test_native_planned_restart_drops_pending_sender_notification ;;
             esac
             shift ;;
-        --hermes|--hermes-python|--receipt)
+        --hermes|--hermes-python|--receipt|--install-tool-store)
             if [ "$#" -lt 2 ] || [ -z "$2" ]; then usage >&2; exit 2; fi
             case "$1" in
                 --hermes) host=$2 ;;
                 --hermes-python) python=$2 ;;
                 --receipt) receipt=$2 ;;
+                --install-tool-store) install_tool_store=$2 ;;
             esac
             shift 2
             ;;
@@ -74,9 +77,13 @@ while [ "$#" -gt 0 ]; do
     esac
 done
 if [ -z "$host" ] || [ -z "$python" ]; then usage >&2; exit 2; fi
-if [ "$installed" -eq 1 ] && [ "$test_file" != test_native_bot_poll_reply.py ]; then
-    usage >&2
-    exit 2
+if [ -n "$install_tool_store" ] && [ "$installed" -ne 1 ]; then usage >&2; exit 2; fi
+if [ "$installed" -eq 1 ]; then
+    case "$mode" in
+        poll|consume) ;;
+        push) case_name=test_installed_recipient_reply_wakes_viewed_sender_once ;;
+        *) usage >&2; exit 2 ;;
+    esac
 fi
 
 case "$mode" in
@@ -132,8 +139,12 @@ fi
 if [ "$installed" -eq 1 ]; then
     # Prepare the exact package with the normal scanner before isolating reply traffic.
     prepared=$(mktemp -d /var/tmp/hbp.XXXXXX)
+    set -- "$host" "$prepared"
+    if [ -n "$install_tool_store" ]; then
+        set -- "$@" "$install_tool_store"
+    fi
     timeout --kill-after=5s 365s "$python" -I -B \
-        "$repo/acceptance/live/prepare_installed_bot_poll_recipient.py" "$host" "$prepared" < /dev/null
+        "$repo/acceptance/live/prepare_installed_bot_poll_recipient.py" "$@" < /dev/null
 fi
 
 if ! env -i PATH="$PATH" LANG=C.UTF-8 TZ=UTC \
@@ -196,7 +207,12 @@ if (
 for suite in tree.iter("testsuite"):
     suite.attrib.pop("hostname", None)
     if sys.argv[2]:
-        suite.set("name", "native_bot_poll_reply_installed")
+        suite.set(
+            "name",
+            "native_bot_push_reply_installed"
+            if sys.argv[3] == "test_installed_recipient_reply_wakes_viewed_sender_once"
+            else "native_bot_poll_reply_installed",
+        )
 sys.stdout.buffer.write(ElementTree.tostring(tree.getroot(), encoding="utf-8", xml_declaration=True))
 PY
     ' bot-poll-reply "$repo" "$host" "$python" "$mount_namespace" "$network_namespace" "$prepared" "$case_name" "$test_file" "$review_recovery" \
