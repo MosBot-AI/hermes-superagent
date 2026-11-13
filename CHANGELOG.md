@@ -83,6 +83,8 @@ This file distinguishes design work, development changes, and released capabilit
 - Run runtime artifact acceptance on exact pull-request heads with read-only credentials; keep downloadable artifact publication push-only.
 ### Changed
 
+- Verify named-profile managed worker recovery after a Gateway crash. The manual case checks that the original admission stays unknown on retry and that explicit resolution lets the queued successor finish once with its own receipt (#33).
+
 - Verify ordinary named-profile prompt execution in a real native managed worker with a synthetic loopback model. The manual Gateway case correlates the worker, admission and terminal receipt and checks that a same-ID retry does not start another execution (#33).
 
 - Verify that signing out of one serving Webapp closes its browser connection while the installation's native client and a second installation's clients keep their existing sessions (#33).

@@ -51,7 +51,7 @@
 | 运行中的 Webapp 登出 | Linux 本地操作者登出选定的运行中 Webapp，原生连接与另一安装的访问继续有效。Chromium 中的原版 Webapp 重新加载后返回 Basic 登录，登录后重新打开原会话。[运行中 Webapp 证据](#当前固定版本的运行中-webapp-登出) | Owner 身份、跨安装恢复、其他凭据模式和进行中操作的结果需要独立证据。 |
 | 本地调用方与接收 Bot | Linux 同 UID 控制票据证明本地操作者准入。干净宿主上的 owner 入口夹具在缺少受支持的接收侧适配器上下文时拒绝。[本地 Gateway](#当前固定版本的本地-bot-传输与重启) · [Owner 入口契约](../tests/contracts/test_owner_entry_contracts.py) | 受保护的原生命令和渠道入口需要宿主以受支持的方式证明原始调用方、接收方及会话，再校验当前 owner 和 grant。[命令上下文实验](23-host-command-context-experiment-zh.md)仍仅供评审。 |
 | 插件状态与子代理角色 | 公开 `ctx.subagent_lifecycle` 覆盖 `in_process` 和 `host` 两种隔离模式下的进程内父子关联。`ctx.state` 在两种模式下均经过验证，其中托管模式覆盖两个命名 profile。[子代理证据](#当前固定版本的子代理关联) | 可信调用方身份、绑定 owner 的 grant 和撤销需要独立检查。[E0.4](13-enforcement-contracts-zh.md)覆盖独立的配置冻结和故障排查安全模式 worker 路径。 |
-| 原生受管 WorkerChannel | 命名 profile 的普通 Gateway 路径关联已准入的 prompt、原生子进程、有序持久化回执及完成后的对话记录。[受管 worker 证据](#当前固定版本的原生受管-workerchannel) | 人类 owner 授权、当前撤销状态、受管委派及 Kanban 接管需要独立证明。仅供评审的纯文本 worker 契约有独立门禁。 |
+| 原生受管 WorkerChannel | 命名 profile 的普通 Gateway 路径关联原生子进程、其准入、有序回执及完成后的对话记录。后继 Gateway 将丢失 worker 的准入保留为 `unknown`，待显式处理后运行排队的后续输入。[受管 worker 证据](#当前固定版本的原生受管-workerchannel) · [重启对账](#当前固定版本的受管-worker-重启对账) | 人类 owner 授权、当前撤销状态、受管委派及 Kanban 接管需要独立证明。仅供评审的纯文本 worker 契约有独立门禁。 |
 | 原生 Bot 与 cron 投递 | 同一安装内的 `message_agent` 和 `bot_relay.deliver` 覆盖仅通知的作者归因及本地终态回执恢复。原生 cron 在响应丢失后复用同一个投递 ID，并报告 `transferred` 和 `queued` 回执。[Bot 消息](#当前固定版本的同一安装内-bot-消息) · [重启](#当前固定版本的本地-bot-传输与重启) · [延后投递](#当前固定版本的-bot-chat-延后投递) | 对需要回复、远程和其他生产者模式分别验证回执及作者对账。结果不确定时保留原投递 ID。 |
 | 插件注入 | 原生调度器证据显示，`ctx.inject_message` 可在随后发生派发失败之前返回 `True`。[注入证据](#8-消息例行任务与回执) | 插件负责的持久投递需要受支持的幂等准入与回执查询。使用布尔接口时保持持久主动投递不可用。 |
 | 可选 HTTP | [客户端契约](14-client-api-contracts-zh.md#3-鉴权不等于领域授权)记录原生凭据形态和 E0.6 传输边界。 | 只有受支持的可信主体和 profile 传递、领域授权以及逐能力的传输和恢复验收都完成后，才启用 Primary Bot HTTP 操作。 |
@@ -431,7 +431,17 @@ V1 **不支持自动跨 profile/跨宿主接管**。应使用 E8.3 下经过单�
 
 原生 `prompt.receipt` 使用 `include_result: true` 返回确切的最终响应、命名 profile 和会话引用、原准入 ID、authority epoch 及 generation。`session.resume` 恰好返回合成用户消息，随后是脚本化的助手响应。使用相同输入 ID 和载荷重复 `prompt.submit` 会返回原终态准入。使用该 ID 提交不同文本时返回 `4001`，原因为 `admission_conflict`。执行记录和回执序号保持一致，模型补全次数仍为一次。`default` 和 `watch` 中所比较的会话和消息字段保持一致，两个同级 profile 的准入、执行及 worker 回执数仍为零。原子进程退出，Gateway 的 PID 和实例 ID 保持不变，直至按计划停止。手动原生 Gateway 工作流在测试通过后发布 `managed-worker.xml`。[手动工作流](../.github/workflows/native-gateway.yml)
 
-这项 worker 证据限于普通本地 Gateway 路径。[进程内子代理关联](#当前固定版本的子代理关联)与 [E0.4 安全模式和冻结配置检查](13-enforcement-contracts-zh.md)覆盖不同路径。#143 的[仅供评审的纯文本 worker 提案](101-current-host-text-worker-zh.md)仍需自己的受支持契约与验收。经验证的人类 owner 身份与 grant、撤销、受管委派、Kanban 接管、真实服务商行为及外部副作用需要独立证据。
+#### 当前固定版本的受管 worker 重启对账
+
+[Linux 手动重启夹具](../acceptance/live/test_native_managed_worker_restart.py)在同一个可丢弃的 `scout` home 上依次运行两个 Hermes `2281116525106e3c109993ccb5dc74d02bfc1427` Gateway。首个脚本化环回响应被暂缓时，夹具观测到原准入已经开始、原生 `compute` 子进程仍存活，且第二条准入排在其后。夹具仅强制终止首个 Gateway，并等待原 worker 停止运行。后继 Gateway 使用新实例及更高的 `scout` authority epoch 为同一会话提供服务。
+
+夹具通过一条新的原生连接恢复同一会话一次。原准入及关联 worker 执行均为 `unknown`，保留原 epoch 和 generation，后续输入仍为 `queued`。`prompt.receipt` 使用 `include_result: true` 返回原准入且无结果。按原样重试第一条输入返回同一 `unknown` 准入。夹具等待该重试触发的队列处理暂停，再处理原准入。使用错误 generation 调用 `prompt.resolve_unknown` 返回 `4001`，原因为 `stale_generation`。[Epoch 恢复](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_state_runtime.py#L453-L464)
+
+使用原 generation 处理后，原准入记为 `terminal` 且结果为 `interrupted`，原 worker 执行退役，队列解除阻塞。后继 Gateway 的另一个直接 worker 子进程在新 epoch 下运行后续输入。后续输入的回执返回 `terminal` 和 `completed`，保留其原准入 ID 并包含脚本化响应。按原样重复处理返回相同的中断回执。环回替身分别收到每条输入的一次补全请求，`default` 和 `watch` 中所比较的状态保持一致。后继 Gateway 按计划停止。手动工作流在测试通过后发布 `managed-worker-restart.xml`。[显式处理](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_state_runtime.py#L657-L694) · [手动工作流](../.github/workflows/native-gateway.yml)
+
+两个 Gateway 实例均使用合成 `scout` profile 中同一条已持久化的无密钥环回路由。替身校验两次请求都携带 Hermes 的 `no-key-required` 占位值。固定版本的宿主文档另行规定了临时启动密钥的生命周期，随接收该密钥的 Gateway 实例结束。[自定义服务商占位值](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_cli/runtime_provider.py#L1091-L1099) · [冻结的本地启动凭据生命周期](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/website/docs/developer-guide/gateway-internals.md#L338-L354)
+
+这项 worker 证据限于普通本地 Gateway 路径。[进程内子代理关联](#当前固定版本的子代理关联)与 [E0.4 安全模式和冻结配置检查](13-enforcement-contracts-zh.md)覆盖不同路径。#143 的[仅供评审的纯文本 worker 提案](101-current-host-text-worker-zh.md)仍需自己的受支持契约与验收。经验证的人类 owner 身份与 grant、撤销、受管委派、Kanban 接管、真实服务商结果及外部副作用需要独立证据。
 
 ### 当前固定版本的同一安装内 Bot 消息
 

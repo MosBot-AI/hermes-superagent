@@ -9,6 +9,7 @@ import sys
 import tempfile
 import threading
 from contextlib import closing, contextmanager, suppress
+from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -63,21 +64,33 @@ class ScriptedModel(BaseHTTPRequestHandler):
             for row in messages
             if isinstance(row, dict) and row.get("role") == "user"
         ]
+        turn = users[-1] if users else None
+        first = users == [TEXT]
+        follower = self.server.follower is not None and turn == self.server.follower
+        expected_key = MODEL_KEY if self.server.follower is None else "no-key-required"
         if (
             self.path != "/v1/chat/completions"
-            or self.headers.get("Authorization") != f"Bearer {MODEL_KEY}"
+            or self.headers.get("Authorization") != f"Bearer {expected_key}"
             or not isinstance(body, dict)
             or body.get("model") != MODEL
-            or users != [TEXT]
+            or not (first or follower)
             or body.get("tools")
         ):
             self.server.unexpected += 1
             self.send_error(400)
             return
         self.server.completions += 1
-        self.server.observed.set()
-        if not self.server.release.wait(12):
-            self.send_error(500)
+        self.server.turns.append(turn)
+        observed, release = (
+            (self.server.observed, self.server.release)
+            if first
+            else (self.server.follower_observed, self.server.follower_release)
+        )
+        observed.set()
+        if not release.wait(35 if self.server.follower is not None else 12):
+            self.server.unexpected += 1
+            with suppress(BrokenPipeError, ConnectionResetError):
+                self.send_error(500)
             return
         reply = {
             "id": "fixture",
@@ -93,24 +106,28 @@ class ScriptedModel(BaseHTTPRequestHandler):
             reply["choices"][0]["message"] = message
             content = json.dumps(reply).encode()
             content_type = "application/json"
-        self.send_response(200)
-        self.send_header("Content-Type", content_type)
-        self.send_header("Content-Length", str(len(content)))
-        self.end_headers()
-        self.wfile.write(content)
+        with suppress(BrokenPipeError, ConnectionResetError):
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(content)))
+            self.end_headers()
+            self.wfile.write(content)
 
 
 @contextmanager
-def scripted_model():
+def scripted_model(*, follower=None):
     with ThreadingHTTPServer(("127.0.0.1", 0), ScriptedModel) as server:
         server.completions = server.unexpected = 0
         server.observed, server.release = threading.Event(), threading.Event()
+        server.follower_observed, server.follower_release = threading.Event(), threading.Event()
+        server.follower, server.turns = follower, []
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
             yield server
         finally:
             server.release.set()
+            server.follower_release.set()
             server.shutdown()
             thread.join(timeout=5)
             assert not thread.is_alive()
@@ -292,9 +309,20 @@ async def verify_worker(root, scout, endpoint, owner, model, url, controls):
                 await asyncio.sleep(0.05)
 
 
-def test_native_named_profile_runs_and_settles_an_ordinary_managed_worker(
-    tmp_path_factory, monkeypatch
-):
+@dataclass
+class ManagedFixture:
+    root: Path
+    host: Path
+    home: Path
+    scout: Path
+    child_env: dict[str, str]
+    model: ThreadingHTTPServer
+    url: str
+    controls: dict
+
+
+@contextmanager
+def managed_fixture(tmp_path_factory, monkeypatch, *, follower=None):
     assert sys.platform == "linux", "This acceptance uses the Linux private control socket"
     host = Path(os.environ["HERMES_TEST_ROOT"]).resolve(strict=True)
     pin = json.loads((REPO / "compatibility.json").read_bytes())["hermes_commit"]
@@ -311,8 +339,11 @@ def test_native_named_profile_runs_and_settles_an_ordinary_managed_worker(
             directory.mkdir(mode=0o700, parents=True)
         assert len(os.fsencode(home / "gateway.sock")) <= 100, "Fixture socket path too long"
         (guard / "sitecustomize.py").write_text(
-            "from native_managed_worker_guard import activate_managed_child\n"
-            "activate_managed_child()\n",
+            "try:\n"
+            "    from native_managed_worker_guard import activate_managed_child\n"
+            "    activate_managed_child()\n"
+            "except Exception:\n"
+            "    raise SystemExit('Could not load the managed-worker socket audit') from None\n",
             encoding="utf-8",
         )
         env = {name: os.environ[name] for name in ("PATH", "LANG", "TZ") if name in os.environ}
@@ -363,56 +394,76 @@ def test_native_named_profile_runs_and_settles_an_ordinary_managed_worker(
         deactivate = activate(root)
         try:
             from hermes_cli import gateway_client
-            from hermes_cli.gateway_runtime import discover_gateway_endpoint
-            from hermes_cli.gateway_runtime_discovery import query_identify
 
             assert Path(gateway_client.__file__).resolve().is_relative_to(host)
-            with scripted_model() as model:
+            with scripted_model(follower=follower) as model:
                 url = f"http://127.0.0.1:{model.server_port}/v1"
                 seed_profiles(home, scout, watch, url)
                 child_env = env | {"HERMES_MANAGED_FIXTURE_MODEL_PORT": str(model.server_port)}
-                with gateway_daemon(host, home, child_env, "managed-worker") as gateway:
-                    identity = query_identify(home, timeout=2)
-                    observed = discover_gateway_endpoint(scout, timeout=2)
-                    assert observed.state == "ready" and observed.endpoint is not None
-                    endpoint = observed.endpoint
-                    assert endpoint.profile_id == str(scout)
-                    assert (endpoint.instance_id, endpoint.api_origin) == (
-                        gateway.instance_id,
-                        gateway.api_origin,
-                    )
-                    owner_port = urlsplit(gateway.api_origin).port
-                    assert owner_port is not None
-                    with (root / "gateway-port").open("x", encoding="ascii") as stream:
-                        stream.write(str(owner_port))
-                    controls = {path: sibling_snapshot(path) for path in (home, watch)}
-                    assert all(
-                        before[2:] == ([(0,)], [(0,)], [(0,)]) for before in controls.values()
-                    )
-                    restrict = activate(root, dial_ports=(owner_port,), dial_host="127.0.0.1")
-                    try:
-                        asyncio.run(
-                            verify_worker(
-                                root, scout, endpoint, identity["pid"], model, url, controls
-                            )
-                        )
-                    except BaseException:
-                        # Retain custody of fixture descendants before the generic daemon
-                        # cleanup reaps their parent. psutil guards against PID reuse.
-                        import psutil
-
-                        with suppress(psutil.NoSuchProcess):
-                            for worker in managed_children(identity["pid"]):
-                                with suppress(psutil.NoSuchProcess):
-                                    worker.kill()
-                                    worker.wait(timeout=4)
-                        raise
-                    finally:
-                        restrict()
-                    current = query_identify(home, timeout=2)
-                    assert (current["pid"], current["instance_id"]) == (
-                        identity["pid"],
-                        identity["instance_id"],
-                    )
+                controls = {path: sibling_snapshot(path) for path in (home, watch)}
+                assert all(before[2:] == ([(0,)], [(0,)], [(0,)]) for before in controls.values())
+                yield ManagedFixture(root, host, home, scout, child_env, model, url, controls)
         finally:
             deactivate()
+
+
+@contextmanager
+def scout_connection(fixture, gateway):
+    from hermes_cli.gateway_runtime import discover_gateway_endpoint
+    from hermes_cli.gateway_runtime_discovery import query_identify
+
+    identity = query_identify(fixture.home, timeout=2)
+    assert identity["instance_id"] == gateway.instance_id
+    observed = discover_gateway_endpoint(fixture.scout, timeout=2)
+    assert observed.state == "ready" and observed.endpoint is not None
+    endpoint = observed.endpoint
+    assert endpoint.profile_id == str(fixture.scout)
+    assert (endpoint.instance_id, endpoint.api_origin) == (gateway.instance_id, gateway.api_origin)
+    owner_port = urlsplit(gateway.api_origin).port
+    assert owner_port is not None
+    port_file = fixture.root / "gateway-port"
+    with port_file.open("x", encoding="ascii") as stream:
+        stream.write(str(owner_port))
+    restrict = activate(fixture.root, dial_ports=(owner_port,), dial_host="127.0.0.1")
+    try:
+        yield endpoint, identity["pid"]
+    finally:
+        restrict()
+        port_file.unlink()
+
+
+def test_native_named_profile_runs_and_settles_an_ordinary_managed_worker(
+    tmp_path_factory, monkeypatch
+):
+    with (
+        managed_fixture(tmp_path_factory, monkeypatch) as fixture,
+        gateway_daemon(fixture.host, fixture.home, fixture.child_env, "managed-worker") as gateway,
+        scout_connection(fixture, gateway) as (endpoint, owner),
+    ):
+        from hermes_cli.gateway_runtime_discovery import query_identify
+
+        try:
+            asyncio.run(
+                verify_worker(
+                    fixture.root,
+                    fixture.scout,
+                    endpoint,
+                    owner,
+                    fixture.model,
+                    fixture.url,
+                    fixture.controls,
+                )
+            )
+        except BaseException:
+            # Retain custody of fixture descendants before the generic daemon
+            # cleanup reaps their parent. psutil guards against PID reuse.
+            import psutil
+
+            with suppress(psutil.NoSuchProcess):
+                for worker in managed_children(owner):
+                    with suppress(psutil.NoSuchProcess):
+                        worker.kill()
+                        worker.wait(timeout=4)
+            raise
+        current = query_identify(fixture.home, timeout=2)
+        assert (current["pid"], current["instance_id"]) == (owner, gateway.instance_id)
