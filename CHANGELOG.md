@@ -199,6 +199,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Verify that Desktop refuses an SSH endpoint whose host key changed and resumes the original Bot Chat after an explicit trust update and retry (#33).
+
 - Verify live SSH endpoint replacement across separate installations. Desktop closes the original socket and opens the replacement chat, while a captured route descriptor can resolve to the replacement under the same connection ID (#33).
 
 - Verify that a saved SSH alias survives explicit retry after a connection loss. Record that a live alias edit switches Bot Mode to the new target while a stale SDK descriptor can still read the previous served profile (#33).

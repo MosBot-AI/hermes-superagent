@@ -122,6 +122,20 @@ function saveSshConnection(page: Page, edit: SshEdit) {
   }, { connectionId, edit })
 }
 
+function testSavedSshConnection(page: Page) {
+  return page.evaluate(async id => {
+    const desktop = (window as unknown as {
+      hermesDesktop: {
+        connections: {
+          test(id: string): Promise<{ reachable: boolean; sshError?: string }>
+        }
+      }
+    }).hermesDesktop
+    const result = await desktop.connections.test(id)
+    return { reachable: result.reachable, sshError: result.sshError }
+  }, connectionId)
+}
+
 function readExactChat(page: Page, route: ProfileRoute, limit: number, retainSocket = false) {
   return page.evaluate(
     async ({ route, limit, retainSocket }) => {
@@ -160,6 +174,15 @@ function stopSshSessions(listenerPid: number) {
   }
 }
 
+function createSshKey(key: string, env: Record<string, string>) {
+  expect(
+    spawnSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', key], {
+      env,
+      stdio: 'ignore'
+    }).status
+  ).toBe(0)
+}
+
 async function prepareSshServer(
   state: string,
   sshConfig: string,
@@ -173,18 +196,13 @@ async function prepareSshServer(
   const sshUser = os.userInfo().username
   const hostKey = path.join(state, 'host')
   const clientKey = path.join(state, 'key')
-  for (const key of [hostKey, clientKey]) {
-    expect(
-      spawnSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', key], {
-        env: localEnv,
-        stdio: 'ignore'
-      }).status
-    ).toBe(0)
-  }
+  createSshKey(hostKey, localEnv)
+  createSshKey(clientKey, localEnv)
   const authorized = path.join(sshConfig, `authorized_keys_${port}`)
   fs.writeFileSync(authorized, fs.readFileSync(clientKey + '.pub'), { mode: 0o600 })
-  const knownHost = `[127.0.0.1]:${port} ${fs.readFileSync(hostKey + '.pub', 'utf8')}`
-  fs.appendFileSync(path.join(sshConfig, 'known_hosts'), knownHost, { mode: 0o600 })
+  const knownHosts = path.join(sshConfig, 'known_hosts')
+  const hostEntry = (key: string) => `[127.0.0.1]:${port} ${fs.readFileSync(key + '.pub', 'utf8')}`
+  fs.appendFileSync(knownHosts, hostEntry(hostKey), { mode: 0o600 })
   const remoteLauncher = path.join(remote.bin, 'hermes')
   fs.writeFileSync(
     remoteLauncher,
@@ -281,12 +299,32 @@ async function prepareSshServer(
     startServer,
     verifyLogin,
     acceptedKeys,
+    prepareHostKeyRotation() {
+      const replacement = path.join(state, 'rotated-host')
+      createSshKey(replacement, localEnv)
+      const previousEntry = hostEntry(hostKey)
+      const nextEntry = hostEntry(replacement)
+      const previousPins = fs.readFileSync(knownHosts, 'utf8')
+      const previousConfig = fs.readFileSync(config, 'utf8')
+      expect(previousPins).toContain(previousEntry)
+      expect(nextEntry).not.toBe(previousEntry)
+      fs.writeFileSync(config, previousConfig.replace(`HostKey ${hostKey}\n`, `HostKey ${replacement}\n`))
+      return {
+        assertOriginalPin: () => expect(fs.readFileSync(knownHosts, 'utf8')).toBe(previousPins),
+        installReplacementPin() {
+          const staged = knownHosts + '.new'
+          fs.writeFileSync(staged, previousPins.replace(previousEntry, nextEntry), { mode: 0o600, flag: 'wx' })
+          fs.renameSync(staged, knownHosts)
+        }
+      }
+    },
     listener: () => listener
   }
 }
 
-async function verifySshBotChat(routeProfile: string, transition?: 'reconnect' | 'edit' | 'replace') {
-  const reconnect = transition === 'reconnect'
+async function verifySshBotChat(routeProfile: string, transition?: 'reconnect' | 'edit' | 'replace' | 'rotate') {
+  const rotate = transition === 'rotate'
+  const reconnect = transition === 'reconnect' || rotate
   const edit = transition === 'edit'
   const replace = transition === 'replace'
   const expectedProfile = edit ? editedProfile : profile
@@ -403,6 +441,9 @@ async function verifySshBotChat(routeProfile: string, transition?: 'reconnect' |
       await stopped
       await expect.poll(() => socket.closed).toBe(true)
       await page.evaluate(() => window.__E07_SSH_RELEASE__?.())
+      const rotation = rotate ? original.prepareHostKeyRotation() : undefined
+      const loginsBeforeRefusal = original.acceptedKeys()
+      if (rotation) await original.startServer()
       await row.click()
       const refusal = page.getByRole('alert').filter({ hasText: /Could not open .*’s chat/ })
       await expect(refusal).toContainText('Try again.', { timeout: 45_000 })
@@ -414,8 +455,15 @@ async function verifySshBotChat(routeProfile: string, transition?: 'reconnect' |
       expect(offlineOperations).toEqual([])
       expect(initial()).toEqual(before)
       await refusal.getByRole('button', { name: 'Dismiss notification', exact: true }).click()
+      if (rotation) {
+        expect(await testSavedSshConnection(page)).toEqual({ reachable: false, sshError: 'host-key-changed' })
+        expect(original.acceptedKeys()).toBe(loginsBeforeRefusal)
+        rotation.assertOriginalPin()
+        rotation.installReplacementPin()
+      } else {
+        await original.startServer()
+      }
       loginsBeforeRecovery = original.acceptedKeys()
-      await original.startServer()
     }
     if (edit || replacement) {
       const socket = sockets.get(sdkRead!)!
@@ -541,4 +589,9 @@ test('Bot Mode opens the new OpenSSH alias target after a live edit', async () =
 test('Bot Mode opens the replacement OpenSSH installation after an endpoint edit', async () => {
   test.setTimeout(180_000)
   await verifySshBotChat('default', 'replace')
+})
+
+test('Bot Mode refuses a changed OpenSSH host key before explicit trust update', async () => {
+  test.setTimeout(180_000)
+  await verifySshBotChat('default', 'rotate')
 })
