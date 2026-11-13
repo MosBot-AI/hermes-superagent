@@ -18,6 +18,7 @@ from types import SimpleNamespace
 from urllib.parse import urlsplit
 
 import test_native_bot_receipt as shared
+from native_bot_reply_checkout import verify_checkout
 from native_bot_socket_guard import activate
 from native_gateway_fixture import gateway_daemon
 from test_packaged_gateway_bot import (
@@ -449,7 +450,6 @@ def isolated_reply_fixture(tmp_path_factory, monkeypatch, *, activate_hook):
     profiles = Path("/etc/profile.d")
     assert not profiles.exists() or not any(profiles.iterdir())
     host = Path(os.environ["HERMES_TEST_ROOT"]).resolve(strict=True)
-    pin = json.loads((shared.ROOT / "compatibility.json").read_bytes())["hermes_commit"]
     prepared = os.environ.get("HERMES_BOT_POLL_INSTALLED")
     root = Path(prepared).resolve(strict=True) if prepared else tmp_path_factory.mktemp("bp")
     root.chmod(0o700)
@@ -500,36 +500,14 @@ def isolated_reply_fixture(tmp_path_factory, monkeypatch, *, activate_hook):
         PYTHONDONTWRITEBYTECODE="1",
         PYTHONPATH=os.pathsep.join((str(guard), str(host), str(Path(__file__).resolve().parent))),
     )
-    review_recovery = os.environ.get("HERMES_BOT_REVIEW_RECOVERY") == "1"
-    upstream_recovery = os.environ.get("HERMES_BOT_UPSTREAM_RECOVERY_BASE") == "1"
-    if review_recovery or upstream_recovery:
-        experiment = shared.ROOT / "experiments/bot-sender-recovery"
-        if upstream_recovery:
-            assert not prepared
-            experiment /= "upstream"
-        proposal = json.loads((experiment / "manifest.json").read_bytes())
-        patch = experiment / "bot-sender-recovery.patch"
-        assert proposal["status"] == "review_only"
-        assert hashlib.sha256(patch.read_bytes()).hexdigest() == proposal["patch_sha256"]
-        if upstream_recovery:
-            pin = proposal["hermes_base"]
-        else:
-            assert proposal["hermes_base"] == pin
-    checks = [(["rev-parse", "HEAD"], pin)]
-    untracked_files = "all" if review_recovery or upstream_recovery else "no"
-    if review_recovery:
-        checks = [
-            (["show", "-s", "--format=%P", "HEAD"], pin),
-            (["rev-parse", "HEAD^{tree}"], proposal["proposal_tree"]),
-        ]
-    checks.append((["status", "--porcelain", f"--untracked-files={untracked_files}"], ""))
-    for argv, expected in checks:
-        assert (
-            subprocess.check_output(
-                ["git", *argv], cwd=host, env=env, stdin=subprocess.DEVNULL, text=True, timeout=10
-            ).strip()
-            == expected
-        )
+    pin = verify_checkout(
+        host,
+        env,
+        review=os.environ.get("HERMES_BOT_REVIEW_RECOVERY") == "1",
+        upstream=os.environ.get("HERMES_BOT_UPSTREAM_RECOVERY_BASE") == "1",
+    )
+    if prepared:
+        assert (root / "install-hermes-commit").read_text(encoding="ascii") == pin
 
     with monkeypatch.context() as isolated:
         for key in tuple(os.environ):

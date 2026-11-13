@@ -8,7 +8,9 @@ usage() {
         'Usage: sh acceptance/live/run_native_bot_poll_reply.sh --hermes CHECKOUT --hermes-python PYTHON [--receipt RESULT.xml] [--installed] [--consume]' \
         '       sh acceptance/live/run_native_bot_poll_reply.sh --hermes CHECKOUT --hermes-python PYTHON [--receipt RESULT.xml] MODE [--review-recovery]' \
         'Use --upstream-recovery-base to select the separate review baseline or its clean control.' \
-        'Installed mode supports --consume, --push and --install-tool-store DIRECTORY.' \
+        'Installed mode supports poll, --consume, --push, --owner-loss, --settled-loss and --held-waiter-restart.' \
+        'Installed recovery with --review-recovery also requires --install-hermes CLEAN_CHECKOUT.' \
+        'Use --install-tool-store DIRECTORY to stage pinned installer tools.' \
         'Modes: --push --reconnect --owner-loss --settled-loss --finished-loss --planned-restart' \
         '       --held-waiter-restart --drained-waiter-restart' \
         'Review only: --killed-settled-receipt --mismatched-waiter-receipt' \
@@ -21,6 +23,7 @@ python=
 receipt=
 installed=0
 install_tool_store=
+install_hermes=
 review_recovery=0
 upstream_recovery_base=0
 mode=poll
@@ -66,13 +69,14 @@ while [ "$#" -gt 0 ]; do
                     case_name=test_native_planned_restart_drops_pending_sender_notification ;;
             esac
             shift ;;
-        --hermes|--hermes-python|--receipt|--install-tool-store)
+        --hermes|--hermes-python|--receipt|--install-tool-store|--install-hermes)
             if [ "$#" -lt 2 ] || [ -z "$2" ]; then usage >&2; exit 2; fi
             case "$1" in
                 --hermes) host=$2 ;;
                 --hermes-python) python=$2 ;;
                 --receipt) receipt=$2 ;;
                 --install-tool-store) install_tool_store=$2 ;;
+                --install-hermes) install_hermes=$2 ;;
             esac
             shift 2
             ;;
@@ -80,15 +84,18 @@ while [ "$#" -gt 0 ]; do
     esac
 done
 if [ -z "$host" ] || [ -z "$python" ]; then usage >&2; exit 2; fi
-if [ -n "$install_tool_store" ] && [ "$installed" -ne 1 ]; then usage >&2; exit 2; fi
+if { [ -n "$install_tool_store" ] || [ -n "$install_hermes" ]; } && [ "$installed" -ne 1 ]; then
+    usage >&2; exit 2
+fi
 if [ "$upstream_recovery_base" -eq 1 ]; then
     case "$mode" in
         poll|consume|push|reconnect) usage >&2; exit 2 ;;
     esac
 fi
 if [ "$installed" -eq 1 ]; then
+    if [ "$review_recovery" -eq 1 ] && [ -z "$install_hermes" ]; then usage >&2; exit 2; fi
     case "$mode" in
-        poll|consume) ;;
+        poll|consume|owner-loss|settled-loss|held-waiter-restart) ;;
         push) case_name=test_installed_recipient_reply_wakes_viewed_sender_once ;;
         *) usage >&2; exit 2 ;;
     esac
@@ -147,9 +154,12 @@ fi
 if [ "$installed" -eq 1 ]; then
     # Prepare the exact package with the normal scanner before isolating reply traffic.
     prepared=$(mktemp -d /var/tmp/hbp.XXXXXX)
-    set -- "$host" "$prepared"
+    set -- "${install_hermes:-$host}" "$prepared"
     if [ -n "$install_tool_store" ]; then
-        set -- "$@" "$install_tool_store"
+        set -- "$@" --tool-store "$install_tool_store"
+    fi
+    if [ "$upstream_recovery_base" -eq 1 ]; then
+        set -- "$@" --upstream-recovery-base
     fi
     timeout --kill-after=5s 365s "$python" -I -B \
         "$repo/acceptance/live/prepare_installed_bot_poll_recipient.py" "$@" < /dev/null
@@ -215,12 +225,12 @@ if (
 for suite in tree.iter("testsuite"):
     suite.attrib.pop("hostname", None)
     if sys.argv[2]:
-        suite.set(
-            "name",
-            "native_bot_push_reply_installed"
-            if sys.argv[3] == "test_installed_recipient_reply_wakes_viewed_sender_once"
-            else "native_bot_poll_reply_installed",
-        )
+        suites = {
+            "test_installed_recipient_reply_wakes_viewed_sender_once": "native_bot_push_reply_installed",
+            "test_native_stateless_bot_wait_consumes_reply_before_fallback": "native_bot_poll_reply_installed",
+            "test_native_stateless_bot_poll_reply_persists_unconsumed_completion": "native_bot_poll_reply_installed",
+        }
+        suite.set("name", suites.get(sys.argv[3], "native_bot_recovery_installed"))
 sys.stdout.buffer.write(ElementTree.tostring(tree.getroot(), encoding="utf-8", xml_declaration=True))
 PY
     ' bot-poll-reply "$repo" "$host" "$python" "$mount_namespace" "$network_namespace" "$prepared" "$case_name" "$test_file" "$review_recovery" "$upstream_recovery_base" \

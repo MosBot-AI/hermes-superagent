@@ -365,6 +365,16 @@ class BotDelivery:
         return RECEIVER_REPLY, self.delivery_id, self.process_id
 
 
+async def check_recipient_plugin(recipient, target):
+    inventory = await recipient.rpc("plugins.list", _timeout=8)
+    (plugin,) = [row for row in inventory["plugins"] if row["key"] == "hermes-personal-agent"]
+    assert plugin["enabled"] and plugin["commands"] > 0 and not plugin["error"]
+    assert await lookup(recipient) == [(target, target)]
+    resumed = await recipient.rpc("session.resume", session_id=target, _timeout=8)
+    assert resumed["session_id"] == resumed["stored_session_id"] == target
+    return resumed
+
+
 async def start_delivery(client, home, scout, model, *, recipient=None):
     ids = {}
     for profile in ("default", "scout"):
@@ -383,12 +393,7 @@ async def start_delivery(client, home, scout, model, *, recipient=None):
     target, sender = ids["default"], ids["scout"]
     task = None
     if recipient is not None:
-        inventory = await recipient.rpc("plugins.list", _timeout=8)
-        (plugin,) = [row for row in inventory["plugins"] if row["key"] == "hermes-personal-agent"]
-        assert plugin["enabled"] and plugin["commands"] > 0 and not plugin["error"]
-        assert await lookup(recipient) == [(target, target)]
-        resumed = await recipient.rpc("session.resume", session_id=target, _timeout=8)
-        assert resumed["session_id"] == resumed["stored_session_id"] == target
+        await check_recipient_plugin(recipient, target)
         task = (await command(recipient, target, ADD))["data"]
         assert task["title"] == TASK and task["revision"] == 1
     await client.rpc("session.resume", profile="scout", session_id=sender, _timeout=8)

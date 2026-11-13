@@ -83,6 +83,8 @@ This file distinguishes design work, development changes, and released capabilit
 - Run runtime artifact acceptance on exact pull-request heads with read-only credentials; keep downloadable artifact publication push-only.
 ### Changed
 
+- Verify native Bot sender recovery with the officially installed recipient across abrupt Gateway loss and planned restart. The review candidates preserve the original task, delivery and sender completion identity on both tested Hermes bases (#33).
+
 - Port the review-only Bot sender recovery patch to a separate upstream Hermes snapshot. Verify local recovery without an unattended Bot inference and preserve hosted sandbox isolation and ordinary process wakes (#33).
 
 - Verify one native reply push and follow-up to a viewed local sender when the receiving profile has the officially installed runtime package. The case checks canonical Bot Chat, task replay and same-input sender retry (#33).
