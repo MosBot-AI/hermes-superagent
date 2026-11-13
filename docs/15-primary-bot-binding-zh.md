@@ -43,7 +43,8 @@
 | 规范会话发现与谱系 | 使用合成的限定范围票据，经 ASGI 调用原生 `profiles.list`，覆盖隐藏 Bot Chat 的根会话、压缩后末端以及不可用或歧义的名册条目。[名册证据](#当前固定版本的原生-bot-chat-名册) | 每条启用的路由都需要经过授权，精确查询根会话和当前谱系。身份缺失或不确定时应报告不可用。按精确标题查询的 `session.list` 回退路径可能接管旧会话。其他发现模式及规范会话移交需要独立证据。 |
 | Desktop 来源选择 | 在 Linux 上运行真实的 Electron 源码构建，通过私有本地票据和已保存的环回 Webapp token 连接，验证 `host.profileRoutes()` 与 `host.requestProfile()`。原生 profile 退役并同名热上线时，已保存的连接保持原路由作用域。[Electron 证据](#当前固定版本的-electron-profile-路由) · [Desktop 运行时转换](#当前固定版本的-desktop-profile-退役) | 分别验证 Desktop 安装包及任何启用的 SSH 或 OAuth 路由。 |
 | 安装复制观测 | 两个 Gateway 均可达时，Electron 将安装标记和 profile 相同的条目归并到主连接。显式注册路由仍返回各自的对话记录，停止状态 home 副本保留相同规范会话 ID 时也是如此。[安装复制证据](#当前固定版本的安装复制歧义) | 恢复或重新绑定前需要独立、经认证的安装和 owner 证据。清单无法消除复制标记的歧义。 |
-| Bot Mode 规范会话打开 | 源码构建的 Linux 名册在查询返回类型化错误时拒绝打开会话，在查询返回空结果但原生指针探测确认已有会话时也拒绝。重试时打开同一个本地未压缩会话。同一用例从本地构建的 Linux x64 AppImage 启动时也通过。[本地 Bot Mode 证据](#当前固定版本的-bot-mode-规范会话拒绝与重试) | 已签名的发行安装包、其他平台、SSH 和 OAuth 界面路由以及经认证的 owner 绑定需要独立证据。 |
+| Bot Mode 规范会话打开 | 源码构建的 Linux 名册在查询返回类型化错误时拒绝打开会话，在查询返回空结果但原生指针探测确认已有会话时也拒绝。重试时打开同一个本地未压缩会话。同一用例从本地构建的 Linux x64 AppImage 启动时也通过。[本地 Bot Mode 证据](#当前固定版本的-bot-mode-规范会话拒绝与重试) | 已签名的发行安装包、其他平台、OAuth 界面路由以及经认证的 owner 绑定需要独立证据。 |
+| 已保存 OpenSSH 的 Bot Mode | Linux x64 Desktop 的源码构建与安装包通过真实 SSH 密钥连接和转发的 Gateway 打开远端命名 Bot Chat，本地同时存在同名 profile。[OpenSSH 证据](#当前固定版本的-openssh-bot-mode-路由) | 目标别名、SSH 断开与重连、其他 SSH 凭据及 owner 绑定需要独立证据。 |
 | 本地旧版压缩历史 | 命名 profile 的原生 CLI 检查并接管符合条件的 Gateway 前压缩末端。Linux 源码构建的 Bot Mode 在所选 profile 路由打开该末端，并显示已存储的祖先与末端消息。[压缩历史证据](#当前固定版本的压缩历史接管) | 经 owner 授权的跨安装接管、混合 owner 谱系、其他凭据模式和投递对账需要独立证据。 |
 | 已保存 Webapp 令牌的回退 | 干净 Linux Electron 构建在命名 profile 查询返回空结果时探测远程启动 authority，并在同一次点击中通过第二次查询打开原会话。单独构建的提案探测命名 authority，拒绝不确定的打开操作，并在明确重试后打开原会话。[已保存 Webapp 证据](#当前固定版本的已保存-webapp-bot-mode-路由) | 干净固定版本仍有回退作用域缺口。受支持的使用需要已修正的宿主修订及该模式的专项验收。 |
 | Profile 与安装连续性 | 停机状态下的原生 profile CLI 和备份导入路径覆盖重命名、克隆、删除、同名重建、拒绝向已占用的 profile 导入，以及恢复后目标的 epoch 下限。在同一运行中的安装实例内，保留原有 host 作用域 WebSocket，覆盖 profile 退役及同名热上线。[Profile 生命周期](#当前固定版本的原生-profile-生命周期) · [保留的路由](#当前固定版本保留的原生-profile-路由) · [备份与恢复](#当前固定版本的原生备份与恢复) | 其他运行时切换和经认证的安装连续性需要当前目标、登记、规范谱系与冲突证据。复制的标记和名称无法消除安装实例的歧义。 |
@@ -214,6 +215,14 @@ Bot Mode 的确切标题 `session.list` 查询携带所选后端 profile。列�
 单独构建的提案在回退探测中发送 `profile: scout`。原生审计确认凭据仍为相同类别的已保存令牌，请求由命名的 `scout` 处理器处理。成功响应识别出未归档的现有 Bot Chat。注入故障的点击显示重试通知并保留原焦点，未发出打开、创建或提交提示词的 RPC。之后明确点击重试时，正常查询打开原有的 `spare::scout` 会话。SQLite 快照保持不变，服务商记录到零次补全。[仅供评审的补丁、构建与证据](../experiments/bot-webapp-canonical/README-zh.md)
 
 [验收运行器](../acceptance/live/run_desktop_profile_routing.py)通过 `--case bot-canonical-saved-token` 复现干净基线，并在验证独立源码树时添加 `--review-proposal`。源码运行检查 Desktop 和 Webapp 构建是否最新。两种行为也在本地构建的捆绑式 Linux x64 AppImage 上复现，且安装标记与各自提交完全匹配。干净镜像探测 `default` 后在同一次点击中恢复。候选镜像探测 `scout`，在显式重试时打开原会话。夹具拒绝在候选模式下传入的干净镜像。签名发行、上游采用、其他凭据模式和经认证的 owner 绑定仍需分别验证。
+
+### 当前固定版本的 OpenSSH Bot Mode 路由
+
+[OpenSSH 用例](../tests/desktop/desktop_bot_ssh.spec.ts)在 Linux 上通过了干净 Hermes `2281116525106e3c109993ccb5dc74d02bfc1427` 的 Desktop 源码构建和本地构建的未签名 Linux x64 AppImage 验收。OpenSSH 10.0p2 在只有回环接口的夹具网络中运行。夹具分别生成 Ed25519 主机密钥和客户端密钥，在私有账户主目录中固定主机公钥，并确认公钥认证成功。Desktop 读取已保存的原生 SSH 连接，并自行管理 SSH 进程，由其启动固定版本的 Hermes Gateway 并转发 WebSocket。独立的本地 Gateway 使用不同的安装标记，也有自己的 `scout` profile。
+
+点击 `fixture-ssh::scout` 后，客户端向转发端口发送一次带 `profile: scout` 的精确标题 `session.list` 查询。Desktop 通过同一端口恢复预置的隐藏会话，并报告当前会话归属于该 SSH 连接及命名 profile。可见消息包含 SSH 命名 profile 的标记，未显示 SSH 默认 profile 或两个本地 profile 的标记。四份 SQLite 会话投影均保持一致。夹具观测到的会话创建、提示提交和 provider 生成次数均为零。
+
+在[验收命令](#当前固定版本的-electron-profile-路由)中添加 `--case bot-canonical-ssh`。安装 OpenSSH 服务端和客户端，使用默认临时目录，或指定 `/tmp` 之外只含常用路径字符的绝对路径。运行器在夹具的挂载命名空间内挂载私有账户主目录与 SSH 配置。验证安装包时，按[本地构建说明](#当前固定版本的-bot-mode-规范会话拒绝与重试)添加 `--appimage /absolute/path/to/Hermes.AppImage`。本证据覆盖通过已保存的密钥文件连接可达命名 profile 的路径。目标别名、SSH 断开与重连、OAuth、经认证的 owner 绑定、签名发行和外部部署仍需单独验收。
 
 ### 当前固定版本的原生 Profile 生命周期
 
