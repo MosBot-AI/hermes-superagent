@@ -44,7 +44,7 @@
 | Desktop 来源选择 | 在 Linux 上运行真实的 Electron 源码构建，通过私有本地票据和已保存的环回 Webapp token 连接，验证 `host.profileRoutes()` 与 `host.requestProfile()`。原生 profile 退役并同名热上线时，已保存的连接保持原路由作用域。[Electron 证据](#当前固定版本的-electron-profile-路由) · [Desktop 运行时转换](#当前固定版本的-desktop-profile-退役) | 分别验证 Desktop 安装包及任何启用的 SSH 或 OAuth 路由。 |
 | 安装复制观测 | 两个 Gateway 均可达时，Electron 将安装标记和 profile 相同的条目归并到主连接。显式注册路由仍返回各自的对话记录，停止状态 home 副本保留相同规范会话 ID 时也是如此。[安装复制证据](#当前固定版本的安装复制歧义) | 恢复或重新绑定前需要独立、经认证的安装和 owner 证据。清单无法消除复制标记的歧义。 |
 | Bot Mode 规范会话打开 | 源码构建的 Linux 名册在查询返回类型化错误时拒绝打开会话，在查询返回空结果但原生指针探测确认已有会话时也拒绝。重试时打开同一个本地未压缩会话。同一用例从本地构建的 Linux x64 AppImage 启动时也通过。[本地 Bot Mode 证据](#当前固定版本的-bot-mode-规范会话拒绝与重试) | 已签名的发行安装包、其他平台、OAuth 界面路由以及经认证的 owner 绑定需要独立证据。 |
-| 已保存 OpenSSH 的 Bot Mode | Linux x64 Desktop 的源码构建与安装包通过真实 SSH 密钥连接和转发的 Gateway 打开远端命名 Bot Chat，本地同时存在同名 profile。[OpenSSH 证据](#当前固定版本的-openssh-bot-mode-路由) · [Profile 别名](#当前固定版本的-openssh-profile-别名) · [重连](#当前固定版本的-openssh-重连) · [别名改绑](#当前固定版本的-openssh-别名改绑) · [端点更换](#当前固定版本的-openssh-端点更换) · [主机密钥轮换](#当前固定版本的-openssh-主机密钥轮换) | 修改别名后，缓存的描述符仍可读取此前仍在服务的 profile。更换端点后，同一描述符可解析到另一个安装。自动恢复、其他 SSH 凭据和 owner 绑定需要独立证据。 |
+| 已保存 OpenSSH 的 Bot Mode | Linux x64 Desktop 的源码构建与安装包通过真实 SSH 密钥连接和转发的 Gateway 打开远端命名 Bot Chat，本地同时存在同名 profile。[OpenSSH 证据](#当前固定版本的-openssh-bot-mode-路由) · [Profile 别名](#当前固定版本的-openssh-profile-别名) · [重连](#当前固定版本的-openssh-重连) · [别名改绑](#当前固定版本的-openssh-别名改绑) · [端点更换](#当前固定版本的-openssh-端点更换) · [主机密钥轮换](#当前固定版本的-openssh-主机密钥轮换) · [在途回合](#当前固定版本中回合进行时的-openssh-中断) | 修改别名后，缓存的描述符仍可读取此前仍在服务的 profile。更换端点后，同一描述符可解析到另一个安装。自动恢复、其他 SSH 凭据和 owner 绑定需要独立证据。 |
 | 本地旧版压缩历史 | 命名 profile 的原生 CLI 检查并接管符合条件的 Gateway 前压缩末端。Linux 源码构建的 Bot Mode 在所选 profile 路由打开该末端，并显示已存储的祖先与末端消息。[压缩历史证据](#当前固定版本的压缩历史接管) | 经 owner 授权的跨安装接管、混合 owner 谱系、其他凭据模式和投递对账需要独立证据。 |
 | 已保存 Webapp 令牌的回退 | 干净 Linux Electron 构建在命名 profile 查询返回空结果时探测远程启动 authority，并在同一次点击中通过第二次查询打开原会话。单独构建的提案探测命名 authority，拒绝不确定的打开操作，并在明确重试后打开原会话。[已保存 Webapp 证据](#当前固定版本的已保存-webapp-bot-mode-路由) | 干净固定版本仍有回退作用域缺口。受支持的使用需要已修正的宿主修订及该模式的专项验收。 |
 | Profile 与安装连续性 | 停机状态下的原生 profile CLI 和备份导入路径覆盖重命名、克隆、删除、同名重建、拒绝向已占用的 profile 导入，以及恢复后目标的 epoch 下限。在同一运行中的安装实例内，保留原有 host 作用域 WebSocket，覆盖 profile 退役及同名热上线。[Profile 生命周期](#当前固定版本的原生-profile-生命周期) · [保留的路由](#当前固定版本保留的原生-profile-路由) · [备份与恢复](#当前固定版本的原生备份与恢复) | 其他运行时切换和经认证的安装连续性需要当前目标、登记、规范谱系与冲突证据。复制的标记和名称无法消除安装实例的歧义。 |
@@ -236,7 +236,7 @@ Bot Mode 的确切标题 `session.list` 查询携带所选后端 profile。列�
 
 夹具使用原主机密钥，在同一地址和端口重启 OpenSSH。再次显式点击时，Desktop 重新认证，经新的转发端口成功按精确标题查询一次，并恢复原来的隐藏 `scout` 会话。当前会话仍归属于 SSH 的 `scout` 路由。可见消息排除远端默认会话和两个本地对照会话。中断前、拒绝后和恢复后的四份 SQLite 投影保持一致，provider 生成次数为零。
 
-使用 `--case bot-canonical-ssh-reconnect` 验证直接命名路由，或使用 `--case bot-canonical-ssh-alias-reconnect` 验证已保存的 `default` → `scout` 映射。别名用例中，新转发仍使用 `profile: scout`，当前会话仍归属于 SSH 的 `default` 路由。两种用例均在相同 Hermes 固定版本的源码构建和本地未签名 Linux x64 Desktop 上通过。使用同一运行器，并可添加 `--appimage`。在途轮次或写入、无需点击的自动恢复和外部部署仍需单独验收。
+使用 `--case bot-canonical-ssh-reconnect` 验证直接命名路由，或使用 `--case bot-canonical-ssh-alias-reconnect` 验证已保存的 `default` → `scout` 映射。别名用例中，新转发仍使用 `profile: scout`，当前会话仍归属于 SSH 的 `default` 路由。两种用例均在相同 Hermes 固定版本的源码构建和本地未签名 Linux x64 Desktop 上通过。使用同一运行器，并可添加 `--appimage`。[在途用例](#当前固定版本中回合进行时的-openssh-中断)覆盖一次已确认的回合。写入结果不确定、无需点击的自动恢复和外部部署仍需单独验收。
 
 #### 当前固定版本的 OpenSSH 别名改绑
 
@@ -261,6 +261,14 @@ Bot Mode 的确切标题 `session.list` 查询携带所选后端 profile。列�
 夹具操作者使用为新监听器生成的公钥，仅替换私有 `known_hosts` 文件中该端点的条目。随后显式点击，Desktop 重新认证，经新的转发套接字打开原来的隐藏 `scout` 会话，归属仍为该连接内的 `default` 路由。四份 SQLite 会话投影保持一致，合成 provider 生成次数为零。
 
 在同一运行器中使用 `--case bot-canonical-ssh-host-key-rotation`，并可添加 `--appimage`。源码构建和本地构建的未签名 Linux x64 Desktop 均在干净固定版本上通过。用例覆盖已保存的次级 SSH 路由遇到合成密钥变化时的拒绝，以及操作者控制的信任更新。主机密钥检查用于认证传输端点。生产密钥验证、经认证的 owner 重新绑定和在途操作仍需单独取证。
+
+#### 当前固定版本中回合进行时的 OpenSSH 中断
+
+已保存的 SSH `default` → `scout` 别名打开已有的隐藏会话。Desktop 输入框的一次提交在转发套接字上发出两个请求。第一个携带提交 ID 的请求被以 `4000` 拒绝。省略提交 ID 的旧协议重试在合成回环 provider 上启动恰好一次生成。命名 profile 的 SQLite 消息记录中出现一条用户消息。成功回复中没有准入 ID，`session_admissions` 中也没有对应记录。
+
+首段助手回复显示后，夹具暂停 provider 的响应流，停止 OpenSSH 监听器和会话，并确认 Desktop 套接字关闭。远端 provider 响应流仍在继续。监听器停止期间，夹具释放响应流，确认完整助手回复在 SSH 恢复前写入原会话。使用原密钥重启同一监听器后，显式重开 Bot Mode 会话会通过新转发恢复原会话，并显示已保存的用户消息和完整回复。没有额外提交或生成，远端默认会话和两个本地会话的投影保持一致。
+
+在同一运行器中使用 `--case bot-canonical-ssh-in-flight-turn`，并可添加 `--appimage`。源码构建和本地构建的未签名 Linux x64 Desktop 均在干净固定版本上通过。本用例在收到旧协议的成功确认后切断传输，远端运行时仍继续运行。命名会话的消息记录证明了这次结果。旧协议提交仍缺少可用于确认丢失后对账的持久准入身份。只有在传输支持回执时，才可考虑开放未知写入结果的自动重放。Gateway 退出和经 owner 授权的写入仍需单独取证。
 
 ### 当前固定版本的原生 Profile 生命周期
 

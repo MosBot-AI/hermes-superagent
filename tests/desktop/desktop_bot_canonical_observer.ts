@@ -13,6 +13,8 @@ export interface WireFrame {
   method: string
   profile?: string
   sessionId?: string
+  inputId?: string
+  admissionId?: string
   title?: string
   includeHidden?: boolean
   limit?: number
@@ -85,6 +87,10 @@ export function observeWire(page: Page, sockets?: Map<WireFrame, WireSocket>): W
           includeHidden: include_hidden,
           limit
         }
+        if (message.method === 'prompt.submit') {
+          const input = message.params?.submission_id ?? message.params?.input_id
+          if (typeof input === 'string') frame.inputId = input
+        }
         frames.push(frame)
         sockets?.set(frame, observed)
         pending.set(String(message.id), frame)
@@ -98,6 +104,9 @@ export function observeWire(page: Page, sockets?: Map<WireFrame, WireSocket>): W
         const frame = pending.get(String(message?.id))
         if (frame) {
           frame.reply = { code: message.error?.code, reason: message.error?.data?.reason }
+          if (frame.method === 'prompt.submit' && typeof message.result?.admission_id === 'string') {
+            frame.admissionId = message.result.admission_id
+          }
           pending.delete(String(message.id))
         }
       } catch {
