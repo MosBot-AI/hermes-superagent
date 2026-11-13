@@ -27,7 +27,7 @@ def crashable_gateway_daemon(host, home, child_env, label, *, entrypoint=None):
 
 
 @contextmanager
-def restartable_gateway_daemon(host, home, child_env, label, *, entrypoint):
+def restartable_gateway_daemon(host, home, child_env, label, *, entrypoint=None):
     with _owned_gateway(
         host, home, child_env, label, exit_mode="restart", entrypoint=entrypoint
     ) as daemon:
@@ -82,7 +82,7 @@ def _owned_gateway(host, home, child_env, label, *, exit_mode, entrypoint=None):
             assert (home.parent / f"socket-guard-{process.pid}").is_file()
             exited = False
 
-            def exit_owner():
+            def exit_owner(*, after_signal=None):
                 nonlocal exited
                 current = query_identify(home, timeout=2)
                 assert (
@@ -98,6 +98,8 @@ def _owned_gateway(host, home, child_env, label, *, exit_mode, entrypoint=None):
                     marker_path = planned_restart_marker_path(home)
                     assert not marker_path.exists()
                     process.send_signal(signal.SIGUSR1)
+                    if after_signal is not None:
+                        after_signal()
                     assert process.wait(timeout=35) == GATEWAY_SERVICE_RESTART_EXIT_CODE
                     marker = json.loads(marker_path.read_bytes())
                     assert marker["via_service"] is True and marker["detached"] is False
