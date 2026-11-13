@@ -199,6 +199,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Verify live SSH endpoint replacement across separate installations. Desktop closes the original socket and opens the replacement chat, while a captured route descriptor can resolve to the replacement under the same connection ID (#33).
+
 - Verify that a saved SSH alias survives explicit retry after a connection loss. Record that a live alias edit switches Bot Mode to the new target while a stale SDK descriptor can still read the previous served profile (#33).
 
 - Verify Bot Mode refuses to open a cached SSH row during a real OpenSSH interruption and reopens the original remote chat on explicit retry after reconnection (#33).

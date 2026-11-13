@@ -18,7 +18,7 @@ import {
   type WireSocket
 } from './desktop_bot_canonical_observer'
 import { privateEnv, seedInstall, startGateway, stopGateway, waitForEndpoint } from './desktop_native_gateway_fixture'
-import { appLogTail, composer, createCoreSandbox, freePort, REPO_ROOT, sandboxProcesses } from './harness'
+import { appLogTail, composer, type CoreSandbox, createCoreSandbox, freePort, REPO_ROOT, sandboxProcesses } from './harness'
 import { listProcesses } from './process-census'
 import { startScriptedProvider } from './provider'
 
@@ -91,8 +91,15 @@ async function readSshChat(page: Page, routeProfile: string, retainSocket: boole
   return route!
 }
 
-function saveSshTarget(page: Page, targetProfile: string) {
-  return page.evaluate(async ({ connectionId, targetProfile }) => {
+interface SshEdit {
+  remoteProfile: string
+  host?: string
+  keyPath?: string
+  remoteHermesPath?: string
+}
+
+function saveSshConnection(page: Page, edit: SshEdit) {
+  return page.evaluate(async ({ connectionId, edit }) => {
     const desktop = (window as unknown as {
       hermesDesktop: {
         connections: {
@@ -100,8 +107,7 @@ function saveSshTarget(page: Page, targetProfile: string) {
             id: string
             kind: 'ssh'
             label: string
-            remoteProfile: string
-          }): Promise<{ ok: boolean; connection: { id: string; remoteProfile: string } }>
+          } & SshEdit): Promise<{ ok: boolean; connection: { id: string; remoteProfile: string; port: number } }>
         }
       }
     }).hermesDesktop
@@ -109,10 +115,11 @@ function saveSshTarget(page: Page, targetProfile: string) {
       id: connectionId,
       kind: 'ssh',
       label: 'Fixture SSH',
-      remoteProfile: targetProfile
+      ...edit
     })
-    return { ok: result.ok, id: result.connection.id, remoteProfile: result.connection.remoteProfile }
-  }, { connectionId, targetProfile })
+    const { id, remoteProfile, port } = result.connection
+    return { ok: result.ok, id, remoteProfile, port }
+  }, { connectionId, edit })
 }
 
 function readExactChat(page: Page, route: ProfileRoute, limit: number, retainSocket = false) {
@@ -153,114 +160,94 @@ function stopSshSessions(listenerPid: number) {
   }
 }
 
-async function verifySshBotChat(routeProfile: string, transition?: 'reconnect' | 'edit') {
-  const reconnect = transition === 'reconnect'
-  const edit = transition === 'edit'
-  const expectedProfile = edit ? editedProfile : profile
-  const expectedChat = edit ? `fixture-ssh-${editedProfile}` : canonical
-  const aliased = routeProfile !== profile
-  expect(process.platform).toBe('linux')
-  const state = process.env.HERMES_E2E_SSH_STATE
-  const python = process.env.HERMES_E2E_PYTHON
-  expect(path.isAbsolute(state ?? '') && path.isAbsolute(python ?? '')).toBe(true)
-  const provider = await startScriptedProvider()
-  const local = createCoreSandbox('a')
-  const remote = createCoreSandbox('b')
-  let gateway: ReturnType<typeof startGateway> | undefined
-  let server: ReturnType<typeof spawn> | undefined
-  let app: ElectronApplication | undefined
-  let completed = false
-  try {
-    const localEnv = privateEnv(local)
-    const remoteEnv = privateEnv(remote)
-    seedInstall(local, localEnv, provider.url, profile, 'local', '1'.repeat(32))
-    seedInstall(remote, remoteEnv, provider.url, edit ? [profile, editedProfile] : profile, 'ssh', '2'.repeat(32))
-    const initial = () => [
-      ...storedChats(local.hermesHome, profile),
-      ...storedChats(remote.hermesHome, profile),
-      ...(edit ? [storedChats(remote.hermesHome, editedProfile)[1]] : [])
-    ]
-    const port = await freePort()
-    const sshUser = os.userInfo().username
-    const sshConfig = path.join(state!, 'account', '.ssh')
-    const hostKey = path.join(state!, 'host')
-    const clientKey = path.join(state!, 'key')
-    for (const key of [hostKey, clientKey]) {
-      expect(
-        spawnSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', key], {
-          env: localEnv,
-          stdio: 'ignore'
-        }).status
-      ).toBe(0)
-    }
-    fs.writeFileSync(path.join(sshConfig, 'authorized_keys'), fs.readFileSync(clientKey + '.pub'), { mode: 0o600 })
-    const knownHost = `[127.0.0.1]:${port} ${fs.readFileSync(hostKey + '.pub', 'utf8')}`
-    fs.writeFileSync(path.join(sshConfig, 'known_hosts'), knownHost, { mode: 0o600 })
-    fs.writeFileSync(
-      path.join(sshConfig, 'config'),
-      `Host 127.0.0.1\n  UserKnownHostsFile ${path.join(sshConfig, 'known_hosts')}\n  IdentitiesOnly yes\n`,
-      { mode: 0o600 }
-    )
-    const remoteLauncher = path.join(remote.bin, 'hermes')
-    fs.writeFileSync(
-      remoteLauncher,
-      `#!/bin/sh\ncd ${shellQuote(REPO_ROOT)}\nexec ${shellQuote(python!)} -m hermes_cli.main "$@"\n`,
-      { mode: 0o700 }
-    )
-    const remoteCommand = path.join(state!, 'remote-command')
-    const remoteSettings = {
-      HOME: remote.home,
-      HERMES_HOME: remote.hermesHome,
-      HERMES_RUNTIME_DIR: remoteEnv.HERMES_RUNTIME_DIR!,
-      PATH: remoteEnv.PATH!,
-      LANG: 'C.UTF-8',
-      PYTHONDONTWRITEBYTECODE: '1',
-      HERMES_ENABLE_PROJECT_PLUGINS: '0'
-    }
-    fs.writeFileSync(
-      remoteCommand,
-      `#!/bin/sh\nexec /usr/bin/env -i ${Object.entries(remoteSettings)
-        .map(([key, value]) => shellQuote(`${key}=${value}`))
-        .join(' ')} /bin/sh -c "$SSH_ORIGINAL_COMMAND"\n`,
-      { mode: 0o700 }
-    )
-    const config = path.join(state!, 'sshd.conf')
-    const log = path.join(state!, 'sshd.log')
-    fs.writeFileSync(
-      config,
-      [
-        'ListenAddress 127.0.0.1',
-        `Port ${port}`,
-        `HostKey ${hostKey}`,
-        'AuthorizedKeysFile .ssh/authorized_keys',
-        'UsePAM no',
-        'PasswordAuthentication no',
-        'KbdInteractiveAuthentication no',
-        'StrictModes yes',
-        `PidFile ${state!}/sshd.pid`,
-        `AllowUsers ${sshUser}`,
-        'PermitUserRC no',
-        'AllowAgentForwarding no',
-        'X11Forwarding no',
-        'AllowTcpForwarding local',
-        'PermitOpen 127.0.0.1:*',
-        'LogLevel VERBOSE',
-        `ForceCommand ${remoteCommand}`,
-        ''
-      ].join('\n'),
-      { mode: 0o600 }
-    )
-    const sshLog = () => fs.existsSync(log) ? fs.readFileSync(log, 'utf8') : ''
-    const startServer = async () => {
-      const before = sshLog().length
-      server = spawn('/usr/sbin/sshd', ['-D', '-E', log, '-f', config], {
+async function prepareSshServer(
+  state: string,
+  sshConfig: string,
+  python: string,
+  localEnv: Record<string, string>,
+  remote: CoreSandbox,
+  remoteEnv: Record<string, string>
+) {
+  fs.mkdirSync(state, { mode: 0o700 })
+  const port = await freePort()
+  const sshUser = os.userInfo().username
+  const hostKey = path.join(state, 'host')
+  const clientKey = path.join(state, 'key')
+  for (const key of [hostKey, clientKey]) {
+    expect(
+      spawnSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', key], {
         env: localEnv,
         stdio: 'ignore'
-      })
-      await expect.poll(() => sshLog().slice(before).includes('Server listening')).toBe(true)
-    }
-    await startServer()
-    const preflight = spawnSync(
+      }).status
+    ).toBe(0)
+  }
+  const authorized = path.join(sshConfig, `authorized_keys_${port}`)
+  fs.writeFileSync(authorized, fs.readFileSync(clientKey + '.pub'), { mode: 0o600 })
+  const knownHost = `[127.0.0.1]:${port} ${fs.readFileSync(hostKey + '.pub', 'utf8')}`
+  fs.appendFileSync(path.join(sshConfig, 'known_hosts'), knownHost, { mode: 0o600 })
+  const remoteLauncher = path.join(remote.bin, 'hermes')
+  fs.writeFileSync(
+    remoteLauncher,
+    `#!/bin/sh\ncd ${shellQuote(REPO_ROOT)}\nexec ${shellQuote(python)} -m hermes_cli.main "$@"\n`,
+    { mode: 0o700 }
+  )
+  const remoteCommand = path.join(state, 'remote-command')
+  const remoteSettings = {
+    HOME: remote.home,
+    HERMES_HOME: remote.hermesHome,
+    HERMES_RUNTIME_DIR: remoteEnv.HERMES_RUNTIME_DIR!,
+    PATH: remoteEnv.PATH!,
+    LANG: 'C.UTF-8',
+    PYTHONDONTWRITEBYTECODE: '1',
+    HERMES_ENABLE_PROJECT_PLUGINS: '0'
+  }
+  fs.writeFileSync(
+    remoteCommand,
+    `#!/bin/sh\nexec /usr/bin/env -i ${Object.entries(remoteSettings)
+      .map(([key, value]) => shellQuote(`${key}=${value}`))
+      .join(' ')} /bin/sh -c "$SSH_ORIGINAL_COMMAND"\n`,
+    { mode: 0o700 }
+  )
+  const config = path.join(state, 'sshd.conf')
+  const log = path.join(state, 'sshd.log')
+  fs.writeFileSync(
+    config,
+    [
+      'ListenAddress 127.0.0.1',
+      `Port ${port}`,
+      `HostKey ${hostKey}`,
+      `AuthorizedKeysFile ${authorized}`,
+      'UsePAM no',
+      'PasswordAuthentication no',
+      'KbdInteractiveAuthentication no',
+      'StrictModes yes',
+      `PidFile ${state}/sshd.pid`,
+      `AllowUsers ${sshUser}`,
+      'PermitUserRC no',
+      'AllowAgentForwarding no',
+      'X11Forwarding no',
+      'AllowTcpForwarding local',
+      'PermitOpen 127.0.0.1:*',
+      'LogLevel VERBOSE',
+      `ForceCommand ${remoteCommand}`,
+      ''
+    ].join('\n'),
+    { mode: 0o600 }
+  )
+  let listener: ReturnType<typeof spawn> | undefined
+  const sshLog = () => fs.existsSync(log) ? fs.readFileSync(log, 'utf8') : ''
+  const startServer = async () => {
+    const before = sshLog().length
+    listener = spawn('/usr/sbin/sshd', ['-D', '-E', log, '-f', config], {
+      env: localEnv,
+      stdio: 'ignore'
+    })
+    await expect.poll(() => sshLog().slice(before).includes('Server listening')).toBe(true)
+  }
+  const acceptedKeys = () => sshLog().match(/Accepted publickey/g)?.length ?? 0
+  const verifyLogin = () => {
+    const loginsBefore = acceptedKeys()
+    const login = spawnSync(
       'ssh',
       [
         '-o',
@@ -278,14 +265,76 @@ async function verifySshBotChat(routeProfile: string, transition?: 'reconnect' |
       ],
       { env: localEnv, encoding: 'utf8', timeout: 10_000 }
     )
-    if (preflight.status !== 0) {
-      fs.writeFileSync(path.join(state!, 'preflight.log'), preflight.stderr ?? '', { mode: 0o600 })
+    if (login.status !== 0) {
+      fs.writeFileSync(path.join(state, 'login.log'), login.stderr ?? '', { mode: 0o600 })
     }
-    expect(preflight.status, 'ephemeral OpenSSH key and host key accepted').toBe(0)
-    expect(preflight.stdout).toBe(remote.hermesHome)
-    const acceptedKeys = () => sshLog().match(/Accepted publickey/g)?.length ?? 0
-    const preflightLogins = acceptedKeys()
-    expect(preflightLogins).toBe(1)
+    expect(login.status, 'ephemeral OpenSSH key and host key accepted').toBe(0)
+    expect(login.stdout).toBe(remote.hermesHome)
+    expect(acceptedKeys()).toBe(loginsBefore + 1)
+  }
+
+  return {
+    port,
+    sshUser,
+    clientKey,
+    remoteLauncher,
+    startServer,
+    verifyLogin,
+    acceptedKeys,
+    listener: () => listener
+  }
+}
+
+async function verifySshBotChat(routeProfile: string, transition?: 'reconnect' | 'edit' | 'replace') {
+  const reconnect = transition === 'reconnect'
+  const edit = transition === 'edit'
+  const replace = transition === 'replace'
+  const expectedProfile = edit ? editedProfile : profile
+  const expectedChat = replace ? 'fixture-replacement-scout' : edit ? `fixture-ssh-${editedProfile}` : canonical
+  const aliased = routeProfile !== profile
+  expect(process.platform).toBe('linux')
+  const state = process.env.HERMES_E2E_SSH_STATE
+  const python = process.env.HERMES_E2E_PYTHON
+  expect(path.isAbsolute(state ?? '') && path.isAbsolute(python ?? '')).toBe(true)
+  const provider = await startScriptedProvider()
+  const local = createCoreSandbox('a')
+  const remote = createCoreSandbox('b')
+  const successor = replace ? createCoreSandbox('c') : undefined
+  const boxes = successor ? [local, remote, successor] : [local, remote]
+  let gateway: ReturnType<typeof startGateway> | undefined
+  const servers: Awaited<ReturnType<typeof prepareSshServer>>[] = []
+  let app: ElectronApplication | undefined
+  let completed = false
+  try {
+    const localEnv = privateEnv(local)
+    const remoteEnv = privateEnv(remote)
+    const successorEnv = successor && privateEnv(successor)
+    seedInstall(local, localEnv, provider.url, profile, 'local', '1'.repeat(32))
+    seedInstall(remote, remoteEnv, provider.url, edit ? [profile, editedProfile] : profile, 'ssh', '2'.repeat(32))
+    if (successor) seedInstall(successor, successorEnv!, provider.url, profile, 'replacement', '3'.repeat(32))
+    const initial = () => [
+      ...boxes.flatMap(box => storedChats(box.hermesHome, profile)),
+      ...(edit ? [storedChats(remote.hermesHome, editedProfile)[1]] : [])
+    ]
+    const sshConfig = path.join(state!, 'account', '.ssh')
+    fs.writeFileSync(
+      path.join(sshConfig, 'config'),
+      `Host 127.0.0.1\n  UserKnownHostsFile ${path.join(sshConfig, 'known_hosts')}\n  IdentitiesOnly yes\n`,
+      { mode: 0o600 }
+    )
+    const original = await prepareSshServer(path.join(state!, 'original'), sshConfig, python!, localEnv, remote, remoteEnv)
+    servers.push(original)
+    await original.startServer()
+    original.verifyLogin()
+    const replacement = successor && await prepareSshServer(
+      path.join(state!, 'replacement'), sshConfig, python!, localEnv, successor, successorEnv!
+    )
+    if (replacement) {
+      expect(replacement.port).not.toBe(original.port)
+      servers.push(replacement)
+      await replacement.startServer()
+      replacement.verifyLogin()
+    }
 
     installCanonicalObserver(local.hermesHome)
     if (aliased || reconnect) installRouteProbe(local.hermesHome)
@@ -304,10 +353,10 @@ async function verifySshBotChat(routeProfile: string, transition?: 'reconnect' |
             kind: 'ssh',
             label: 'Fixture SSH',
             host: '127.0.0.1',
-            user: sshUser,
-            port,
-            keyPath: clientKey,
-            remoteHermesPath: remoteLauncher,
+            user: original.sshUser,
+            port: original.port,
+            keyPath: original.clientKey,
+            remoteHermesPath: original.remoteLauncher,
             ...(aliased ? { remoteProfile: profile } : {})
           }
         ]
@@ -345,10 +394,10 @@ async function verifySshBotChat(routeProfile: string, transition?: 'reconnect' |
     if (reconnect) {
       const socket = sockets.get(sdkRead!)!
       expect(socket.closed).toBe(false)
-      expect(acceptedKeys()).toBeGreaterThan(preflightLogins)
+      expect(original.acceptedKeys()).toBeGreaterThan(1)
       const offlineFrom = wire.length
       const focusedBefore = await focus(page)
-      const listener = server!
+      const listener = original.listener()!
       const stopped = once(listener, 'exit')
       stopSshSessions(listener.pid!)
       await stopped
@@ -365,16 +414,22 @@ async function verifySshBotChat(routeProfile: string, transition?: 'reconnect' |
       expect(offlineOperations).toEqual([])
       expect(initial()).toEqual(before)
       await refusal.getByRole('button', { name: 'Dismiss notification', exact: true }).click()
-      loginsBeforeRecovery = acceptedKeys()
-      await startServer()
+      loginsBeforeRecovery = original.acceptedKeys()
+      await original.startServer()
     }
-    if (edit) {
+    if (edit || replacement) {
       const socket = sockets.get(sdkRead!)!
       expect(socket.closed).toBe(false)
-      expect(await saveSshTarget(page, editedProfile)).toEqual({
+      const endpoint = replacement && {
+        host: `${replacement.sshUser}@127.0.0.1:${replacement.port}`,
+        keyPath: replacement.clientKey,
+        remoteHermesPath: replacement.remoteLauncher
+      }
+      expect(await saveSshConnection(page, { remoteProfile: expectedProfile, ...endpoint })).toEqual({
         ok: true,
         id: connectionId,
-        remoteProfile: editedProfile
+        remoteProfile: expectedProfile,
+        port: replacement?.port ?? original.port
       })
       await expect.poll(() => socket.closed).toBe(true)
       await page.evaluate(() => window.__E07_SSH_RELEASE__?.())
@@ -382,7 +437,7 @@ async function verifySshBotChat(routeProfile: string, transition?: 'reconnect' |
         connectionId,
         mode: 'remote',
         profile: routeProfile,
-        targetProfile: editedProfile
+        targetProfile: expectedProfile
       })
     }
     const from = wire.length
@@ -390,7 +445,9 @@ async function verifySshBotChat(routeProfile: string, transition?: 'reconnect' |
     const viewport = page.locator('[data-slot="aui_thread-viewport"]').filter({ visible: true }).first()
     await expect(viewport.getByText(expectedChat, { exact: true })).toBeVisible({ timeout: 55_000 })
     await expect.poll(() => focus(page)).toEqual({ id: expectedChat, owner: { connectionId, profile: routeProfile } })
-    for (const decoy of edit ? [...decoys, canonical] : decoys) {
+    const excluded = edit || replace ? [...decoys, canonical] : decoys
+    if (replace) excluded.push('fixture-replacement-default')
+    for (const decoy of excluded) {
       await expect(viewport.getByText(decoy, { exact: true })).toHaveCount(0)
     }
     const frames = wire.slice(from)
@@ -400,18 +457,18 @@ async function verifySshBotChat(routeProfile: string, transition?: 'reconnect' |
     expect(reads[0]!.port).not.toBe(localPort)
     if (aliased && !transition) expect(reads[0]!.port).toBe(sdkRead!.port)
     if (transition) expect(reads[0]!.port).not.toBe(sdkRead!.port)
-    if (reconnect) expect(acceptedKeys()).toBeGreaterThan(loginsBeforeRecovery)
+    if (reconnect) expect(original.acceptedKeys()).toBeGreaterThan(loginsBeforeRecovery)
     const opens = frames.filter((frame) => ['session.resume', 'session.activate'].includes(frame.method))
     expect(opens.some((frame) => frame.method === 'session.resume')).toBe(true)
     for (const frame of opens) {
       expect(frame).toMatchObject({ port: reads[0]!.port, profile: expectedProfile, sessionId: expectedChat })
     }
     expect(frames.filter((frame) => ['session.create', 'prompt.submit'].includes(frame.method))).toEqual([])
-    if (edit) {
+    if (edit || replacement) {
       const replayFrom = wire.length
-      // The SDK uses connection and route profile to dial. The explicit RPC
-      // profile still selects scout even after the saved alias points at harbor.
-      expect(await readExactChat(page, originalRoute!, 18)).toEqual([[canonical, canonical]])
+      // The captured descriptor still resolves through the saved connection ID.
+      const replayChat = replacement ? expectedChat : canonical
+      expect(await readExactChat(page, originalRoute!, 18)).toEqual([[replayChat, replayChat]])
       const replayFrames = wire.slice(replayFrom)
       const staleReads = replayFrames.filter(frame => lookup(frame) && frame.limit === 18)
       expect(staleReads).toHaveLength(1)
@@ -428,7 +485,11 @@ async function verifySshBotChat(routeProfile: string, transition?: 'reconnect' |
     }
     expect(initial()).toEqual(before)
     expect(provider.completions.length).toBe(0)
-    expect(acceptedKeys()).toBeGreaterThan(preflightLogins)
+    expect(original.acceptedKeys()).toBeGreaterThan(1)
+    if (replacement) {
+      expect(replacement.acceptedKeys()).toBeGreaterThan(1)
+      original.verifyLogin()
+    }
     completed = true
   } catch (error) {
     if (app) fs.writeFileSync(path.join(state!, 'desktop.log'), appLogTail(app), { mode: 0o600 })
@@ -438,16 +499,15 @@ async function verifySshBotChat(routeProfile: string, transition?: 'reconnect' |
     try {
       if (gateway) await stopGateway(gateway)
     } finally {
-      server?.kill()
+      for (const server of servers) server.listener()?.kill()
       await provider.close()
       try {
         if (completed) {
           // The SSH watchdog's last bounded sleep can briefly outlive its shell.
-          await expect.poll(() => [local, remote].flatMap(sandboxProcesses), { timeout: 20_000 }).toEqual([])
+          await expect.poll(() => boxes.flatMap(sandboxProcesses), { timeout: 20_000 }).toEqual([])
         }
       } finally {
-        local.cleanup()
-        remote.cleanup()
+        for (const box of boxes) box.cleanup()
       }
     }
   }
@@ -476,4 +536,9 @@ test('Bot Mode reopens the original chat behind an offline OpenSSH alias', async
 test('Bot Mode opens the new OpenSSH alias target after a live edit', async () => {
   test.setTimeout(180_000)
   await verifySshBotChat('default', 'edit')
+})
+
+test('Bot Mode opens the replacement OpenSSH installation after an endpoint edit', async () => {
+  test.setTimeout(180_000)
+  await verifySshBotChat('default', 'replace')
 })

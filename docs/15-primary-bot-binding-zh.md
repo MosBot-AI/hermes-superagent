@@ -44,7 +44,7 @@
 | Desktop 来源选择 | 在 Linux 上运行真实的 Electron 源码构建，通过私有本地票据和已保存的环回 Webapp token 连接，验证 `host.profileRoutes()` 与 `host.requestProfile()`。原生 profile 退役并同名热上线时，已保存的连接保持原路由作用域。[Electron 证据](#当前固定版本的-electron-profile-路由) · [Desktop 运行时转换](#当前固定版本的-desktop-profile-退役) | 分别验证 Desktop 安装包及任何启用的 SSH 或 OAuth 路由。 |
 | 安装复制观测 | 两个 Gateway 均可达时，Electron 将安装标记和 profile 相同的条目归并到主连接。显式注册路由仍返回各自的对话记录，停止状态 home 副本保留相同规范会话 ID 时也是如此。[安装复制证据](#当前固定版本的安装复制歧义) | 恢复或重新绑定前需要独立、经认证的安装和 owner 证据。清单无法消除复制标记的歧义。 |
 | Bot Mode 规范会话打开 | 源码构建的 Linux 名册在查询返回类型化错误时拒绝打开会话，在查询返回空结果但原生指针探测确认已有会话时也拒绝。重试时打开同一个本地未压缩会话。同一用例从本地构建的 Linux x64 AppImage 启动时也通过。[本地 Bot Mode 证据](#当前固定版本的-bot-mode-规范会话拒绝与重试) | 已签名的发行安装包、其他平台、OAuth 界面路由以及经认证的 owner 绑定需要独立证据。 |
-| 已保存 OpenSSH 的 Bot Mode | Linux x64 Desktop 的源码构建与安装包通过真实 SSH 密钥连接和转发的 Gateway 打开远端命名 Bot Chat，本地同时存在同名 profile。[OpenSSH 证据](#当前固定版本的-openssh-bot-mode-路由) · [Profile 别名](#当前固定版本的-openssh-profile-别名) · [重连](#当前固定版本的-openssh-重连) · [别名改绑](#当前固定版本的-openssh-别名改绑) | 修改别名后，缓存的描述符仍可读取此前仍在服务的 profile。自动恢复、其他 SSH 凭据和 owner 绑定需要独立证据。 |
+| 已保存 OpenSSH 的 Bot Mode | Linux x64 Desktop 的源码构建与安装包通过真实 SSH 密钥连接和转发的 Gateway 打开远端命名 Bot Chat，本地同时存在同名 profile。[OpenSSH 证据](#当前固定版本的-openssh-bot-mode-路由) · [Profile 别名](#当前固定版本的-openssh-profile-别名) · [重连](#当前固定版本的-openssh-重连) · [别名改绑](#当前固定版本的-openssh-别名改绑) · [端点更换](#当前固定版本的-openssh-端点更换) | 修改别名后，缓存的描述符仍可读取此前仍在服务的 profile。更换端点后，同一描述符可解析到另一个安装。自动恢复、其他 SSH 凭据和 owner 绑定需要独立证据。 |
 | 本地旧版压缩历史 | 命名 profile 的原生 CLI 检查并接管符合条件的 Gateway 前压缩末端。Linux 源码构建的 Bot Mode 在所选 profile 路由打开该末端，并显示已存储的祖先与末端消息。[压缩历史证据](#当前固定版本的压缩历史接管) | 经 owner 授权的跨安装接管、混合 owner 谱系、其他凭据模式和投递对账需要独立证据。 |
 | 已保存 Webapp 令牌的回退 | 干净 Linux Electron 构建在命名 profile 查询返回空结果时探测远程启动 authority，并在同一次点击中通过第二次查询打开原会话。单独构建的提案探测命名 authority，拒绝不确定的打开操作，并在明确重试后打开原会话。[已保存 Webapp 证据](#当前固定版本的已保存-webapp-bot-mode-路由) | 干净固定版本仍有回退作用域缺口。受支持的使用需要已修正的宿主修订及该模式的专项验收。 |
 | Profile 与安装连续性 | 停机状态下的原生 profile CLI 和备份导入路径覆盖重命名、克隆、删除、同名重建、拒绝向已占用的 profile 导入，以及恢复后目标的 epoch 下限。在同一运行中的安装实例内，保留原有 host 作用域 WebSocket，覆盖 profile 退役及同名热上线。[Profile 生命周期](#当前固定版本的原生-profile-生命周期) · [保留的路由](#当前固定版本保留的原生-profile-路由) · [备份与恢复](#当前固定版本的原生备份与恢复) | 其他运行时切换和经认证的安装连续性需要当前目标、登记、规范谱系与冲突证据。复制的标记和名称无法消除安装实例的歧义。 |
@@ -244,7 +244,15 @@ Bot Mode 的确切标题 `session.list` 查询携带所选后端 profile。列�
 
 使用之前捕获的 `default` → `scout` 描述符，并显式传入 RPC 参数 `profile: scout` 重放读取，仍会经**新**转发返回原来的 `scout` 会话。SDK 按连接 ID 和连接内的 profile 路由，显式 RPC profile 仍可选择该安装上正在服务的 profile。此次编辑关闭了旧传输，并改变了后续 Bot Mode 的选择。因此，缓存的 SDK 描述符无法证明当前目标仍符合原绑定，也无法证明对某个 profile 的访问已被撤销。依赖描述符本身的绑定或撤销流程应保持禁用。两次读取和界面恢复均未改变五份 SQLite 投影。夹具记录到的会话创建、提示提交和 provider 生成次数均为零。
 
-使用同一运行器的 `--case bot-canonical-ssh-alias-edit`，并可添加 `--appimage`。源码构建和本地构建的未签名 Linux x64 AppImage 在干净固定版本上复现相同结果。证据覆盖同一个可达安装上的目标修改。端点变更、在途写入和生产 owner 重新绑定需要单独取证。
+使用同一运行器的 `--case bot-canonical-ssh-alias-edit`，并可添加 `--appimage`。源码构建和本地构建的未签名 Linux x64 AppImage 在干净固定版本上复现相同结果。证据覆盖同一个可达安装上的目标修改。[端点更换用例](#当前固定版本的-openssh-端点更换)覆盖不同安装。在途写入和生产 owner 重新绑定需要单独取证。
+
+#### 当前固定版本的 OpenSSH 端点更换
+
+本用例在不同回环端口运行两个 OpenSSH 监听器，各自使用独立的主机密钥、客户端密钥、Hermes 主目录和安装标记。两个安装都有 `default` 和 `scout` 会话，第三个本地安装用作对照。夹具确认每个监听器都能使用其固定的主机公钥和客户端凭据连接，并到达各自的主目录。Desktop 先通过保留的 SDK 套接字读取原安装的隐藏 `scout` 会话。通过原生连接注册表保存时，修改端点、密钥路径和启动器，同时保留已保存的连接 ID 和 `default` → `scout` 映射。保留的套接字关闭，重新读取的公开描述符与此前捕获的描述符字段相同。
+
+再次点击 Bot Mode 行后，精确标题查询和恢复请求通过新端点的转发发出，打开新安装已有的 `scout` 会话。Desktop 的会话归属仍显示相同路由。此前捕获的描述符也会通过新转发返回新安装的会话。直接使用固定密钥检查时，仍可连接原监听器并到达原主目录。六份 SQLite 投影均保持一致，没有新建会话、提交提示或调用模型。描述符和会话归属相同，仍可能对应不同的安装和规范会话。连续性和 owner 重新绑定仍需独立验证安装和 owner。
+
+在同一运行器中使用 `--case bot-canonical-ssh-endpoint-replacement`，并可添加 `--appimage`。源码构建和本地构建的未签名 Linux x64 Desktop 均在干净固定版本上通过。证据覆盖两个主机公钥均已固定的主动端点更换。同一地址上的主机密钥轮换、在途操作和生产环境重新登记仍需单独验收。
 
 ### 当前固定版本的原生 Profile 生命周期
 
