@@ -7,6 +7,7 @@ import os
 import runpy
 from pathlib import Path
 
+import utils
 from gateway.run_notifications import GatewayNotificationsMixin
 from gateway.session_context import clear_session_vars, set_session_vars
 from tools import process_registry_results
@@ -16,6 +17,17 @@ root = Path(os.environ["HERMES_BOT_ACCEPTANCE_ROOT"])
 results = Path(os.environ["HERMES_HOME"]) / "profiles/scout/logs/process-results"
 original_enqueue = GatewayNotificationsMixin._enqueue_process_completion_notification
 original_result_write = process_registry_results.atomic_json_write
+original_checkpoint_write = utils.atomic_json_write
+
+
+def write_checkpoint(path, record, **kwargs):
+    if (
+        path == results.parent.parent / "processes.json"
+        and (root / "fail-bot-checkpoint").is_file()
+    ):
+        (root / "bot-checkpoint-write-failed").touch(mode=0o600)
+        raise OSError(errno.ENOSPC, "Synthetic Bot checkpoint write failure")
+    return original_checkpoint_write(path, record, **kwargs)
 
 
 def write_process_result(path, record, **kwargs):
@@ -64,4 +76,5 @@ async def block_bot_completion(self, text, event):
 
 GatewayNotificationsMixin._enqueue_process_completion_notification = block_bot_completion
 process_registry_results.atomic_json_write = write_process_result
+utils.atomic_json_write = write_checkpoint
 runpy.run_module("gateway.run", run_name="__main__")

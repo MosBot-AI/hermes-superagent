@@ -1,13 +1,13 @@
 {
   "status": "review_only",
   "hermes_base": "2281116525106e3c109993ccb5dc74d02bfc1427",
-  "proposal_tree": "dd9932dd45bc5fd9b50f5b3c730d4635beb0a9fb",
-  "patch_sha256": "edf99ac886de12da61563f277fe365d825e1afb244f163131b62f00c52d85636",
+  "proposal_tree": "3acca14de6ac94beec5bd0d5f710462eecd9dbd9",
+  "patch_sha256": "92e9d73d1946053288c89270108965ce8fa08f02fa19d976ba27eaf6a97dd60b",
   "validation": {
     "python": "3.14.9",
     "platform": "Linux",
     "clean_live_controls_passed": 6,
-    "candidate_live_cases_passed": 13,
+    "candidate_live_cases_passed": 16,
     "candidate_focused_tests_passed": 255,
     "candidate_focused_tests_skipped": 5,
     "skipped": [

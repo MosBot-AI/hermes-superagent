@@ -13,8 +13,11 @@ import pytest
 
 
 @contextmanager
-def gateway_daemon(host, home, child_env, label):
-    with _owned_gateway(host, home, child_env, label, exit_mode="stop") as (endpoint, _):
+def gateway_daemon(host, home, child_env, label, *, entrypoint=None):
+    with _owned_gateway(host, home, child_env, label, exit_mode="stop", entrypoint=entrypoint) as (
+        endpoint,
+        _,
+    ):
         yield endpoint
 
 

@@ -46,6 +46,11 @@ async def finish_waiter(first, host, home, scout, model, *, phase, recovery):
                 (tracked,) = [row for row in checkpoint if row["session_id"] == delivery.process_id]
                 assert tracked["notify_on_complete"] is True
                 (root / "fail-finished-result").write_text(delivery.process_id, encoding="ascii")
+                if phase == "write-failed-combined":
+                    (root / "checkpoint-before-fault").write_bytes(
+                        (scout / "processes.json").read_bytes()
+                    )
+                    (root / "fail-bot-checkpoint").touch(mode=0o600)
         return await observe_finished(first, home, scout, model, delivery, phase, recovery)
 
 
@@ -64,6 +69,11 @@ async def observe_finished(first, home, scout, model, delivery, phase, recovery)
             assert (root / "finished-result-write-failed").is_file()
             assert not path.exists()
             checkpoint = json.loads((scout / "processes.json").read_bytes())
+            if phase == "write-failed-combined":
+                assert (root / "bot-checkpoint-write-failed").is_file()
+                assert (scout / "processes.json").read_bytes() == (
+                    root / "checkpoint-before-fault"
+                ).read_bytes()
             (handoff,) = [row for row in checkpoint if row["session_id"] == process_id]
             assert handoff["started_at"] == started_at
             assert handoff["parent_session_id"] == delivery.sender
@@ -168,7 +178,8 @@ def run_finished_loss(tmp_path_factory, monkeypatch, *, recovery, phase="pending
                     scout,
                     model,
                     before,
-                    recover_note=recovery and phase in {"pending", "write-failed"},
+                    recover_note=recovery
+                    and phase in {"pending", "write-failed", "write-failed-combined"},
                 )
             )
             asyncio.run(verify_no_repeat(successor, home, scout, model, observed))
@@ -230,6 +241,14 @@ def test_proposed_failed_result_write_recovers_pending_sender_notification(
 def test_proposed_failed_result_write_preserves_consumption(tmp_path_factory, monkeypatch):
     run_finished_loss(
         tmp_path_factory, monkeypatch, recovery=True, phase="write-failed-consumed", restart=True
+    )
+
+
+def test_proposed_combined_write_failure_recovers_from_previous_checkpoint(
+    tmp_path_factory, monkeypatch
+):
+    run_finished_loss(
+        tmp_path_factory, monkeypatch, recovery=True, phase="write-failed-combined", restart=True
     )
 
 
