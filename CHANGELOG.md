@@ -83,6 +83,8 @@ This file distinguishes design work, development changes, and released capabilit
 - Run runtime artifact acceptance on exact pull-request heads with read-only credentials; keep downloadable artifact publication push-only.
 ### Changed
 
+- Verify in-flight Bot delivery reconciliation after abrupt Gateway loss. The successor marks the original recipient admission interrupted, preserves the ambiguous receipt and does not resend on an exact retry. Automatic sender completion was absent in the isolated case (#33).
+
 - Verify a local Bot reply persists after its only viewer disconnects. Reopening the original chat returns one completion note, and retrying the original input does not resend the Bot request (#33).
 
 - Verify a native Bot reply reaches a viewed local sender once. The recipient receipt, sender event and stored completion correlate to one delivery, which starts one follow-up turn in isolated Linux acceptance (#33).
