@@ -439,7 +439,8 @@ async def exercise(fixture, endpoint, db, model, monkeypatch, *, installed, cons
         restrict()
 
 
-def run_reply(tmp_path_factory, monkeypatch, *, consume):
+@contextmanager
+def isolated_reply_fixture(tmp_path_factory, monkeypatch, *, activate_hook):
     assert sys.platform == "linux" and os.environ.get("HERMES_BOT_POLL_NAMESPACE") == "1"
     assert sys.version_info[:2] == (3, 14)
     assert [name for _, name in socket.if_nameindex()] == ["lo"]
@@ -463,18 +464,16 @@ def run_reply(tmp_path_factory, monkeypatch, *, consume):
     assert len(os.fsencode(home / "gateway.sock")) <= 100
     sender_home = home / "profiles/scout"
     sender_home.mkdir(parents=True, mode=0o700)
-    (sender_home / "config.yaml").write_text(
-        '{"telemetry":{"shared_metrics":{"enabled":false}}}', encoding="utf-8"
-    )
     (sender_home / "profile.yaml").write_text(
         '{"ui_meta":{"hermes-bots":{"title":"Scout Fixture"}}}', encoding="utf-8"
     )
+    module, function = activate_hook.split(":")
     (guard / "sitecustomize.py").write_text(
         "try:\n"
-        "    from native_bot_socket_guard import activate_child\n"
-        "    activate_child()\n"
+        f"    from {module} import {function}\n"
+        f"    {function}()\n"
         "except Exception:\n"
-        "    raise SystemExit('Private Bot poll socket audit could not start') from None\n",
+        "    raise SystemExit('Private Bot reply socket audit could not start') from None\n",
         encoding="utf-8",
     )
     env = {name: os.environ[name] for name in ("PATH", "LANG", "TZ") if name in os.environ}
@@ -521,76 +520,88 @@ def run_reply(tmp_path_factory, monkeypatch, *, consume):
         isolated.syspath_prepend(str(host))
         isolated.chdir(root)
         isolated.setattr(tempfile, "tempdir", str(scratch))
-        isolated.setattr(shared, "MESSAGE", MESSAGE)
         deactivate = activate(root)
         try:
-            from hermes_cli import gateway_client
-            from hermes_state import SessionDB
-
-            assert Path(gateway_client.__file__).resolve().is_relative_to(host)
-            with (
-                shared.synthetic_model() as peer,
-                closing(SessionDB(sender_home / "state.db")) as db,
-            ):
-                model = peer.requests = HeldRequests()
-                base = f"http://127.0.0.1:{peer.server_port}/v1"
-                config = {
-                    "gateway": {"multiplex_profiles": False},
-                    "webapp": {"enabled": False},
-                    "model": {"provider": "custom", "default": shared.MODEL, "base_url": base},
-                    "auxiliary": {"title_generation": {"enabled": False}},
-                    "terminal": {"backend": "local", "cwd": str(root), "auto_source_bashrc": False},
-                    "platform_toolsets": {"gui": []},
-                    "telemetry": {"shared_metrics": {"enabled": False}},
-                }
-                if prepared:
-                    from ruamel.yaml import YAML
-
-                    yaml = YAML()
-                    config_path = home / "config.yaml"
-                    installed_config = yaml.load(config_path)
-                    installed_config.update(config)
-                    yaml.dump(installed_config, config_path)
-                else:
-                    (home / "config.yaml").write_text(json.dumps(config), encoding="utf-8")
-                for directory in (home, sender_home):
-                    (directory / "models_dev_cache.json").write_text(
-                        '{"hermes-test-offline":{"id":"hermes-test-offline","env":[],"models":{}}}',
-                        encoding="utf-8",
-                    )
-                db.create_session(SENDER, source="local", user_id="synthetic-scout-owner")
-                assert db.set_session_title(SENDER, "Bot Chat")
-                assert db.set_session_hidden(SENDER, True)
-                db.append_message(SENDER, "user", "Synthetic original sender marker")
-                child_env = env | {
-                    "OPENAI_API_KEY": shared.MODEL_KEY,
-                    "OPENAI_BASE_URL": base,
-                    "HERMES_BOT_ACCEPTANCE_ROOT": str(root),
-                    "HERMES_BOT_ACCEPTANCE_MODEL_PORT": str(peer.server_port),
-                }
-                with gateway_daemon(host, home, child_env, "bot-poll") as gateway:
-                    saved = asyncio.run(
-                        exercise(
-                            (host, home, scratch, guard),
-                            gateway,
-                            db,
-                            model,
-                            isolated,
-                            installed=bool(prepared),
-                            consume=consume,
-                        )
-                    )
-                if prepared:
-                    target, task_id = saved
-                    verify_saved_state(
-                        home,
-                        target,
-                        task_id,
-                        messages=(("user", MESSAGE), ("assistant", shared.REPLY)),
-                        admission_count=1,
-                    )
+            yield isolated, (host, home, scratch, guard), sender_home, env, bool(prepared)
         finally:
             deactivate()
+
+
+def run_reply(tmp_path_factory, monkeypatch, *, consume):
+    with isolated_reply_fixture(
+        tmp_path_factory, monkeypatch, activate_hook="native_bot_socket_guard:activate_child"
+    ) as (isolated, fixture, sender_home, env, prepared):
+        host, home, scratch, guard = fixture
+        root = home.parent
+        (sender_home / "config.yaml").write_text(
+            '{"telemetry":{"shared_metrics":{"enabled":false}}}', encoding="utf-8"
+        )
+        isolated.setattr(shared, "MESSAGE", MESSAGE)
+        from hermes_cli import gateway_client
+        from hermes_state import SessionDB
+
+        assert Path(gateway_client.__file__).resolve().is_relative_to(host)
+        with (
+            shared.synthetic_model() as peer,
+            closing(SessionDB(sender_home / "state.db")) as db,
+        ):
+            model = peer.requests = HeldRequests()
+            base = f"http://127.0.0.1:{peer.server_port}/v1"
+            config = {
+                "gateway": {"multiplex_profiles": False},
+                "webapp": {"enabled": False},
+                "model": {"provider": "custom", "default": shared.MODEL, "base_url": base},
+                "auxiliary": {"title_generation": {"enabled": False}},
+                "terminal": {"backend": "local", "cwd": str(root), "auto_source_bashrc": False},
+                "platform_toolsets": {"gui": []},
+                "telemetry": {"shared_metrics": {"enabled": False}},
+            }
+            if prepared:
+                from ruamel.yaml import YAML
+
+                yaml = YAML()
+                config_path = home / "config.yaml"
+                installed_config = yaml.load(config_path)
+                installed_config.update(config)
+                yaml.dump(installed_config, config_path)
+            else:
+                (home / "config.yaml").write_text(json.dumps(config), encoding="utf-8")
+            for directory in (home, sender_home):
+                (directory / "models_dev_cache.json").write_text(
+                    '{"hermes-test-offline":{"id":"hermes-test-offline","env":[],"models":{}}}',
+                    encoding="utf-8",
+                )
+            db.create_session(SENDER, source="local", user_id="synthetic-scout-owner")
+            assert db.set_session_title(SENDER, "Bot Chat")
+            assert db.set_session_hidden(SENDER, True)
+            db.append_message(SENDER, "user", "Synthetic original sender marker")
+            child_env = env | {
+                "OPENAI_API_KEY": shared.MODEL_KEY,
+                "OPENAI_BASE_URL": base,
+                "HERMES_BOT_ACCEPTANCE_ROOT": str(root),
+                "HERMES_BOT_ACCEPTANCE_MODEL_PORT": str(peer.server_port),
+            }
+            with gateway_daemon(host, home, child_env, "bot-poll") as gateway:
+                saved = asyncio.run(
+                    exercise(
+                        (host, home, scratch, guard),
+                        gateway,
+                        db,
+                        model,
+                        isolated,
+                        installed=bool(prepared),
+                        consume=consume,
+                    )
+                )
+            if prepared:
+                target, task_id = saved
+                verify_saved_state(
+                    home,
+                    target,
+                    task_id,
+                    messages=(("user", MESSAGE), ("assistant", shared.REPLY)),
+                    admission_count=1,
+                )
 
 
 def test_native_stateless_bot_poll_reply_persists_unconsumed_completion(
