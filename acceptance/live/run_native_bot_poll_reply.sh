@@ -1,0 +1,120 @@
+#!/bin/sh
+# Run the real native Bot reply waiter with private Linux login startup.
+set -eu
+umask 077
+
+usage() {
+    printf '%s\n' 'Usage: sh acceptance/live/run_native_bot_poll_reply.sh --hermes CHECKOUT --hermes-python PYTHON [--receipt RESULT.xml]'
+}
+
+host=
+python=
+receipt=
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        -h|--help) usage; exit 0 ;;
+        --hermes|--hermes-python|--receipt)
+            if [ "$#" -lt 2 ] || [ -z "$2" ]; then usage >&2; exit 2; fi
+            case "$1" in
+                --hermes) host=$2 ;;
+                --hermes-python) python=$2 ;;
+                --receipt) receipt=$2 ;;
+            esac
+            shift 2
+            ;;
+        *) usage >&2; exit 2 ;;
+    esac
+done
+if [ -z "$host" ] || [ -z "$python" ]; then usage >&2; exit 2; fi
+
+export PATH=/usr/bin:/bin
+repo=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd -P)
+host=$(CDPATH='' cd -- "$host" && pwd -P)
+# Keep the virtual environment's interpreter link so Python loads that environment.
+python=$(CDPATH='' cd -- "$(dirname -- "$python")" && pwd -P)/$(basename -- "$python")
+test -x "$python"
+for program in git ip mount readlink setpriv timeout unshare; do
+    if ! command -v "$program" >/dev/null; then
+        printf 'Missing Linux acceptance command %s\n' "$program" >&2
+        exit 2
+    fi
+done
+mount_namespace=$(readlink /proc/self/ns/mnt)
+network_namespace=$(readlink /proc/self/ns/net)
+
+staged_receipt=
+if [ -n "$receipt" ]; then
+    staged_receipt=$(mktemp -- "$(dirname -- "$receipt")/.bot-poll-reply.XXXXXX")
+fi
+trap 'if [ -n "$staged_receipt" ]; then rm -f -- "$staged_receipt"; fi' EXIT
+
+if ! env -i PATH="$PATH" LANG=C.UTF-8 TZ=UTC \
+    timeout --kill-after=5s 150s unshare --user --map-current-user --keep-caps \
+    --mount --propagation private --net --pid --mount-proc --fork --kill-child=SIGKILL \
+    sh -eu -c '
+        # Check namespace identity before mounting over any system path.
+        test "$(readlink /proc/self/ns/mnt)" != "$4"
+        test "$(readlink /proc/self/ns/net)" != "$5"
+        test "$$" -eq 1
+        mount -t tmpfs -o mode=1777,size=64m,nr_inodes=8192 tmpfs /tmp
+        ip link set lo up
+        test "$(ip -o link show | wc -l)" -eq 1
+        test -z "$(ip -4 route show default)"
+        test -z "$(ip -6 route show default)"
+        work=$(mktemp -d /tmp/hbp.XXXXXX)
+        mkdir -m 700 "$work/user" "$work/tmp"
+        : > "$work/empty"
+        for path in /etc/profile /etc/bash.bashrc; do
+            if [ -e "$path" ] || [ -L "$path" ]; then
+                test -f "$path"
+                test ! -L "$path"
+                mount --bind "$work/empty" "$path"
+            fi
+        done
+        if [ -e /etc/profile.d ] || [ -L /etc/profile.d ]; then
+            test -d /etc/profile.d
+            test ! -L /etc/profile.d
+            mount -t tmpfs -o mode=755,size=1m,nr_inodes=128 tmpfs /etc/profile.d
+        fi
+
+        cd "$1"
+        if ! setpriv --inh-caps=-all --ambient-caps=-all --bounding-set=-all --no-new-privs \
+            env -i PATH=/usr/bin:/bin LANG=C.UTF-8 TZ=UTC HOME="$work/user" TMPDIR="$work/tmp" \
+            PYTHONNOUSERSITE=1 PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
+            HERMES_TEST_ROOT="$2" HERMES_BOT_POLL_NAMESPACE=1 \
+            "$3" -m pytest -q -p no:cacheprovider --show-capture=no --tb=short \
+            -o junit_logging=no --basetemp="$work/test" --junitxml="$work/result.xml" \
+            acceptance/live/test_native_bot_poll_reply.py >&2; then
+            exit 1
+        fi
+        setpriv --inh-caps=-all --ambient-caps=-all --bounding-set=-all --no-new-privs \
+            env -i PATH=/usr/bin:/bin LANG=C.UTF-8 HOME="$work/user" TMPDIR="$work/tmp" \
+            PYTHONNOUSERSITE=1 PYTHONDONTWRITEBYTECODE=1 "$3" - "$work/result.xml" <<\PY
+from pathlib import Path
+import sys
+from xml.etree import ElementTree
+
+receipt = Path(sys.argv[1])
+tree = ElementTree.parse(receipt)
+cases = tree.findall(".//testcase")
+excluded = ("error", "failure", "skipped", "system-out", "system-err")
+if (
+    len(cases) != 1
+    or cases[0].get("name") != "test_native_stateless_bot_poll_reply_persists_unconsumed_completion"
+    or any(tree.findall(f".//{tag}") for tag in excluded)
+):
+    raise SystemExit("Expected one clean passing native Bot reply case")
+for suite in tree.iter("testsuite"):
+    suite.attrib.pop("hostname", None)
+sys.stdout.buffer.write(ElementTree.tostring(tree.getroot(), encoding="utf-8", xml_declaration=True))
+PY
+    ' bot-poll-reply "$repo" "$host" "$python" "$mount_namespace" "$network_namespace" \
+    < /dev/null > "${staged_receipt:-/dev/null}"; then
+    printf '%s\n' 'Isolated native Bot reply acceptance failed.' >&2
+    exit 1
+fi
+
+if [ -n "$staged_receipt" ]; then
+    mv -fT -- "$staged_receipt" "$receipt"
+fi
+printf '%s\n' 'Isolated native Bot reply acceptance passed.'
