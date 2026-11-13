@@ -43,7 +43,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           test "$(git -C "$upstream" rev-parse HEAD)" = "$pin"
           mkdir -p "$RUNNER_TEMP/native-gateway-evidence"
-          for fixture in bot_receipt profile_retirement webapp_restore_rotation history_adoption webapp_signout managed_worker; do
+          for fixture in bot_receipt profile_retirement webapp_restore_rotation history_adoption webapp_signout managed_worker managed_worker_restart; do
             sandbox="$(mktemp -d "$RUNNER_TEMP/native-bot.XXXXXX")"
             mkdir -p "$sandbox/home" "$sandbox/tmp"
             receipt="${fixture//_/-}.xml"

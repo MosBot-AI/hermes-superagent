@@ -1,5 +1,6 @@
 """Process custody for the manual native Gateway socket checks."""
 
+import signal
 import socket
 import subprocess
 import sys
@@ -12,6 +13,18 @@ import pytest
 
 @contextmanager
 def gateway_daemon(host, home, child_env, label):
+    with _owned_gateway(host, home, child_env, label, crash_expected=False) as (endpoint, _):
+        yield endpoint
+
+
+@contextmanager
+def crashable_gateway_daemon(host, home, child_env, label):
+    with _owned_gateway(host, home, child_env, label, crash_expected=True) as daemon:
+        yield daemon
+
+
+@contextmanager
+def _owned_gateway(host, home, child_env, label, *, crash_expected):
     from gateway.status import get_process_start_time, terminate_pid, write_planned_stop_marker
     from hermes_cli.gateway_runtime import discover_gateway_endpoint
     from hermes_cli.gateway_runtime_discovery import query_identify
@@ -53,7 +66,28 @@ def gateway_daemon(host, home, child_env, label):
             )
             assert initial_start and get_process_start_time(process.pid) == initial_start
             assert (home.parent / f"socket-guard-{process.pid}").is_file()
-            yield endpoint
+            crashed = False
+
+            def crash():
+                nonlocal crashed
+                current = query_identify(home, timeout=2)
+                assert (
+                    current["pid"] == process.pid and current["instance_id"] == endpoint.instance_id
+                )
+                assert (
+                    process.poll() is None and get_process_start_time(process.pid) == initial_start
+                )
+                terminate_pid(process.pid, force=True, expected_start_time=initial_start)
+                assert process.wait(timeout=8) == -signal.SIGKILL
+                crashed = True
+
+            yield endpoint, crash if crash_expected else None
+            if crash_expected:
+                assert crashed
+                with pytest.raises(ConnectionRefusedError):
+                    with socket.create_connection(("127.0.0.1", origin.port), timeout=2):
+                        pass
+                return
             assert process.poll() is None and get_process_start_time(process.pid) == initial_start
             assert write_planned_stop_marker(process.pid)
             assert process.wait(timeout=35) == 0
