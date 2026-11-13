@@ -500,10 +500,19 @@ def isolated_reply_fixture(tmp_path_factory, monkeypatch, *, activate_hook):
         PYTHONDONTWRITEBYTECODE="1",
         PYTHONPATH=os.pathsep.join((str(guard), str(host), str(Path(__file__).resolve().parent))),
     )
-    for argv, expected in (
-        (["rev-parse", "HEAD"], pin),
-        (["status", "--porcelain", "--untracked-files=no"], ""),
-    ):
+    checks = [(["rev-parse", "HEAD"], pin)]
+    if os.environ.get("HERMES_BOT_REVIEW_RECOVERY") == "1":
+        experiment = shared.ROOT / "experiments/bot-sender-recovery"
+        proposal = json.loads((experiment / "manifest.json").read_bytes())
+        patch = experiment / "bot-sender-recovery.patch"
+        assert proposal["status"] == "review_only" and proposal["hermes_base"] == pin
+        assert hashlib.sha256(patch.read_bytes()).hexdigest() == proposal["patch_sha256"]
+        checks = [
+            (["show", "-s", "--format=%P", "HEAD"], pin),
+            (["rev-parse", "HEAD^{tree}"], proposal["proposal_tree"]),
+        ]
+    checks.append((["status", "--porcelain", "--untracked-files=all"], ""))
+    for argv, expected in checks:
         assert (
             subprocess.check_output(
                 ["git", *argv], cwd=host, env=env, stdin=subprocess.DEVNULL, text=True, timeout=10

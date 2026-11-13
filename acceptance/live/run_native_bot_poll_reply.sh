@@ -6,13 +6,14 @@ umask 077
 usage() {
     printf '%s\n' \
         'Usage: sh acceptance/live/run_native_bot_poll_reply.sh --hermes CHECKOUT --hermes-python PYTHON [--receipt RESULT.xml] [--installed] [--consume]' \
-        '       sh acceptance/live/run_native_bot_poll_reply.sh --hermes CHECKOUT --hermes-python PYTHON [--receipt RESULT.xml] (--push | --reconnect | --owner-loss | --settled-loss)'
+        '       sh acceptance/live/run_native_bot_poll_reply.sh --hermes CHECKOUT --hermes-python PYTHON [--receipt RESULT.xml] (--push | --reconnect | --owner-loss | --settled-loss) [--review-recovery]'
 }
 
 host=
 python=
 receipt=
 installed=0
+review_recovery=0
 mode=poll
 test_file=test_native_bot_poll_reply.py
 case_name=test_native_stateless_bot_poll_reply_persists_unconsumed_completion
@@ -20,6 +21,7 @@ while [ "$#" -gt 0 ]; do
     case "$1" in
         -h|--help) usage; exit 0 ;;
         --installed) installed=1; shift ;;
+        --review-recovery) review_recovery=1; shift ;;
         --consume)
             if [ "$mode" != poll ]; then usage >&2; exit 2; fi
             mode=consume
@@ -56,6 +58,14 @@ if [ -z "$host" ] || [ -z "$python" ]; then usage >&2; exit 2; fi
 if [ "$installed" -eq 1 ] && [ "$test_file" != test_native_bot_poll_reply.py ]; then
     usage >&2
     exit 2
+fi
+
+if [ "$review_recovery" -eq 1 ]; then
+    case "$mode" in
+        owner-loss) case_name=test_proposed_inflight_bot_sender_recovers_after_owner_loss ;;
+        settled-loss) case_name=test_proposed_settled_bot_sender_recovers_after_owner_loss ;;
+        *) usage >&2; exit 2 ;;
+    esac
 fi
 
 export PATH=/usr/bin:/bin
@@ -123,6 +133,7 @@ if ! env -i PATH="$PATH" LANG=C.UTF-8 TZ=UTC \
             env -i PATH=/usr/bin:/bin LANG=C.UTF-8 TZ=UTC HOME="$work/user" TMPDIR="$work/tmp" \
             PYTHONNOUSERSITE=1 PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
             HERMES_TEST_ROOT="$2" HERMES_BOT_POLL_NAMESPACE=1 HERMES_BOT_POLL_INSTALLED="$6" \
+            HERMES_BOT_REVIEW_RECOVERY="$9" \
             "$3" -m pytest -q -p no:cacheprovider --show-capture=no --tb=short \
             -o junit_logging=no --basetemp="$work/test" --junitxml="$work/result.xml" \
             "acceptance/live/$8::$7" >&2; then
@@ -151,7 +162,7 @@ for suite in tree.iter("testsuite"):
         suite.set("name", "native_bot_poll_reply_installed")
 sys.stdout.buffer.write(ElementTree.tostring(tree.getroot(), encoding="utf-8", xml_declaration=True))
 PY
-    ' bot-poll-reply "$repo" "$host" "$python" "$mount_namespace" "$network_namespace" "$prepared" "$case_name" "$test_file" \
+    ' bot-poll-reply "$repo" "$host" "$python" "$mount_namespace" "$network_namespace" "$prepared" "$case_name" "$test_file" "$review_recovery" \
     < /dev/null > "${staged_receipt:-/dev/null}"; then
     printf '%s\n' 'Isolated native Bot reply acceptance failed.' >&2
     exit 1

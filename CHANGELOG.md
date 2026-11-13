@@ -83,6 +83,8 @@ This file distinguishes design work, development changes, and released capabilit
 - Run runtime artifact acceptance on exact pull-request heads with read-only credentials; keep downloadable artifact publication push-only.
 ### Changed
 
+- Add a review-only Hermes patch that restores one native sender completion after each of two abrupt Gateway loss scenarios. The clean compatibility pin remains in use (#33).
+
 - Verify a settled Bot reply remains available under its original delivery ID after abrupt Gateway loss before the waiter reads it. Exact receipt replay starts no new inference. The isolated case observes no recovered sender completion (#33).
 
 - Verify in-flight Bot delivery reconciliation after abrupt Gateway loss. The successor marks the original recipient admission interrupted, preserves the ambiguous receipt and does not resend on an exact retry. Automatic sender completion was absent in the isolated case (#33).

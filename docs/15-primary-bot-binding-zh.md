@@ -644,6 +644,8 @@ sh acceptance/live/run_native_bot_poll_reply.sh \
 
 该用例验证接收方已结算、等待进程尚未读取回复时，进程意外退出后仍能通过原回执恢复回复。该窗口中的发送方自动恢复仍待解决。等待进程已保存输出后的进程退出、计划重启、已安装插件时的推送、Desktop 安装包、外部传输、经认证的 owner 绑定及真实服务商需要独立验收。
 
+[仅供评审的原生候选方案](../experiments/bot-sender-recovery/README-zh.md)复用现有的进程输出日志和会话权威服务。在一次性补丁宿主上，上述两种意外退出用例均为发送方恢复一条记录，没有再次向接收方投递，Gateway 再启动一次也没有重复记录。该结果适用于候选树。官方固定版本仍使用未修改的宿主。
+
 ## 9. 事件、错误与客户端恢复
 
 拟议的持久化失效通知包括 `primary_binding.changed`、`primary_binding.suspended`、`primary_binding.recovery_required`、`primary_binding.retired` 和 `primary_delivery.updated`。使用与 [14](14-client-api-contracts-zh.md) 相同的已提交领域序列/outbox；不创建平行事件总线作为权威来源。快照包含已授权的绑定摘要。可选实时提示仅请求重新获取数据。
