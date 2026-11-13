@@ -5,7 +5,7 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 
-import { expect, type ElectronApplication, type Page, test } from '@playwright/test'
+import { expect, type ElectronApplication, type Locator, type Page, test } from '@playwright/test'
 
 import { launchBotDesktop } from './desktop_bot_appimage'
 import {
@@ -20,7 +20,7 @@ import {
 import { privateEnv, seedInstall, startGateway, stopGateway, waitForEndpoint } from './desktop_native_gateway_fixture'
 import { appLogTail, composer, type CoreSandbox, createCoreSandbox, freePort, REPO_ROOT, sandboxProcesses } from './harness'
 import { listProcesses } from './process-census'
-import { startScriptedProvider } from './provider'
+import { gate, type ScriptedProvider, startScriptedProvider } from './provider'
 
 const profile = 'scout'
 const connectionId = 'fixture-ssh'
@@ -322,7 +322,94 @@ async function prepareSshServer(
   }
 }
 
-async function verifySshBotChat(routeProfile: string, transition?: 'reconnect' | 'edit' | 'replace' | 'rotate') {
+async function interruptSshServer(server: Awaited<ReturnType<typeof prepareSshServer>>) {
+  const listener = server.listener()!
+  const stopped = once(listener, 'exit')
+  stopSshSessions(listener.pid!)
+  await stopped
+}
+
+async function verifyInterruptedTurn(
+  page: Page,
+  row: Locator,
+  remote: CoreSandbox,
+  server: Awaited<ReturnType<typeof prepareSshServer>>,
+  provider: ScriptedProvider,
+  wire: WireFrame[],
+  sockets: Map<WireFrame, WireSocket>,
+  port: string,
+  owner: { connectionId: string; profile: string }
+) {
+  const input = 'U18-sshturn'
+  const partial = 'Synthetic partial reply'
+  const tail = 'Synthetic reply after release'
+  const hold = gate()
+  provider.script(input, [{ text: [partial, tail], holdAfterFirstChunk: hold }])
+  const from = wire.length
+  const named = () => storedChats(remote.hermesHome, profile)[1]!
+  const viewport = page.locator('[data-slot="aui_thread-viewport"]').filter({ visible: true }).first()
+  const submissions = () => wire.slice(from).filter(frame => frame.method === 'prompt.submit')
+
+  try {
+    await composer(page).fill(input)
+    await composer(page).press('Enter')
+    await expect.poll(() => provider.completions.some(turn =>
+      turn.marker === input && turn.sentText === partial && !turn.finished
+    ), { timeout: 35_000 }).toBe(true)
+    const submitted = submissions()
+    expect(submitted).toHaveLength(2)
+    const [refused, submit] = submitted
+    expect(refused).toMatchObject({ port, reply: { code: 4000 }, inputId: expect.any(String) })
+    expect(submit).toMatchObject({ port, reply: {}, sessionId: refused!.sessionId })
+    expect(submit!.inputId).toBeUndefined()
+    expect(submit!.admissionId).toBeUndefined()
+    const beforeLoss = named()
+    expect(beforeLoss.admissions).toEqual([])
+    expect(beforeLoss.messages.filter(message => message.role === 'user' && message.content === input)).toHaveLength(1)
+    await expect(viewport.getByText(partial, { exact: true })).toBeVisible()
+
+    const socket = sockets.get(submit!)!
+    expect(socket.closed).toBe(false)
+    await interruptSshServer(server)
+    await expect.poll(() => socket.closed).toBe(true)
+    expect(provider.completions[0]).toMatchObject({ aborted: false, finished: false })
+    const logins = server.acceptedKeys()
+    hold.open()
+    await expect.poll(() => named().messages.filter(message =>
+      message.role === 'assistant' && String(message.content).includes(tail)
+    ), { timeout: 25_000 }).toHaveLength(1)
+    expect(provider.completions[0]).toMatchObject({ aborted: false, finished: true, sentText: partial + tail })
+    const committedOffline = named()
+    expect(committedOffline.admissions).toEqual([])
+    expect(server.acceptedKeys()).toBe(logins)
+    await server.startServer()
+
+    const reopenFrom = wire.length
+    await row.click()
+    await expect(viewport.getByText(canonical, { exact: true })).toBeVisible({ timeout: 55_000 })
+    await expect.poll(() => focus(page)).toEqual({ id: canonical, owner })
+    await expect(viewport.getByText(input, { exact: true })).toBeVisible({ timeout: 20_000 })
+    await expect(viewport.getByText(partial + tail, { exact: true })).toBeVisible({ timeout: 20_000 })
+    expect(committedOffline.sessions).toEqual(beforeLoss.sessions)
+    expect(committedOffline.messages.filter(message => message.role === 'user' && message.content === input)).toHaveLength(1)
+    expect(named()).toEqual(committedOffline)
+    expect(submissions()).toEqual(submitted)
+    expect(provider.completions.map(turn => turn.marker)).toEqual([input])
+    const recovery = wire.slice(reopenFrom)
+    expect(recovery.filter(frame => frame.method === 'session.create')).toEqual([])
+    const resumes = recovery.filter(frame => frame.method === 'session.resume')
+    expect(resumes.some(frame => frame.port !== port && frame.profile === profile && frame.sessionId === canonical)).toBe(true)
+    expect(resumes.every(frame => frame.port !== port && frame.sessionId === canonical)).toBe(true)
+    expect(server.acceptedKeys()).toBeGreaterThan(logins)
+  } finally {
+    hold.open()
+  }
+}
+
+async function verifySshBotChat(
+  routeProfile: string,
+  transition?: 'reconnect' | 'edit' | 'replace' | 'rotate' | 'turn'
+) {
   const rotate = transition === 'rotate'
   const reconnect = transition === 'reconnect' || rotate
   const edit = transition === 'edit'
@@ -435,10 +522,7 @@ async function verifySshBotChat(routeProfile: string, transition?: 'reconnect' |
       expect(original.acceptedKeys()).toBeGreaterThan(1)
       const offlineFrom = wire.length
       const focusedBefore = await focus(page)
-      const listener = original.listener()!
-      const stopped = once(listener, 'exit')
-      stopSshSessions(listener.pid!)
-      await stopped
+      await interruptSshServer(original)
       await expect.poll(() => socket.closed).toBe(true)
       await page.evaluate(() => window.__E07_SSH_RELEASE__?.())
       const rotation = rotate ? original.prepareHostKeyRotation() : undefined
@@ -503,8 +587,8 @@ async function verifySshBotChat(routeProfile: string, transition?: 'reconnect' |
     expect(reads).toHaveLength(1)
     expect(reads[0]).toMatchObject({ method: 'session.list', profile: expectedProfile, includeHidden: true, reply: {} })
     expect(reads[0]!.port).not.toBe(localPort)
-    if (aliased && !transition) expect(reads[0]!.port).toBe(sdkRead!.port)
-    if (transition) expect(reads[0]!.port).not.toBe(sdkRead!.port)
+    if (reconnect || edit || replace) expect(reads[0]!.port).not.toBe(sdkRead!.port)
+    else if (aliased) expect(reads[0]!.port).toBe(sdkRead!.port)
     if (reconnect) expect(original.acceptedKeys()).toBeGreaterThan(loginsBeforeRecovery)
     const opens = frames.filter((frame) => ['session.resume', 'session.activate'].includes(frame.method))
     expect(opens.some((frame) => frame.method === 'session.resume')).toBe(true)
@@ -533,6 +617,12 @@ async function verifySshBotChat(routeProfile: string, transition?: 'reconnect' |
     }
     expect(initial()).toEqual(before)
     expect(provider.completions.length).toBe(0)
+    if (transition === 'turn') {
+      await verifyInterruptedTurn(page, row, remote, original, provider, wire, sockets, reads[0]!.port, {
+        connectionId, profile: routeProfile
+      })
+      expect(initial().slice(0, 3)).toEqual(before.slice(0, 3))
+    }
     expect(original.acceptedKeys()).toBeGreaterThan(1)
     if (replacement) {
       expect(replacement.acceptedKeys()).toBeGreaterThan(1)
@@ -594,4 +684,9 @@ test('Bot Mode opens the replacement OpenSSH installation after an endpoint edit
 test('Bot Mode refuses a changed OpenSSH host key before explicit trust update', async () => {
   test.setTimeout(180_000)
   await verifySshBotChat('default', 'rotate')
+})
+
+test('Bot Mode reopens the canonical chat after SSH loss during a turn', async () => {
+  test.setTimeout(180_000)
+  await verifySshBotChat('default', 'turn')
 })

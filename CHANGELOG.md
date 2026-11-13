@@ -199,6 +199,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Verify that a legacy SSH Bot Mode turn can finish while the transport is down and that an explicit reopen reads the committed reply without resubmitting. Record the missing durable admission receipt (#33).
+
 - Verify that Desktop refuses an SSH endpoint whose host key changed and resumes the original Bot Chat after an explicit trust update and retry (#33).
 
 - Verify live SSH endpoint replacement across separate installations. Desktop closes the original socket and opens the replacement chat, while a captured route descriptor can resolve to the replacement under the same connection ID (#33).
