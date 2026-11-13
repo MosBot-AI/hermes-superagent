@@ -1,6 +1,6 @@
 """Stage a disposable recipient using the official installer before reply isolation."""
 
-import json
+import argparse
 import os
 import shutil
 import subprocess
@@ -24,9 +24,10 @@ def stage_tooling(source, destination):
         raise ValueError("The installer tooling contains an external link")
 
 
-def prepare(host, root, tool_store=None):
+def prepare(host, root, tool_store=None, *, upstream=False):
     # The launcher uses isolated Python mode. Only add the local fixture directory.
     sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from native_bot_reply_checkout import verify_checkout
     from ruamel.yaml import YAML
     from test_packaged_gateway_bot import verify_install
     from test_packaged_gateway_tasks import install_package, write_install_config
@@ -58,9 +59,7 @@ def prepare(host, root, tool_store=None):
             ["git", "-C", str(directory), *args], env=env, text=True, timeout=10
         ).strip()
 
-    pin = json.loads((REPO / "compatibility.json").read_bytes())["hermes_commit"]
-    if git(host, "rev-parse", "HEAD") != pin or git(host, "status", "--porcelain", "-uno"):
-        raise ValueError("Hermes source must match the clean compatibility pin")
+    pin = verify_checkout(host, env, upstream=upstream)
     source = git(REPO, "rev-parse", "HEAD")
     package = root / "package"
     build = [
@@ -101,11 +100,23 @@ def prepare(host, root, tool_store=None):
     shutil.move(home / "plugins", recipient / "plugins")
     shutil.move(home / "config.yaml", recipient / "config.yaml")
     (root / "source-commit").write_text(source, encoding="ascii")
+    (root / "install-hermes-commit").write_text(pin, encoding="ascii")
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("host", type=Path)
+    parser.add_argument("root", type=Path)
+    parser.add_argument("--tool-store", type=Path)
+    parser.add_argument("--upstream-recovery-base", action="store_true")
+    args = parser.parse_args()
     try:
-        prepare(*(Path(arg).resolve(strict=True) for arg in sys.argv[1:]))
+        prepare(
+            args.host.resolve(strict=True),
+            args.root.resolve(strict=True),
+            args.tool_store.resolve(strict=True) if args.tool_store else None,
+            upstream=args.upstream_recovery_base,
+        )
     except (OSError, ValueError, subprocess.SubprocessError, AssertionError) as error:
         raise SystemExit(
             f"Official disposable plugin installation failed ({type(error).__name__})"

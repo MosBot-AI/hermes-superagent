@@ -21,6 +21,7 @@ from test_native_bot_push_reply import (
     RECEIVER_REPLY,
     SENDER_ACK,
     admissions,
+    check_recipient_plugin,
     completion_card,
     gateway_dial,
     is_completion_event,
@@ -31,6 +32,7 @@ from test_native_bot_push_reply import (
     verify_recipient,
     wait_for_disconnected_reply,
 )
+from test_packaged_gateway_bot import confirm_task, verify_install
 
 
 @contextmanager
@@ -101,12 +103,19 @@ async def lose_owner(
     recovery,
     restart=False,
     stop_after_drain=False,
+    installed=False,
 ):
+    from hermes_cli.gateway_client import connect_gateway
     from tools.bot_live_delivery import read_delivery_result
 
     with gateway_dial(home, endpoint) as owner_pid:
-        async with asyncio.timeout(40), retained_host_client(home, endpoint) as client:
-            delivery = await start_delivery(client, home, scout, model)
+        recipient_connection = connect_gateway(endpoint=endpoint) if installed else nullcontext()
+        async with (
+            asyncio.timeout(40),
+            retained_host_client(home, endpoint) as client,
+            recipient_connection as recipient,
+        ):
+            delivery = await start_delivery(client, home, scout, model, recipient=recipient)
             waiter = await owned_waiter(host, home.parent, owner_pid)
             record = read_delivery_result(home, delivery.delivery_id)
             assert record["admission_id"] == delivery.receiver_admission["admission_id"]
@@ -384,6 +393,18 @@ async def verify_after_owner_loss(
             return delivery, expected_history, expected_admissions
 
 
+async def verify_installed_recipient(endpoint, home, delivery):
+    from hermes_cli.gateway_client import connect_gateway
+
+    with gateway_dial(home, endpoint):
+        async with connect_gateway(endpoint=endpoint) as recipient:
+            resumed = await check_recipient_plugin(recipient, delivery.target)
+            assert not resumed["pending"] and not resumed["running"]
+            await confirm_task(recipient, delivery.target, delivery.recipient_task)
+            (admission,) = admissions(home, delivery.target)
+            assert admission["admission_id"] == delivery.receiver_admission["admission_id"]
+
+
 def run_owner_loss(
     tmp_path_factory,
     monkeypatch,
@@ -395,7 +416,9 @@ def run_owner_loss(
     mismatched=False,
     receipt_delay=None,
 ):
-    with local_reply_fixture(tmp_path_factory, monkeypatch) as (host, home, scout, env, model):
+    installed = bool(os.environ.get("HERMES_BOT_POLL_INSTALLED"))
+    with local_reply_fixture(tmp_path_factory, monkeypatch, installed=installed) as fixture:
+        host, home, scout, env, model = fixture
         launch = restartable_gateway_daemon if restart else crashable_gateway_daemon
         if restart:
             env = env | {
@@ -416,6 +439,7 @@ def run_owner_loss(
                         recovery=recovery,
                         restart=restart,
                         stop_after_drain=stop_after_drain,
+                        installed=installed,
                     )
                 )
         finally:
@@ -453,10 +477,18 @@ def run_owner_loss(
                     receipt_delay=receipt_delay,
                 )
             )
+            if installed:
+                asyncio.run(verify_installed_recipient(successor, home, before[0]))
         if recovery:
             with gateway_daemon(host, home, env, "bot-restarted-again") as restarted:
                 assert restarted.instance_id not in (first.instance_id, successor.instance_id)
                 asyncio.run(verify_no_repeat(restarted, home, scout, model, observed))
+                if installed:
+                    asyncio.run(verify_installed_recipient(restarted, home, before[0]))
+        if installed:
+            root = home.parent
+            source = (root / "source-commit").read_text(encoding="ascii")
+            verify_install(home, root / "package", source)
 
 
 async def verify_no_repeat(endpoint, home, scout, model, observed):
