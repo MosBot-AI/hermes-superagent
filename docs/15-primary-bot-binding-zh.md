@@ -54,7 +54,7 @@
 | 本地调用方与接收 Bot | Linux 同 UID 控制票据证明本地操作者准入。干净宿主上的 owner 入口夹具在缺少受支持的接收侧适配器上下文时拒绝。[本地 Gateway](#当前固定版本的本地-bot-传输与重启) · [Owner 入口契约](../tests/contracts/test_owner_entry_contracts.py) | 受保护的原生命令和渠道入口需要宿主以受支持的方式证明原始调用方、接收方及会话，再校验当前 owner 和 grant。[命令上下文实验](23-host-command-context-experiment-zh.md)仍仅供评审。 |
 | 插件状态与子代理角色 | 公开 `ctx.subagent_lifecycle` 覆盖 `in_process` 和 `host` 两种隔离模式下的进程内父子关联。`ctx.state` 在两种模式下均经过验证，其中托管模式覆盖两个命名 profile。[子代理证据](#当前固定版本的子代理关联) | 可信调用方身份、绑定 owner 的 grant 和撤销需要独立检查。[E0.4](13-enforcement-contracts-zh.md)覆盖独立的配置冻结和故障排查安全模式 worker 路径。 |
 | 原生受管 WorkerChannel | 命名 profile 的普通 Gateway 路径关联原生子进程、其准入、有序回执及完成后的对话记录。在同一 Gateway 上，经 generation 检查的停止请求中断等待澄清的 worker，随后排队的输入完成。后继 Gateway 将丢失 worker 的准入保留为 `unknown`，直到显式处理。[受管 worker 证据](#当前固定版本的原生受管-workerchannel) · [停止](#当前固定版本的受管-worker-停止) · [重启对账](#当前固定版本的受管-worker-重启对账) | 人类 owner 授权、当前撤销状态、受管委派及 Kanban 接管需要独立证明。仅供评审的纯文本 worker 契约有独立门禁。 |
-| 原生 Bot 与 cron 投递 | 同一安装内的 `message_agent` 和 `bot_relay.deliver` 覆盖仅通知的作者归因及本地终态回执恢复。原生 cron 在响应丢失后复用同一个投递 ID，并报告 `transferred` 和 `queued` 回执。[Bot 消息](#当前固定版本的同一安装内-bot-消息) · [重启](#当前固定版本的本地-bot-传输与重启) · [延后投递](#当前固定版本的-bot-chat-延后投递) | 对需要回复、远程和其他生产者模式分别验证回执及作者对账。结果不确定时保留原投递 ID。 |
+| 原生 Bot 与 cron 投递 | 同一安装内的 `message_agent` 和 `bot_relay.deliver` 覆盖仅通知的作者归因、本地终态回执恢复及非推送会话的发送方回复持久化。原生 cron 在响应丢失后复用同一个投递 ID，并报告 `transferred` 和 `queued` 回执。[Bot 消息](#当前固定版本的同一安装内-bot-消息) · [重启](#当前固定版本的本地-bot-传输与重启) · [回复持久化](#当前固定版本的同一安装内-bot-回复持久化) · [延后投递](#当前固定版本的-bot-chat-延后投递) | 对推送投递、远程凭据和其他生产者模式分别验证回执及作者对账。结果不确定时保留原投递 ID。 |
 | 插件注入 | 原生调度器证据显示，`ctx.inject_message` 可在随后发生派发失败之前返回 `True`。[注入证据](#8-消息例行任务与回执) | 插件负责的持久投递需要受支持的幂等准入与回执查询。使用布尔接口时保持持久主动投递不可用。 |
 | 可选 HTTP | [客户端契约](14-client-api-contracts-zh.md#3-鉴权不等于领域授权)记录原生凭据形态和 E0.6 传输边界。 | 只有受支持的可信主体和 profile 传递、领域授权以及逐能力的传输和恢复验收都完成后，才启用 Primary Bot HTTP 操作。 |
 
@@ -487,7 +487,7 @@ V1 **不支持自动跨 profile/跨宿主接管**。应使用 E8.3 下经过单�
 | 命名 Bot Chat 向 `@hermes` 发送 | 默认 profile 的规范 Bot Chat 收到一条排队中的准入记录。消息以 `Message from 🤖 Scout Fixture (@scout): [no reply needed]` 开头，结构化作者为 `bot:scout`，名称为 `scout`，`is_bot: true`。本地票据主体和 FIFO 生产者分别记录。 |
 | 持久化回执与事件还原 | 工具返回 `queued` 和 `expects_reply: false`。投递 ID 与已固定的意图、邮箱回执及 FIFO 请求 `bot:<delivery_id>` 一致。原生还原函数从该排队条目返回相同的作者和内部事件标记。发送方临时载荷和意图已清理。参与比较的发送方数据库记录保持不变，接收方的会话消息记录仍为空，authority 记录一次调度请求。 |
 
-夹具让接收方回合保持排队状态，并拦截回复等待进程。证据覆盖同一安装内的 Bot 作者归属和本地 operator 准入。另有夹具验证本地进程传输和终态回执。已验证的人类 owner、受支持的插件调用方和 worker 来源证明、真实服务商执行、回复送达、已安装发行包及跨机器消息均需单独验证。[本地 Bot 传输与重启](#当前固定版本的本地-bot-传输与重启)
+夹具让接收方回合保持排队状态，并拦截回复等待进程。证据覆盖同一安装内的 Bot 作者归属和本地 operator 准入。另有夹具验证本地终态回执恢复和非推送会话的发送方回复持久化。已验证的人类 owner、受支持的插件调用方和 worker 来源证明、真实服务商执行、推送投递、已安装发行包及跨机器消息均需单独验证。[本地 Bot 传输与重启](#当前固定版本的本地-bot-传输与重启) · [回复持久化](#当前固定版本的同一安装内-bot-回复持久化)
 
 ## 7. 跨设备与平台连续性
 
@@ -543,6 +543,23 @@ Linux 验收夹具在临时独立 home 中两次启动原生 `gateway.run` 入�
 夹具观察到本地 operator 凭据、一次合成接收回合及同一 home 正常重启后的回执恢复。该凭据模式提供当前运行时的访问。经认证的人类 owner、跨安装连续性、已安装包的 Bot 回执行为、从 Electron 发起的投递、其他操作系统的控制传输、远程 token、OAuth 和 SSH 投递模式、worker 来源证明及对用户的回复送达仍需单独取证。[恢复身份限制](#33-必须明确展示身份识别的限制)
 
 手动工作流在确切固定版本上以独立进程运行本用例。只有产生一项通过且没有跳过的结果时，才暂存干净的 `bot-receipt.xml`。常规拉取请求和推送检查覆盖内存 Bot 契约。已安装包的任务、记忆和 handoff 检查在工作流中各有独立步骤。[Native Gateway 验收工作流](../.github/workflows/native-gateway.yml)
+
+### 当前固定版本的同一安装内 Bot 回复持久化
+
+Linux operator 夹具使用 Hermes `2281116525106e3c109993ccb5dc74d02bfc1427` 的未修改源码。合成的 `scout` Bot Chat 声明原生无状态 channel，通过原生内联路径调用要求回复的 `message_agent`。接收方默认 profile 的 Bot Chat 在同一可丢弃安装中运行，使用原生私有 Unix 票据及回环 WebSocket。脚本化环回补全提供回复。[原生回复交接](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/tools/bot_mode_dm.py#L762-L799)
+
+工具确认投递 ID 并返回 `reply_delivery: poll`，确认中没有回复。原生登录 shell 快照成功，Hermes 启动负责在父进程退出时清理的监督进程，以及受跟踪的 `bash -lic` 等待进程。在接收方响应暂缓期间，发送方没有新的会话记录，临时意图和载荷仍存在。接收方为该投递 ID 记录一条终态 `completed` 准入及一条 `settled` 邮箱回执。等待进程以 `settled` 状态返回同一 ID 和回复，成功退出并移除临时文件。发送方的一条 `process_complete` 记录保留回复和投递 ID，未启动另一发送方回合。[后台进程启动](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/tools/process_registry.py#L1112-L1129) · [回复等待与持久化](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/tools/bot_mode_dm.py#L828-L931)
+
+在 Linux 上使用已准备好的固定版本检出目录及 Python 3.14 环境运行[独立 operator 启动器](../acceptance/live/run_native_bot_poll_reply.sh)。启动器需要用户、挂载、PID 和网络命名空间支持。它隔离 Bash 启动文件，并且网络仅允许回环连接。可选 `--receipt` 路径接收通过的结果。
+
+```sh
+sh acceptance/live/run_native_bot_poll_reply.sh \
+  --hermes /path/to/exact/checkout \
+  --hermes-python /path/to/venv/bin/python \
+  --receipt /path/to/result.xml
+```
+
+该用例在通过进程等待或日志读取消费结果前观察持久化。如果完成结果已被消费，原生源码可能跳过额外的会话记录。客户端实际轮询、发送方重启、推送投递、HTTP 与远程路由、服务商副作用以及经认证的 owner 或 worker grant 均需独立证据。
 
 ## 9. 事件、错误与客户端恢复
 
