@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 
-def activate(root, *, dial_ports=None):
+def activate(root, *, dial_ports=None, dial_host=None):
     root = root.resolve()
     active = True
 
@@ -22,6 +22,8 @@ def activate(root, *, dial_ports=None):
                     raise PermissionError("Native Bot fixture is loopback only")
                 if dial_ports is not None and event != "socket.bind" and port not in dial_ports:
                     raise PermissionError("Native Bot fixture dial port is not permitted")
+                if dial_host is not None and event != "socket.bind" and host != dial_host:
+                    raise PermissionError("Native Bot fixture dial host is not permitted")
             elif peer.family == socket.AF_UNIX:
                 if not isinstance(address, str) or not Path(address).resolve().is_relative_to(root):
                     raise PermissionError("Native Bot fixture Unix paths must be private")
@@ -43,7 +45,19 @@ def activate(root, *, dial_ports=None):
 def activate_child():
     root = Path(os.environ["HERMES_BOT_ACCEPTANCE_ROOT"])
     model_port = os.environ.get("HERMES_BOT_ACCEPTANCE_MODEL_PORT")
-    activate(root, dial_ports=() if model_port is None else (int(model_port),))
+    gateway_port = os.environ.get("HERMES_NATIVE_ACCEPTANCE_DIAL_PORT")
+    if model_port is not None and gateway_port is not None:
+        raise SystemExit("A native fixture child may dial only one declared endpoint")
+    port = gateway_port if gateway_port is not None else model_port
+    try:
+        dial_ports = () if port is None else (int(port),)
+    except ValueError:
+        raise SystemExit("Native fixture dial port must be an integer") from None
+    activate(
+        root,
+        dial_ports=dial_ports,
+        dial_host="127.0.0.1" if gateway_port is not None else None,
+    )
     try:
         sys.audit("socket.getaddrinfo", "blocked.invalid")
     except PermissionError:

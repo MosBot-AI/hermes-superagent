@@ -41,6 +41,11 @@ CASES = {
         (GATEWAY_FIXTURE, "desktop_profile_retirement_fixture.py", CANONICAL_OBSERVER),
         "saved Webapp profile retirement",
     ),
+    "compressed-history-adoption": (
+        "desktop_compressed_adoption.spec.ts",
+        (GATEWAY_FIXTURE, "desktop_compressed_adoption_fixture.py", CANONICAL_OBSERVER),
+        "compressed Bot Mode history adoption",
+    ),
     "install-marker-collision": (
         INSTALL_AMBIGUITY_SPEC,
         (GATEWAY_FIXTURE, CANONICAL_OBSERVER),
