@@ -33,14 +33,15 @@ def stopped_waiter(waiter):
     try:
         assert waiter.is_running()
         signal.pidfd_send_signal(pidfd, signal.SIGSTOP)
-        yield
-    finally:
         try:
-            signal.pidfd_send_signal(pidfd, signal.SIGCONT)
-        except ProcessLookupError:
-            pass
+            yield
         finally:
-            os.close(pidfd)
+            try:
+                signal.pidfd_send_signal(pidfd, signal.SIGCONT)
+            except ProcessLookupError:
+                pass
+    finally:
+        os.close(pidfd)
 
 
 async def settle_before_loss(client, home, scout, delivery, model, waiter, crash):
