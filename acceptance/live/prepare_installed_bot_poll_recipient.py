@@ -10,9 +10,24 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 
 
-def prepare(host, root):
+def stage_tooling(source, destination):
+    shutil.copytree(
+        source,
+        destination,
+        symlinks=True,
+        ignore=shutil.ignore_patterns(".staging-*", ".install.lock"),
+    )
+    if any(
+        path.is_symlink() and not path.resolve().is_relative_to(destination)
+        for path in destination.rglob("*")
+    ):
+        raise ValueError("The installer tooling contains an external link")
+
+
+def prepare(host, root, tool_store=None):
     # The launcher uses isolated Python mode. Only add the local fixture directory.
     sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from ruamel.yaml import YAML
     from test_packaged_gateway_bot import verify_install
     from test_packaged_gateway_tasks import install_package, write_install_config
 
@@ -20,11 +35,17 @@ def prepare(host, root):
     for directory in (home, user, scratch):
         directory.mkdir(mode=0o700)
     env = {key: os.environ[key] for key in ("PATH", "LANG", "TZ") if key in os.environ}
+    runtime = root / "install-runtime"
+    if tool_store is not None:
+        stage_tooling(tool_store, runtime)
+        uv_cache = tool_store.parent / "uv-cache"
+        if uv_cache.is_dir():
+            stage_tooling(uv_cache, root / "uv-cache")
     env.update(
         HOME=str(user),
         USERPROFILE=str(user),
         HERMES_HOME=str(home),
-        HERMES_RUNTIME_DIR=str(root / "install-runtime"),
+        HERMES_RUNTIME_DIR=str(runtime),
         TMPDIR=str(scratch),
         XDG_CONFIG_HOME=str(root / "config"),
         XDG_CACHE_HOME=str(root / "cache"),
@@ -68,6 +89,11 @@ def prepare(host, root):
     # The launcher bounds the whole process group, including dependency children.
     install_package(host, package, env, timeout=None)
     verify_install(home, package, source)
+    selection = YAML(typ="safe").load(home / "config.yaml")["plugins"]
+    if "hermes-personal-agent" not in selection.get(
+        "enabled", []
+    ) or "hermes-personal-agent" in selection.get("disabled", []):
+        raise SystemExit("Official installer did not enable the runtime package")
     # Carry the official install and its enablement into the private Gateway home.
     # Installer-owned runtime generations and bootstrap files stay in staging.
     recipient = root / "h"
