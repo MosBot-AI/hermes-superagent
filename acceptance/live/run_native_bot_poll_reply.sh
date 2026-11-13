@@ -1,22 +1,36 @@
 #!/bin/sh
-# Run the real native Bot reply waiter with private Linux login startup.
+# Run real native Bot reply acceptance with private Linux login startup.
 set -eu
 umask 077
 
 usage() {
-    printf '%s\n' 'Usage: sh acceptance/live/run_native_bot_poll_reply.sh --hermes CHECKOUT --hermes-python PYTHON [--installed] [--consume] [--receipt RESULT.xml]'
+    printf '%s\n' \
+        'Usage: sh acceptance/live/run_native_bot_poll_reply.sh --hermes CHECKOUT --hermes-python PYTHON [--receipt RESULT.xml] [--installed] [--consume]' \
+        '       sh acceptance/live/run_native_bot_poll_reply.sh --hermes CHECKOUT --hermes-python PYTHON [--receipt RESULT.xml] --push'
 }
 
 host=
 python=
 receipt=
 installed=0
+mode=poll
+test_file=test_native_bot_poll_reply.py
 case_name=test_native_stateless_bot_poll_reply_persists_unconsumed_completion
 while [ "$#" -gt 0 ]; do
     case "$1" in
         -h|--help) usage; exit 0 ;;
         --installed) installed=1; shift ;;
-        --consume) case_name=test_native_stateless_bot_wait_consumes_reply_before_fallback; shift ;;
+        --consume)
+            if [ "$mode" != poll ]; then usage >&2; exit 2; fi
+            mode=consume
+            case_name=test_native_stateless_bot_wait_consumes_reply_before_fallback
+            shift ;;
+        --push)
+            if [ "$mode" != poll ]; then usage >&2; exit 2; fi
+            mode=push
+            test_file=test_native_bot_push_reply.py
+            case_name=test_native_viewed_bot_reply_wakes_sender_once
+            shift ;;
         --hermes|--hermes-python|--receipt)
             if [ "$#" -lt 2 ] || [ -z "$2" ]; then usage >&2; exit 2; fi
             case "$1" in
@@ -29,7 +43,7 @@ while [ "$#" -gt 0 ]; do
         *) usage >&2; exit 2 ;;
     esac
 done
-if [ -z "$host" ] || [ -z "$python" ]; then usage >&2; exit 2; fi
+if [ -z "$host" ] || [ -z "$python" ] || { [ "$installed" -eq 1 ] && [ "$mode" = push ]; }; then usage >&2; exit 2; fi
 
 export PATH=/usr/bin:/bin
 repo=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd -P)
@@ -98,7 +112,7 @@ if ! env -i PATH="$PATH" LANG=C.UTF-8 TZ=UTC \
             HERMES_TEST_ROOT="$2" HERMES_BOT_POLL_NAMESPACE=1 HERMES_BOT_POLL_INSTALLED="$6" \
             "$3" -m pytest -q -p no:cacheprovider --show-capture=no --tb=short \
             -o junit_logging=no --basetemp="$work/test" --junitxml="$work/result.xml" \
-            "acceptance/live/test_native_bot_poll_reply.py::$7" >&2; then
+            "acceptance/live/$8::$7" >&2; then
             exit 1
         fi
         setpriv --inh-caps=-all --ambient-caps=-all --bounding-set=-all --no-new-privs \
@@ -124,7 +138,7 @@ for suite in tree.iter("testsuite"):
         suite.set("name", "native_bot_poll_reply_installed")
 sys.stdout.buffer.write(ElementTree.tostring(tree.getroot(), encoding="utf-8", xml_declaration=True))
 PY
-    ' bot-poll-reply "$repo" "$host" "$python" "$mount_namespace" "$network_namespace" "$prepared" "$case_name" \
+    ' bot-poll-reply "$repo" "$host" "$python" "$mount_namespace" "$network_namespace" "$prepared" "$case_name" "$test_file" \
     < /dev/null > "${staged_receipt:-/dev/null}"; then
     printf '%s\n' 'Isolated native Bot reply acceptance failed.' >&2
     exit 1
