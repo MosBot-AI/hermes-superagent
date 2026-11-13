@@ -1,4 +1,4 @@
-"""Run a real Electron acceptance case from a prepared Hermes checkout."""
+"""Run a real Desktop or Webapp acceptance case from a prepared Hermes checkout."""
 
 import argparse
 import hashlib
@@ -19,6 +19,7 @@ CANONICAL_FIXTURE = "desktop_bot_canonical_fixture.py"
 CANONICAL_OBSERVER = "desktop_bot_canonical_observer.ts"
 INSTALL_AMBIGUITY_SPEC = "desktop_install_ambiguity_ipc.spec.ts"
 SAVED_TOKEN_CASE = "bot-canonical-saved-token"
+WEBAPP_SIGNOUT_CASE = "active-webapp-sign-out"
 PROPOSAL = ROOT / "experiments/bot-webapp-canonical"
 CASES = {
     "profile-routing": (
@@ -45,6 +46,11 @@ CASES = {
         "desktop_compressed_adoption.spec.ts",
         (GATEWAY_FIXTURE, "desktop_compressed_adoption_fixture.py", CANONICAL_OBSERVER),
         "compressed Bot Mode history adoption",
+    ),
+    WEBAPP_SIGNOUT_CASE: (
+        "desktop_webapp_signout.spec.ts",
+        (GATEWAY_FIXTURE, CANONICAL_OBSERVER),
+        "serving Webapp sign-out",
     ),
     "install-marker-collision": (
         INSTALL_AMBIGUITY_SPEC,
@@ -237,9 +243,20 @@ def stage_probe(core, spec, fixtures):
 
 
 def run_probe(
-    host, python, node, work, spec, fixtures, *, title_filter=None, review_proposal=False
+    host,
+    python,
+    node,
+    work,
+    spec,
+    fixtures,
+    *,
+    title_filter=None,
+    review_proposal=False,
+    chromium=None,
 ):
     env = isolated_environment(work, python, node)
+    if chromium is not None:
+        env["HERMES_E2E_CHROMIUM"] = str(chromium)
     if spec == CASES[SAVED_TOKEN_CASE][0]:
         env["HERMES_E2E_BOT_WEBAPP_EXPECTATION"] = "proposal" if review_proposal else "baseline"
     desktop = verify_build(host, python, node, env, review_proposal=review_proposal)
@@ -289,12 +306,12 @@ def run_probe(
                     process.kill()
                     process.wait(timeout=10)
     if status:
-        raise ValueError(f"Isolated Electron acceptance exited {status}")
+        raise ValueError(f"Isolated browser or Electron acceptance exited {status}")
     stats = json.loads((work / "playwright.json").read_bytes()).get("stats", {})
     if stats.get("expected") != 1 or any(
         stats.get(key) != 0 for key in ("unexpected", "flaky", "skipped")
     ):
-        raise ValueError("Expected one passing Electron acceptance case")
+        raise ValueError("Expected one passing browser or Electron acceptance case")
 
 
 def main():
@@ -302,6 +319,7 @@ def main():
     parser.add_argument("--hermes", type=Path, required=True, help="Prepared pinned checkout")
     parser.add_argument("--hermes-python", type=Path, required=True, help="Hermes interpreter")
     parser.add_argument("--node", type=Path, required=True, help="Pinned Hermes Node executable")
+    parser.add_argument("--chromium", type=Path, help="Prepared Chromium executable for Webapp")
     parser.add_argument("--scratch", type=Path, default=Path("/var/tmp"), help="Short temp parent")
     parser.add_argument("--case", choices=CASES, default="profile-routing", help="Acceptance case")
     parser.add_argument(
@@ -314,7 +332,13 @@ def main():
         parser.error("This acceptance requires Linux namespaces and Xvfb")
     if args.review_proposal and args.case != SAVED_TOKEN_CASE:
         parser.error(f"--review-proposal requires --case {SAVED_TOKEN_CASE}")
+    if (args.chromium is not None) != (args.case == WEBAPP_SIGNOUT_CASE):
+        parser.error(f"--chromium is required only for --case {WEBAPP_SIGNOUT_CASE}")
     inputs = (args.hermes, args.hermes_python, args.node, args.scratch)
+    if args.chromium is not None:
+        inputs += (args.chromium,)
+        if not args.chromium.is_file() or not os.access(args.chromium, os.X_OK):
+            parser.error("--chromium must identify an executable file")
     if any(
         location.is_relative_to("/tmp")
         for path in inputs
@@ -334,6 +358,7 @@ def main():
             fixtures,
             title_filter=CASE_TITLE_FILTERS.get(args.case),
             review_proposal=args.review_proposal,
+            chromium=args.chromium.absolute() if args.chromium is not None else None,
         )
     except (OSError, ValueError, subprocess.SubprocessError) as exc:
         parser.exit(1, f"{exc}\nPrivate diagnostics: {work}\n")
@@ -341,7 +366,8 @@ def main():
         parser.exit(130, f"Acceptance interrupted. Private diagnostics: {work}\n")
     shutil.rmtree(work)
     variant = " proposal" if args.review_proposal else ""
-    print(f"One real Electron {description}{variant} case passed")
+    product = "Chromium" if args.case == WEBAPP_SIGNOUT_CASE else "Electron"
+    print(f"One real {product} {description}{variant} case passed")
 
 
 if __name__ == "__main__":
