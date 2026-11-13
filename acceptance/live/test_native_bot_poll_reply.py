@@ -20,6 +20,14 @@ from urllib.parse import urlsplit
 import test_native_bot_receipt as shared
 from native_bot_socket_guard import activate
 from native_gateway_fixture import gateway_daemon
+from test_packaged_gateway_bot import (
+    ADD,
+    TASK,
+    command,
+    confirm_task,
+    verify_install,
+    verify_saved_state,
+)
 
 NOTICE = "Synthetic Bot poll reply request"
 MESSAGE = f"Message from 🤖 Scout Fixture (@scout): {NOTICE}"
@@ -152,24 +160,36 @@ def guarded_sender_processes(monkeypatch, host, home, scratch, guard, port):
                 raise PermissionError("Native Bot waiter input was outside fixture custody")
             category = "waiter"
         else:
-            denied.add("snapshot arguments" if binary.name == "bash" else "process")
+            if binary.name == "bash":
+                denied.add("snapshot arguments")
+                if len(argv) == 4:
+                    if cwd != root:
+                        denied.add("snapshot cwd")
+                    if str(scratch) not in argv[3]:
+                        denied.add("snapshot scratch")
+            else:
+                denied.add("process")
             raise PermissionError("Unexpected process in the private Bot fixture")
 
         if category in processes:
             denied.add("duplicate process")
             raise PermissionError("Unexpected duplicate process in the private Bot fixture")
-        if category != "supervisor" and (
-            env.get("HOME") != str(root / "u")
-            or env.get("HERMES_HOME") != str(home)
-            or env.get("TMPDIR") != str(scratch)
-            or str(guard) not in env.get("PYTHONPATH", "").split(os.pathsep)
-            or env.get("HERMES_BOT_ACCEPTANCE_ROOT") != str(root)
-            or env.get("HERMES_NATIVE_ACCEPTANCE_DIAL_PORT") != str(port)
-            or "OPENAI_API_KEY" in env
-            or kwargs.get("start_new_session") is not True
-        ):
-            denied.add("process environment")
-            raise PermissionError("Native Bot process environment was outside fixture custody")
+        if category != "supervisor":
+            expected_env = {
+                "HOME": str(root / "u"),
+                "HERMES_HOME": str(home),
+                "TMPDIR": str(scratch),
+                "HERMES_BOT_ACCEPTANCE_ROOT": str(root),
+                "HERMES_NATIVE_ACCEPTANCE_DIAL_PORT": str(port),
+            }
+            mismatched = {key for key, value in expected_env.items() if env.get(key) != value}
+            if str(guard) not in env.get("PYTHONPATH", "").split(os.pathsep):
+                mismatched.add("PYTHONPATH")
+            if "OPENAI_API_KEY" in env or kwargs.get("start_new_session") is not True:
+                mismatched.add("process custody")
+            if mismatched:
+                denied.update(mismatched)
+                raise PermissionError("Native Bot process environment was outside fixture custody")
         proc = original_popen(argv, *args, **kwargs)
         processes[category] = proc
         return proc
@@ -232,7 +252,7 @@ def waiter_settled(tracked, delivery):
     ) == ("settled", delivery, shared.REPLY)
 
 
-async def exercise(fixture, endpoint, db, model, monkeypatch):
+async def exercise(fixture, endpoint, db, model, monkeypatch, *, installed):
     from gateway.session_results import admission_result
     from hermes_cli.gateway_client import connect_gateway
     from hermes_state import SessionDB
@@ -257,6 +277,10 @@ async def exercise(fixture, endpoint, db, model, monkeypatch):
                 _timeout=8,
             )
             target = created["session_id"]
+            if installed:
+                await client.rpc("session.resume", session_id=target, _timeout=8)
+                task = (await command(client, target, ADD))["data"]
+                assert task["title"] == TASK and task["revision"] == 1
             before = db.get_messages(SENDER)
             with monkeypatch.context() as sender:
                 sender.setenv("HERMES_BOT_ACCEPTANCE_ROOT", str(root))
@@ -356,6 +380,9 @@ async def exercise(fixture, endpoint, db, model, monkeypatch):
             assert (public["status"], public["outcome"]) == ("terminal", "completed")
             assert public["result"]["final_response"] == shared.REPLY
             assert model == ["chat completion"] and db.get_messages(SENDER) == rows
+            if installed:
+                await confirm_task(client, target, task)
+                return target, task["id"]
     finally:
         restrict()
 
@@ -372,13 +399,17 @@ def test_native_stateless_bot_poll_reply_persists_unconsumed_completion(
     assert not profiles.exists() or not any(profiles.iterdir())
     host = Path(os.environ["HERMES_TEST_ROOT"]).resolve(strict=True)
     pin = json.loads((shared.ROOT / "compatibility.json").read_bytes())["hermes_commit"]
-    root = tmp_path_factory.mktemp("bp")
+    prepared = os.environ.get("HERMES_BOT_POLL_INSTALLED")
+    root = Path(prepared).resolve(strict=True) if prepared else tmp_path_factory.mktemp("bp")
     root.chmod(0o700)
     home, user, runtime, scratch, xdg, bundled, guard = (
         root / name for name in ("h", "u", "rt", "tmp", "xdg", "bundled", "guard")
     )
     for directory in (home, user, runtime, scratch, xdg, bundled, guard):
-        directory.mkdir(mode=0o700)
+        directory.mkdir(mode=0o700, exist_ok=bool(prepared))
+    if prepared:
+        source = (root / "source-commit").read_text(encoding="ascii")
+        verify_install(home, root / "package", source)
     assert len(os.fsencode(home / "gateway.sock")) <= 100
     sender_home = home / "profiles/scout"
     sender_home.mkdir(parents=True, mode=0o700)
@@ -462,7 +493,16 @@ def test_native_stateless_bot_poll_reply_persists_unconsumed_completion(
                     "platform_toolsets": {"gui": []},
                     "telemetry": {"shared_metrics": {"enabled": False}},
                 }
-                (home / "config.yaml").write_text(json.dumps(config), encoding="utf-8")
+                if prepared:
+                    from ruamel.yaml import YAML
+
+                    yaml = YAML()
+                    config_path = home / "config.yaml"
+                    installed_config = yaml.load(config_path)
+                    installed_config.update(config)
+                    yaml.dump(installed_config, config_path)
+                else:
+                    (home / "config.yaml").write_text(json.dumps(config), encoding="utf-8")
                 for directory in (home, sender_home):
                     (directory / "models_dev_cache.json").write_text(
                         '{"hermes-test-offline":{"id":"hermes-test-offline","env":[],"models":{}}}',
@@ -479,8 +519,24 @@ def test_native_stateless_bot_poll_reply_persists_unconsumed_completion(
                     "HERMES_BOT_ACCEPTANCE_MODEL_PORT": str(peer.server_port),
                 }
                 with gateway_daemon(host, home, child_env, "bot-poll") as gateway:
-                    asyncio.run(
-                        exercise((host, home, scratch, guard), gateway, db, model, isolated)
+                    saved = asyncio.run(
+                        exercise(
+                            (host, home, scratch, guard),
+                            gateway,
+                            db,
+                            model,
+                            isolated,
+                            installed=bool(prepared),
+                        )
+                    )
+                if prepared:
+                    target, task_id = saved
+                    verify_saved_state(
+                        home,
+                        target,
+                        task_id,
+                        messages=(("user", MESSAGE), ("assistant", shared.REPLY)),
+                        admission_count=1,
                     )
         finally:
             deactivate()

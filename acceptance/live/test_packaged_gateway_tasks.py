@@ -22,7 +22,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def checked(command, *, cwd, env):
+def checked(command, *, cwd, env, timeout=180):
     return subprocess.run(
         command,
         cwd=cwd,
@@ -31,7 +31,7 @@ def checked(command, *, cwd, env):
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
-        timeout=180,
+        timeout=timeout,
         check=True,
     )
 
@@ -65,6 +65,13 @@ def installed(tmp_path):
         PYTHONUNBUFFERED="1",
         HERMES_RUNTIME_DIR=str(tmp_path / "runtime"),
     )
+    write_install_config(home)
+    install_package(host, package, env)
+    yield home, env, helpers
+    sys.path.remove(str(host))
+
+
+def write_install_config(home):
     config = {
         "gateway": {"multiplex_profiles": False},
         # Pinned host requires a non-empty model label in a restorable session
@@ -86,6 +93,9 @@ def installed(tmp_path):
         },
     }
     (home / "config.yaml").write_text(json.dumps(config))
+
+
+def install_package(host, package, env, *, timeout=180):
     # Official installer performs its normal scan and enable flow. A scan denial
     # fails the test: there are deliberately no bypass/force/allow-removed flags.
     # Installation may use the runner's existing proxy/CA routing, but no model
@@ -118,9 +128,8 @@ def installed(tmp_path):
         ],
         cwd=host,
         env=install_env,
+        timeout=timeout,
     )
-    yield home, env, helpers
-    sys.path.remove(str(host))
 
 
 def test_packaged_task_commands_survive_real_gateway_restart(installed):

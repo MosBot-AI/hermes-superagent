@@ -4,15 +4,17 @@ set -eu
 umask 077
 
 usage() {
-    printf '%s\n' 'Usage: sh acceptance/live/run_native_bot_poll_reply.sh --hermes CHECKOUT --hermes-python PYTHON [--receipt RESULT.xml]'
+    printf '%s\n' 'Usage: sh acceptance/live/run_native_bot_poll_reply.sh --hermes CHECKOUT --hermes-python PYTHON [--installed] [--receipt RESULT.xml]'
 }
 
 host=
 python=
 receipt=
+installed=0
 while [ "$#" -gt 0 ]; do
     case "$1" in
         -h|--help) usage; exit 0 ;;
+        --installed) installed=1; shift ;;
         --hermes|--hermes-python|--receipt)
             if [ "$#" -lt 2 ] || [ -z "$2" ]; then usage >&2; exit 2; fi
             case "$1" in
@@ -43,10 +45,20 @@ mount_namespace=$(readlink /proc/self/ns/mnt)
 network_namespace=$(readlink /proc/self/ns/net)
 
 staged_receipt=
+prepared=
+trap '
+    if [ -n "$staged_receipt" ]; then rm -f -- "$staged_receipt"; fi
+    if [ -n "$prepared" ]; then rm -rf -- "$prepared"; fi
+' EXIT
 if [ -n "$receipt" ]; then
     staged_receipt=$(mktemp -- "$(dirname -- "$receipt")/.bot-poll-reply.XXXXXX")
 fi
-trap 'if [ -n "$staged_receipt" ]; then rm -f -- "$staged_receipt"; fi' EXIT
+if [ "$installed" -eq 1 ]; then
+    # Prepare the exact package with the normal scanner before isolating reply traffic.
+    prepared=$(mktemp -d /var/tmp/hbp.XXXXXX)
+    timeout --kill-after=5s 365s "$python" -I -B \
+        "$repo/acceptance/live/prepare_installed_bot_poll_recipient.py" "$host" "$prepared" < /dev/null
+fi
 
 if ! env -i PATH="$PATH" LANG=C.UTF-8 TZ=UTC \
     timeout --kill-after=5s 150s unshare --user --map-current-user --keep-caps \
@@ -81,7 +93,7 @@ if ! env -i PATH="$PATH" LANG=C.UTF-8 TZ=UTC \
         if ! setpriv --inh-caps=-all --ambient-caps=-all --bounding-set=-all --no-new-privs \
             env -i PATH=/usr/bin:/bin LANG=C.UTF-8 TZ=UTC HOME="$work/user" TMPDIR="$work/tmp" \
             PYTHONNOUSERSITE=1 PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
-            HERMES_TEST_ROOT="$2" HERMES_BOT_POLL_NAMESPACE=1 \
+            HERMES_TEST_ROOT="$2" HERMES_BOT_POLL_NAMESPACE=1 HERMES_BOT_POLL_INSTALLED="$6" \
             "$3" -m pytest -q -p no:cacheprovider --show-capture=no --tb=short \
             -o junit_logging=no --basetemp="$work/test" --junitxml="$work/result.xml" \
             acceptance/live/test_native_bot_poll_reply.py >&2; then
@@ -89,7 +101,7 @@ if ! env -i PATH="$PATH" LANG=C.UTF-8 TZ=UTC \
         fi
         setpriv --inh-caps=-all --ambient-caps=-all --bounding-set=-all --no-new-privs \
             env -i PATH=/usr/bin:/bin LANG=C.UTF-8 HOME="$work/user" TMPDIR="$work/tmp" \
-            PYTHONNOUSERSITE=1 PYTHONDONTWRITEBYTECODE=1 "$3" - "$work/result.xml" <<\PY
+            PYTHONNOUSERSITE=1 PYTHONDONTWRITEBYTECODE=1 "$3" - "$work/result.xml" "$6" <<\PY
 from pathlib import Path
 import sys
 from xml.etree import ElementTree
@@ -106,9 +118,11 @@ if (
     raise SystemExit("Expected one clean passing native Bot reply case")
 for suite in tree.iter("testsuite"):
     suite.attrib.pop("hostname", None)
+    if sys.argv[2]:
+        suite.set("name", "native_bot_poll_reply_installed")
 sys.stdout.buffer.write(ElementTree.tostring(tree.getroot(), encoding="utf-8", xml_declaration=True))
 PY
-    ' bot-poll-reply "$repo" "$host" "$python" "$mount_namespace" "$network_namespace" \
+    ' bot-poll-reply "$repo" "$host" "$python" "$mount_namespace" "$network_namespace" "$prepared" \
     < /dev/null > "${staged_receipt:-/dev/null}"; then
     printf '%s\n' 'Isolated native Bot reply acceptance failed.' >&2
     exit 1

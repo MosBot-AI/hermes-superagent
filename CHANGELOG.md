@@ -85,6 +85,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 - Verify same-install Bot reply persistence in an isolated Linux operator case. One native target receipt and one unconsumed sender completion record carry the same delivery ID and synthetic reply (#33).
 
+- Verify native non-push reply persistence with the officially installed plugin in the receiving profile. The isolated Linux operator case also checks installed task replay after sender completion (#33).
+
 - Verify one native notify-only Bot delivery and its exact settled replay across a Gateway restart with the officially installed plugin in the receiving profile (#33).
 
 - Verify the officially installed plugin can capture and reopen a task in the same hidden canonical Bot Chat across a local Gateway restart (#33).
