@@ -64,7 +64,7 @@ if ! env -i PATH="$PATH" LANG=C.UTF-8 TZ=UTC \
         work=$(mktemp -d /tmp/hbp.XXXXXX)
         mkdir -m 700 "$work/user" "$work/tmp"
         : > "$work/empty"
-        for path in /etc/profile /etc/bash.bashrc; do
+        for path in /etc/profile /etc/bash.bashrc /etc/bash.bash_logout; do
             if [ -e "$path" ] || [ -L "$path" ]; then
                 test -f "$path"
                 test ! -L "$path"

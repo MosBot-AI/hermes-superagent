@@ -366,7 +366,7 @@ def test_native_stateless_bot_poll_reply_persists_unconsumed_completion(
     assert sys.platform == "linux" and os.environ.get("HERMES_BOT_POLL_NAMESPACE") == "1"
     assert sys.version_info[:2] == (3, 14)
     assert [name for _, name in socket.if_nameindex()] == ["lo"]
-    for path in map(Path, ("/etc/profile", "/etc/bash.bashrc")):
+    for path in map(Path, ("/etc/profile", "/etc/bash.bashrc", "/etc/bash.bash_logout")):
         assert not path.exists() or path.stat().st_size == 0
     profiles = Path("/etc/profile.d")
     assert not profiles.exists() or not any(profiles.iterdir())
