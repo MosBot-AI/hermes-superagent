@@ -83,6 +83,8 @@ This file distinguishes design work, development changes, and released capabilit
 - Run runtime artifact acceptance on exact pull-request heads with read-only credentials; keep downloadable artifact publication push-only.
 ### Changed
 
+- Verify a local Bot reply persists after its only viewer disconnects. Reopening the original chat returns one completion note, and retrying the original input does not resend the Bot request (#33).
+
 - Verify a native Bot reply reaches a viewed local sender once. The recipient receipt, sender event and stored completion correlate to one delivery, which starts one follow-up turn in isolated Linux acceptance (#33).
 
 - Verify same-install Bot reply persistence in an isolated Linux operator case. One native target receipt and one unconsumed sender completion record carry the same delivery ID and synthetic reply (#33).

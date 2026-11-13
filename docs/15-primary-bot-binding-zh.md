@@ -54,7 +54,7 @@
 | 本地调用方与接收 Bot | Linux 同 UID 控制票据证明本地操作者准入。干净宿主上的 owner 入口夹具在缺少受支持的接收侧适配器上下文时拒绝。[本地 Gateway](#当前固定版本的本地-bot-传输与重启) · [Owner 入口契约](../tests/contracts/test_owner_entry_contracts.py) | 受保护的原生命令和渠道入口需要宿主以受支持的方式证明原始调用方、接收方及会话，再校验当前 owner 和 grant。[命令上下文实验](23-host-command-context-experiment-zh.md)仍仅供评审。 |
 | 插件状态与子代理角色 | 公开 `ctx.subagent_lifecycle` 覆盖 `in_process` 和 `host` 两种隔离模式下的进程内父子关联。`ctx.state` 在两种模式下均经过验证，其中托管模式覆盖两个命名 profile。[子代理证据](#当前固定版本的子代理关联) | 可信调用方身份、绑定 owner 的 grant 和撤销需要独立检查。[E0.4](13-enforcement-contracts-zh.md)覆盖独立的配置冻结和故障排查安全模式 worker 路径。 |
 | 原生受管 WorkerChannel | 命名 profile 的普通 Gateway 路径关联原生子进程、其准入、有序回执及完成后的对话记录。在同一 Gateway 上，经 generation 检查的停止请求中断等待澄清的 worker，随后排队的输入完成。后继 Gateway 将丢失 worker 的准入保留为 `unknown`，直到显式处理。[受管 worker 证据](#当前固定版本的原生受管-workerchannel) · [停止](#当前固定版本的受管-worker-停止) · [重启对账](#当前固定版本的受管-worker-重启对账) | 人类 owner 授权、当前撤销状态、受管委派及 Kanban 接管需要独立证明。仅供评审的纯文本 worker 契约有独立门禁。 |
-| 原生 Bot 与 cron 投递 | 同一安装内的 `message_agent` 和 `bot_relay.deliver` 覆盖仅通知的作者归因、本地终态回执恢复及非推送会话的发送方回复持久化。客户端保持连接的本地 Bot Chat 收到一次原生完成通知，并执行一次发送方后续回合。原生 cron 在响应丢失后复用同一个投递 ID。另一项真实本地 Gateway 用例将离线结果移交给原有的命名 Bot Chat，并结算一个回合。[Bot 消息](#当前固定版本的同一安装内-bot-消息) · [重启](#当前固定版本的本地-bot-传输与重启) · [回复持久化](#当前固定版本的同一安装内-bot-回复持久化) · [本地回复推送](#当前固定版本中有客户端在线的本地-bot-回复推送) · [延后投递](#当前固定版本的-bot-chat-延后投递) | 对其他推送路由、远程凭据和其他生产者模式分别验证回执及作者对账。结果不确定时保留原投递 ID。 |
+| 原生 Bot 与 cron 投递 | 同一安装内的 `message_agent` 和 `bot_relay.deliver` 覆盖仅通知的作者归因、本地终态回执恢复及非推送会话的发送方回复持久化。客户端保持连接的本地 Bot Chat 收到一次原生完成通知，并执行一次发送方后续回合。唯一客户端断线后，同一路由为原会话保存一条回复记录。原生 cron 在响应丢失后复用同一个投递 ID。另一项真实本地 Gateway 用例将离线结果移交给原有的命名 Bot Chat，并结算一个回合。[Bot 消息](#当前固定版本的同一安装内-bot-消息) · [重启](#当前固定版本的本地-bot-传输与重启) · [回复持久化](#当前固定版本的同一安装内-bot-回复持久化) · [本地回复推送](#当前固定版本中有客户端在线的本地-bot-回复推送) · [重连](#当前固定版本中本地-bot-断线后的回复) · [延后投递](#当前固定版本的-bot-chat-延后投递) | 对其他推送路由、远程凭据和其他生产者模式分别验证回执及作者对账。结果不确定时保留原投递 ID。 |
 | Bot Chat 中的已安装插件 | 经官方流程扫描安装的插件在本地 Gateway 正常重启前后，通过同一隐藏规范会话记录任务并原样重放。另一个仅通知的 Bot 间投递用例在已安装插件的接收 profile 中保留原生对话记录和已结算回执。[插件安装证据](#当前固定版本的-bot-chat-插件安装验收) | [隔离 operator 用例](#当前固定版本的同一安装内-bot-回复持久化)还验证了接收 profile 已安装插件时的非推送回复。推送投递、Desktop 安装包、其他传输模式及经认证的 owner 绑定均需独立验证。 |
 | 插件注入 | 原生调度器证据显示，`ctx.inject_message` 可在随后发生派发失败之前返回 `True`。[注入证据](#8-消息例行任务与回执) | 插件负责的持久投递需要受支持的幂等准入与回执查询。使用布尔接口时保持持久主动投递不可用。 |
 | 可选 HTTP | [客户端契约](14-client-api-contracts-zh.md#3-鉴权不等于领域授权)记录原生凭据形态和 E0.6 传输边界。 | 只有受支持的可信主体和 profile 传递、领域授权以及逐能力的传输和恢复验收都完成后，才启用 Primary Bot HTTP 操作。 |
@@ -595,7 +595,22 @@ sh acceptance/live/run_native_bot_poll_reply.sh \
   --push --receipt /path/to/result.xml
 ```
 
-证据覆盖临时安装中持续有客户端在线的本地发送方，该安装没有加载插件。断线与重启恢复、无客户端在线的发送方、已安装插件时的推送、Desktop 安装包、外部传输、经认证的 owner 绑定以及真实服务商需要各自验收。
+推送用例覆盖临时安装中持续有客户端在线的本地发送方，该安装没有加载插件。另一项操作者用例覆盖[发送端失去客户端连接](#当前固定版本中本地-bot-断线后的回复)。
+
+### 当前固定版本中本地 Bot 断线后的回复
+
+`--reconnect` 用例沿用 `--push` 的合成 profile、host scope WebSocket 和原生 Bot 投递。发送方结束初始回合时，接收方仍在等待。夹具先关闭发送端唯一的 WebSocket，再释放接收方。没有客户端在线时，原发送会话产生一条终态完成准入，并保存一条关联该准入的 `process_complete` 记录。接收方以原投递 ID 结算一条回执。模型请求记录显示，断线期间没有触发发送方唤醒回合。[原生完成记录路径](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/gateway/session_completion_notes.py#L52-L75)
+
+新的同 UID WebSocket 使用原发送会话 ID 恢复会话，在已存历史和显示投影中读取同一条完成记录。使用原输入 ID 重提原请求，返回原已完成准入，未重新发起投递。提交新的显式提示词时，模型上下文在新提示词前只包含一份恢复的回复。
+
+```sh
+sh acceptance/live/run_native_bot_poll_reply.sh \
+  --hermes /path/to/exact/checkout \
+  --hermes-python /path/to/venv/bin/python \
+  --reconnect --receipt /path/to/result.xml
+```
+
+用例中原 Gateway 持续运行。回复尚未完成时的 Gateway 重启、Desktop 安装包、已安装插件时的推送、外部传输、经认证的 owner 绑定以及真实服务商需要独立证据。
 
 ## 9. 事件、错误与客户端恢复
 

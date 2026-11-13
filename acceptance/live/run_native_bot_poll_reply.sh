@@ -6,7 +6,7 @@ umask 077
 usage() {
     printf '%s\n' \
         'Usage: sh acceptance/live/run_native_bot_poll_reply.sh --hermes CHECKOUT --hermes-python PYTHON [--receipt RESULT.xml] [--installed] [--consume]' \
-        '       sh acceptance/live/run_native_bot_poll_reply.sh --hermes CHECKOUT --hermes-python PYTHON [--receipt RESULT.xml] --push'
+        '       sh acceptance/live/run_native_bot_poll_reply.sh --hermes CHECKOUT --hermes-python PYTHON [--receipt RESULT.xml] (--push | --reconnect)'
 }
 
 host=
@@ -25,11 +25,14 @@ while [ "$#" -gt 0 ]; do
             mode=consume
             case_name=test_native_stateless_bot_wait_consumes_reply_before_fallback
             shift ;;
-        --push)
+        --push|--reconnect)
             if [ "$mode" != poll ]; then usage >&2; exit 2; fi
-            mode=push
+            mode=${1#--}
             test_file=test_native_bot_push_reply.py
-            case_name=test_native_viewed_bot_reply_wakes_sender_once
+            case "$mode" in
+                push) case_name=test_native_viewed_bot_reply_wakes_sender_once ;;
+                reconnect) case_name=test_native_disconnected_bot_reply_recovers_once ;;
+            esac
             shift ;;
         --hermes|--hermes-python|--receipt)
             if [ "$#" -lt 2 ] || [ -z "$2" ]; then usage >&2; exit 2; fi
@@ -43,7 +46,11 @@ while [ "$#" -gt 0 ]; do
         *) usage >&2; exit 2 ;;
     esac
 done
-if [ -z "$host" ] || [ -z "$python" ] || { [ "$installed" -eq 1 ] && [ "$mode" = push ]; }; then usage >&2; exit 2; fi
+if [ -z "$host" ] || [ -z "$python" ]; then usage >&2; exit 2; fi
+if [ "$installed" -eq 1 ] && [ "$test_file" != test_native_bot_poll_reply.py ]; then
+    usage >&2
+    exit 2
+fi
 
 export PATH=/usr/bin:/bin
 repo=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd -P)
