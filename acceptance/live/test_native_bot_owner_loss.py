@@ -15,6 +15,7 @@ from test_native_bot_push_reply import (
     RECEIVER_REPLY,
     SENDER_ACK,
     admissions,
+    completion_card,
     gateway_dial,
     is_completion_event,
     local_reply_fixture,
@@ -22,6 +23,7 @@ from test_native_bot_push_reply import (
     sender_messages,
     start_delivery,
     verify_recipient,
+    wait_for_disconnected_reply,
 )
 
 
@@ -76,7 +78,7 @@ def completed_result_path(scout, delivery):
     return scout / "logs" / "process-results" / f"{delivery.process_id}.json"
 
 
-async def lose_owner(endpoint, host, home, scout, model, crash, *, settled_reply):
+async def lose_owner(endpoint, host, home, scout, model, crash, *, settled_reply, recovery):
     from tools.bot_live_delivery import read_delivery_result
 
     with gateway_dial(home, endpoint) as owner_pid:
@@ -88,7 +90,15 @@ async def lose_owner(endpoint, host, home, scout, model, crash, *, settled_reply
             assert record["status"] in {"queued", "claimed"} and not record.get("reply")
             checkpoint = json.loads((scout / "processes.json").read_bytes())
             (tracked,) = [item for item in checkpoint if item["session_id"] == delivery.process_id]
-            assert not tracked["output_log"]
+            if recovery:
+                output = scout / "logs" / "process-output" / f"{delivery.process_id}.log"
+                assert tracked["output_log"] == str(output)
+                assert output.stat().st_mode & 0o777 == 0o600
+                assert (
+                    tracked["notify_on_complete"] is True and tracked["watcher_platform"] == "local"
+                )
+            else:
+                assert not tracked["output_log"]
             assert tracked["pid"] in (waiter.pid, waiter.ppid())
             before = sender_messages(scout, delivery.sender)
             assert before[-1]["content"] == SENDER_ACK
@@ -102,7 +112,9 @@ async def lose_owner(endpoint, host, home, scout, model, crash, *, settled_reply
             return delivery, record, before, waiter
 
 
-async def verify_after_owner_loss(endpoint, home, scout, model, before_loss, *, settled_reply):
+async def verify_after_owner_loss(
+    endpoint, home, scout, model, before_loss, *, settled_reply, recovery
+):
     import psutil
     from agent.turn_failure_copy import AUTOMATION_INTERRUPTED_NOTICE
     from hermes_cli.gateway_client import GatewayRPCError
@@ -125,7 +137,28 @@ async def verify_after_owner_loss(endpoint, home, scout, model, before_loss, *, 
         "session_id": delivery.target,
     }
     with gateway_dial(home, endpoint):
-        async with asyncio.timeout(38), retained_host_client(home, endpoint) as client:
+        async with asyncio.timeout(42), retained_host_client(home, endpoint) as client:
+            expected_history = sender_before
+            expected_admissions = [delivery.original]
+            if recovery:
+                reply_tokens = (
+                    expected_reply or "Do not resend; receipt is retained.",
+                    delivery.delivery_id,
+                    delivery.process_id,
+                )
+                note, stored = await wait_for_disconnected_reply(
+                    scout, delivery.sender, delivery.original, reply_tokens, model
+                )
+                expected_history = sender_before + [stored]
+                expected_admissions.append(note["admission_id"])
+                persisted = json.loads(completed_result_path(scout, delivery).read_bytes())
+                assert persisted["id"] == delivery.process_id
+                assert persisted["parent_session_id"] == delivery.sender
+                assert persisted["exit_code"] == (0 if settled_reply else 1)
+                assert delivery.delivery_id in persisted["output"]
+                assert (expected_reply or "Do not resend; receipt is retained.") in persisted[
+                    "output"
+                ]
             resumed = await client.rpc(
                 "session.resume", profile="default", session_id=delivery.target
             )
@@ -179,9 +212,15 @@ async def verify_after_owner_loss(endpoint, home, scout, model, before_loss, *, 
                 delivery.delivery_id,
                 delivery.process_id,
             )
-            assert not any(
-                row.get("display_kind") == "process_complete" for row in reopened["messages"]
-            )
+            if recovery:
+                assert (
+                    completion_card(reopened["messages"], reply_tokens)["content"]
+                    == stored["content"]
+                )
+            else:
+                assert not any(
+                    row.get("display_kind") == "process_complete" for row in reopened["messages"]
+                )
             replay = await client.rpc("prompt.submit", **sender, input_id=INPUT, text=PROMPT)
             assert (replay["admission_id"], replay["status"], replay["outcome"]) == (
                 delivery.original,
@@ -207,33 +246,72 @@ async def verify_after_owner_loss(endpoint, home, scout, model, before_loss, *, 
                 and kept["request_id"] == f"bot:{delivery.delivery_id}"
             )
             assert (kept["status"], kept["outcome"]) == ("terminal", expected_outcome)
-            assert not completed_result_path(scout, delivery).exists()
-            assert [row["admission_id"] for row in admissions(scout, delivery.sender)] == [
-                delivery.original
-            ]
-            assert sender_messages(scout, delivery.sender) == sender_before
+            assert completed_result_path(scout, delivery).exists() == recovery
+            assert [
+                row["admission_id"] for row in admissions(scout, delivery.sender)
+            ] == expected_admissions
+            assert sender_messages(scout, delivery.sender) == expected_history
             while not client.events.empty():
                 assert not is_completion_event(client.events.get_nowait(), delivery.sender)
             assert model.recipient_requests == 1 and model.unexpected == 0
             assert sorted(model.turns) == ["ack", "recipient", "send"]
+            return delivery, expected_history, expected_admissions
 
 
-def run_owner_loss(tmp_path_factory, monkeypatch, *, settled_reply):
+def run_owner_loss(tmp_path_factory, monkeypatch, *, settled_reply, recovery=False):
     with local_reply_fixture(tmp_path_factory, monkeypatch) as (host, home, scout, env, model):
         try:
             with crashable_gateway_daemon(host, home, env, "bot-before-loss") as (first, crash):
                 before = asyncio.run(
-                    lose_owner(first, host, home, scout, model, crash, settled_reply=settled_reply)
+                    lose_owner(
+                        first,
+                        host,
+                        home,
+                        scout,
+                        model,
+                        crash,
+                        settled_reply=settled_reply,
+                        recovery=recovery,
+                    )
                 )
         finally:
             model.release.set()
         with gateway_daemon(host, home, env, "bot-after-loss") as successor:
             assert successor.instance_id != first.instance_id
-            asyncio.run(
+            observed = asyncio.run(
                 verify_after_owner_loss(
-                    successor, home, scout, model, before, settled_reply=settled_reply
+                    successor,
+                    home,
+                    scout,
+                    model,
+                    before,
+                    settled_reply=settled_reply,
+                    recovery=recovery,
                 )
             )
+        if recovery:
+            with gateway_daemon(host, home, env, "bot-restarted-again") as restarted:
+                assert restarted.instance_id not in (first.instance_id, successor.instance_id)
+                asyncio.run(verify_no_repeat(restarted, home, scout, model, observed))
+
+
+async def verify_no_repeat(endpoint, home, scout, model, observed):
+    delivery, expected_history, expected_admissions = observed
+    with gateway_dial(home, endpoint):
+        async with retained_host_client(home, endpoint) as client:
+            resumed = await client.rpc(
+                "session.resume", profile="scout", session_id=delivery.sender
+            )
+            assert resumed["session_id"] == delivery.sender and not resumed["pending"]
+            await asyncio.sleep(6)
+            assert sender_messages(scout, delivery.sender) == expected_history
+            assert [
+                row["admission_id"] for row in admissions(scout, delivery.sender)
+            ] == expected_admissions
+            while not client.events.empty():
+                assert not is_completion_event(client.events.get_nowait(), delivery.sender)
+            assert model.recipient_requests == 1 and model.unexpected == 0
+            assert sorted(model.turns) == ["ack", "recipient", "send"]
 
 
 def test_native_inflight_bot_reply_reconciles_after_owner_loss(tmp_path_factory, monkeypatch):
@@ -242,3 +320,13 @@ def test_native_inflight_bot_reply_reconciles_after_owner_loss(tmp_path_factory,
 
 def test_native_settled_bot_reply_reconciles_after_owner_loss(tmp_path_factory, monkeypatch):
     run_owner_loss(tmp_path_factory, monkeypatch, settled_reply=True)
+
+
+def test_proposed_inflight_bot_sender_recovers_after_owner_loss(tmp_path_factory, monkeypatch):
+    assert os.environ.get("HERMES_BOT_REVIEW_RECOVERY") == "1"
+    run_owner_loss(tmp_path_factory, monkeypatch, settled_reply=False, recovery=True)
+
+
+def test_proposed_settled_bot_sender_recovers_after_owner_loss(tmp_path_factory, monkeypatch):
+    assert os.environ.get("HERMES_BOT_REVIEW_RECOVERY") == "1"
+    run_owner_loss(tmp_path_factory, monkeypatch, settled_reply=True, recovery=True)

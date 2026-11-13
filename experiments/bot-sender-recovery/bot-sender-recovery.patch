@@ -1,0 +1,279 @@
+diff --git a/tests/tools/test_process_checkpoint_worker_handoff.py b/tests/tools/test_process_checkpoint_worker_handoff.py
+index 997018316d8169be7a303e7e2d203c2ad9b83e3b..a0bceb27c5801c019c319c8bc62acc774d22ab2e 100644
+--- a/tests/tools/test_process_checkpoint_worker_handoff.py
++++ b/tests/tools/test_process_checkpoint_worker_handoff.py
+@@ -50,3 +50,45 @@ def test_owner_checkpoint_write_keeps_a_live_worker_handoff(tmp_path, monkeypatc
+             proc.kill()
+             proc.wait(timeout=10)
+     assert not psutil.pid_exists(worker_proc.pid) or psutil.Process(worker_proc.pid).status() == psutil.STATUS_ZOMBIE
++
++
++def test_recoverable_output_is_adopted_only_in_the_log_profile(tmp_path, monkeypatch):
++    from tools.process_registry import ProcessRegistry
++    from tools.process_registry_output_log import output_dir
++
++    launch = tmp_path / "launch"
++    sender = launch / "profiles" / "scout"
++    monkeypatch.setenv("HERMES_HOME", str(sender))
++    log = output_dir() / "proc_bot_waiter.log"
++    log.parent.mkdir(parents=True)
++    log.write_text("synthetic reply\n", encoding="utf-8")
++    log.with_suffix(".exit").write_text("0\n", encoding="ascii")
++    entry = {
++        "session_id": "proc_bot_waiter",
++        "command": "synthetic",
++        "pid": 2**22 + 7,
++        "started_at": 123,
++        "parent_session_id": "sender",
++        "watcher_platform": "local",
++        "watcher_interval": 5,
++        "notify_on_complete": True,
++        "recoverable_output": True,
++        "output_log": str(log),
++    }
++    for profile in (launch, sender):
++        (profile / "processes.json").write_text(json.dumps([entry]), encoding="utf-8")
++
++    registry = ProcessRegistry()
++    monkeypatch.setenv("HERMES_HOME", str(launch))
++    assert registry.recover_from_checkpoint() == 0
++    assert registry.get(entry["session_id"]) is None
++    assert not registry.pending_watchers
++    assert list((launch / "logs").glob("process-results/*")) == []
++
++    monkeypatch.setenv("HERMES_HOME", str(sender))
++    assert registry.recover_from_checkpoint() == 1
++    process = registry.get(entry["session_id"])
++    assert process is not None and process._completion_event.wait(5)
++    assert (process.output_buffer, process.exit_code, process.started_at) == ("synthetic reply\n", 0, 123)
++    assert process.parent_session_id == "sender"
++    assert len(registry.pending_watchers) == 1
+diff --git a/tools/bot_mode_dm.py b/tools/bot_mode_dm.py
+index 4faabf7517c418903d0ff26b49425eb242a6a2b0..28a9410b29cbac939a6c4f2d7562a0eb9c49cdf8 100644
+--- a/tools/bot_mode_dm.py
++++ b/tools/bot_mode_dm.py
+@@ -784,7 +784,8 @@ def _start_delivery(argv: list[str], content: str, label: str, *, stdin_file: bo
+                     detail=_NOTIFY_ONLY_DETAIL), record, label))
+             command = _delivery_command(argv, dm_file, stdin_file=False, profile_home=profile_home, author=author)
+             notification = json.loads(_spawn_delivery(command, label, delivery_id=record["delivery_id"],
+-                                                      task_id=task_id, agent=agent, wake=wake))
++                                                      task_id=task_id, agent=agent, wake=wake,
++                                                      recover_local_reply=True))
+             result = dict(status=record["status"], delivery_id=record["delivery_id"], to=label,
+                           detail="Durably queued for the live Bot Chat owner. Do NOT wait or resend; finish your turn.")
+             if notification.get("error"):
+@@ -827,7 +828,7 @@ def _with_target_state(result: dict, record: dict, label: str) -> dict:
+ 
+ def _spawn_delivery(command: str, label: str, *, dm_file: Optional[str] = None, delivery_id: Optional[str] = None,
+                     task_id: Optional[str], agent: Any, wake: Any = "notify",
+-                    completion_chars: int = REPLY_COMPLETION_CHARS) -> str:
++                    completion_chars: int = REPLY_COMPLETION_CHARS, recover_local_reply: bool = False) -> str:
+     """Launch the cleanup-owning runner and transfer file ownership on ack. ``dm_file``
+     is None for relay deliveries (the waiter watches a reply file; envelope artifacts
+     are owned/swept by ``tools/bot_relay.py``), which pass the envelope id as ``delivery_id``
+@@ -842,9 +843,15 @@ def _spawn_delivery(command: str, label: str, *, dm_file: Optional[str] = None,
+     try:
+         from tools.terminal_tool import terminal_tool
+ 
++        terminal_options = {}
++        if recover_local_reply and os.name == "posix":
++            from gateway.session_context import async_delivery_supported, get_session_env
++            if (get_session_env("HERMES_SESSION_PLATFORM", "") == "local"
++                    and get_session_env("HERMES_SESSION_ID", "") and async_delivery_supported()):
++                terminal_options["_recoverable_output"] = True
+         raw = terminal_tool(command, background=True, notify_on_complete=wake != "none", task_id=task_id,
+                             workdir=str(Path(__file__).resolve().parent.parent), _host_local=True,
+-                            _completion_output_chars=completion_chars)
++                            _completion_output_chars=completion_chars, **terminal_options)
+         try:
+             parsed = json.loads(raw)
+         except (ValueError, TypeError):
+diff --git a/tools/process_registry.py b/tools/process_registry.py
+index 1e14aa0e1f479272d10e22f8ab4bbf996f7be4e6..d7f56957daa0adc791628ae1aefd7b719b3ee69b 100644
+--- a/tools/process_registry.py
++++ b/tools/process_registry.py
+@@ -570,7 +570,8 @@ class ProcessSession:
+     handoff_note: str = ""                      # why a subagent handed this process to its parent (rides the notice)
+     persist_on_release: bool = False           # opt out of agent-lifecycle cleanup (release()/turn-abandon kill
+                                                 # sweeps), per terminal(background=true, persist_on_release=true) (#41225)
+-    output_log: str = ""                        # file the process writes to (worker spawns; no pipe to lose)
++    output_log: str = ""                        # file the process writes to (no pipe to lose)
++    recoverable_output: bool = False            # explicit host-local output recovery, profile-bound
+     pty_fallback: str = ""                      # why a pty=true local spawn runs in pipe mode instead
+     # Watcher/notification routing (persisted for crash recovery)
+     watcher_platform: str = ""
+@@ -659,7 +660,7 @@ _CHECKPOINT_FIELDS = (
+     "started_at", "task_id", "owner_task_id", "session_key",
+     *(f"watcher_{k}" for k in _WATCHER_ROUTE_KEYS), "watcher_interval",
+     "parent_session_id", "notify_on_complete", "completion_output_chars", "watch_patterns",
+-    "heartbeat_seconds", "persist_on_release", "output_log")
++    "heartbeat_seconds", "persist_on_release", "output_log", "recoverable_output")
+ _CHECKPOINT_DEFAULTS = {
+     f.name: ([] if f.name == "watch_patterns" else f.default)
+     for f in ProcessSession.__dataclass_fields__.values()
+@@ -1179,7 +1180,8 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
+     def spawn_local(
+         self, command: str, cwd: str | None = None, task_id: str = "", session_key: str = "",
+         env_vars: dict | None = None, use_pty: bool = False, owner_task_id: str = "",
+-        persist_on_release: bool = False, restore_login_path: bool = False) -> ProcessSession:
++        persist_on_release: bool = False, restore_login_path: bool = False,
++        recoverable_output: bool = False) -> ProcessSession:
+         """Spawn a background process locally (TERMINAL_ENV=local; other backends: spawn_via_env()).
+         ``use_pty`` asks ptyprocess/pywinpty for a pseudo-terminal; on failure: pipe + ``pty_fallback``.
+         ``persist_on_release``: no agent kill sweeps (#41225); ``restore_login_path``: re-add reset PATH dirs (#56634)."""
+@@ -1191,8 +1193,9 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
+         session = self._new_session(command, task_id, owner_task_id, session_key, _resolve_safe_cwd(cwd or os.getcwd()),
+                                     persist_on_release=persist_on_release)
+         pty_scope_attempted = False
+-        # A worker's pipe or PTY dies with the worker (the child's next write is SIGPIPE): write to a log.
+-        log = worker_output_log(session.id)
++        # These jobs must be collectable after the interpreter loses its pipe.
++        log = worker_output_log(session.id, required=recoverable_output)
++        session.recoverable_output = recoverable_output
+         if use_pty and log is None:
+             try:
+                 return self._spawn_local_pty(session, safe_command, env_vars)
+diff --git a/tools/process_registry_checkpoint.py b/tools/process_registry_checkpoint.py
+index 176f0c3daba14cec23e1246aaa7725fa0e34d025..163b8e57efa005b637567473de338492138e9c45 100644
+--- a/tools/process_registry_checkpoint.py
++++ b/tools/process_registry_checkpoint.py
+@@ -2,6 +2,7 @@
+ 
+ import json
+ import logging
++from pathlib import Path
+ import time
+ from typing import Any, Dict, List, Optional
+ 
+@@ -94,6 +95,13 @@ class ProcessCheckpointMixin:
+             pid, pid_scope = entry.get("pid"), entry.get("pid_scope", "host")
+             if not pid:
+                 continue
++            log = adoptable_log(entry.get("output_log"))
++            if entry.get("recoverable_output") and (
++                not log or Path(log).name != f'{entry["session_id"]}.log'
++            ):
++                # A multiplex checkpoint can include copies from sibling profiles.
++                # Let the log's own profile adopt this job with its output and route.
++                continue
+             # The registry is process-global, so every profile's checkpoint carries every live
+             # process; a multiplexer recovering several homes must adopt each session once.
+             with self._lock:
+@@ -113,7 +121,6 @@ class ProcessCheckpointMixin:
+             fate = self._detached_host_fate(pid, entry.get("host_start_time"))
+             # A worker spawn's output log and recorded exit outlive both the spawner and the PID,
+             # so its reader decides the outcome (a recycled PID is never signalled: fate != running).
+-            log = adoptable_log(entry.get("output_log"))
+             if log:
+                 fate = "running"
+             if fate == "reused":
+diff --git a/tools/process_registry_output_log.py b/tools/process_registry_output_log.py
+index 8b88bdddc7b364f5dc4579ad952f4d6c4d1bd44d..9188e26e41341d831d75b28dbb0f68bf1c3f94fc 100644
+--- a/tools/process_registry_output_log.py
++++ b/tools/process_registry_output_log.py
+@@ -1,4 +1,4 @@
+-"""File-backed output for background processes a registered worker starts.
++"""File-backed output for background processes that outlive their interpreter.
+ 
+ A managed worker is a per-turn interpreter. A stdout pipe whose read end that worker's reader
+ thread owns closes when the worker exits, so the child's next write raises SIGPIPE
+@@ -6,6 +6,7 @@ thread owns closes when the worker exits, so the child's next write raises SIGPI
+ profile-scoped log instead and its shell records the exit status beside it (the contract the
+ env-backend wrapper already uses), so whichever interpreter adopts the checkpoint entry next
+ (the session's next worker, the owner at startup) tails the same file and collects the exit.
++A Gateway-hosted Bot reply waiter can use the same handoff in its originating profile.
+ """
+ import codecs
+ from contextlib import suppress
+@@ -29,10 +30,10 @@ def output_dir() -> Path:
+     return get_hermes_home() / "logs" / "process-output"
+ 
+ 
+-def worker_output_log(session_id: str) -> Optional[Path]:
+-    """The log a worker-spawned process writes to; None outside a registered worker."""
++def worker_output_log(session_id: str, *, required: bool = False) -> Optional[Path]:
++    """Use a log in a registered worker or for an explicitly recoverable process."""
+     from agent.runtime_session_store import is_worker_process
+-    if not is_worker_process():
++    if not required and not is_worker_process():
+         return None
+     directory = output_dir()
+     make_user_dir(directory, mode=0o700, parents=True, exist_ok=True)
+diff --git a/tools/terminal_tool.py b/tools/terminal_tool.py
+index d99296ba6ea34ac4daa0cb3ead33583d7da26d3c..cbba1b38e56147cb696eb3bdd073f22014f5f276 100644
+--- a/tools/terminal_tool.py
++++ b/tools/terminal_tool.py
+@@ -1484,6 +1484,8 @@ def terminal_tool(
+     _completion_output_chars: int = 0,
+     heartbeat: int = 0,
+     persist_on_release: bool = False,
++    *,
++    _recoverable_output: bool = False,
+ ) -> str:
+     """Execute *command* in the configured terminal environment; returns a JSON string.
+ 
+@@ -1503,6 +1505,7 @@ def terminal_tool(
+     process_manage kill (#41225).
+     ``_completion_output_chars`` (internal) sizes the completion notification's output for a
+     spawner whose output is the payload (a bot DM's reply); 0 keeps the usual tail.
++    ``_recoverable_output`` (internal, host-local only) retains output for owner recovery.
+     ``_host_local`` forces the local backend for Hermes-owned control-plane
+     children (kept in a separate env cache from the configured backend).
+     """
+@@ -1578,6 +1581,7 @@ def terminal_tool(
+                     watch_patterns=watch_patterns, approval_note=verdict.note,
+                     pty_disabled_reason=_PTY_DISABLED_REASON if pty_disabled else None,
+                     completion_output_chars=_completion_output_chars,
++                    **({"recoverable_output": True} if _host_local and _recoverable_output else {}),
+                     heartbeat_seconds=heartbeat,
+                     persist_on_release=persist_on_release,
+                     auto_backgrounded=auto_bg is not None and plan.promoted_from_foreground_timeout is None,
+diff --git a/tools/terminal_tool_background.py b/tools/terminal_tool_background.py
+index 8c1f02ad6ae2c74b87e44785657b405ccb071601..3bf09f230ee0295ae7ef1027f656b9b3eecef6db 100644
+--- a/tools/terminal_tool_background.py
++++ b/tools/terminal_tool_background.py
+@@ -93,14 +93,15 @@ def _stamp_gateway_routing(proc_session, get_session_env) -> None:
+ 
+ 
+ def _spawn(process_registry, *, env, env_type, command, cwd, effective_task_id, task_id,
+-           session_key, effective_pty, persist_on_release: bool = False):
++           session_key, effective_pty, persist_on_release: bool = False, recoverable_output: bool = False):
+     common = dict(command=command, cwd=cwd, task_id=effective_task_id,
+                   owner_task_id=task_id or effective_task_id, session_key=session_key,
+                   persist_on_release=persist_on_release)
+     if env_type == "local":
+         return process_registry.spawn_local(
+             env_vars=env.env if hasattr(env, 'env') else None, use_pty=effective_pty,
+-            restore_login_path=True, **common)
++            restore_login_path=True,
++            **({"recoverable_output": True} if recoverable_output else {}), **common)
+     return process_registry.spawn_via_env(env=env, **common)
+ 
+ 
+@@ -132,6 +133,10 @@ def _register_completion_watcher(process_registry, proc_session, session_key) ->
+     serves, or while it stops, the descriptor waits in ``pending_watchers`` for the
+     startup / post-turn drain instead."""
+     proc_session.watcher_interval = 5
++    # The spawn checkpoint predates notification configuration. A log-backed
++    # process needs the final route and watcher settings to survive owner loss.
++    if proc_session.recoverable_output:
++        process_registry._write_checkpoint()
+     watcher = {
+         "session_id": proc_session.id, "check_interval": 5, "session_key": session_key,
+         "platform": proc_session.watcher_platform,
+@@ -156,6 +161,7 @@ def spawn_background_process(
+     persist_on_release: bool = False,
+     mounted_host: Optional[str] = None,
+     auto_backgrounded: bool = False,
++    recoverable_output: bool = False,
+ ) -> str:
+     """Spawn *command* as a tracked background process and return the JSON result.
+ 
+@@ -180,6 +186,7 @@ def spawn_background_process(
+             process_registry, env=env, env_type=env_type, command=command, cwd=effective_cwd,
+             effective_task_id=effective_task_id, task_id=task_id, session_key=session_key,
+             effective_pty=effective_pty, persist_on_release=persist_on_release,
++            **({"recoverable_output": True} if recoverable_output else {}),
+         )
+         result_data = {"output": "Background process started", "session_id": proc_session.id,
+                        "pid": proc_session.pid, "exit_code": 0, "error": None}
