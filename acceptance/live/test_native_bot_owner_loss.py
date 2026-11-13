@@ -6,6 +6,7 @@ import os
 import signal
 import time
 from contextlib import contextmanager, nullcontext
+from pathlib import Path
 
 import pytest
 from native_gateway_fixture import (
@@ -172,6 +173,7 @@ async def verify_after_owner_loss(
     restart=False,
     stop_after_drain=False,
     mismatched=False,
+    receipt_delay=None,
 ):
     import psutil
     from agent.turn_failure_copy import AUTOMATION_INTERRUPTED_NOTICE
@@ -201,6 +203,18 @@ async def verify_after_owner_loss(
         async with asyncio.timeout(42), retained_host_client(home, endpoint) as client:
             expected_history = sender_before
             expected_admissions = [delivery.original]
+            if receipt_delay is not None:
+                misses = home.parent / "bot-receipt-misses"
+                async with asyncio.timeout(16):
+                    while not misses.is_file():
+                        await asyncio.sleep(0.05)
+                assert misses.read_text(encoding="ascii") == "1"
+                assert sender_messages(scout, delivery.sender) == sender_before
+                assert [
+                    row["admission_id"] for row in admissions(scout, delivery.sender)
+                ] == expected_admissions
+                if receipt_delay == "transient":
+                    (home.parent / "release-bot-receipt").touch(mode=0o600)
             if recovery:
                 reply_tokens = (
                     expected_reply or "Do not resend; receipt is retained.",
@@ -209,7 +223,7 @@ async def verify_after_owner_loss(
                 )
                 if held_restart:
                     reply_tokens = (delivery.process_id, delivery.delivery_id, OWNER_STOPPED_ERROR)
-                if mismatched:
+                if mismatched or receipt_delay == "persistent":
                     reply_tokens = (delivery.process_id, "exit code -")
                 note, stored = await wait_for_disconnected_reply(
                     scout, delivery.sender, delivery.original, reply_tokens, model
@@ -226,7 +240,7 @@ async def verify_after_owner_loss(
                     assert "exit code -" in stored["content"]
                     if held_restart:
                         assert RECEIVER_REPLY not in stored["content"]
-                    if mismatched:
+                    if mismatched or receipt_delay == "persistent":
                         assert delivery.delivery_id not in stored["content"]
                         assert OWNER_STOPPED_ERROR not in stored["content"]
                     elif held_restart:
@@ -242,6 +256,9 @@ async def verify_after_owner_loss(
                     delivery.process_id,
                     persisted["started_at"],
                 ]
+            if receipt_delay is not None:
+                expected_misses = "1" if receipt_delay == "transient" else "4"
+                assert misses.read_text(encoding="ascii") == expected_misses
             resumed = await client.rpc(
                 "session.resume", profile="default", session_id=delivery.target
             )
@@ -376,6 +393,7 @@ def run_owner_loss(
     restart=False,
     stop_after_drain=False,
     mismatched=False,
+    receipt_delay=None,
 ):
     with local_reply_fixture(tmp_path_factory, monkeypatch) as (host, home, scout, env, model):
         launch = restartable_gateway_daemon if restart else crashable_gateway_daemon
@@ -414,7 +432,11 @@ def run_owner_loss(
             assert binding["target_session"] == before[0].target
             binding["target_session"] = before[0].sender
             path.write_text(json.dumps(result), encoding="utf-8")
-        with gateway_daemon(host, home, env, "bot-after-loss") as successor:
+        entrypoint = None
+        if receipt_delay is not None:
+            (home.parent / "delay-bot-receipt").write_text(before[0].delivery_id, encoding="ascii")
+            entrypoint = Path(__file__).with_name("native_bot_receipt_delay_daemon.py").resolve()
+        with gateway_daemon(host, home, env, "bot-after-loss", entrypoint=entrypoint) as successor:
             assert successor.instance_id != first.instance_id
             observed = asyncio.run(
                 verify_after_owner_loss(
@@ -428,6 +450,7 @@ def run_owner_loss(
                     restart=restart,
                     stop_after_drain=stop_after_drain,
                     mismatched=mismatched,
+                    receipt_delay=receipt_delay,
                 )
             )
         if recovery:
@@ -508,4 +531,26 @@ def test_proposed_killed_waiter_refuses_mismatched_receipt(tmp_path_factory, mon
         recovery=True,
         restart=True,
         mismatched=True,
+    )
+
+
+def test_proposed_waiter_retries_temporarily_missing_receipt(tmp_path_factory, monkeypatch):
+    run_owner_loss(
+        tmp_path_factory,
+        monkeypatch,
+        settled_reply=False,
+        recovery=True,
+        restart=True,
+        receipt_delay="transient",
+    )
+
+
+def test_proposed_waiter_falls_back_when_receipt_stays_missing(tmp_path_factory, monkeypatch):
+    run_owner_loss(
+        tmp_path_factory,
+        monkeypatch,
+        settled_reply=False,
+        recovery=True,
+        restart=True,
+        receipt_delay="persistent",
     )
