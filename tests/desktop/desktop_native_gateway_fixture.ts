@@ -94,7 +94,7 @@ export function seedInstall(
   box: CoreSandbox,
   env: Record<string, string>,
   modelUrl: string,
-  profile: string,
+  profile: string | string[],
   label: string,
   installId: string,
   webappPort?: number
@@ -103,18 +103,18 @@ export function seedInstall(
   const webapp = webappPort
     ? `webapp:\n  enabled: true\n  host: 127.0.0.1\n  port: ${webappPort}\n`
     : 'webapp:\n  enabled: false\n'
-  const namedHome = path.join(box.hermesHome, 'profiles', profile)
+  const profiles = typeof profile === 'string' ? [profile] : profile
   writeProviderHome(box.hermesHome, modelUrl, config + webapp)
-  writeProviderHome(namedHome, modelUrl, config)
-  fs.chmodSync(namedHome, 0o700)
   fs.writeFileSync(path.join(box.hermesHome, 'install_id'), `${installId}\n`, { mode: 0o600 })
-  for (const [home, suffix] of [
-    [box.hermesHome, 'default'],
-    [namedHome, profile]
-  ]) {
+  for (const suffix of ['default', ...profiles]) {
+    const home = suffix === 'default' ? box.hermesHome : path.join(box.hermesHome, 'profiles', suffix)
+    if (suffix !== 'default') {
+      writeProviderHome(home, modelUrl, config)
+      fs.chmodSync(home, 0o700)
+    }
     const id = `fixture-${label}-${suffix}`
     fs.writeFileSync(
-      path.join(home!, 'models_dev_cache.json'),
+      path.join(home, 'models_dev_cache.json'),
       '{"hermes-test-offline":{"id":"hermes-test-offline","env":[],"models":{}}}'
     )
     runPython(
@@ -130,7 +130,7 @@ with SessionDB(Path(home) / "state.db") as db:
     assert db.set_session_hidden(session_id, True)
     db.append_message(session_id, "user", session_id)
 `,
-      home!,
+      home,
       id
     )
   }

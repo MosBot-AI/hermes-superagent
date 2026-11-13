@@ -25,6 +25,7 @@ import { startScriptedProvider } from './provider'
 const profile = 'scout'
 const connectionId = 'fixture-ssh'
 const canonical = 'fixture-ssh-scout'
+const editedProfile = 'harbor'
 const decoys = ['fixture-ssh-default', 'fixture-local-default', 'fixture-local-scout']
 
 function shellQuote(value: string) {
@@ -72,31 +73,64 @@ export default {
   )
 }
 
-async function readSshChat(page: Page, routeProfile: string, retainSocket: boolean) {
+async function sshRoute(page: Page, routeProfile: string) {
   await page.waitForFunction(() => typeof window.__E07_SSH_ROUTE_PROBE__?.profileRoutes === 'function')
-  const route = await page.evaluate(
+  return page.evaluate(
     async ({ connectionId, routeProfile }) => {
       const routes = await window.__E07_SSH_ROUTE_PROBE__!.profileRoutes()
       return routes.find(route => route.connectionId === connectionId && route.profile === routeProfile)
     },
     { connectionId, routeProfile }
   )
+}
+
+async function readSshChat(page: Page, routeProfile: string, retainSocket: boolean) {
+  const route = await sshRoute(page, routeProfile)
   expect(route).toEqual({ connectionId, mode: 'remote', profile: routeProfile, targetProfile: profile })
-  const ids = await page.evaluate(
-    async ({ route, retainSocket }) => {
-      if (retainSocket) window.__E07_SSH_RELEASE__ = window.__E07_SSH_ROUTE_PROBE__!.retainProfileSocket(route)
-      const result = await window.__E07_SSH_ROUTE_PROBE__!.requestProfile(
+  expect(await readExactChat(page, route!, 17, retainSocket)).toEqual([[canonical, canonical]])
+  return route!
+}
+
+function saveSshTarget(page: Page, targetProfile: string) {
+  return page.evaluate(async ({ connectionId, targetProfile }) => {
+    const desktop = (window as unknown as {
+      hermesDesktop: {
+        connections: {
+          save(input: {
+            id: string
+            kind: 'ssh'
+            label: string
+            remoteProfile: string
+          }): Promise<{ ok: boolean; connection: { id: string; remoteProfile: string } }>
+        }
+      }
+    }).hermesDesktop
+    const result = await desktop.connections.save({
+      id: connectionId,
+      kind: 'ssh',
+      label: 'Fixture SSH',
+      remoteProfile: targetProfile
+    })
+    return { ok: result.ok, id: result.connection.id, remoteProfile: result.connection.remoteProfile }
+  }, { connectionId, targetProfile })
+}
+
+function readExactChat(page: Page, route: ProfileRoute, limit: number, retainSocket = false) {
+  return page.evaluate(
+    async ({ route, limit, retainSocket }) => {
+      const sdk = window.__E07_SSH_ROUTE_PROBE__!
+      if (retainSocket) window.__E07_SSH_RELEASE__ = sdk.retainProfileSocket(route)
+      const result = await sdk.requestProfile(
         route,
         'session.list',
-        { title: 'Bot Chat', profile: route.targetProfile, include_hidden: true, limit: 17 },
+        { title: 'Bot Chat', profile: route.targetProfile, include_hidden: true, limit },
         25_000,
         { spawnPriority: 'foreground' }
       )
       return result.sessions.map(({ id, resolved_id }) => [id, resolved_id])
     },
-    { route: route!, retainSocket }
+    { route, limit, retainSocket }
   )
-  expect(ids).toEqual([[canonical, canonical]])
 }
 
 function stopSshSessions(listenerPid: number) {
@@ -119,7 +153,11 @@ function stopSshSessions(listenerPid: number) {
   }
 }
 
-async function verifySshBotChat(routeProfile: string, reconnect = false) {
+async function verifySshBotChat(routeProfile: string, transition?: 'reconnect' | 'edit') {
+  const reconnect = transition === 'reconnect'
+  const edit = transition === 'edit'
+  const expectedProfile = edit ? editedProfile : profile
+  const expectedChat = edit ? `fixture-ssh-${editedProfile}` : canonical
   const aliased = routeProfile !== profile
   expect(process.platform).toBe('linux')
   const state = process.env.HERMES_E2E_SSH_STATE
@@ -136,8 +174,12 @@ async function verifySshBotChat(routeProfile: string, reconnect = false) {
     const localEnv = privateEnv(local)
     const remoteEnv = privateEnv(remote)
     seedInstall(local, localEnv, provider.url, profile, 'local', '1'.repeat(32))
-    seedInstall(remote, remoteEnv, provider.url, profile, 'ssh', '2'.repeat(32))
-    const initial = () => [local, remote].map((box) => storedChats(box.hermesHome, profile))
+    seedInstall(remote, remoteEnv, provider.url, edit ? [profile, editedProfile] : profile, 'ssh', '2'.repeat(32))
+    const initial = () => [
+      ...storedChats(local.hermesHome, profile),
+      ...storedChats(remote.hermesHome, profile),
+      ...(edit ? [storedChats(remote.hermesHome, editedProfile)[1]] : [])
+    ]
     const port = await freePort()
     const sshUser = os.userInfo().username
     const sshConfig = path.join(state!, 'account', '.ssh')
@@ -280,9 +322,10 @@ async function verifySshBotChat(routeProfile: string, reconnect = false) {
     await expect(composer(page)).toBeVisible({ timeout: 45_000 })
     const localPort = new URL(localEndpoint.origin).port
     let sdkRead: WireFrame | undefined
+    let originalRoute: ProfileRoute | undefined
     if (aliased || reconnect) {
       const from = wire.length
-      await readSshChat(page, routeProfile, reconnect)
+      originalRoute = await readSshChat(page, routeProfile, Boolean(transition))
       const reads = wire.slice(from).filter(frame => lookup(frame) && frame.limit === 17)
       expect(reads).toHaveLength(1)
       sdkRead = reads[0]!
@@ -325,28 +368,64 @@ async function verifySshBotChat(routeProfile: string, reconnect = false) {
       loginsBeforeRecovery = acceptedKeys()
       await startServer()
     }
+    if (edit) {
+      const socket = sockets.get(sdkRead!)!
+      expect(socket.closed).toBe(false)
+      expect(await saveSshTarget(page, editedProfile)).toEqual({
+        ok: true,
+        id: connectionId,
+        remoteProfile: editedProfile
+      })
+      await expect.poll(() => socket.closed).toBe(true)
+      await page.evaluate(() => window.__E07_SSH_RELEASE__?.())
+      await expect.poll(() => sshRoute(page, routeProfile)).toEqual({
+        connectionId,
+        mode: 'remote',
+        profile: routeProfile,
+        targetProfile: editedProfile
+      })
+    }
     const from = wire.length
     await row.click()
     const viewport = page.locator('[data-slot="aui_thread-viewport"]').filter({ visible: true }).first()
-    await expect(viewport.getByText(canonical, { exact: true })).toBeVisible({ timeout: 55_000 })
-    await expect.poll(() => focus(page)).toEqual({ id: canonical, owner: { connectionId, profile: routeProfile } })
-    for (const decoy of decoys) await expect(viewport.getByText(decoy, { exact: true })).toHaveCount(0)
+    await expect(viewport.getByText(expectedChat, { exact: true })).toBeVisible({ timeout: 55_000 })
+    await expect.poll(() => focus(page)).toEqual({ id: expectedChat, owner: { connectionId, profile: routeProfile } })
+    for (const decoy of edit ? [...decoys, canonical] : decoys) {
+      await expect(viewport.getByText(decoy, { exact: true })).toHaveCount(0)
+    }
     const frames = wire.slice(from)
     const reads = frames.filter(lookup)
     expect(reads).toHaveLength(1)
-    expect(reads[0]).toMatchObject({ method: 'session.list', profile, includeHidden: true, reply: {} })
+    expect(reads[0]).toMatchObject({ method: 'session.list', profile: expectedProfile, includeHidden: true, reply: {} })
     expect(reads[0]!.port).not.toBe(localPort)
-    if (aliased) expect(reads[0]!.port).toBe(sdkRead!.port)
-    if (reconnect) {
-      expect(reads[0]!.port).not.toBe(sdkRead!.port)
-      expect(acceptedKeys()).toBeGreaterThan(loginsBeforeRecovery)
-    }
+    if (aliased && !transition) expect(reads[0]!.port).toBe(sdkRead!.port)
+    if (transition) expect(reads[0]!.port).not.toBe(sdkRead!.port)
+    if (reconnect) expect(acceptedKeys()).toBeGreaterThan(loginsBeforeRecovery)
     const opens = frames.filter((frame) => ['session.resume', 'session.activate'].includes(frame.method))
     expect(opens.some((frame) => frame.method === 'session.resume')).toBe(true)
     for (const frame of opens) {
-      expect(frame).toMatchObject({ port: reads[0]!.port, profile, sessionId: canonical })
+      expect(frame).toMatchObject({ port: reads[0]!.port, profile: expectedProfile, sessionId: expectedChat })
     }
     expect(frames.filter((frame) => ['session.create', 'prompt.submit'].includes(frame.method))).toEqual([])
+    if (edit) {
+      const replayFrom = wire.length
+      // The SDK uses connection and route profile to dial. The explicit RPC
+      // profile still selects scout even after the saved alias points at harbor.
+      expect(await readExactChat(page, originalRoute!, 18)).toEqual([[canonical, canonical]])
+      const replayFrames = wire.slice(replayFrom)
+      const staleReads = replayFrames.filter(frame => lookup(frame) && frame.limit === 18)
+      expect(staleReads).toHaveLength(1)
+      expect(staleReads[0]).toMatchObject({
+        profile,
+        port: reads[0]!.port,
+        includeHidden: true,
+        reply: {}
+      })
+      expect(replayFrames.filter(frame =>
+        ['session.create', 'session.resume', 'session.activate', 'prompt.submit'].includes(frame.method)
+      )).toEqual([])
+      expect(await focus(page)).toEqual({ id: expectedChat, owner: { connectionId, profile: routeProfile } })
+    }
     expect(initial()).toEqual(before)
     expect(provider.completions.length).toBe(0)
     expect(acceptedKeys()).toBeGreaterThan(preflightLogins)
@@ -386,5 +465,15 @@ test('Bot Mode opens the canonical chat behind an OpenSSH profile alias', async 
 
 test('Bot Mode refuses an offline OpenSSH route and reopens the original chat', async () => {
   test.setTimeout(180_000)
-  await verifySshBotChat(profile, true)
+  await verifySshBotChat(profile, 'reconnect')
+})
+
+test('Bot Mode reopens the original chat behind an offline OpenSSH alias', async () => {
+  test.setTimeout(180_000)
+  await verifySshBotChat('default', 'reconnect')
+})
+
+test('Bot Mode opens the new OpenSSH alias target after a live edit', async () => {
+  test.setTimeout(180_000)
+  await verifySshBotChat('default', 'edit')
 })
