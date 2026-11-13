@@ -41,6 +41,8 @@ python -m acceptance.live.run_desktop_profile_routing \
 
 Run the clean baseline separately with `--case bot-canonical-saved-token` and a prepared clean checkout at the base revision. Leave `--review-proposal` out of that invocation.
 
+For bundled Linux x64 acceptance, build a local AppImage from each checkout with upstream `scripts/build-bundle.sh` and the [pinned icon-tool workaround](../../docs/15-primary-bot-binding.md#current-pin-bot-mode-canonical-chat-refusal-and-retry). Wait for packaging to finish before staging the acceptance overlay in the checkout. Add `--appimage /absolute/path/to/Hermes.AppImage` to each invocation. The launcher verifies that the image stamp matches the exact clean or verified proposal commit used by the fixture. A rebuilt proposal commit can have a different ID if its parent, tree and patch match the manifest. Run the clean and proposal checks with their respective images.
+
 ## Evidence
 
 The clean and proposal builds each passed one isolated Linux Electron case with two owned Gateway installations and the same one-shot empty result after a real named-profile lookup. [UI fixture](../../tests/desktop/desktop_bot_saved_token_refusal.spec.ts)

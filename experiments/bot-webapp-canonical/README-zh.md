@@ -41,6 +41,8 @@ python -m acceptance.live.run_desktop_profile_routing \
 
 使用准备好的干净基线检出单独运行 `--case bot-canonical-saved-token`。该次调用省略 `--review-proposal`。
 
+测试捆绑式 Linux x64 安装包时，在两个检出目录分别运行上游 `scripts/build-bundle.sh`，并使用[固定版本的图标工具解决方法](../../docs/15-primary-bot-binding-zh.md#当前固定版本的-bot-mode-规范会话拒绝与重试)构建本地 AppImage。请等打包完成后再将验收夹具放入检出目录。每次运行验收时添加 `--appimage /absolute/path/to/Hermes.AppImage`。启动器验证镜像标记与夹具使用的干净提交或已验证的候选提交完全一致。重新构建的候选提交可以使用不同 ID，其父提交、文件树和补丁必须与清单匹配。请使用各自对应的镜像运行干净版本和候选版本。
+
 ## 证据
 
 干净构建与提案构建各通过一项隔离的 Linux Electron 用例。两次运行均使用两个由夹具控制的 Gateway 安装，并在真实的命名 profile 查询后注入一次空结果。[界面夹具](../../tests/desktop/desktop_bot_saved_token_refusal.spec.ts)

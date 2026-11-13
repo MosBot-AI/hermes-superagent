@@ -4,6 +4,7 @@ import * as path from 'node:path'
 
 import { expect, type ElectronApplication, test } from '@playwright/test'
 
+import { launchBotDesktop } from './desktop_bot_appimage'
 import {
   focus,
   installCanonicalObserver,
@@ -23,7 +24,7 @@ import {
   stopGateway,
   waitForEndpoint
 } from './desktop_native_gateway_fixture'
-import { composer, createCoreSandbox, freePort, launchCoreApp, sandboxProcesses } from './harness'
+import { composer, createCoreSandbox, freePort, sandboxProcesses } from './harness'
 import { startScriptedProvider } from './provider'
 
 const fixtureModule = 'apps.desktop.e2e.core.desktop_bot_canonical_fixture'
@@ -122,7 +123,7 @@ test('Bot Mode checks the named canonical chat on the saved Webapp token route',
       { mode: 0o600 }
     )
 
-    const live = await launchCoreApp(localEnv)
+    const live = await launchBotDesktop(localEnv)
     app = live.app
     const { page } = live
     const wire = observeWire(page)

@@ -15,8 +15,10 @@ from scripts.check import ROOT, verify_checkout
 
 DESKTOP_TESTS = ROOT / "tests/desktop"
 GATEWAY_FIXTURE = "desktop_native_gateway_fixture.ts"
+APPIMAGE_FIXTURE = "desktop_bot_appimage.ts"
 CANONICAL_FIXTURE = "desktop_bot_canonical_fixture.py"
 CANONICAL_OBSERVER = "desktop_bot_canonical_observer.ts"
+CANONICAL_FIXTURES = (GATEWAY_FIXTURE, CANONICAL_FIXTURE, CANONICAL_OBSERVER, APPIMAGE_FIXTURE)
 INSTALL_AMBIGUITY_SPEC = "desktop_install_ambiguity_ipc.spec.ts"
 CANONICAL_CASE = "bot-canonical"
 SAVED_TOKEN_CASE = "bot-canonical-saved-token"
@@ -30,12 +32,12 @@ CASES = {
     ),
     CANONICAL_CASE: (
         "desktop_bot_canonical_refusal.spec.ts",
-        (GATEWAY_FIXTURE, CANONICAL_FIXTURE, CANONICAL_OBSERVER),
+        CANONICAL_FIXTURES,
         "Bot Mode canonical chat",
     ),
     SAVED_TOKEN_CASE: (
         "desktop_bot_saved_token_refusal.spec.ts",
-        (GATEWAY_FIXTURE, CANONICAL_FIXTURE, CANONICAL_OBSERVER),
+        CANONICAL_FIXTURES,
         "saved Webapp token Bot Mode",
     ),
     "profile-retirement": (
@@ -170,7 +172,7 @@ def verify_build(host, python, node, env, *, review_proposal=False, packaged=Fal
 
     desktop = host / "apps/desktop"
     if packaged:
-        return desktop
+        return desktop, expected_commit
 
     stamp = json.loads((desktop / "build/install-stamp.json").read_text(encoding="utf-8"))
     if stamp["commit"] != expected_commit or stamp["dirty"] is not False:
@@ -200,7 +202,7 @@ def verify_build(host, python, node, env, *, review_proposal=False, packaged=Fal
         check=True,
         timeout=15,
     )
-    return desktop
+    return desktop, expected_commit
 
 
 def isolated_environment(work, python, node):
@@ -271,15 +273,13 @@ def run_probe(
         env["HERMES_E2E_CHROMIUM"] = str(chromium)
     if spec == CASES[SAVED_TOKEN_CASE][0]:
         env["HERMES_E2E_BOT_WEBAPP_EXPECTATION"] = "proposal" if review_proposal else "baseline"
-    desktop = verify_build(
+    desktop, expected_commit = verify_build(
         host, python, node, env, review_proposal=review_proposal, packaged=appimage is not None
     )
     if appimage is not None:
         env["HERMES_E2E_APPIMAGE"] = str(appimage)
         env["HERMES_E2E_APPIMAGE_WORK"] = str(work)
-        env["HERMES_E2E_PACKAGED_PIN"] = json.loads((ROOT / "compatibility.json").read_bytes())[
-            "hermes_commit"
-        ]
+        env["HERMES_E2E_PACKAGED_COMMIT"] = expected_commit
     cli = desktop / "node_modules/@playwright/test/cli.js"
     if not cli.is_file():
         raise ValueError("Install the pinned Desktop workspace dependencies before running")
@@ -343,7 +343,9 @@ def main():
     parser.add_argument("--hermes-python", type=Path, required=True, help="Hermes interpreter")
     parser.add_argument("--node", type=Path, required=True, help="Pinned Hermes Node executable")
     parser.add_argument("--chromium", type=Path, help="Prepared Chromium executable for Webapp")
-    parser.add_argument("--appimage", type=Path, help="Local bundled Hermes Desktop AppImage")
+    parser.add_argument(
+        "--appimage", type=Path, help="Local bundled AppImage matching the selected Hermes checkout"
+    )
     parser.add_argument("--scratch", type=Path, default=Path("/var/tmp"), help="Short temp parent")
     parser.add_argument("--case", choices=CASES, default="profile-routing", help="Acceptance case")
     parser.add_argument(
@@ -364,8 +366,8 @@ def main():
         if not args.chromium.is_file() or not os.access(args.chromium, os.X_OK):
             parser.error("--chromium must identify an executable file")
     if args.appimage is not None:
-        if args.case != CANONICAL_CASE:
-            parser.error(f"--appimage requires --case {CANONICAL_CASE}")
+        if args.case not in (CANONICAL_CASE, SAVED_TOKEN_CASE):
+            parser.error(f"--appimage requires --case {CANONICAL_CASE} or {SAVED_TOKEN_CASE}")
         if not args.appimage.is_file() or not os.access(args.appimage, os.X_OK):
             parser.error("--appimage must identify an executable file")
         inputs += (args.appimage,)
