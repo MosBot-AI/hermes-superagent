@@ -1,14 +1,14 @@
 {
   "status": "review_only",
   "hermes_base": "2281116525106e3c109993ccb5dc74d02bfc1427",
-  "proposal_tree": "c9c4862da3e18b423134a2f5ed02382e65d12433",
-  "patch_sha256": "fce77aef210576f346cfd6216e37cf999460256e55543e108724344829f468cb",
+  "proposal_tree": "0e9be5956551d182605e133ef2377443cf4e91b7",
+  "patch_sha256": "d1b4a5ea1fadd7d714da829e10c70c4b9a18a7116b7d8d2e4569de8b3d9fa22a",
   "validation": {
     "python": "3.14.9",
     "platform": "Linux",
-    "clean_live_controls_passed": 2,
-    "candidate_live_cases_passed": 2,
-    "candidate_focused_tests_passed": 134,
+    "clean_live_controls_passed": 3,
+    "candidate_live_cases_passed": 5,
+    "candidate_focused_tests_passed": 167,
     "candidate_focused_tests_skipped": 1,
     "skipped": [
       "Windows-only local shell command round trip on Linux"

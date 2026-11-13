@@ -644,7 +644,7 @@ sh acceptance/live/run_native_bot_poll_reply.sh \
 
 This case verifies exact-receipt recovery when the recipient settled before abrupt process loss and the waiter had yet to read the reply. Automatic restoration to the sender remains open for this window. Loss after the waiter has already persisted output, planned restart, installed-plugin push, packaged Desktop, external transports, authenticated owner binding and real providers require independent acceptance.
 
-A [review-only native candidate](../experiments/bot-sender-recovery/README.md) uses the existing process output log and session authority. On a disposable patched host it restores one sender note for each of the two abrupt-loss cases above, with no recipient resend or duplicate note after a second Gateway startup. This result applies to the candidate tree. The official pin remains on the clean host.
+A [review-only native candidate](../experiments/bot-sender-recovery/README.md) uses the existing process output log and session authority. On a disposable patched host it restores one sender note for each abrupt-loss case above and replays a finished waiter result that had not reached the session queue. Explicitly consumed output and an already admitted completion do not create another note. The cases verify no recipient resend or duplicate note after a second Gateway startup. This result applies to the candidate tree. The official pin remains on the clean host.
 
 ## 9. Events, Errors and Client Recovery
 

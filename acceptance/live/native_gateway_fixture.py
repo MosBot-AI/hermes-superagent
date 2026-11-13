@@ -18,23 +18,26 @@ def gateway_daemon(host, home, child_env, label):
 
 
 @contextmanager
-def crashable_gateway_daemon(host, home, child_env, label):
-    with _owned_gateway(host, home, child_env, label, crash_expected=True) as daemon:
+def crashable_gateway_daemon(host, home, child_env, label, *, entrypoint=None):
+    with _owned_gateway(
+        host, home, child_env, label, crash_expected=True, entrypoint=entrypoint
+    ) as daemon:
         yield daemon
 
 
 @contextmanager
-def _owned_gateway(host, home, child_env, label, *, crash_expected):
+def _owned_gateway(host, home, child_env, label, *, crash_expected, entrypoint=None):
     from gateway.status import get_process_start_time, terminate_pid, write_planned_stop_marker
     from hermes_cli.gateway_runtime import discover_gateway_endpoint
     from hermes_cli.gateway_runtime_discovery import query_identify
 
     # Logs stay in this private test directory. Never echo them into pytest or JUnit.
     log_path = home.parent / f"{label}.log"
+    argv = [str(entrypoint)] if entrypoint else ["-m", "gateway.run"]
     with log_path.open("w", encoding="utf-8") as log:
         log_path.chmod(0o600)
         process = subprocess.Popen(
-            [sys.executable, "-m", "gateway.run"],
+            [sys.executable, *argv],
             cwd=host,
             env=child_env,
             stdin=subprocess.DEVNULL,
