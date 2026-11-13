@@ -199,6 +199,8 @@
 
 ### 新增
 
+- 验证真实 OpenSSH 中断时 Bot Mode 拒绝打开缓存的 SSH 名册行，并在恢复连接后通过显式重试打开原远端会话（#33）。
+
 - 从 Desktop SDK 到 Bot Mode 验证已保存的 OpenSSH profile 别名。Linux x64 源码版与安装包客户端保留连接内的路由身份，同时打开远端命名会话（#33）。
 
 - 在 Linux x64 Desktop 源码构建和安装包中验证 Bot Mode 通过已保存的 OpenSSH 密钥连接打开远端现有命名会话。测试包含同名本地 profile，且会话存储保持原样（#33）。
