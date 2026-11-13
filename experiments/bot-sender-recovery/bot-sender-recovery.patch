@@ -1,5 +1,5 @@
 diff --git a/gateway/run_notifications.py b/gateway/run_notifications.py
-index 4cbd26022dbf69b186aed3641e38eaf658c9d89f..9f019fe5f1da67b8c4bd7f602ce68241b1e4de4d 100644
+index 4cbd2602..9f019fe5 100644
 --- a/gateway/run_notifications.py
 +++ b/gateway/run_notifications.py
 @@ -1861,6 +1861,7 @@ class GatewayNotificationsMixin(GatewayUpdateNotificationsMixin, GatewayNotifica
@@ -70,10 +70,10 @@ index 4cbd26022dbf69b186aed3641e38eaf658c9d89f..9f019fe5f1da67b8c4bd7f602ce68241
              elif has_new_output and notify_mode == "all" and not agent_notify:
                  # New output — deliver a status update (only in "all" mode; agent_notify watchers
 diff --git a/tests/tools/test_process_checkpoint_worker_handoff.py b/tests/tools/test_process_checkpoint_worker_handoff.py
-index 997018316d8169be7a303e7e2d203c2ad9b83e3b..a0bceb27c5801c019c319c8bc62acc774d22ab2e 100644
+index 99701831..0f36c3e2 100644
 --- a/tests/tools/test_process_checkpoint_worker_handoff.py
 +++ b/tests/tools/test_process_checkpoint_worker_handoff.py
-@@ -50,3 +50,45 @@ def test_owner_checkpoint_write_keeps_a_live_worker_handoff(tmp_path, monkeypatc
+@@ -50,3 +50,97 @@ def test_owner_checkpoint_write_keeps_a_live_worker_handoff(tmp_path, monkeypatc
              proc.kill()
              proc.wait(timeout=10)
      assert not psutil.pid_exists(worker_proc.pid) or psutil.Process(worker_proc.pid).status() == psutil.STATUS_ZOMBIE
@@ -119,8 +119,60 @@ index 997018316d8169be7a303e7e2d203c2ad9b83e3b..a0bceb27c5801c019c319c8bc62acc77
 +    assert (process.output_buffer, process.exit_code, process.started_at) == ("synthetic reply\n", 0, 123)
 +    assert process.parent_session_id == "sender"
 +    assert len(registry.pending_watchers) == 1
++
++
++def test_failed_bot_result_keeps_only_its_own_recent_handoff(tmp_path, monkeypatch):
++    import os
++
++    from tools import process_registry as pr
++    from tools.process_registry_output_log import output_dir
++    from tools.process_registry_results import RESULT_RETENTION_SECONDS, save_completed_result
++
++    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
++    checkpoint = tmp_path / "processes.json"
++    monkeypatch.setattr(pr, "CHECKPOINT_PATH", checkpoint)
++    output_dir().mkdir(parents=True)
++    registry = pr.ProcessRegistry()
++    session = pr.ProcessSession(
++        id="proc_bot_waiter", command="synthetic", pid=123, started_at=10,
++        parent_session_id="sender", session_key="agent:local:sender",
++        watcher_platform="local", watcher_interval=5, notify_on_complete=True,
++        recoverable_output=True, exited=True,
++    )
++    log = output_dir() / f"{session.id}.log"
++    log.write_text("reply\n", encoding="utf-8")
++    exit_record = log.with_suffix(".exit")
++    exit_record.write_text("0\n", encoding="ascii")
++    handoff = {name: getattr(session, name) for name in pr._CHECKPOINT_FIELDS}
++    handoff.update(session_id=session.id, output_log=str(log))
++    checkpoint.write_text(json.dumps([handoff]), encoding="utf-8")
++    registry._finished[session.id] = session
++
++    registry._write_checkpoint()
++    assert json.loads(checkpoint.read_bytes()) == [handoff]
++    wrong = pr.ProcessSession(
++        id=session.id, command="synthetic", started_at=session.started_at,
++        parent_session_id="another-sender", session_key=session.session_key,
++        watcher_platform="local", watcher_interval=5, notify_on_complete=True,
++        recoverable_output=True, exited=True,
++    )
++    save_completed_result(wrong)
++    registry._write_checkpoint()
++    assert json.loads(checkpoint.read_bytes()) == [handoff]
++
++    save_completed_result(session)
++    registry._write_checkpoint()
++    assert json.loads(checkpoint.read_bytes()) == []
++
++    result = tmp_path / "logs" / "process-results" / f"{session.id}.json"
++    result.unlink()
++    checkpoint.write_text(json.dumps([handoff]), encoding="utf-8")
++    expired = time.time() - RESULT_RETENTION_SECONDS - 1
++    os.utime(exit_record, (expired, expired))
++    registry._write_checkpoint()
++    assert json.loads(checkpoint.read_bytes()) == []
 diff --git a/tools/bot_mode_dm.py b/tools/bot_mode_dm.py
-index 4faabf7517c418903d0ff26b49425eb242a6a2b0..28a9410b29cbac939a6c4f2d7562a0eb9c49cdf8 100644
+index 4faabf75..28a9410b 100644
 --- a/tools/bot_mode_dm.py
 +++ b/tools/bot_mode_dm.py
 @@ -784,7 +784,8 @@ def _start_delivery(argv: list[str], content: str, label: str, *, stdin_file: bo
@@ -160,10 +212,15 @@ index 4faabf7517c418903d0ff26b49425eb242a6a2b0..28a9410b29cbac939a6c4f2d7562a0eb
              parsed = json.loads(raw)
          except (ValueError, TypeError):
 diff --git a/tools/process_registry.py b/tools/process_registry.py
-index 1e14aa0e1f479272d10e22f8ab4bbf996f7be4e6..a2c601eb8696bdd889e6edc59991a10ef456de5a 100644
+index 1e14aa0e..bc289498 100644
 --- a/tools/process_registry.py
 +++ b/tools/process_registry.py
-@@ -38,7 +38,7 @@ from tools.process_registry_checkpoint import ProcessCheckpointMixin
+@@ -34,11 +34,11 @@ from hermes_cli.config import get_hermes_home
+ 
+ from tools.process_registry_notifications import (
+     format_process_notification, heartbeat_output_tail, is_child_process_notification, should_surface_notification)
+-from tools.process_registry_checkpoint import ProcessCheckpointMixin
++from tools.process_registry_checkpoint import ProcessCheckpointMixin, retain_handoff_consumption
  from tools.process_registry_output_log import ProcessOutputLogMixin, open_output_log, record_exit_command, worker_output_log
  from tools.process_registry_ownership import ProcessOwnershipMixin
  from tools.process_registry_termination import ProcessTerminationMixin
@@ -192,7 +249,16 @@ index 1e14aa0e1f479272d10e22f8ab4bbf996f7be4e6..a2c601eb8696bdd889e6edc59991a10e
  _CHECKPOINT_DEFAULTS = {
      f.name: ([] if f.name == "watch_patterns" else f.default)
      for f in ProcessSession.__dataclass_fields__.values()
-@@ -1179,7 +1181,8 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
+@@ -1150,6 +1152,8 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
+             # ghost entry if the interpreter cannot start another thread.
+             reader.start()
+             self._running[session.id] = session
++            if session.completion_consumed:
++                self._completion_consumed.add(session.id)
+         self._write_checkpoint()
+ 
+     def _spawn_local_pty(self, session: ProcessSession, safe_command: str, env_vars: dict) -> ProcessSession:
+@@ -1179,7 +1183,8 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
      def spawn_local(
          self, command: str, cwd: str | None = None, task_id: str = "", session_key: str = "",
          env_vars: dict | None = None, use_pty: bool = False, owner_task_id: str = "",
@@ -202,7 +268,7 @@ index 1e14aa0e1f479272d10e22f8ab4bbf996f7be4e6..a2c601eb8696bdd889e6edc59991a10e
          """Spawn a background process locally (TERMINAL_ENV=local; other backends: spawn_via_env()).
          ``use_pty`` asks ptyprocess/pywinpty for a pseudo-terminal; on failure: pipe + ``pty_fallback``.
          ``persist_on_release``: no agent kill sweeps (#41225); ``restore_login_path``: re-add reset PATH dirs (#56634)."""
-@@ -1191,8 +1194,9 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
+@@ -1191,8 +1196,9 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
          session = self._new_session(command, task_id, owner_task_id, session_key, _resolve_safe_cwd(cwd or os.getcwd()),
                                      persist_on_release=persist_on_release)
          pty_scope_attempted = False
@@ -214,7 +280,7 @@ index 1e14aa0e1f479272d10e22f8ab4bbf996f7be4e6..a2c601eb8696bdd889e6edc59991a10e
          if use_pty and log is None:
              try:
                  return self._spawn_local_pty(session, safe_command, env_vars)
-@@ -1655,6 +1659,14 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
+@@ -1655,6 +1661,15 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
          return (session._reader_finish_requested.is_set() and not session._completion_event.is_set()
                  and reader is not None and reader.is_alive())
  
@@ -224,12 +290,13 @@ index 1e14aa0e1f479272d10e22f8ab4bbf996f7be4e6..a2c601eb8696bdd889e6edc59991a10e
 +            # Serialize with the first result snapshot. A kill can consume its
 +            # result before that snapshot exists.
 +            session.completion_consumed = True
-+            settle_result_notification(session, "consumed")
++            if not settle_result_notification(session, "consumed"):
++                retain_handoff_consumption(session)
 +
      def is_completion_consumed(self, session_id: str) -> bool:
          """Check if a completion notification was already consumed via wait/log."""
          return session_id in self._completion_consumed
-@@ -2041,7 +2053,7 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
+@@ -2041,7 +2056,7 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
              **self._status_head(session), "output": "\n".join(selected),
              "total_lines": total_lines, "showing": f"{len(selected)} lines"}
          if exited and observed_completion_output and not finalizing:
@@ -238,7 +305,7 @@ index 1e14aa0e1f479272d10e22f8ab4bbf996f7be4e6..a2c601eb8696bdd889e6edc59991a10e
          return result
  
      def wait(self, session_id: str, timeout: int | None = None) -> dict:
-@@ -2075,7 +2087,7 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
+@@ -2075,7 +2090,7 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
              self._reconcile_local_exit(session)  # orphaned-pipe reader guard
              result = None
              if session.exited and not self._reader_finalizing(session):
@@ -247,7 +314,7 @@ index 1e14aa0e1f479272d10e22f8ab4bbf996f7be4e6..a2c601eb8696bdd889e6edc59991a10e
                  result = self._exit_snapshot(session, "exited")
              elif _is_interrupted():
                  result = {
-@@ -2151,7 +2163,7 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
+@@ -2151,7 +2166,7 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
              # Only suppress the autonomous turn after its output is present in
              # the explicit kill result, matching wait/log consumption.
              if consume_output and not finalizing:
@@ -256,7 +323,7 @@ index 1e14aa0e1f479272d10e22f8ab4bbf996f7be4e6..a2c601eb8696bdd889e6edc59991a10e
              return result
          try:
              early = self._signal_kill(session, session_id, consume_output)
-@@ -2200,7 +2212,7 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
+@@ -2200,7 +2215,7 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
              with session._lock:
                  output = _completion_output(session)
                  if consume_output:
@@ -265,7 +332,7 @@ index 1e14aa0e1f479272d10e22f8ab4bbf996f7be4e6..a2c601eb8696bdd889e6edc59991a10e
                  session.exited = True
                  session.exit_code = -15  # SIGTERM
                  session.completion_reason = "killed"
-@@ -2256,7 +2268,7 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
+@@ -2256,7 +2271,7 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
                  with session._lock:
                      output = _completion_output(session)
                  if consume_output:
@@ -275,21 +342,160 @@ index 1e14aa0e1f479272d10e22f8ab4bbf996f7be4e6..a2c601eb8696bdd889e6edc59991a10e
                  # entry without queueing a completion, and do not signal a PID
                  # whose start time does not match.
 diff --git a/tools/process_registry_checkpoint.py b/tools/process_registry_checkpoint.py
-index 176f0c3daba14cec23e1246aaa7725fa0e34d025..dae285a76d1152539a7246fea4bc4ac517ccd074 100644
+index 176f0c3d..c4f8793c 100644
 --- a/tools/process_registry_checkpoint.py
 +++ b/tools/process_registry_checkpoint.py
-@@ -2,6 +2,7 @@
+@@ -2,14 +2,84 @@
  
  import json
  import logging
-+from pathlib import Path
++import re
  import time
- from typing import Any, Dict, List, Optional
+-from typing import Any, Dict, List, Optional
++from pathlib import Path
++from typing import Any, Optional
  
-@@ -69,6 +70,17 @@ class ProcessCheckpointMixin:
-                 and (_exit_path(log).exists() or self._detached_host_fate(
-                     entry.get("pid"), entry.get("host_start_time")) == "running")]
+ from agent.redact import redact_sensitive_text
++from tools.process_registry_output_log import _exit_path, adoptable_log
++from tools.process_registry_results import (
++    RESULT_RETENTION_SECONDS, recoverable_results, settle_result_notification,
++)
  
+ logger = logging.getLogger("tools.process_registry")
+ 
+ 
++def _checkpoint_entries(path):
++    try:
++        entries = json.loads(path.read_text(encoding="utf-8-sig"))
++    except (OSError, ValueError):
++        return []
++    return [entry for entry in entries if isinstance(entry, dict)] if isinstance(entries, list) else []
++
++
++def _handoff_identity(entry):
++    return (entry.get("session_id"), entry.get("started_at"),
++            entry.get("parent_session_id"), entry.get("session_key"))
++
++
++def _process_identity(session):
++    return (session.id, session.started_at, session.parent_session_id, session.session_key)
++
++
++def _local_reply_log(entry):
++    session_id, started_at, parent, session_key = _handoff_identity(entry)
++    if (not isinstance(session_id, str) or not re.fullmatch(r"proc_[\w]+", session_id)
++            or type(started_at) not in {int, float} or not started_at > 0
++            or not all(isinstance(value, str) and value for value in (parent, session_key))
++            or entry.get("recoverable_output") is not True or entry.get("watcher_platform") != "local"
++            or entry.get("notify_on_complete") is not True or entry.get("pid_scope", "host") != "host"
++            or type(entry.get("watcher_interval")) is not int or entry["watcher_interval"] <= 0):
++        return None
++    log = adoptable_log(entry.get("output_log"))
++    if log and Path(log).name == f"{session_id}.log":
++        return Path(log)
++    return None
++
++
++def _handoff_exit_is_recent(log):
++    try:
++        return _exit_path(log).stat().st_mtime >= time.time() - RESULT_RETENTION_SECONDS
++    except OSError:
++        return False
++
++
++def retain_handoff_consumption(session):
++    """Fallback when the full result cannot record an explicit output read."""
++    from hermes_cli.active_sessions import _FileLock
++    from hermes_constants import assert_named_profile_home_live
++    from tools.process_registry import _checkpoint_path
++    from utils import atomic_json_write
++
++    path = _checkpoint_path()
++    try:
++        assert_named_profile_home_live(path.parent)
++        with _FileLock(path.with_name(path.name + ".lock")):
++            # A concurrent result writer can finish before we acquire the checkpoint lock.
++            if settle_result_notification(session, "consumed"):
++                return
++            entries = _checkpoint_entries(path)
++            for entry in entries:
++                if _handoff_identity(entry) == _process_identity(session) and _local_reply_log(entry):
++                    if entry.get("completion_consumed") is not True:
++                        entry["completion_consumed"] = True
++                        atomic_json_write(path, entries, fsync_dir=True)
++                    return
++    except (OSError, RuntimeError):
++        logger.warning("Could not retain Bot handoff consumption for %s", session.id, exc_info=True)
++
++
+ class ProcessCheckpointMixin:
+     def _detached_host_fate(self, pid: Optional[int], expected_start: Optional[int]) -> str:
+         """Subclass supplies the live PID decision. See ProcessRegistry."""
+@@ -38,6 +108,8 @@ class ProcessCheckpointMixin:
+                     # See #77484.
+                     entry["command"] = redact_sensitive_text(s.command, code_file=True)
+                     entry["owner_task_id"] = s.owner_task_id or s.task_id
++                    if s.completion_consumed and _local_reply_log(entry):
++                        entry["completion_consumed"] = True
+                     entries.append(entry)
+                 if extra_entries:
+                     tracked_ids = {item.get("session_id") for item in entries}
+@@ -50,24 +122,54 @@ class ProcessCheckpointMixin:
+             # its own table; a worker's output-log handoff is its only path to the next one, so a
+             # writer keeps the handoffs it does not track (read-merge-write under one file lock).
+             with _FileLock(path.with_name(path.name + ".lock")):
+-                entries.extend(self._foreign_handoffs(path, known))
++                self._merge_handoffs(entries, _checkpoint_entries(path), known)
+                 atomic_json_write(path, entries)
+         except Exception as e:
+             logger.debug("Failed to write checkpoint file: %s", e, exc_info=True)
+ 
+-    def _foreign_handoffs(self, path, known) -> list[dict[str, Any]]:
+-        """On-disk worker handoffs this registry never tracked whose log still decides an outcome:
+-        the process is alive (same start time) or its recorded exit is waiting to be read."""
+-        from pathlib import Path
+-        from tools.process_registry_output_log import _exit_path, adoptable_log
+-        try:
+-            on_disk = json.loads(path.read_text(encoding="utf-8-sig"))
+-        except (OSError, ValueError):
+-            return []
+-        return [entry for entry in on_disk if isinstance(entry, dict) and entry.get("session_id") not in known
+-                and (log := adoptable_log(entry.get("output_log"))) and Path(log).exists()
+-                and (_exit_path(log).exists() or self._detached_host_fate(
+-                    entry.get("pid"), entry.get("host_start_time")) == "running")]
++    def _merge_handoffs(self, entries, on_disk, known):
++        """Keep live foreign handoffs and finished Bot handoffs lacking a durable result."""
++        current = {entry.get("session_id"): entry for entry in entries}
++        for entry in on_disk:
++            session_id = entry.get("session_id")
++            if not isinstance(session_id, str):
++                continue
++            active = current.get(session_id)
++            if log := _local_reply_log(entry):
++                # Retain a consumed marker until a matching result records a terminal state.
++                # This also covers a result committed concurrently with an explicit log read.
++                consumed = entry.get("completion_consumed") is True
++                if active is not None:
++                    if consumed and _handoff_identity(entry) == _handoff_identity(active):
++                        active["completion_consumed"] = True
++                    continue
++                if not log.is_file():
++                    continue
++                if _exit_path(log).is_file():
++                    if _handoff_exit_is_recent(log):
++                        result = next(recoverable_results(session_id), None)
++                        if (result is None or _process_identity(result[0]) != _handoff_identity(entry)
++                                or (consumed and result[1] == "pending")):
++                            entries.append(entry)
++                            current[session_id] = entry
++                    continue
++            log = adoptable_log(entry.get("output_log"))
++            if (session_id not in known and session_id not in current and log and Path(log).is_file()
++                    and (_exit_path(log).exists() or self._detached_host_fate(
++                        entry.get("pid"), entry.get("host_start_time")) == "running")):
++                entries.append(entry)
++                current[session_id] = entry
++
 +    @staticmethod
 +    def _recovered_watcher(session, route_keys):
 +        return {
@@ -300,47 +506,65 @@ index 176f0c3daba14cec23e1246aaa7725fa0e34d025..dae285a76d1152539a7246fea4bc4ac5
 +            "notify_on_complete": session.notify_on_complete,
 +            "parent_session_id": session.parent_session_id,
 +        }
-+
+ 
      def recover_from_checkpoint(self) -> int:
          """On gateway startup, probe PIDs from the checkpoint file; returns how many
-         were recovered as detached sessions."""
-@@ -77,10 +89,19 @@ class ProcessCheckpointMixin:
+@@ -76,24 +178,48 @@ class ProcessCheckpointMixin:
+             ProcessSession, _CHECKPOINT_FIELDS, _checkpoint_path,
              _CHECKPOINT_DEFAULTS, _WATCHER_ROUTE_KEYS, _stop_systemd_unit,
          )
-         from tools.process_registry_output_log import adoptable_log
-+        from tools.process_registry_results import recoverable_results
+-        from tools.process_registry_output_log import adoptable_log
  
          # This host adopts what a crashed predecessor left running, so the jobs it starts must
          # survive its own crash for the next one: they stay out of the owner-death supervisor.
          self._jobs_outlive_host = True
+         checkpoint_path = _checkpoint_path()
++        entries = _checkpoint_entries(checkpoint_path)
++        consumed_handoffs = {
++            _handoff_identity(entry) for entry in entries
++            if entry.get("completion_consumed") is True and _local_reply_log(entry)
++        }
 +        completed = set()
 +        for session, state in recoverable_results():
 +            completed.add(session.id)
-+            if state == "pending":
++            if state == "pending" and _process_identity(session) in consumed_handoffs:
++                settle_result_notification(session, "consumed")
++            elif state == "pending":
 +                watcher = self._recovered_watcher(session, _WATCHER_ROUTE_KEYS)
 +                self.pending_watchers.append({
 +                    **watcher, "retained_result": True, "started_at": session.started_at,
 +                })
-         checkpoint_path = _checkpoint_path()
          if not checkpoint_path.exists():
              return 0
-@@ -92,7 +113,14 @@ class ProcessCheckpointMixin:
+-        try:
+-            entries = json.loads(checkpoint_path.read_text(encoding="utf-8-sig"))
+-        except Exception:
+-            return 0
+         recovered = 0
          unresolved_scope_entries: list[dict[str, Any]] = []
          for entry in entries:
              pid, pid_scope = entry.get("pid"), entry.get("pid_scope", "host")
 -            if not pid:
-+            if not pid or entry.get("session_id") in completed:
-+                continue
++            session_id = entry.get("session_id")
++            if not pid or not isinstance(session_id, str) or session_id in completed:
+                 continue
 +            log = adoptable_log(entry.get("output_log"))
 +            if entry.get("recoverable_output") and (
 +                not log or Path(log).name != f'{entry["session_id"]}.log'
 +            ):
 +                # A multiplex checkpoint can include copies from sibling profiles.
 +                # Let the log's own profile adopt this job with its output and route.
-                 continue
++                continue
++            if entry.get("recoverable_output") and log and not Path(log).is_file():
++                continue
++            if reply_log := _local_reply_log(entry):
++                exit_record = _exit_path(reply_log)
++                if exit_record.exists() and not _handoff_exit_is_recent(reply_log):
++                    continue
              # The registry is process-global, so every profile's checkpoint carries every live
              # process; a multiplexer recovering several homes must adopt each session once.
-@@ -113,7 +141,6 @@ class ProcessCheckpointMixin:
+             with self._lock:
+@@ -113,7 +239,6 @@ class ProcessCheckpointMixin:
              fate = self._detached_host_fate(pid, entry.get("host_start_time"))
              # A worker spawn's output log and recorded exit outlive both the spawner and the PID,
              # so its reader decides the outcome (a recycled PID is never signalled: fate != running).
@@ -348,7 +572,15 @@ index 176f0c3daba14cec23e1246aaa7725fa0e34d025..dae285a76d1152539a7246fea4bc4ac5
              if log:
                  fate = "running"
              if fate == "reused":
-@@ -150,13 +177,6 @@ class ProcessCheckpointMixin:
+@@ -140,6 +265,7 @@ class ProcessCheckpointMixin:
+             # detached: no Popen handle, but can report status + kill; a worker spawn's output log
+             # (and recorded exit) outlives its spawner, so tail it from the start.
+             fields["output_log"] = log
++            fields["completion_consumed"] = _handoff_identity(entry) in consumed_handoffs
+             session = ProcessSession(id=entry["session_id"], detached=True, **fields)
+             if session.output_log:
+                 self._track_started(session, self._log_reader_loop, f"proc-log-reader-{session.id}")
+@@ -150,13 +276,6 @@ class ProcessCheckpointMixin:
              logger.info("Recovered detached process: %s (pid=%d)", session.command[:60], pid)
              # Re-enqueue watcher so gateway can resume notifications
              if session.watcher_interval > 0:
@@ -364,7 +596,7 @@ index 176f0c3daba14cec23e1246aaa7725fa0e34d025..dae285a76d1152539a7246fea4bc4ac5
          self._write_checkpoint(extra_entries=unresolved_scope_entries)
          return recovered
 diff --git a/tools/process_registry_output_log.py b/tools/process_registry_output_log.py
-index 8b88bdddc7b364f5dc4579ad952f4d6c4d1bd44d..9188e26e41341d831d75b28dbb0f68bf1c3f94fc 100644
+index 8b88bddd..9188e26e 100644
 --- a/tools/process_registry_output_log.py
 +++ b/tools/process_registry_output_log.py
 @@ -1,4 +1,4 @@
@@ -396,7 +628,7 @@ index 8b88bdddc7b364f5dc4579ad952f4d6c4d1bd44d..9188e26e41341d831d75b28dbb0f68bf
      directory = output_dir()
      make_user_dir(directory, mode=0o700, parents=True, exist_ok=True)
 diff --git a/tools/process_registry_results.py b/tools/process_registry_results.py
-index 988b72bd5d25f44585d5e15e78c9ce908e153154..b44b0311bbb2027a1985fd99c0672e6dee2af14e 100644
+index 988b72bd..220d8ad8 100644
 --- a/tools/process_registry_results.py
 +++ b/tools/process_registry_results.py
 @@ -1,12 +1,13 @@
@@ -433,7 +665,7 @@ index 988b72bd5d25f44585d5e15e78c9ce908e153154..b44b0311bbb2027a1985fd99c0672e6d
  def save_completed_result(session) -> None:
      from agent.redact import redact_sensitive_text, redact_terminal_output
      from tools.process_registry import MAX_OUTPUT_CHARS
-@@ -53,21 +65,103 @@ def save_completed_result(session) -> None:
+@@ -53,21 +65,112 @@ def save_completed_result(session) -> None:
      with session._lock:
          record = {key: getattr(session, key) for key in _RESULT_FIELDS}
          record["output"] = session.output_buffer[-MAX_OUTPUT_CHARS:]
@@ -468,6 +700,7 @@ index 988b72bd5d25f44585d5e15e78c9ce908e153154..b44b0311bbb2027a1985fd99c0672e6d
 +                old = previous.get("notification")
 +                if (isinstance(old, dict) and previous.get("started_at") == session.started_at
 +                        and previous.get("parent_session_id") == session.parent_session_id
++                        and previous.get("session_key") == session.session_key
 +                        and old.get("state") in {"consumed", "handled"}):
 +                    record["notification"]["state"] = old["state"]
 +                elif session.completion_consumed:
@@ -477,18 +710,19 @@ index 988b72bd5d25f44585d5e15e78c9ce908e153154..b44b0311bbb2027a1985fd99c0672e6d
 +            atomic_json_write(path, record, mode=0o600)
          _result_paths()
 -    except OSError:
-+    except (OSError, ValueError, KeyError, TypeError):
++    except (OSError, RuntimeError, ValueError, KeyError, TypeError):
          # Preserve live delivery on disk failure, but never silently claim durability.
          logger.warning("Could not retain completed process result %s", session.id, exc_info=True)
  
  
-+def settle_result_notification(session, state: str) -> None:
-+    """Advance a pending retained notification without replacing its result."""
-+    if not session.recoverable_output or not re.fullmatch(r"proc_[\w]+", session.id):
-+        return
++def settle_result_notification(session, state: str) -> bool:
++    """Advance a matching retained notification, reporting whether it is terminal."""
++    if (not session.recoverable_output or state not in {"consumed", "handled"}
++            or not re.fullmatch(r"proc_[\w]+", session.id)):
++        return False
 +    path = _result_path(session.id)
 +    if not path.parent.is_dir():
-+        return  # The first result write captures in-memory consumption.
++        return False
 +    from hermes_cli.active_sessions import _FileLock
 +    from hermes_constants import assert_named_profile_home_live
 +
@@ -497,16 +731,23 @@ index 988b72bd5d25f44585d5e15e78c9ce908e153154..b44b0311bbb2027a1985fd99c0672e6d
 +        with _FileLock(path.with_name(".notifications.lock")):
 +            record = _result_record(path)
 +            notification = record.get("notification")
-+            if (not isinstance(notification, dict) or notification.get("state") != "pending"
++            if (not isinstance(notification, dict)
 +                    or record.get("started_at") != session.started_at
-+                    or record.get("parent_session_id") != session.parent_session_id):
-+                return
++                    or record.get("parent_session_id") != session.parent_session_id
++                    or record.get("session_key") != session.session_key):
++                return False
++            if notification.get("state") in {"consumed", "handled"}:
++                return True
++            if notification.get("state") != "pending":
++                return False
 +            notification["state"] = state
 +            atomic_json_write(path, record, mode=0o600, fsync_dir=True)
++            return True
 +    except FileNotFoundError:
-+        return
-+    except (OSError, ValueError, KeyError, TypeError):
++        pass
++    except (OSError, RuntimeError, ValueError, KeyError, TypeError):
 +        logger.warning("Could not retain notification outcome for process %s", session.id, exc_info=True)
++    return False
 +
 +
 +def recoverable_results(session_id: str = ""):
@@ -542,7 +783,7 @@ index 988b72bd5d25f44585d5e15e78c9ce908e153154..b44b0311bbb2027a1985fd99c0672e6d
  def _owns_result(owner: str, parent: str | None) -> bool:
      if not parent:
          return False
-@@ -103,13 +197,12 @@ def load_completed_results(prefix: str = "") -> dict:
+@@ -103,13 +206,12 @@ def load_completed_results(prefix: str = "") -> dict:
          if not path.stem.startswith(prefix):
              continue
          try:
@@ -559,7 +800,7 @@ index 988b72bd5d25f44585d5e15e78c9ce908e153154..b44b0311bbb2027a1985fd99c0672e6d
              )
              session._completion_event.set()
 diff --git a/tools/terminal_tool.py b/tools/terminal_tool.py
-index d99296ba6ea34ac4daa0cb3ead33583d7da26d3c..cbba1b38e56147cb696eb3bdd073f22014f5f276 100644
+index d99296ba..cbba1b38 100644
 --- a/tools/terminal_tool.py
 +++ b/tools/terminal_tool.py
 @@ -1484,6 +1484,8 @@ def terminal_tool(
@@ -588,7 +829,7 @@ index d99296ba6ea34ac4daa0cb3ead33583d7da26d3c..cbba1b38e56147cb696eb3bdd073f220
                      persist_on_release=persist_on_release,
                      auto_backgrounded=auto_bg is not None and plan.promoted_from_foreground_timeout is None,
 diff --git a/tools/terminal_tool_background.py b/tools/terminal_tool_background.py
-index 8c1f02ad6ae2c74b87e44785657b405ccb071601..3bf09f230ee0295ae7ef1027f656b9b3eecef6db 100644
+index 8c1f02ad..3bf09f23 100644
 --- a/tools/terminal_tool_background.py
 +++ b/tools/terminal_tool_background.py
 @@ -93,14 +93,15 @@ def _stamp_gateway_routing(proc_session, get_session_env) -> None:
