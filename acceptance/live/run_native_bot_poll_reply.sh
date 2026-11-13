@@ -4,17 +4,19 @@ set -eu
 umask 077
 
 usage() {
-    printf '%s\n' 'Usage: sh acceptance/live/run_native_bot_poll_reply.sh --hermes CHECKOUT --hermes-python PYTHON [--installed] [--receipt RESULT.xml]'
+    printf '%s\n' 'Usage: sh acceptance/live/run_native_bot_poll_reply.sh --hermes CHECKOUT --hermes-python PYTHON [--installed] [--consume] [--receipt RESULT.xml]'
 }
 
 host=
 python=
 receipt=
 installed=0
+case_name=test_native_stateless_bot_poll_reply_persists_unconsumed_completion
 while [ "$#" -gt 0 ]; do
     case "$1" in
         -h|--help) usage; exit 0 ;;
         --installed) installed=1; shift ;;
+        --consume) case_name=test_native_stateless_bot_wait_consumes_reply_before_fallback; shift ;;
         --hermes|--hermes-python|--receipt)
             if [ "$#" -lt 2 ] || [ -z "$2" ]; then usage >&2; exit 2; fi
             case "$1" in
@@ -96,12 +98,12 @@ if ! env -i PATH="$PATH" LANG=C.UTF-8 TZ=UTC \
             HERMES_TEST_ROOT="$2" HERMES_BOT_POLL_NAMESPACE=1 HERMES_BOT_POLL_INSTALLED="$6" \
             "$3" -m pytest -q -p no:cacheprovider --show-capture=no --tb=short \
             -o junit_logging=no --basetemp="$work/test" --junitxml="$work/result.xml" \
-            acceptance/live/test_native_bot_poll_reply.py >&2; then
+            "acceptance/live/test_native_bot_poll_reply.py::$7" >&2; then
             exit 1
         fi
         setpriv --inh-caps=-all --ambient-caps=-all --bounding-set=-all --no-new-privs \
             env -i PATH=/usr/bin:/bin LANG=C.UTF-8 HOME="$work/user" TMPDIR="$work/tmp" \
-            PYTHONNOUSERSITE=1 PYTHONDONTWRITEBYTECODE=1 "$3" - "$work/result.xml" "$6" <<\PY
+            PYTHONNOUSERSITE=1 PYTHONDONTWRITEBYTECODE=1 "$3" - "$work/result.xml" "$6" "$7" <<\PY
 from pathlib import Path
 import sys
 from xml.etree import ElementTree
@@ -112,7 +114,7 @@ cases = tree.findall(".//testcase")
 excluded = ("error", "failure", "skipped", "system-out", "system-err")
 if (
     len(cases) != 1
-    or cases[0].get("name") != "test_native_stateless_bot_poll_reply_persists_unconsumed_completion"
+    or cases[0].get("name") != sys.argv[3]
     or any(tree.findall(f".//{tag}") for tag in excluded)
 ):
     raise SystemExit("Expected one clean passing native Bot reply case")
@@ -122,7 +124,7 @@ for suite in tree.iter("testsuite"):
         suite.set("name", "native_bot_poll_reply_installed")
 sys.stdout.buffer.write(ElementTree.tostring(tree.getroot(), encoding="utf-8", xml_declaration=True))
 PY
-    ' bot-poll-reply "$repo" "$host" "$python" "$mount_namespace" "$network_namespace" "$prepared" \
+    ' bot-poll-reply "$repo" "$host" "$python" "$mount_namespace" "$network_namespace" "$prepared" "$case_name" \
     < /dev/null > "${staged_receipt:-/dev/null}"; then
     printf '%s\n' 'Isolated native Bot reply acceptance failed.' >&2
     exit 1
