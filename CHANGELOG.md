@@ -83,6 +83,8 @@ This file distinguishes design work, development changes, and released capabilit
 - Run runtime artifact acceptance on exact pull-request heads with read-only credentials; keep downloadable artifact publication push-only.
 ### Changed
 
+- Port the review-only Bot sender recovery patch to a separate upstream Hermes snapshot. Verify local recovery without an unattended Bot inference and preserve hosted sandbox isolation and ordinary process wakes (#33).
+
 - Verify one native reply push and follow-up to a viewed local sender when the receiving profile has the officially installed runtime package. The case checks canonical Bot Chat, task replay and same-input sender retry (#33).
 
 - Retry temporarily unavailable receipts for terminated Bot waiters in the review-only candidate. The isolated cases verify exit-only fallback after the retry window and recovery from simultaneous result and checkpoint write failures when the previous checkpoint and output survive (#33).

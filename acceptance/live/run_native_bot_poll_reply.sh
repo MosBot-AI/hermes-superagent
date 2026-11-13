@@ -7,6 +7,7 @@ usage() {
     printf '%s\n' \
         'Usage: sh acceptance/live/run_native_bot_poll_reply.sh --hermes CHECKOUT --hermes-python PYTHON [--receipt RESULT.xml] [--installed] [--consume]' \
         '       sh acceptance/live/run_native_bot_poll_reply.sh --hermes CHECKOUT --hermes-python PYTHON [--receipt RESULT.xml] MODE [--review-recovery]' \
+        'Use --upstream-recovery-base to select the separate review baseline or its clean control.' \
         'Installed mode supports --consume, --push and --install-tool-store DIRECTORY.' \
         'Modes: --push --reconnect --owner-loss --settled-loss --finished-loss --planned-restart' \
         '       --held-waiter-restart --drained-waiter-restart' \
@@ -21,6 +22,7 @@ receipt=
 installed=0
 install_tool_store=
 review_recovery=0
+upstream_recovery_base=0
 mode=poll
 test_file=test_native_bot_poll_reply.py
 case_name=test_native_stateless_bot_poll_reply_persists_unconsumed_completion
@@ -29,6 +31,7 @@ while [ "$#" -gt 0 ]; do
         -h|--help) usage; exit 0 ;;
         --installed) installed=1; shift ;;
         --review-recovery) review_recovery=1; shift ;;
+        --upstream-recovery-base) upstream_recovery_base=1; shift ;;
         --consume)
             if [ "$mode" != poll ]; then usage >&2; exit 2; fi
             mode=consume
@@ -78,6 +81,11 @@ while [ "$#" -gt 0 ]; do
 done
 if [ -z "$host" ] || [ -z "$python" ]; then usage >&2; exit 2; fi
 if [ -n "$install_tool_store" ] && [ "$installed" -ne 1 ]; then usage >&2; exit 2; fi
+if [ "$upstream_recovery_base" -eq 1 ]; then
+    case "$mode" in
+        poll|consume|push|reconnect) usage >&2; exit 2 ;;
+    esac
+fi
 if [ "$installed" -eq 1 ]; then
     case "$mode" in
         poll|consume) ;;
@@ -181,7 +189,7 @@ if ! env -i PATH="$PATH" LANG=C.UTF-8 TZ=UTC \
             env -i PATH=/usr/bin:/bin LANG=C.UTF-8 TZ=UTC HOME="$work/user" TMPDIR="$work/tmp" \
             PYTHONNOUSERSITE=1 PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
             HERMES_TEST_ROOT="$2" HERMES_BOT_POLL_NAMESPACE=1 HERMES_BOT_POLL_INSTALLED="$6" \
-            HERMES_BOT_REVIEW_RECOVERY="$9" \
+            HERMES_BOT_REVIEW_RECOVERY="$9" HERMES_BOT_UPSTREAM_RECOVERY_BASE="${10}" \
             "$3" -m pytest -q -p no:cacheprovider --show-capture=no --tb=short \
             -o junit_logging=no --basetemp="$work/test" --junitxml="$work/result.xml" \
             "acceptance/live/$8::$7" >&2; then
@@ -215,7 +223,7 @@ for suite in tree.iter("testsuite"):
         )
 sys.stdout.buffer.write(ElementTree.tostring(tree.getroot(), encoding="utf-8", xml_declaration=True))
 PY
-    ' bot-poll-reply "$repo" "$host" "$python" "$mount_namespace" "$network_namespace" "$prepared" "$case_name" "$test_file" "$review_recovery" \
+    ' bot-poll-reply "$repo" "$host" "$python" "$mount_namespace" "$network_namespace" "$prepared" "$case_name" "$test_file" "$review_recovery" "$upstream_recovery_base" \
     < /dev/null > "${staged_receipt:-/dev/null}"; then
     printf '%s\n' 'Isolated native Bot reply acceptance failed.' >&2
     exit 1
