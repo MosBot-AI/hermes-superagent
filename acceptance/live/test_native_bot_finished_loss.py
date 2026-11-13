@@ -39,9 +39,9 @@ async def finish_waiter(first, host, home, scout, model, *, phase, recovery):
         async with asyncio.timeout(50), retained_host_client(home, first) as client:
             delivery = await start_delivery(client, home, scout, model)
             await owned_waiter(host, root, owner_pid)
-            if phase == "admitted":
+            if phase in {"admitted", "write-failed-admitted"}:
                 (root / "admit-finished-waiter").touch()
-            if phase == "write-failed":
+            if phase.startswith("write-failed"):
                 checkpoint = json.loads((scout / "processes.json").read_bytes())
                 (tracked,) = [row for row in checkpoint if row["session_id"] == delivery.process_id]
                 assert tracked["notify_on_complete"] is True
@@ -57,12 +57,19 @@ async def observe_finished(first, home, scout, model, delivery, phase, recovery)
         assert process_id == delivery.process_id
         await verify_recipient(client, home, delivery)
         path = completed_result_path(scout, delivery)
-        if phase == "write-failed":
+        failed_write = phase.startswith("write-failed")
+        consumed = phase in {"consumed", "write-failed-consumed"}
+        admitted = phase in {"admitted", "write-failed-admitted"}
+        if failed_write:
             assert (root / "finished-result-write-failed").is_file()
             assert not path.exists()
             checkpoint = json.loads((scout / "processes.json").read_bytes())
-            assert all(row["session_id"] != process_id for row in checkpoint)
+            (handoff,) = [row for row in checkpoint if row["session_id"] == process_id]
+            assert handoff["started_at"] == started_at
+            assert handoff["parent_session_id"] == delivery.sender
+            assert handoff["watcher_platform"] == "local" and handoff["notify_on_complete"] is True
             output = scout / "logs" / "process-output" / f"{process_id}.log"
+            assert handoff["output_log"] == str(output)
             content = output.read_text(encoding="utf-8")
             assert RECEIVER_REPLY in content and delivery.delivery_id in content
             assert output.with_suffix(".exit").read_text(encoding="utf-8").strip() == "0"
@@ -78,15 +85,21 @@ async def observe_finished(first, home, scout, model, delivery, phase, recovery)
             assert path.stat().st_mode & 0o777 == 0o600
             if recovery:
                 assert result["notification"]["state"] == "pending"
-        if phase == "consumed":
+        if consumed:
             (root / "consume-finished-waiter").touch()
             observed = json.loads(await read_barrier(root / "consumed-waiter"))
             assert observed["status"] == "exited"
             assert RECEIVER_REPLY in observed["output"]
             assert delivery.delivery_id in observed["output"]
-            assert json.loads(path.read_bytes())["notification"]["state"] == "consumed"
+            if failed_write:
+                assert not path.exists()
+                checkpoint = json.loads((scout / "processes.json").read_bytes())
+                (handoff,) = [row for row in checkpoint if row["session_id"] == process_id]
+                assert handoff["completion_consumed"] is True
+            else:
+                assert json.loads(path.read_bytes())["notification"]["state"] == "consumed"
         original = [delivery.original]
-        if phase == "admitted":
+        if admitted:
             note, _ = await wait_for_disconnected_reply(
                 scout, delivery.sender, delivery.original, delivery.reply_tokens, model
             )
@@ -96,10 +109,11 @@ async def observe_finished(first, home, scout, model, delivery, phase, recovery)
                 started_at,
             ]
             original.append(note["admission_id"])
-            assert json.loads(path.read_bytes())["notification"]["state"] == "pending"
+            if not failed_write:
+                assert json.loads(path.read_bytes())["notification"]["state"] == "pending"
         history = sender_messages(scout, delivery.sender)
         assert sum(row.get("display_kind") == "process_complete" for row in history) == (
-            1 if phase == "admitted" else 0
+            1 if admitted else 0
         )
         assert [row["admission_id"] for row in admissions(scout, delivery.sender)] == original
         return delivery, history, original, started_at
@@ -154,7 +168,7 @@ def run_finished_loss(tmp_path_factory, monkeypatch, *, recovery, phase="pending
                     scout,
                     model,
                     before,
-                    recover_note=recovery and phase == "pending",
+                    recover_note=recovery and phase in {"pending", "write-failed"},
                 )
             )
             asyncio.run(verify_no_repeat(successor, home, scout, model, observed))
@@ -163,13 +177,18 @@ def run_finished_loss(tmp_path_factory, monkeypatch, *, recovery, phase="pending
                 assert restarted.instance_id not in (first.instance_id, successor.instance_id)
                 asyncio.run(verify_no_repeat(restarted, home, scout, model, observed))
             path = completed_result_path(scout, before[0])
-            if phase == "write-failed":
-                assert not path.exists()
-            else:
-                result = json.loads(path.read_bytes())
-                assert result["notification"]["state"] == (
-                    "consumed" if phase == "consumed" else "handled"
-                )
+            result = json.loads(path.read_bytes())
+            assert (result["id"], result["parent_session_id"], result["started_at"]) == (
+                before[0].process_id,
+                before[0].sender,
+                before[3],
+            )
+            assert result["notification"]["state"] == (
+                "consumed" if phase in {"consumed", "write-failed-consumed"} else "handled"
+            )
+            if phase.startswith("write-failed"):
+                checkpoint = json.loads((scout / "processes.json").read_bytes())
+                assert all(row["session_id"] != before[0].process_id for row in checkpoint)
 
 
 def test_native_finished_bot_reply_needs_sender_recovery(tmp_path_factory, monkeypatch):
@@ -200,9 +219,21 @@ def test_proposed_planned_restart_recovers_pending_sender_notification(
     run_finished_loss(tmp_path_factory, monkeypatch, recovery=True, restart=True)
 
 
-def test_proposed_failed_result_write_loses_pending_sender_notification(
+def test_proposed_failed_result_write_recovers_pending_sender_notification(
     tmp_path_factory, monkeypatch
 ):
     run_finished_loss(
         tmp_path_factory, monkeypatch, recovery=True, phase="write-failed", restart=True
+    )
+
+
+def test_proposed_failed_result_write_preserves_consumption(tmp_path_factory, monkeypatch):
+    run_finished_loss(
+        tmp_path_factory, monkeypatch, recovery=True, phase="write-failed-consumed", restart=True
+    )
+
+
+def test_proposed_failed_result_write_does_not_repeat_admission(tmp_path_factory, monkeypatch):
+    run_finished_loss(
+        tmp_path_factory, monkeypatch, recovery=True, phase="write-failed-admitted", restart=True
     )
