@@ -54,7 +54,7 @@
 | 本地调用方与接收 Bot | Linux 同 UID 控制票据证明本地操作者准入。干净宿主上的 owner 入口夹具在缺少受支持的接收侧适配器上下文时拒绝。[本地 Gateway](#当前固定版本的本地-bot-传输与重启) · [Owner 入口契约](../tests/contracts/test_owner_entry_contracts.py) | 受保护的原生命令和渠道入口需要宿主以受支持的方式证明原始调用方、接收方及会话，再校验当前 owner 和 grant。[命令上下文实验](23-host-command-context-experiment-zh.md)仍仅供评审。 |
 | 插件状态与子代理角色 | 公开 `ctx.subagent_lifecycle` 覆盖 `in_process` 和 `host` 两种隔离模式下的进程内父子关联。`ctx.state` 在两种模式下均经过验证，其中托管模式覆盖两个命名 profile。[子代理证据](#当前固定版本的子代理关联) | 可信调用方身份、绑定 owner 的 grant 和撤销需要独立检查。[E0.4](13-enforcement-contracts-zh.md)覆盖独立的配置冻结和故障排查安全模式 worker 路径。 |
 | 原生受管 WorkerChannel | 命名 profile 的普通 Gateway 路径关联原生子进程、其准入、有序回执及完成后的对话记录。在同一 Gateway 上，经 generation 检查的停止请求中断等待澄清的 worker，随后排队的输入完成。后继 Gateway 将丢失 worker 的准入保留为 `unknown`，直到显式处理。[受管 worker 证据](#当前固定版本的原生受管-workerchannel) · [停止](#当前固定版本的受管-worker-停止) · [重启对账](#当前固定版本的受管-worker-重启对账) | 人类 owner 授权、当前撤销状态、受管委派及 Kanban 接管需要独立证明。仅供评审的纯文本 worker 契约有独立门禁。 |
-| 原生 Bot 与 cron 投递 | 同一安装内的 `message_agent` 和 `bot_relay.deliver` 覆盖仅通知的作者归因、本地终态回执恢复及非推送会话的发送方回复持久化。原生 cron 在响应丢失后复用同一个投递 ID，并报告 `transferred` 和 `queued` 回执。[Bot 消息](#当前固定版本的同一安装内-bot-消息) · [重启](#当前固定版本的本地-bot-传输与重启) · [回复持久化](#当前固定版本的同一安装内-bot-回复持久化) · [延后投递](#当前固定版本的-bot-chat-延后投递) | 对推送投递、远程凭据和其他生产者模式分别验证回执及作者对账。结果不确定时保留原投递 ID。 |
+| 原生 Bot 与 cron 投递 | 同一安装内的 `message_agent` 和 `bot_relay.deliver` 覆盖仅通知的作者归因、本地终态回执恢复及非推送会话的发送方回复持久化。原生 cron 在响应丢失后复用同一个投递 ID。另一项真实本地 Gateway 用例将离线结果移交给原有的命名 Bot Chat，并结算一个回合。[Bot 消息](#当前固定版本的同一安装内-bot-消息) · [重启](#当前固定版本的本地-bot-传输与重启) · [回复持久化](#当前固定版本的同一安装内-bot-回复持久化) · [延后投递](#当前固定版本的-bot-chat-延后投递) | 对推送投递、远程凭据和其他生产者模式分别验证回执及作者对账。结果不确定时保留原投递 ID。 |
 | 插件注入 | 原生调度器证据显示，`ctx.inject_message` 可在随后发生派发失败之前返回 `True`。[注入证据](#8-消息例行任务与回执) | 插件负责的持久投递需要受支持的幂等准入与回执查询。使用布尔接口时保持持久主动投递不可用。 |
 | 可选 HTTP | [客户端契约](14-client-api-contracts-zh.md#3-鉴权不等于领域授权)记录原生凭据形态和 E0.6 传输边界。 | 只有受支持的可信主体和 profile 传递、领域授权以及逐能力的传输和恢复验收都完成后，才启用 Primary Bot HTTP 操作。 |
 
@@ -523,6 +523,12 @@ V1 **不支持自动跨 profile/跨宿主接管**。应使用 E8.3 下经过单�
 | 再次运行排空流程 | 已移交的记录不再触发移交。夹具仍只有一个规范会话、一份回执、一条排队中的 FIFO 准入记录和一次调度请求。准入条目没有终态结果，规范会话的消息记录仍为空。 |
 
 夹具让已准入的回合保持排队状态，覆盖 cron 的合成本地 operator 准入及回执处理。公开插件 API 提供上文所述的布尔值注入路径。
+
+Linux Gateway 验收在同一固定版本上覆盖另一种情况。Gateway 在 `scout` 中创建一个隐藏的规范 Bot Chat，随后正常停止。`watch` profile 的原生 cron 投递辅助函数为 `bot-chat:scout` 保存一条合成结果。目标离线时执行一次原生来源 tick，待投递记录逐字节保持不变。目标仍只有原会话，准入数为零。[原生 Cron 移交夹具](../acceptance/live/test_native_cron_bot_deferred.py)
+
+同一安装启动新的 Gateway 实例后，第二次来源 tick 通过私有 Unix operator 票据和回环 WebSocket 移交暂存结果。在脚本模型暂缓响应期间，来源待投递记录标为 `transferred`，并记下 `queued` 或 `claimed` 回执状态。接收端在邮箱回执中记录本地 operator UID，在唯一的 `bot:<delivery_id>` 准入中记录规范路由的 automation 主体。模型响应后，该准入进入 `terminal/completed`，同一邮箱回执变为 `settled`，并保存确切回复。后续 tick 和同次执行重放均保留原待投递记录及唯一准入。同次执行的不同载荷会被拒绝。默认 profile 和来源 profile 的会话与执行快照保持不变。
+
+手动工作流发布 `cron-bot-deferred.xml`。夹具提供既定的执行 ID，并显式运行来源 tick，覆盖真实本地传输上的移交和完成。Cron 作业执行、来源定时器的自动触发时序、真实套接字响应丢失、已安装发行包的 Bot 传输及外部投递需要独立证据。[原生 Gateway 工作流](../.github/workflows/native-gateway.yml)
 
 ### 当前固定版本的本地 Bot 传输与重启
 
