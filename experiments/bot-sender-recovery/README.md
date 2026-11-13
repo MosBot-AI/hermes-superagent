@@ -59,11 +59,11 @@ Two additional cases make the receipt file appear absent on the successor's firs
 
 ## Upstream review snapshot
 
-A [separate patch](upstream/bot-sender-recovery.patch) and [manifest](upstream/manifest.json) adapt the candidate to upstream Hermes `547739e46692b2db7b4c9cdd57e8f795573846a4` (candidate tree `d93d217d67e2b7f5b0893a32f78d7e1e21f3e5b1`). The port preserves first-observer process exit results, sandbox-scoped process visibility and legacy in-memory adoption. Hosted activity cannot use local reply recovery to read or mutate host checkpoints or results.
+A [separate patch](upstream/bot-sender-recovery.patch) and [manifest](upstream/manifest.json) adapt the candidate to upstream Hermes `547739e46692b2db7b4c9cdd57e8f795573846a4` (candidate tree `2ec041850c1f9604274f9a0b5ef06099a192a513`). The port preserves first-observer process exit results, sandbox-scoped process visibility and legacy in-memory adoption. Hosted activity cannot use local reply recovery to read or mutate host checkpoints or results.
 
 On this revision ordinary unattended background completions can resume their parent as a model turn. Bot reply waiters persist one completion note when there is no viewer, including after Gateway loss. An attached sender can still receive the usual follow-up. Bot waiter completions are batched separately so an unrelated process retains its upstream wake behavior.
 
-For this snapshot, use the `upstream` artifact directory and the manifest's `hermes_base` in the reconstruction commands above. Pass `--upstream-recovery-base --review-recovery` for the candidate, and `--upstream-recovery-base` for the six clean controls. Prepare the Python environment from this snapshot's lockfiles. With Python 3.14.9 on Linux, the 16 candidate cases, six clean controls and 341 focused upstream tests passed. The focused run skipped five platform cases. The supported compatibility pin and installed package still use the original clean host.
+For this snapshot, use the `upstream` artifact directory and the manifest's `hermes_base` in the reconstruction commands above. Pass `--upstream-recovery-base --review-recovery` for the candidate, and `--upstream-recovery-base` for the six clean controls. Prepare the Python environment from this snapshot's lockfiles. With Python 3.14.9 on Linux, the 16 candidate cases, six clean controls and 514 focused upstream tests passed. The focused run skipped five platform cases. The supported compatibility pin and installed package still use the original clean host.
 
 ## Boundaries
 
