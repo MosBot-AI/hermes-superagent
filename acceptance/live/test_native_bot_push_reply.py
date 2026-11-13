@@ -1,4 +1,4 @@
-"""Manual acceptance of a native Bot reply waking its viewed local sender."""
+"""Manual acceptance of native local Bot replies with and without a viewer."""
 
 import asyncio
 import json
@@ -20,6 +20,9 @@ RECEIVER_REPLY = "Synthetic recipient's push reply"
 SENDER_ACK = "Synthetic sender acknowledged the queued request"
 SENDER_REPLY = "Synthetic sender received the completion"
 TOOL_CALL = "fixture-bot-push-call"
+FOLLOW_UP = "Synthetic explicit follow-up after reconnect"
+FOLLOW_UP_ID = "fixture-bot-reconnect-follow-up"
+RECOVERED_REPLY = "Synthetic sender used the recovered completion"
 
 
 class BotPushModel(ScriptedModel):
@@ -46,6 +49,12 @@ class BotPushModel(ScriptedModel):
                     self.send_error(500)
                     return
                 reply["content"] = RECEIVER_REPLY
+            elif FOLLOW_UP in text:
+                phase = "follow-up"
+                self.server.follow_up_history = [
+                    m["content"] for m in messages if m["role"] == "user"
+                ]
+                reply["content"] = RECOVERED_REPLY
             elif RECEIVER_REPLY in text and "[IMPORTANT:" in text:
                 phase = "wake"
                 self.server.wake_text = text
@@ -174,9 +183,137 @@ async def owned_waiter(host, root, owner_pid):
             await asyncio.sleep(0.05)
 
 
-async def exercise_push(endpoint, host, home, scout, model):
-    from hermes_cli.gateway_runtime_discovery import query_identify
+def completion_card(messages, reply_tokens):
+    (card,) = [row for row in messages if row.get("display_kind") == "process_complete"]
+    assert card["role"] == "user"
+    assert all(value in card["content"] for value in reply_tokens)
+    return card
+
+
+def sender_messages(scout, sender):
     from hermes_state import SessionDB
+
+    with closing(SessionDB(scout / "state.db", read_only=True)) as db:
+        return db.get_messages(sender)
+
+
+def completion_admission(scout, sender, original):
+    (origin, completion) = admissions(scout, sender)
+    assert origin["admission_id"] == original
+    assert completion["principal_id"].startswith("automation:")
+    assert json.loads(completion["request_id"])[0] == "completion"
+    assert origin["seq"] < completion["seq"]
+    return completion
+
+
+async def verify_viewed(client, scout, sender, original, reply_tokens, model):
+    event = await completion_event(client, sender)
+    assert all(value in event["text"] for value in reply_tokens)
+    wake = completion_admission(scout, sender, original)
+    await settled(client, "scout", scout, sender, wake["admission_id"], SENDER_REPLY)
+    assert completion_admission(scout, sender, original)["admission_id"] == wake["admission_id"]
+    while not client.events.empty():
+        assert not is_completion_event(client.events.get_nowait(), sender)
+    messages = sender_messages(scout, sender)
+    completion_card(messages, reply_tokens)
+    assert (messages[-1]["role"], messages[-1]["content"]) == ("assistant", SENDER_REPLY)
+    assert model.turns[0] == "send" and model.turns[-1] == "wake"
+    assert sorted(model.turns) == ["ack", "recipient", "send", "wake"]
+    assert all(value in model.wake_text for value in reply_tokens)
+
+
+async def wait_for_disconnected_reply(scout, sender, original, reply_tokens, model):
+    async with asyncio.timeout(24):
+        while True:
+            rows = admissions(scout, sender)
+            if len(rows) >= 2 and all(row["status"] == "terminal" for row in rows):
+                break
+            await asyncio.sleep(0.05)
+    note = completion_admission(scout, sender, original)
+    assert note["outcome"] == "completed"
+    messages = sender_messages(scout, sender)
+    stored = completion_card(messages, reply_tokens)
+    assert messages[-1] == stored
+    assert stored["display_metadata"]["completion_admission"] == note["admission_id"]
+    assert stored["display_metadata"]["completion_note"] == [note["request_id"]]
+    assert sorted(model.turns) == ["ack", "recipient", "send"]
+    return note, stored
+
+
+async def verify_reopened(client, scout, sender, original, reply_tokens, note, stored, model):
+    resumed = await client.rpc(
+        "session.resume", profile="scout", session_id=sender, display_projection=True, _timeout=8
+    )
+    assert resumed["session_id"] == resumed["stored_session_id"] == sender
+    assert not resumed["running"] and not resumed["pending"]
+    recovered = completion_card(resumed["messages"], reply_tokens)
+    assert recovered["content"] == stored["content"]
+    assert recovered["display_metadata"] == stored["display_metadata"]
+    (projected,) = [
+        row for row in resumed["display_messages"] if row.get("display_kind") == "process_complete"
+    ]
+    assert projected["text"] == stored["content"]
+    assert projected["display_metadata"] == stored["display_metadata"]
+    await settled(client, "scout", scout, sender, note["admission_id"], "")
+
+    repeated = await client.rpc(
+        "prompt.submit",
+        profile="scout",
+        session_id=sender,
+        input_id=INPUT,
+        text=PROMPT,
+        _timeout=8,
+    )
+    assert repeated["admission_id"] == original
+    assert (repeated["status"], repeated["outcome"]) == ("terminal", "completed")
+    assert completion_admission(scout, sender, original)["admission_id"] == note["admission_id"]
+    assert sorted(model.turns) == ["ack", "recipient", "send"]
+
+    follow_up = await client.rpc(
+        "prompt.submit",
+        profile="scout",
+        session_id=sender,
+        input_id=FOLLOW_UP_ID,
+        text=FOLLOW_UP,
+        _timeout=8,
+    )
+    await settled(client, "scout", scout, sender, follow_up["admission_id"], RECOVERED_REPLY)
+    assert [row["admission_id"] for row in admissions(scout, sender)] == [
+        original,
+        note["admission_id"],
+        follow_up["admission_id"],
+    ]
+    context = json.dumps(model.follow_up_history, ensure_ascii=False)
+    assert context.count(reply_tokens[0]) == 1
+    assert all(value in context for value in reply_tokens)
+    assert context.index(reply_tokens[0]) < context.index(FOLLOW_UP)
+    messages = sender_messages(scout, sender)
+    assert completion_card(messages, reply_tokens)["display_metadata"] == stored["display_metadata"]
+    assert (messages[-1]["role"], messages[-1]["content"]) == ("assistant", RECOVERED_REPLY)
+    assert model.turns[0] == "send" and model.turns[-1] == "follow-up"
+    assert sorted(model.turns) == ["ack", "follow-up", "recipient", "send"]
+
+
+async def verify_recipient(client, home, target, queued, delivery):
+    await settled(client, "default", home, target, queued["admission_id"], RECEIVER_REPLY)
+    (received,) = admissions(home, target)
+    assert received["admission_id"] == queued["admission_id"]
+    assert received["payload"]["text"] == MESSAGE
+    (receipt_path,) = (home / "runtime/bot_live_delivery").glob("*.json")
+    receipt = json.loads(receipt_path.read_bytes())
+    assert (receipt["session_id"], receipt["delivery_id"], receipt["admission_id"]) == (
+        target,
+        delivery,
+        queued["admission_id"],
+    )
+    assert receipt["status"] == "settled" and receipt["reply"] == RECEIVER_REPLY
+    assert receipt["principal_id"] == f"uid:{os.getuid()}"
+    assert {key: receipt["author"].get(key) for key in AUTHOR} == AUTHOR
+
+
+async def exercise_local_reply(endpoint, host, home, scout, model, *, reconnect):
+    from hermes_cli.gateway_runtime_discovery import query_identify
+    from websockets.protocol import State
 
     port = urlsplit(endpoint.api_origin).port
     assert port is not None
@@ -186,7 +323,7 @@ async def exercise_push(endpoint, host, home, scout, model):
     assert owner["instance_id"] == endpoint.instance_id
     restrict = activate(home.parent, dial_ports=(port,), dial_host="127.0.0.1")
     try:
-        async with asyncio.timeout(66), retained_host_client(home, endpoint) as client:
+        async with asyncio.timeout(82), retained_host_client(home, endpoint) as client:
             ids = {}
             for profile in ("default", "scout"):
                 created = await client.rpc(
@@ -211,65 +348,48 @@ async def exercise_push(endpoint, host, home, scout, model):
                 text=PROMPT,
                 _timeout=8,
             )
-            try:
-                await settled(client, "scout", scout, sender, submitted["admission_id"], SENDER_ACK)
-                assert await asyncio.to_thread(model.observed.wait, 5)
-                waiter = await owned_waiter(host, home.parent, owner["pid"])
-                ack = model.ack
-                assert ack["status"] in {"queued", "claimed"} and ack["to"] == "@hermes"
-                assert ack["reply_delivery"] == "notification"
-                assert not {"error", "notification_error", "reply"}.intersection(ack)
-                delivery, process = ack["delivery_id"], ack["process_id"]
-                assert len(admissions(scout, sender)) == 1
-                (queued,) = admissions(home, target)
-                assert queued["request_id"] == f"bot:{delivery}"
-                assert queued["status"] != "terminal"
-            finally:
+            original = submitted["admission_id"]
+            await settled(client, "scout", scout, sender, original, SENDER_ACK)
+            assert await asyncio.to_thread(model.observed.wait, 5)
+            waiter = await owned_waiter(host, home.parent, owner["pid"])
+            ack = model.ack
+            assert ack["status"] in {"queued", "claimed"} and ack["to"] == "@hermes"
+            assert ack["reply_delivery"] == "notification"
+            assert not {"error", "notification_error", "reply"}.intersection(ack)
+            delivery, process = ack["delivery_id"], ack["process_id"]
+            reply_tokens = (RECEIVER_REPLY, delivery, process)
+            assert len(admissions(scout, sender)) == 1
+            (queued,) = admissions(home, target)
+            assert queued["request_id"] == f"bot:{delivery}"
+            assert queued["status"] != "terminal"
+
+            if not reconnect:
                 model.release.set()
+                await verify_viewed(client, scout, sender, original, reply_tokens, model)
+                await verify_recipient(client, home, target, queued, delivery)
 
-            event = await completion_event(client, sender)
-            assert all(value in event["text"] for value in (RECEIVER_REPLY, delivery, process))
-            (origin, wake) = admissions(scout, sender)
-            assert origin["admission_id"] == submitted["admission_id"]
-            assert wake["principal_id"].startswith("automation:")
-            assert json.loads(wake["request_id"])[0] == "completion"
-            await settled(client, "scout", scout, sender, wake["admission_id"], SENDER_REPLY)
-            await settled(client, "default", home, target, queued["admission_id"], RECEIVER_REPLY)
-            assert [row["admission_id"] for row in admissions(scout, sender)] == [
-                origin["admission_id"],
-                wake["admission_id"],
-            ]
-            while not client.events.empty():
-                assert not is_completion_event(client.events.get_nowait(), sender)
-            (received,) = admissions(home, target)
-            assert received["admission_id"] == queued["admission_id"]
-            assert received["payload"]["text"] == MESSAGE
-            assert not waiter.is_running()
-
-            with closing(SessionDB(scout / "state.db", read_only=True)) as db:
-                messages = db.get_messages(sender)
-            (card,) = [row for row in messages if row["display_kind"] == "process_complete"]
-            assert (messages[-1]["role"], messages[-1]["content"]) == ("assistant", SENDER_REPLY)
-            assert all(value in card["content"] for value in (RECEIVER_REPLY, delivery, process))
-            (receipt_path,) = (home / "runtime/bot_live_delivery").glob("*.json")
-            receipt = json.loads(receipt_path.read_bytes())
-            assert (receipt["session_id"], receipt["delivery_id"], receipt["admission_id"]) == (
-                target,
-                delivery,
-                queued["admission_id"],
+        if reconnect:
+            # Keep the recipient held until the viewer's actual WebSocket has closed.
+            assert client.websocket.state is State.CLOSED
+            assert not model.release.is_set()
+            model.release.set()
+            note, stored = await wait_for_disconnected_reply(
+                scout, sender, original, reply_tokens, model
             )
-            assert receipt["status"] == "settled" and receipt["reply"] == RECEIVER_REPLY
-            assert receipt["principal_id"] == f"uid:{os.getuid()}"
-            assert {key: receipt["author"].get(key) for key in AUTHOR} == AUTHOR
-            assert model.turns[0] == "send" and model.turns[-1] == "wake"
-            assert sorted(model.turns) == ["ack", "recipient", "send", "wake"]
-            assert model.unexpected == 0
-            assert all(value in model.wake_text for value in (RECEIVER_REPLY, delivery, process))
+            async with retained_host_client(home, endpoint) as reopened:
+                await verify_reopened(
+                    reopened, scout, sender, original, reply_tokens, note, stored, model
+                )
+                await verify_recipient(reopened, home, target, queued, delivery)
+        assert not waiter.is_running()
+        assert model.unexpected == 0
     finally:
+        model.release.set()
         restrict()
 
 
-def test_native_viewed_bot_reply_wakes_sender_once(tmp_path_factory, monkeypatch):
+def run_local_reply(tmp_path_factory, monkeypatch, *, reconnect):
+
     with isolated_reply_fixture(
         tmp_path_factory, monkeypatch, activate_hook="native_bot_push_guard:activate_push_child"
     ) as (_, fixture, scout, env, installed):
@@ -283,4 +403,14 @@ def test_native_viewed_bot_reply_wakes_sender_once(tmp_path_factory, monkeypatch
                 "HERMES_BOT_ACCEPTANCE_MODEL_PORT": str(model.server_port),
             }
             with gateway_daemon(host, home, child_env, "bot-push") as endpoint:
-                asyncio.run(exercise_push(endpoint, host, home, scout, model))
+                asyncio.run(
+                    exercise_local_reply(endpoint, host, home, scout, model, reconnect=reconnect)
+                )
+
+
+def test_native_viewed_bot_reply_wakes_sender_once(tmp_path_factory, monkeypatch):
+    run_local_reply(tmp_path_factory, monkeypatch, reconnect=False)
+
+
+def test_native_disconnected_bot_reply_recovers_once(tmp_path_factory, monkeypatch):
+    run_local_reply(tmp_path_factory, monkeypatch, reconnect=True)
