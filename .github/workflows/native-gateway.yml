@@ -107,6 +107,34 @@ jobs:
             acceptance/live/test_packaged_gateway_memory.py \
             acceptance/live/test_packaged_gateway_handoff.py \
             --junitxml="$RUNNER_TEMP/native-gateway-evidence/packaged-results.xml"
+      - name: Verify installed package in the canonical Bot Chat
+        timeout-minutes: 7
+        shell: bash
+        run: |
+          set -euo pipefail
+          export HERMES_TEST_ROOT="$RUNNER_TEMP/hermes"
+          export HERMES_RUNTIME_PACKAGE="$RUNNER_TEMP/live-runtime"
+          export HERMES_SOURCE_COMMIT="$GITHUB_SHA"
+          export PYTEST_DISABLE_PLUGIN_AUTOLOAD=1
+          test_python="$RUNNER_TEMP/hermes-test-venv/bin/python"
+          result="$RUNNER_TEMP/packaged-bot.xml"
+          "$test_python" -m pytest -q -p no:cacheprovider --show-capture=no \
+            -o junit_logging=no --junitxml="$result" acceptance/live/test_packaged_gateway_bot.py
+          "$test_python" - "$result" <<'PY'
+          import sys
+          from xml.etree import ElementTree
+
+          result = ElementTree.parse(sys.argv[1])
+          cases = result.findall(".//testcase")
+          excluded = ("error", "failure", "skipped", "system-out", "system-err")
+          if (
+              len(cases) != 1
+              or cases[0].get("name") != "test_installed_task_commands_reopen_original_canonical_bot_chat"
+              or any(result.findall(f".//{tag}") for tag in excluded)
+          ):
+              raise SystemExit("Expected one clean passing installed Bot Chat case")
+          PY
+          install -m 600 "$result" "$RUNNER_TEMP/native-gateway-evidence/packaged-bot.xml"
       - name: Upload synthetic native Gateway test receipt
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
