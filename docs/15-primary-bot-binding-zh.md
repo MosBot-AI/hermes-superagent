@@ -47,6 +47,7 @@
 | 本地旧版压缩历史 | 命名 profile 的原生 CLI 检查并接管符合条件的 Gateway 前压缩末端。Linux 源码构建的 Bot Mode 在所选 profile 路由打开该末端，并显示已存储的祖先与末端消息。[压缩历史证据](#当前固定版本的压缩历史接管) | 经 owner 授权的跨安装接管、混合 owner 谱系、其他凭据模式和投递对账需要独立证据。 |
 | 已保存 Webapp 令牌的回退 | 干净 Linux Electron 构建在命名 profile 查询返回空结果时探测远程启动 authority，并在同一次点击中通过第二次查询打开原会话。单独构建的提案探测命名 authority，拒绝不确定的打开操作，并在明确重试后打开原会话。[已保存 Webapp 证据](#当前固定版本的已保存-webapp-bot-mode-路由) | 干净固定版本仍有回退作用域缺口。受支持的使用需要已修正的宿主修订及该模式的专项验收。 |
 | Profile 与安装连续性 | 停机状态下的原生 profile CLI 和备份导入路径覆盖重命名、克隆、删除、同名重建、拒绝向已占用的 profile 导入，以及恢复后目标的 epoch 下限。在同一运行中的安装实例内，保留原有 host 作用域 WebSocket，覆盖 profile 退役及同名热上线。[Profile 生命周期](#当前固定版本的原生-profile-生命周期) · [保留的路由](#当前固定版本保留的原生-profile-路由) · [备份与恢复](#当前固定版本的原生备份与恢复) | 其他运行时切换和经认证的安装连续性需要当前目标、登记、规范谱系与冲突证据。复制的标记和名称无法消除安装实例的歧义。 |
+| 原生 profile 重命名 | 运行中的 Gateway 为重命名后的 profile 提供服务并公布原规范会话指针。该已绑定 LOCAL 会话的精确查询与恢复均拒绝，原因为 `storage_unavailable`。[原生重命名证据](#当前固定版本的原生-profile-重命名) | 在受支持的迁移能同时保留规范指针和经授权的会话访问之前，保持该连续性模式不可用。 |
 | 恢复副本的 Webapp 凭据清理 | Linux 原生恢复夹具覆盖完整归档复制浏览器凭据，以及 Webapp 关闭时通过私有 Unix 控制套接字替换恢复目标上的凭据。[恢复后轮换证据](#当前固定版本的恢复副本-webapp-凭据轮换) | 经认证的安装连续性和经 owner 授权的恢复需要独立证据。 |
 | 运行中的 Webapp 登出 | Linux 本地操作者登出选定的运行中 Webapp，原生连接与另一安装的访问继续有效。Chromium 中的原版 Webapp 重新加载后返回 Basic 登录，登录后重新打开原会话。[运行中 Webapp 证据](#当前固定版本的运行中-webapp-登出) | Owner 身份、跨安装恢复、其他凭据模式和进行中操作的结果需要独立证据。 |
 | 本地调用方与接收 Bot | Linux 同 UID 控制票据证明本地操作者准入。干净宿主上的 owner 入口夹具在缺少受支持的接收侧适配器上下文时拒绝。[本地 Gateway](#当前固定版本的本地-bot-传输与重启) · [Owner 入口契约](../tests/contracts/test_owner_entry_contracts.py) | 受保护的原生命令和渠道入口需要宿主以受支持的方式证明原始调用方、接收方及会话，再校验当前 owner 和 grant。[命令上下文实验](23-host-command-context-experiment-zh.md)仍仅供评审。 |
@@ -230,6 +231,16 @@ Bot Mode 的确切标题 `session.list` 查询携带所选后端 profile。列�
 `spare/scout` 停放期间，所有权锁已释放，实时和持久化上线集合均只剩 `default`。Desktop 仍列出该已安装 profile 的路由描述符。原生名册行不再包含规范、最近及 worker 会话字段。显式 SDK 查询与 Bot Mode 点击均通过保留的已保存令牌 WebSocket 发送 `profile: scout`，并收到 `4001/profile_mismatch`。点击显示重试提示并保持默认聊天焦点，没有发出打开、创建或提示词提交 RPC。默认路由和本地同名聊天仍各自返回原 ID。
 
 同名热上线在相同 Gateway 进程及实例中恢复 `scout` 的锁，且只有其 epoch 增加。原 Desktop 路由和 WebSocket 再次找到已有的 `scout` 聊天。原生名册恢复规范会话指针，正常点击打开原会话记录。四个存储中核对的会话、消息和准入行保持原样。夹具记录的模型完成数为零。证据覆盖一个安装实例内活跃的已保存令牌源码构建。Desktop 安装包、其他凭据模式和经认证的安装连续性仍需各自验收。
+
+#### 当前固定版本的原生 profile 重命名
+
+[Linux 手动夹具](../acceptance/live/test_native_profile_rename.py)使用干净的 Hermes `2281116525106e3c109993ccb5dc74d02bfc1427`，并在一个可丢弃的多路复用 Gateway 上保留 host 作用域的原生 WebSocket。它通过 `session.create` 在 `scout` 创建隐藏的 LOCAL `Bot Chat`，使用 CLI 来源及位于移动 home 之外的隔离工作目录。重命名前，确切标题查询和恢复均返回原 ID。Gateway 运行期间，原生 CLI 将 `scout` 重命名为 `renamed`。发现结果、已记录的服务集合及所有权锁确认，仍由同一 Gateway 进程及实例为 `renamed` 提供服务。新 home 的 `previous_names` 记录 `scout`，`profiles.list` 在新名称下返回相同的规范会话摘要。
+
+保留的套接字使用旧 `scout` 选择器时返回 `4001`，原因为 `profile_mismatch`。使用 `renamed` 时，按确切标题查询的 `session.list`、`session.resume` 及 `session.info` 均返回 `4001`，原因为 `storage_unavailable`。重命名后的 profile epoch 增加一，已存会话键迁入新 profile 的命名空间。其他比较字段保持一致，消息及准入仍为空。`default` 和 `watch` 仍可读取，所比较的状态保持不变。夹具限制无关的 CLI 副作用，且未调用模型。手动 Native Gateway 工作流在测试通过后发布 `profile-rename.xml`。[手动工作流](../.github/workflows/native-gateway.yml)
+
+固定版本的重命名按新名称迁移会话及路由行，并请多路复用器为新名称提供服务。该迁移保留已绑定 LOCAL 策略回执中的旧路由。新 authority 根据重命名后的命名空间计算路由，`_checked_entry` 拒绝不匹配的结果，恢复路径将其报告为 `storage_unavailable`。夹具通过固定的私有诊断确认触发了这项检查。名册直接读取已存的规范会话行，因此即使规范会话访问不可用，原指针也可以继续显示。[原生重命名顺序](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_cli/profiles.py#L2246-L2316) · [运行时身份迁移](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/gateway/run_profile_reconcile.py#L695-L734) · [持久化迁移](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_state_gateway.py#L712-L779) · [LOCAL 路由校验](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/gateway/session_local_recovery.py#L93-L126) · [恢复拒绝](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/gateway/session_local_recovery.py#L173-L196) · [规范名册读取](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/gateway/session_group_controls.py#L399-L428)
+
+在此固定版本上，应将重命名后的规范路由视为不可用。Profile 注册表迁移成功、会话记录得到保留以及 `previous_names` 都未能验证经授权的会话续接。受支持的 LOCAL 回执迁移、经认证的 owner 恢复及其他凭据或客户端模式的验收，仍是独立门禁。
 
 ### 当前固定版本的原生备份与恢复
 
