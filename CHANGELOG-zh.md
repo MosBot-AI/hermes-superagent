@@ -199,6 +199,8 @@
 
 ### 新增
 
+- 在捆绑式 Linux x64 AppImage 中复现已保存 Webapp 的 Bot Chat 回退，并在对应评审镜像中验证命名 profile 作用域和显式重试（#33）。
+
 - 用固定 Hermes 版本构建的捆绑式 Linux x64 AppImage 验证本地 Bot Mode 的拒绝与重试。验收检查运行中的打包可执行文件，并在显式重试时打开原规范会话（#33）。
 
 - 新增显式 LOCAL `origin RECORD_ID` 与可选 SDK `record_origin` 检查，以有界只读元数据区分历史接受、当前状态和最近编辑路径；不重建已遗忘载荷或证明作者身份/权限（#157）。

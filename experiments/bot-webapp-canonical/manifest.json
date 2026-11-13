@@ -39,7 +39,16 @@
     "proposal_unarmed_retry": "opened_existing_chat",
     "seeded_sqlite_projections_unchanged": true,
     "model_completions": 0,
-    "full_upstream_suite": false
+    "full_upstream_suite": false,
+    "bundled_linux_x64_appimage": {
+      "clean_commit": "2281116525106e3c109993ccb5dc74d02bfc1427",
+      "clean_sha256": "758c07c5a86829bb70b8904b459329f73f000c3218e1829f32db8e67af08d887",
+      "proposal_commit": "ca2faee9c1533fcbde42d1a45107743e9a984dac",
+      "proposal_sha256": "ae58bb7246ca7ea83394bbfe6b8a31e0946698f900e89146f9384cccac0eb32c",
+      "clean_cases_passed": 1,
+      "proposal_cases_passed": 1,
+      "clean_image_refused_in_proposal_mode": true
+    }
   },
   "submitted_upstream": false,
   "production_activated": false

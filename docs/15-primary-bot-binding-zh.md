@@ -209,7 +209,7 @@ Bot Mode 的确切标题 `session.list` 查询携带所选后端 profile。列�
 
 单独构建的提案在回退探测中发送 `profile: scout`。原生审计确认凭据仍为相同类别的已保存令牌，请求由命名的 `scout` 处理器处理。成功响应识别出未归档的现有 Bot Chat。注入故障的点击显示重试通知并保留原焦点，未发出打开、创建或提交提示词的 RPC。之后明确点击重试时，正常查询打开原有的 `spare::scout` 会话。SQLite 快照保持不变，服务商记录到零次补全。[仅供评审的补丁、构建与证据](../experiments/bot-webapp-canonical/README-zh.md)
 
-[验收运行器](../acceptance/live/run_desktop_profile_routing.py)通过 `--case bot-canonical-saved-token` 复现干净基线，并在验证独立源码树时添加 `--review-proposal`。两次运行均检查 Desktop 和 Webapp 构建产物是否为当前源码所生成。干净兼容性固定版本保持不变。上游采用、打包、通过已保存 Webapp 路由的压缩会话界面附加、其他凭据模式和经认证的 owner 绑定仍需独立验收。
+[验收运行器](../acceptance/live/run_desktop_profile_routing.py)通过 `--case bot-canonical-saved-token` 复现干净基线，并在验证独立源码树时添加 `--review-proposal`。源码运行检查 Desktop 和 Webapp 构建是否最新。两种行为也在本地构建的捆绑式 Linux x64 AppImage 上复现，且安装标记与各自提交完全匹配。干净镜像探测 `default` 后在同一次点击中恢复。候选镜像探测 `scout`，在显式重试时打开原会话。夹具拒绝在候选模式下传入的干净镜像。签名发行、上游采用、已保存 Webapp 路由的压缩会话附加、其他凭据模式和经认证的 owner 绑定仍需分别验证。
 
 ### 当前固定版本的原生 Profile 生命周期
 
