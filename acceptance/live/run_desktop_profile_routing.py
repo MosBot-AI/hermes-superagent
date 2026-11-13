@@ -24,6 +24,7 @@ INSTALL_AMBIGUITY_SPEC = "desktop_install_ambiguity_ipc.spec.ts"
 CANONICAL_CASE = "bot-canonical"
 SSH_CASE = "bot-canonical-ssh"
 SSH_ALIAS_CASE = "bot-canonical-ssh-alias"
+SSH_RECONNECT_CASE = "bot-canonical-ssh-reconnect"
 SSH_SPEC = "desktop_bot_ssh.spec.ts"
 SSH_FIXTURES = (GATEWAY_FIXTURE, CANONICAL_OBSERVER, APPIMAGE_FIXTURE)
 SAVED_TOKEN_CASE = "bot-canonical-saved-token"
@@ -40,6 +41,7 @@ APPIMAGE_CASES = (
     CANONICAL_CASE,
     SSH_CASE,
     SSH_ALIAS_CASE,
+    SSH_RECONNECT_CASE,
     SAVED_TOKEN_CASE,
     COMPRESSED_LOCAL_CASE,
     COMPRESSED_SAVED_CASE,
@@ -59,6 +61,7 @@ CASES = {
     ),
     SSH_CASE: (SSH_SPEC, SSH_FIXTURES, "OpenSSH Bot Mode"),
     SSH_ALIAS_CASE: (SSH_SPEC, SSH_FIXTURES, "OpenSSH Bot Mode profile alias"),
+    SSH_RECONNECT_CASE: (SSH_SPEC, SSH_FIXTURES, "OpenSSH Bot Mode reconnection"),
     SAVED_TOKEN_CASE: (
         "desktop_bot_saved_token_refusal.spec.ts",
         CANONICAL_FIXTURES,
@@ -98,6 +101,7 @@ CASES = {
 CASE_TITLE_FILTERS = {
     SSH_CASE: "opens the named canonical chat over OpenSSH$",
     SSH_ALIAS_CASE: "opens the canonical chat behind an OpenSSH profile alias$",
+    SSH_RECONNECT_CASE: "refuses an offline OpenSSH route and reopens the original chat$",
     COMPRESSED_LOCAL_CASE: "compressed Bot Chat over the local private ticket$",
     COMPRESSED_SAVED_CASE: "compressed Bot Chat over the saved Webapp token$",
     "install-marker-collision": (
@@ -417,7 +421,7 @@ def main():
     args = parser.parse_args()
     if sys.platform != "linux":
         parser.error("This acceptance requires Linux namespaces and Xvfb")
-    if args.case in (SSH_CASE, SSH_ALIAS_CASE):
+    if args.case in (SSH_CASE, SSH_ALIAS_CASE, SSH_RECONNECT_CASE):
         if any(
             not shutil.which(command, path="/usr/bin:/bin")
             for command in ("/usr/sbin/sshd", "ssh", "ssh-keygen")

@@ -1,5 +1,6 @@
 /** Overlay in the pinned Hermes apps/desktop/e2e/core directory. */
 import { spawn, spawnSync } from 'node:child_process'
+import { once } from 'node:events'
 import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
@@ -7,9 +8,18 @@ import * as path from 'node:path'
 import { expect, type ElectronApplication, type Page, test } from '@playwright/test'
 
 import { launchBotDesktop } from './desktop_bot_appimage'
-import { focus, installCanonicalObserver, lookup, observeWire, storedChats } from './desktop_bot_canonical_observer'
+import {
+  focus,
+  installCanonicalObserver,
+  lookup,
+  observeWire,
+  storedChats,
+  type WireFrame,
+  type WireSocket
+} from './desktop_bot_canonical_observer'
 import { privateEnv, seedInstall, startGateway, stopGateway, waitForEndpoint } from './desktop_native_gateway_fixture'
 import { appLogTail, composer, createCoreSandbox, freePort, REPO_ROOT, sandboxProcesses } from './harness'
+import { listProcesses } from './process-census'
 import { startScriptedProvider } from './provider'
 
 const profile = 'scout'
@@ -30,6 +40,7 @@ interface ProfileRoute {
 
 interface RouteProbe {
   profileRoutes(): Promise<ProfileRoute[]>
+  retainProfileSocket(route: ProfileRoute): () => void
   requestProfile(
     route: ProfileRoute,
     method: string,
@@ -42,6 +53,7 @@ interface RouteProbe {
 declare global {
   interface Window {
     __E07_SSH_ROUTE_PROBE__?: RouteProbe
+    __E07_SSH_RELEASE__?: () => void
   }
 }
 
@@ -60,7 +72,7 @@ export default {
   )
 }
 
-async function readAliasedChat(page: Page, routeProfile: string) {
+async function readSshChat(page: Page, routeProfile: string, retainSocket: boolean) {
   await page.waitForFunction(() => typeof window.__E07_SSH_ROUTE_PROBE__?.profileRoutes === 'function')
   const route = await page.evaluate(
     async ({ connectionId, routeProfile }) => {
@@ -70,20 +82,44 @@ async function readAliasedChat(page: Page, routeProfile: string) {
     { connectionId, routeProfile }
   )
   expect(route).toEqual({ connectionId, mode: 'remote', profile: routeProfile, targetProfile: profile })
-  const ids = await page.evaluate(async route => {
-    const result = await window.__E07_SSH_ROUTE_PROBE__!.requestProfile(
-      route,
-      'session.list',
-      { title: 'Bot Chat', profile: route.targetProfile, include_hidden: true, limit: 17 },
-      25_000,
-      { spawnPriority: 'foreground' }
-    )
-    return result.sessions.map(({ id, resolved_id }) => [id, resolved_id])
-  }, route!)
+  const ids = await page.evaluate(
+    async ({ route, retainSocket }) => {
+      if (retainSocket) window.__E07_SSH_RELEASE__ = window.__E07_SSH_ROUTE_PROBE__!.retainProfileSocket(route)
+      const result = await window.__E07_SSH_ROUTE_PROBE__!.requestProfile(
+        route,
+        'session.list',
+        { title: 'Bot Chat', profile: route.targetProfile, include_hidden: true, limit: 17 },
+        25_000,
+        { spawnPriority: 'foreground' }
+      )
+      return result.sessions.map(({ id, resolved_id }) => [id, resolved_id])
+    },
+    { route: route!, retainSocket }
+  )
   expect(ids).toEqual([[canonical, canonical]])
 }
 
-async function verifySshBotChat(routeProfile: string) {
+function stopSshSessions(listenerPid: number) {
+  // OpenSSH session processes can have their own session IDs. Walk only the
+  // fixture listener's descendants in the private PID namespace.
+  const processes = listProcesses()
+  const descendants = new Set([listenerPid])
+  for (let previousSize = 0; descendants.size !== previousSize; ) {
+    previousSize = descendants.size
+    for (const { pid, ppid } of processes) {
+      if (pid > 1 && descendants.has(ppid)) descendants.add(pid)
+    }
+  }
+  for (const pid of [...descendants].reverse()) {
+    try {
+      process.kill(pid, 'SIGTERM')
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error
+    }
+  }
+}
+
+async function verifySshBotChat(routeProfile: string, reconnect = false) {
   const aliased = routeProfile !== profile
   expect(process.platform).toBe('linux')
   const state = process.env.HERMES_E2E_SSH_STATE
@@ -172,11 +208,16 @@ async function verifySshBotChat(routeProfile: string) {
       ].join('\n'),
       { mode: 0o600 }
     )
-    server = spawn('/usr/sbin/sshd', ['-D', '-E', log, '-f', config], {
-      env: localEnv,
-      stdio: 'ignore'
-    })
-    await expect.poll(() => fs.existsSync(log) && fs.readFileSync(log, 'utf8').includes('Server listening')).toBe(true)
+    const sshLog = () => fs.existsSync(log) ? fs.readFileSync(log, 'utf8') : ''
+    const startServer = async () => {
+      const before = sshLog().length
+      server = spawn('/usr/sbin/sshd', ['-D', '-E', log, '-f', config], {
+        env: localEnv,
+        stdio: 'ignore'
+      })
+      await expect.poll(() => sshLog().slice(before).includes('Server listening')).toBe(true)
+    }
+    await startServer()
     const preflight = spawnSync(
       'ssh',
       [
@@ -200,12 +241,12 @@ async function verifySshBotChat(routeProfile: string) {
     }
     expect(preflight.status, 'ephemeral OpenSSH key and host key accepted').toBe(0)
     expect(preflight.stdout).toBe(remote.hermesHome)
-    const acceptedKeys = () => fs.readFileSync(log, 'utf8').match(/Accepted publickey/g)?.length ?? 0
+    const acceptedKeys = () => sshLog().match(/Accepted publickey/g)?.length ?? 0
     const preflightLogins = acceptedKeys()
     expect(preflightLogins).toBe(1)
 
     installCanonicalObserver(local.hermesHome)
-    if (aliased) installRouteProbe(local.hermesHome)
+    if (aliased || reconnect) installRouteProbe(local.hermesHome)
     gateway = startGateway(local, localEnv)
     const localEndpoint = await waitForEndpoint(gateway, profile)
     const before = initial()
@@ -234,17 +275,19 @@ async function verifySshBotChat(routeProfile: string) {
     const live = await launchBotDesktop(localEnv)
     app = live.app
     const { page } = live
-    const wire = observeWire(page)
+    const sockets = new Map<WireFrame, WireSocket>()
+    const wire = observeWire(page, sockets)
     await expect(composer(page)).toBeVisible({ timeout: 45_000 })
-    let aliasedPort: string | undefined
-    if (aliased) {
+    const localPort = new URL(localEndpoint.origin).port
+    let sdkRead: WireFrame | undefined
+    if (aliased || reconnect) {
       const from = wire.length
-      await readAliasedChat(page, routeProfile)
+      await readSshChat(page, routeProfile, reconnect)
       const reads = wire.slice(from).filter(frame => lookup(frame) && frame.limit === 17)
       expect(reads).toHaveLength(1)
-      expect(reads[0]).toMatchObject({ profile, includeHidden: true, reply: {} })
-      aliasedPort = reads[0]!.port
-      expect(aliasedPort).not.toBe(new URL(localEndpoint.origin).port)
+      sdkRead = reads[0]!
+      expect(sdkRead).toMatchObject({ profile, includeHidden: true, reply: {} })
+      expect(sdkRead.port).not.toBe(localPort)
     }
     await page
       .getByRole('button', { name: 'Bots', exact: true })
@@ -255,6 +298,33 @@ async function verifySshBotChat(routeProfile: string) {
     const row = roster.locator(`[data-roster-key="${connectionId}::${routeProfile}"]`)
     await expect(row).toBeVisible({ timeout: 45_000 })
     await expect(roster.locator(`[data-roster-key="local::${routeProfile}"]`)).toBeVisible()
+    let loginsBeforeRecovery = 0
+    if (reconnect) {
+      const socket = sockets.get(sdkRead!)!
+      expect(socket.closed).toBe(false)
+      expect(acceptedKeys()).toBeGreaterThan(preflightLogins)
+      const offlineFrom = wire.length
+      const focusedBefore = await focus(page)
+      const listener = server!
+      const stopped = once(listener, 'exit')
+      stopSshSessions(listener.pid!)
+      await stopped
+      await expect.poll(() => socket.closed).toBe(true)
+      await page.evaluate(() => window.__E07_SSH_RELEASE__?.())
+      await row.click()
+      const refusal = page.getByRole('alert').filter({ hasText: /Could not open .*’s chat/ })
+      await expect(refusal).toContainText('Try again.', { timeout: 45_000 })
+      expect(await focus(page)).toEqual(focusedBefore)
+      const offlineOperations = wire.slice(offlineFrom).filter(
+        frame => lookup(frame) ||
+          ['session.create', 'session.resume', 'session.activate', 'prompt.submit'].includes(frame.method)
+      )
+      expect(offlineOperations).toEqual([])
+      expect(initial()).toEqual(before)
+      await refusal.getByRole('button', { name: 'Dismiss notification', exact: true }).click()
+      loginsBeforeRecovery = acceptedKeys()
+      await startServer()
+    }
     const from = wire.length
     await row.click()
     const viewport = page.locator('[data-slot="aui_thread-viewport"]').filter({ visible: true }).first()
@@ -265,8 +335,12 @@ async function verifySshBotChat(routeProfile: string) {
     const reads = frames.filter(lookup)
     expect(reads).toHaveLength(1)
     expect(reads[0]).toMatchObject({ method: 'session.list', profile, includeHidden: true, reply: {} })
-    expect(reads[0]!.port).not.toBe(new URL(localEndpoint.origin).port)
-    if (aliasedPort) expect(reads[0]!.port).toBe(aliasedPort)
+    expect(reads[0]!.port).not.toBe(localPort)
+    if (aliased) expect(reads[0]!.port).toBe(sdkRead!.port)
+    if (reconnect) {
+      expect(reads[0]!.port).not.toBe(sdkRead!.port)
+      expect(acceptedKeys()).toBeGreaterThan(loginsBeforeRecovery)
+    }
     const opens = frames.filter((frame) => ['session.resume', 'session.activate'].includes(frame.method))
     expect(opens.some((frame) => frame.method === 'session.resume')).toBe(true)
     for (const frame of opens) {
@@ -308,4 +382,9 @@ test('Bot Mode opens the named canonical chat over OpenSSH', async () => {
 test('Bot Mode opens the canonical chat behind an OpenSSH profile alias', async () => {
   test.setTimeout(180_000)
   await verifySshBotChat('default')
+})
+
+test('Bot Mode refuses an offline OpenSSH route and reopens the original chat', async () => {
+  test.setTimeout(180_000)
+  await verifySshBotChat(profile, true)
 })

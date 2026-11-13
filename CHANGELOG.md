@@ -199,6 +199,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Verify Bot Mode refuses to open a cached SSH row during a real OpenSSH interruption and reopens the original remote chat on explicit retry after reconnection (#33).
+
 - Verify a saved OpenSSH profile alias from the Desktop SDK through Bot Mode. The source-built and bundled Linux x64 clients keep the connection-local route while opening the remote named chat (#33).
 
 - Verify Bot Mode opens the existing remote named chat over a saved OpenSSH key connection in source-built and bundled Linux x64 Desktop, with a same-name local profile and unchanged chat stores (#33).
