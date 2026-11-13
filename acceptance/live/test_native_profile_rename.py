@@ -3,10 +3,12 @@
 import asyncio
 import json
 import os
+import shutil
 import signal
 import sqlite3
 import subprocess
 import sys
+import tarfile
 import tempfile
 from contextlib import closing
 from pathlib import Path
@@ -34,9 +36,11 @@ LABEL = "profile-rename"
 def activate_rename_cli(root, host):
     """Fence service-related side effects in the real CLI child."""
     denied = root / "rename-cli-audit-denied"
+    binaries = {name: (root / "bin" / name).resolve(strict=True) for name in ("git", "which")}
 
-    def block():
-        denied.touch(mode=0o600)
+    def block(category):
+        if not denied.exists():
+            denied.write_text(category, encoding="ascii")
         raise PermissionError("Rename fixture operation outside private custody")
 
     def private_path(value, dir_fd):
@@ -49,8 +53,12 @@ def activate_rename_cli(root, host):
     def inspect_operation(event, args):
         if event == "subprocess.Popen":
             executable, command, cwd, _ = args
-            binary = Path(os.fsdecode(executable)).name
+            executable = os.fsdecode(executable)
+            binary = Path(executable).name
             directory = Path(cwd or Path.cwd()).resolve()
+            candidate = root / "bin" / executable
+            if binary not in binaries or candidate.resolve() != binaries[binary]:
+                block("subprocess")
             # Native startup provenance and alias collision probes are read-only.
             if not (
                 binary == "which"
@@ -61,10 +69,10 @@ def activate_rename_cli(root, host):
                 or binary == "git"
                 and command[1:] == ["-C", str(host), "rev-parse", "HEAD"]
             ):
-                block()
+                block("subprocess-arguments")
         elif event == "os.kill":
             if args[1] != 0:
-                block()
+                block("signal")
         elif event in {
             "os.system",
             "os.posix_spawn",
@@ -73,14 +81,19 @@ def activate_rename_cli(root, host):
             "os.forkpty",
             "os.killpg",
         }:
-            block()
+            block("process")
         elif event in {"os.remove", "os.rmdir"}:
             if not private_path(*args):
-                block()
+                block("remove")
         elif event == "os.rename":
             source, destination, source_fd, destination_fd = args
             if not private_path(source, source_fd) or not private_path(destination, destination_fd):
-                block()
+                block("rename")
+        elif event == "open":
+            path, _, flags = args
+            writes = flags & (os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_APPEND)
+            if writes and not isinstance(path, int) and not private_path(path, -1):
+                block("write")
 
     sys.addaudithook(inspect_operation)
     try:
@@ -90,6 +103,39 @@ def activate_rename_cli(root, host):
         (root / "rename-cli-audit-ready").touch(mode=0o600, exist_ok=False)
     else:
         raise RuntimeError("Rename fixture CLI guard did not activate")
+
+
+def prepare_cli_source(host, pin, root, guard, env):
+    """Use the exact committed CLI source without sharing launcher-maintenance writes."""
+    source = root / "cli-source"
+    source.mkdir(mode=0o700)
+    with tempfile.TemporaryFile(dir=root) as archive:
+        subprocess.run(
+            ["git", "archive", "--format=tar", pin],
+            cwd=host,
+            env=env,
+            stdin=subprocess.DEVNULL,
+            stdout=archive,
+            check=True,
+            timeout=30,
+        )
+        archive.seek(0)
+        with tarfile.open(fileobj=archive) as package:
+            package.extractall(source, filter="data")
+    assert (source / "hermes_cli/main.py").is_file() and not (source / ".git").exists()
+    bin_dir = root / "bin"
+    bin_dir.mkdir(mode=0o700)
+    for name in ("git", "which"):
+        executable = shutil.which(name, path=os.defpath)
+        assert executable is not None, f"Missing fixture executable {name}"
+        (bin_dir / name).symlink_to(Path(executable).resolve(strict=True))
+    return source, env | {
+        "PATH": str(bin_dir),
+        "PYTHONPATH": os.pathsep.join(
+            (str(guard), str(source), str(Path(__file__).resolve().parent))
+        ),
+        "HERMES_RENAME_FIXTURE_CLI": "1",
+    }
 
 
 def rename_profile(host, home, env):
@@ -102,7 +148,7 @@ def rename_profile(host, home, env):
     result = subprocess.run(
         [sys.executable, "-m", "hermes_cli.main", "profile", "rename", OLD, NEW],
         cwd=host,
-        env=env | {"HERMES_RENAME_FIXTURE_CLI": "1"},
+        env=env,
         stdin=subprocess.DEVNULL,
         capture_output=True,
         text=True,
@@ -110,9 +156,22 @@ def rename_profile(host, home, env):
         umask=0o077,
     )
     assert (home.parent / "rename-cli-audit-ready").is_file()
-    assert not (home.parent / "rename-cli-audit-denied").exists(), (
-        "Native CLI attempted an operation outside the private fixture"
-    )
+    denied = home.parent / "rename-cli-audit-denied"
+    if denied.exists():
+        category = denied.read_text(encoding="ascii")
+        if category not in {
+            "process",
+            "remove",
+            "rename",
+            "signal",
+            "subprocess",
+            "subprocess-arguments",
+            "write",
+        }:
+            category = "unknown"
+        pytest.fail(
+            f"Native CLI attempted an operation outside the fixture ({category})", pytrace=False
+        )
     if (
         result.returncode
         or f"Renamed {OLD} → {NEW}" not in result.stdout
@@ -270,8 +329,11 @@ def test_native_live_rename_retains_roster_but_refuses_canonical_chat_reads(
             "    from native_bot_socket_guard import activate_child\n"
             "    activate_child()\n"
             "    if os.environ.get('HERMES_RENAME_FIXTURE_CLI') == '1':\n"
+            "        from importlib.util import find_spec\n"
             "        from test_native_profile_rename import activate_rename_cli\n"
             "        root = Path(os.environ['HERMES_BOT_ACCEPTANCE_ROOT'])\n"
+            "        if Path(find_spec('hermes_cli').origin).parent.parent != Path.cwd():\n"
+            "            raise RuntimeError('CLI source mismatch')\n"
             "        activate_rename_cli(root, Path.cwd())\n"
             "except Exception:\n"
             "    raise SystemExit('Could not load the profile rename fixture audit') from None\n",
@@ -315,6 +377,7 @@ def test_native_live_rename_retains_roster_but_refuses_canonical_chat_reads(
                 stdin=subprocess.DEVNULL,
             )
             assert actual.strip() == expected
+        cli_source, cli_env = prepare_cli_source(host, pin, root, guard, env)
         for key in tuple(os.environ):
             if key not in env:
                 isolated.delenv(key)
@@ -339,7 +402,7 @@ def test_native_live_rename_retains_roster_but_refuses_canonical_chat_reads(
                 port = urlsplit(endpoint.api_origin).port
                 restrict = activate(root, dial_ports=(port,), dial_host="127.0.0.1")
                 try:
-                    asyncio.run(verify_rename(host, env, homes, workspace, endpoint))
+                    asyncio.run(verify_rename(cli_source, cli_env, homes, workspace, endpoint))
                 finally:
                     restrict()
             assert all(not lock_held(profile) for profile in homes.values())

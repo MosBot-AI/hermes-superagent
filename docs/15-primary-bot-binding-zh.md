@@ -234,7 +234,7 @@ Bot Mode 的确切标题 `session.list` 查询携带所选后端 profile。列�
 
 #### 当前固定版本的原生 profile 重命名
 
-[Linux 手动夹具](../acceptance/live/test_native_profile_rename.py)使用干净的 Hermes `2281116525106e3c109993ccb5dc74d02bfc1427`，并在一个可丢弃的多路复用 Gateway 上保留 host 作用域的原生 WebSocket。它通过 `session.create` 在 `scout` 创建隐藏的 LOCAL `Bot Chat`，使用 CLI 来源及位于移动 home 之外的隔离工作目录。重命名前，确切标题查询和恢复均返回原 ID。Gateway 运行期间，原生 CLI 将 `scout` 重命名为 `renamed`。发现结果、已记录的服务集合及所有权锁确认，仍由同一 Gateway 进程及实例为 `renamed` 提供服务。新 home 的 `previous_names` 记录 `scout`，`profiles.list` 在新名称下返回相同的规范会话摘要。
+[Linux 手动夹具](../acceptance/live/test_native_profile_rename.py)使用干净的 Hermes `2281116525106e3c109993ccb5dc74d02bfc1427`，并在一个可丢弃的多路复用 Gateway 上保留 host 作用域的原生 WebSocket。Gateway 从固定版本的检出目录运行，原生 CLI 从同一提交所跟踪源码的私有导出目录运行。夹具通过 `session.create` 在 `scout` 创建隐藏的 LOCAL `Bot Chat`，使用 CLI 来源及位于移动 home 之外的隔离工作目录。重命名前，确切标题查询和恢复均返回原 ID。Gateway 运行期间，原生 CLI 将 `scout` 重命名为 `renamed`。发现结果、已记录的服务集合及所有权锁确认，仍由同一 Gateway 进程及实例为 `renamed` 提供服务。新 home 的 `previous_names` 记录 `scout`，`profiles.list` 在新名称下返回相同的规范会话摘要。
 
 保留的套接字使用旧 `scout` 选择器时返回 `4001`，原因为 `profile_mismatch`。使用 `renamed` 时，按确切标题查询的 `session.list`、`session.resume` 及 `session.info` 均返回 `4001`，原因为 `storage_unavailable`。重命名后的 profile epoch 增加一，已存会话键迁入新 profile 的命名空间。其他比较字段保持一致，消息及准入仍为空。`default` 和 `watch` 仍可读取，所比较的状态保持不变。夹具限制无关的 CLI 副作用，且未调用模型。手动 Native Gateway 工作流在测试通过后发布 `profile-rename.xml`。[手动工作流](../.github/workflows/native-gateway.yml)
 
