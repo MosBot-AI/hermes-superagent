@@ -6,7 +6,7 @@ umask 077
 usage() {
     printf '%s\n' \
         'Usage: sh acceptance/live/run_native_bot_poll_reply.sh --hermes CHECKOUT --hermes-python PYTHON [--receipt RESULT.xml] [--installed] [--consume]' \
-        '       sh acceptance/live/run_native_bot_poll_reply.sh --hermes CHECKOUT --hermes-python PYTHON [--receipt RESULT.xml] (--push | --reconnect)'
+        '       sh acceptance/live/run_native_bot_poll_reply.sh --hermes CHECKOUT --hermes-python PYTHON [--receipt RESULT.xml] (--push | --reconnect | --owner-loss)'
 }
 
 host=
@@ -25,13 +25,16 @@ while [ "$#" -gt 0 ]; do
             mode=consume
             case_name=test_native_stateless_bot_wait_consumes_reply_before_fallback
             shift ;;
-        --push|--reconnect)
+        --push|--reconnect|--owner-loss)
             if [ "$mode" != poll ]; then usage >&2; exit 2; fi
             mode=${1#--}
             test_file=test_native_bot_push_reply.py
             case "$mode" in
                 push) case_name=test_native_viewed_bot_reply_wakes_sender_once ;;
                 reconnect) case_name=test_native_disconnected_bot_reply_recovers_once ;;
+                owner-loss)
+                    test_file=test_native_bot_owner_loss.py
+                    case_name=test_native_inflight_bot_reply_reconciles_after_owner_loss ;;
             esac
             shift ;;
         --hermes|--hermes-python|--receipt)

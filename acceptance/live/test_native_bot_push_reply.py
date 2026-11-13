@@ -4,7 +4,8 @@ import asyncio
 import json
 import os
 import sys
-from contextlib import closing
+from contextlib import closing, contextmanager
+from dataclasses import dataclass
 from urllib.parse import urlsplit
 
 from native_bot_socket_guard import activate
@@ -43,6 +44,7 @@ class BotPushModel(ScriptedModel):
         ):
             if MESSAGE in text:
                 phase = "recipient"
+                self.server.recipient_requests += 1
                 self.server.observed.set()
                 if not self.server.release.wait(25):
                     self.server.unexpected += 1
@@ -294,7 +296,8 @@ async def verify_reopened(client, scout, sender, original, reply_tokens, note, s
     assert sorted(model.turns) == ["ack", "follow-up", "recipient", "send"]
 
 
-async def verify_recipient(client, home, target, queued, delivery):
+async def verify_recipient(client, home, send):
+    target, queued, delivery = send.target, send.receiver_admission, send.delivery_id
     await settled(client, "default", home, target, queued["admission_id"], RECEIVER_REPLY)
     (received,) = admissions(home, target)
     assert received["admission_id"] == queued["admission_id"]
@@ -311,101 +314,148 @@ async def verify_recipient(client, home, target, queued, delivery):
     assert {key: receipt["author"].get(key) for key in AUTHOR} == AUTHOR
 
 
-async def exercise_local_reply(endpoint, host, home, scout, model, *, reconnect):
+@contextmanager
+def gateway_dial(home, endpoint):
     from hermes_cli.gateway_runtime_discovery import query_identify
-    from websockets.protocol import State
 
     port = urlsplit(endpoint.api_origin).port
     assert port is not None
-    with (home.parent / "gateway-port").open("x", encoding="ascii") as file:
+    port_file = home.parent / "gateway-port"
+    with port_file.open("x", encoding="ascii") as file:
         file.write(str(port))
-    owner = query_identify(home, timeout=2)
-    assert owner["instance_id"] == endpoint.instance_id
     restrict = activate(home.parent, dial_ports=(port,), dial_host="127.0.0.1")
     try:
-        async with asyncio.timeout(82), retained_host_client(home, endpoint) as client:
-            ids = {}
-            for profile in ("default", "scout"):
-                created = await client.rpc(
-                    "session.create",
-                    profile=profile,
-                    request_id=f"fixture-bot-push-{profile}",
-                    title="Bot Chat",
-                    source="gui",
-                    cwd=str(home.parent),
-                    hidden=True,
-                    toolsets=[],
-                    _timeout=8,
-                )
-                ids[profile] = created["session_id"]
-            target, sender = ids["default"], ids["scout"]
-            await client.rpc("session.resume", profile="scout", session_id=sender, _timeout=8)
-            submitted = await client.rpc(
-                "prompt.submit",
-                profile="scout",
-                session_id=sender,
-                input_id=INPUT,
-                text=PROMPT,
-                _timeout=8,
-            )
-            original = submitted["admission_id"]
-            await settled(client, "scout", scout, sender, original, SENDER_ACK)
-            assert await asyncio.to_thread(model.observed.wait, 5)
-            waiter = await owned_waiter(host, home.parent, owner["pid"])
-            ack = model.ack
-            assert ack["status"] in {"queued", "claimed"} and ack["to"] == "@hermes"
-            assert ack["reply_delivery"] == "notification"
-            assert not {"error", "notification_error", "reply"}.intersection(ack)
-            delivery, process = ack["delivery_id"], ack["process_id"]
-            reply_tokens = (RECEIVER_REPLY, delivery, process)
-            assert len(admissions(scout, sender)) == 1
-            (queued,) = admissions(home, target)
-            assert queued["request_id"] == f"bot:{delivery}"
-            assert queued["status"] != "terminal"
-
-            if not reconnect:
-                model.release.set()
-                await verify_viewed(client, scout, sender, original, reply_tokens, model)
-                await verify_recipient(client, home, target, queued, delivery)
-
-        if reconnect:
-            # Keep the recipient held until the viewer's actual WebSocket has closed.
-            assert client.websocket.state is State.CLOSED
-            assert not model.release.is_set()
-            model.release.set()
-            note, stored = await wait_for_disconnected_reply(
-                scout, sender, original, reply_tokens, model
-            )
-            async with retained_host_client(home, endpoint) as reopened:
-                await verify_reopened(
-                    reopened, scout, sender, original, reply_tokens, note, stored, model
-                )
-                await verify_recipient(reopened, home, target, queued, delivery)
-        assert not waiter.is_running()
-        assert model.unexpected == 0
+        owner = query_identify(home, timeout=2)
+        assert owner["instance_id"] == endpoint.instance_id
+        yield owner["pid"]
     finally:
-        model.release.set()
         restrict()
+        port_file.unlink()
 
 
-def run_local_reply(tmp_path_factory, monkeypatch, *, reconnect):
+@dataclass(frozen=True)
+class BotDelivery:
+    sender: str
+    target: str
+    original: str
+    receiver_admission: dict
+    delivery_id: str
+    process_id: str
 
+    @property
+    def reply_tokens(self):
+        return RECEIVER_REPLY, self.delivery_id, self.process_id
+
+
+async def start_delivery(client, home, scout, model):
+    ids = {}
+    for profile in ("default", "scout"):
+        created = await client.rpc(
+            "session.create",
+            profile=profile,
+            request_id=f"fixture-bot-push-{profile}",
+            title="Bot Chat",
+            source="gui",
+            cwd=str(home.parent),
+            hidden=True,
+            toolsets=[],
+            _timeout=8,
+        )
+        ids[profile] = created["session_id"]
+    target, sender = ids["default"], ids["scout"]
+    await client.rpc("session.resume", profile="scout", session_id=sender, _timeout=8)
+    submitted = await client.rpc(
+        "prompt.submit",
+        profile="scout",
+        session_id=sender,
+        input_id=INPUT,
+        text=PROMPT,
+        _timeout=8,
+    )
+    original = submitted["admission_id"]
+    await settled(client, "scout", scout, sender, original, SENDER_ACK)
+    assert await asyncio.to_thread(model.observed.wait, 5)
+    ack = model.ack
+    assert ack["status"] in {"queued", "claimed"} and ack["to"] == "@hermes"
+    assert ack["reply_delivery"] == "notification"
+    assert not {"error", "notification_error", "reply"}.intersection(ack)
+    delivery_id, process_id = ack["delivery_id"], ack["process_id"]
+    assert len(admissions(scout, sender)) == 1
+    (receiver_admission,) = admissions(home, target)
+    assert receiver_admission["request_id"] == f"bot:{delivery_id}"
+    assert receiver_admission["status"] == "started"
+    return BotDelivery(sender, target, original, receiver_admission, delivery_id, process_id)
+
+
+async def exercise_local_reply(endpoint, host, home, scout, model, *, reconnect):
+    from websockets.protocol import State
+
+    with gateway_dial(home, endpoint) as owner_pid:
+        try:
+            async with asyncio.timeout(82), retained_host_client(home, endpoint) as client:
+                delivery = await start_delivery(client, home, scout, model)
+                waiter = await owned_waiter(host, home.parent, owner_pid)
+                if not reconnect:
+                    model.release.set()
+                    await verify_viewed(
+                        client,
+                        scout,
+                        delivery.sender,
+                        delivery.original,
+                        delivery.reply_tokens,
+                        model,
+                    )
+                    await verify_recipient(client, home, delivery)
+
+            if reconnect:
+                # Keep the recipient held until the viewer's actual WebSocket has closed.
+                assert client.websocket.state is State.CLOSED
+                assert not model.release.is_set()
+                model.release.set()
+                note, stored = await wait_for_disconnected_reply(
+                    scout, delivery.sender, delivery.original, delivery.reply_tokens, model
+                )
+                async with retained_host_client(home, endpoint) as reopened:
+                    await verify_reopened(
+                        reopened,
+                        scout,
+                        delivery.sender,
+                        delivery.original,
+                        delivery.reply_tokens,
+                        note,
+                        stored,
+                        model,
+                    )
+                    await verify_recipient(reopened, home, delivery)
+            assert not waiter.is_running()
+            assert model.recipient_requests == 1 and model.unexpected == 0
+        finally:
+            model.release.set()
+
+
+@contextmanager
+def local_reply_fixture(tmp_path_factory, monkeypatch):
     with isolated_reply_fixture(
         tmp_path_factory, monkeypatch, activate_hook="native_bot_push_guard:activate_push_child"
     ) as (_, fixture, scout, env, installed):
         assert not installed
         host, home, _, _ = fixture
         with scripted_model(handler=BotPushModel) as model:
-            url = f"http://127.0.0.1:{model.server_port}/v1"
-            create_profiles(home, scout, url)
+            model.recipient_requests = 0
+            create_profiles(home, scout, f"http://127.0.0.1:{model.server_port}/v1")
             child_env = env | {
                 "HERMES_BOT_ACCEPTANCE_ROOT": str(home.parent),
                 "HERMES_BOT_ACCEPTANCE_MODEL_PORT": str(model.server_port),
             }
-            with gateway_daemon(host, home, child_env, "bot-push") as endpoint:
-                asyncio.run(
-                    exercise_local_reply(endpoint, host, home, scout, model, reconnect=reconnect)
-                )
+            yield host, home, scout, child_env, model
+
+
+def run_local_reply(tmp_path_factory, monkeypatch, *, reconnect):
+    with local_reply_fixture(tmp_path_factory, monkeypatch) as (host, home, scout, env, model):
+        with gateway_daemon(host, home, env, "bot-push") as endpoint:
+            asyncio.run(
+                exercise_local_reply(endpoint, host, home, scout, model, reconnect=reconnect)
+            )
 
 
 def test_native_viewed_bot_reply_wakes_sender_once(tmp_path_factory, monkeypatch):
