@@ -83,6 +83,8 @@ This file distinguishes design work, development changes, and released capabilit
 - Run runtime artifact acceptance on exact pull-request heads with read-only credentials; keep downloadable artifact publication push-only.
 ### Changed
 
+- Verify live deletion and same-name recreation of a named profile. The retained Gateway connection refuses the old canonical chat and resolves a distinct chat created explicitly on the fresh profile (#33).
+
 - Record the pinned Hermes behavior after a live named-profile rename. The roster retains the original canonical Bot Chat, and the native Gateway refuses to reopen it when the stored local receipt still references the old route (#33).
 
 - Verify named-profile managed worker recovery after a Gateway crash. The manual case checks that the original admission stays unknown on retry and that explicit resolution lets the queued successor finish once with its own receipt (#33).

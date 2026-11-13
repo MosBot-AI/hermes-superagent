@@ -48,6 +48,7 @@
 | 已保存 Webapp 令牌的回退 | 干净 Linux Electron 构建在命名 profile 查询返回空结果时探测远程启动 authority，并在同一次点击中通过第二次查询打开原会话。单独构建的提案探测命名 authority，拒绝不确定的打开操作，并在明确重试后打开原会话。[已保存 Webapp 证据](#当前固定版本的已保存-webapp-bot-mode-路由) | 干净固定版本仍有回退作用域缺口。受支持的使用需要已修正的宿主修订及该模式的专项验收。 |
 | Profile 与安装连续性 | 停机状态下的原生 profile CLI 和备份导入路径覆盖重命名、克隆、删除、同名重建、拒绝向已占用的 profile 导入，以及恢复后目标的 epoch 下限。在同一运行中的安装实例内，保留原有 host 作用域 WebSocket，覆盖 profile 退役及同名热上线。[Profile 生命周期](#当前固定版本的原生-profile-生命周期) · [保留的路由](#当前固定版本保留的原生-profile-路由) · [备份与恢复](#当前固定版本的原生备份与恢复) | 其他运行时切换和经认证的安装连续性需要当前目标、登记、规范谱系与冲突证据。复制的标记和名称无法消除安装实例的歧义。 |
 | 原生 profile 重命名 | 运行中的 Gateway 为重命名后的 profile 提供服务并公布原规范会话指针。该已绑定 LOCAL 会话的精确查询与恢复均拒绝，原因为 `storage_unavailable`。[原生重命名证据](#当前固定版本的原生-profile-重命名) | 在受支持的迁移能同时保留规范指针和经授权的会话访问之前，保持该连续性模式不可用。 |
+| 原生 profile 重建 | 保留的 host 作用域原生套接字观测到旧路由消失，且全新 profile 在同一路径上线。旧规范会话不存在。显式创建建立新会话。[原生重建证据](#当前固定版本的原生-profile-重建) | 恢复旧绑定需要独立的 owner 和安装证据。 |
 | 恢复副本的 Webapp 凭据清理 | Linux 原生恢复夹具覆盖完整归档复制浏览器凭据，以及 Webapp 关闭时通过私有 Unix 控制套接字替换恢复目标上的凭据。[恢复后轮换证据](#当前固定版本的恢复副本-webapp-凭据轮换) | 经认证的安装连续性和经 owner 授权的恢复需要独立证据。 |
 | 运行中的 Webapp 登出 | Linux 本地操作者登出选定的运行中 Webapp，原生连接与另一安装的访问继续有效。Chromium 中的原版 Webapp 重新加载后返回 Basic 登录，登录后重新打开原会话。[运行中 Webapp 证据](#当前固定版本的运行中-webapp-登出) | Owner 身份、跨安装恢复、其他凭据模式和进行中操作的结果需要独立证据。 |
 | 本地调用方与接收 Bot | Linux 同 UID 控制票据证明本地操作者准入。干净宿主上的 owner 入口夹具在缺少受支持的接收侧适配器上下文时拒绝。[本地 Gateway](#当前固定版本的本地-bot-传输与重启) · [Owner 入口契约](../tests/contracts/test_owner_entry_contracts.py) | 受保护的原生命令和渠道入口需要宿主以受支持的方式证明原始调用方、接收方及会话，再校验当前 owner 和 grant。[命令上下文实验](23-host-command-context-experiment-zh.md)仍仅供评审。 |
@@ -241,6 +242,16 @@ Bot Mode 的确切标题 `session.list` 查询携带所选后端 profile。列�
 固定版本的重命名按新名称迁移会话及路由行，并请多路复用器为新名称提供服务。该迁移保留已绑定 LOCAL 策略回执中的旧路由。新 authority 根据重命名后的命名空间计算路由，`_checked_entry` 拒绝不匹配的结果，恢复路径将其报告为 `storage_unavailable`。夹具通过固定的私有诊断确认触发了这项检查。名册直接读取已存的规范会话行，因此即使规范会话访问不可用，原指针也可以继续显示。[原生重命名顺序](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_cli/profiles.py#L2246-L2316) · [运行时身份迁移](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/gateway/run_profile_reconcile.py#L695-L734) · [持久化迁移](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_state_gateway.py#L712-L779) · [LOCAL 路由校验](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/gateway/session_local_recovery.py#L93-L126) · [恢复拒绝](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/gateway/session_local_recovery.py#L173-L196) · [规范名册读取](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/gateway/session_group_controls.py#L399-L428)
 
 在此固定版本上，应将重命名后的规范路由视为不可用。Profile 注册表迁移成功、会话记录得到保留以及 `previous_names` 都未能验证经授权的会话续接。受支持的 LOCAL 回执迁移、经认证的 owner 恢复及其他凭据或客户端模式的验收，仍是独立门禁。
+
+#### 当前固定版本的原生 profile 重建
+
+[Linux 手动夹具](../acceptance/live/test_native_profile_recreate.py)使用 Hermes `2281116525106e3c109993ccb5dc74d02bfc1427`、可丢弃的多路复用 Gateway 和同一条保留的 host 作用域原生 WebSocket。原生 CLI 从该提交的私有源码导出目录运行，使用 `--yes` 删除合成的 `scout` profile，再使用 `--no-alias --no-skills` 在同一路径创建全新 profile。固定版本的 CLI 对旧 home 写入删除标记并撤销其路由，再请求运行中的多路复用器清理该名称的路由身份。CLI 在发布全新 home 前清除删除标记，并请求多路复用器重新协调。[原生删除](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_cli/profiles.py#L1699-L1797) · [运行时身份清理](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/gateway/run_profile_reconcile.py#L737-L767) · [原生创建](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_cli/profiles.py#L1395-L1429)
+
+CLI 确认删除已结算，旧 home 消失并保留删除标记。`profiles.list` 省略 `scout`，在保留的套接字上对 `scout` 进行确切标题查询和 `session.info` 均返回 `4001`，原因为 `profile_mismatch`。创建后，同一多路复用器通过常规原生协调流程为同路径上的新 `scout` 提供服务。删除标记及原有文件标记均不存在。新存储的会话、消息及准入列表均为空。`profiles.list` 没有规范会话指针，包含隐藏会话的确切标题查询返回空列表，对原会话 ID 调用 `session.info` 返回 `4001`，原因为 `not_found`。
+
+显式调用 `session.create` 建立另一个隐藏的 LOCAL `Bot Chat`。限定范围的查询、恢复及名册返回其新 ID。其会话记录和准入列表均为空，`default` 和 `watch` 所比较的存储内容保持不变。发现结果、已记录的服务集合及所有权锁确认整个切换由同一 Gateway 进程及实例服务。夹具未调用模型。手动 Native Gateway 工作流在测试通过后发布 `profile-recreate.xml`。[手动工作流](../.github/workflows/native-gateway.yml)
+
+初次探索时，观测程序在删除期间保持只读 SQLite 连接打开。被取消链接的 WAL 和 SHM 文件描述符触发原生 SQLite 文件世代检查，阻止在同一路径打开新存储。通过验证的路径在删除前关闭每个观测连接，并保留原生检查。该证据覆盖删除后建立全新原生路由。经认证的 owner 恢复、跨安装连续性和其他客户端或凭据模式仍有独立门禁。[原生已删除 WAL 世代检查](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_state_dbfile.py#L359-L393)
 
 ### 当前固定版本的原生备份与恢复
 
