@@ -5,7 +5,7 @@ import json
 import os
 import signal
 import time
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 
 import pytest
 from native_gateway_fixture import (
@@ -51,14 +51,19 @@ def stopped_waiter(waiter):
         os.close(pidfd)
 
 
-async def settle_before_loss(client, home, scout, delivery, model, waiter, crash):
+async def wait_until_stopped(waiter):
     import psutil
+
+    async with asyncio.timeout(4):
+        while waiter.status() != psutil.STATUS_STOPPED:
+            await asyncio.sleep(0.05)
+
+
+async def settle_before_loss(client, home, scout, delivery, model, waiter, crash):
     from tools.bot_live_delivery import read_delivery_result
 
     with stopped_waiter(waiter):
-        async with asyncio.timeout(4):
-            while waiter.status() != psutil.STATUS_STOPPED:
-                await asyncio.sleep(0.05)
+        await wait_until_stopped(waiter)
         model.release.set()
         async with asyncio.timeout(12):
             while True:
@@ -73,7 +78,7 @@ async def settle_before_loss(client, home, scout, delivery, model, waiter, crash
             row.get("display_kind") == "process_complete"
             for row in sender_messages(scout, delivery.sender)
         )
-        assert waiter.status() == psutil.STATUS_STOPPED
+        await wait_until_stopped(waiter)
         assert not completed_result_path(scout, delivery).exists()
         crash()
         return receipt
@@ -84,7 +89,17 @@ def completed_result_path(scout, delivery):
 
 
 async def lose_owner(
-    endpoint, host, home, scout, model, exit_owner, *, settled_reply, recovery, restart=False
+    endpoint,
+    host,
+    home,
+    scout,
+    model,
+    exit_owner,
+    *,
+    settled_reply,
+    recovery,
+    restart=False,
+    stop_after_drain=False,
 ):
     from tools.bot_live_delivery import read_delivery_result
 
@@ -125,16 +140,15 @@ async def lose_owner(
                         time.sleep(0.05)
                     pytest.fail("Gateway did not enter the restart wait")
 
-                exit_owner(after_signal=release_during_restart)
+                with stopped_waiter(waiter) if stop_after_drain else nullcontext():
+                    if stop_after_drain:
+                        await wait_until_stopped(waiter)
+                    exit_owner(after_signal=release_during_restart)
             elif restart:
-                import psutil
-
                 # Keep the held waiter from racing the native shutdown sweep.
                 # Its recipient is still waiting on the synthetic model response.
                 with stopped_waiter(waiter):
-                    async with asyncio.timeout(4):
-                        while waiter.status() != psutil.STATUS_STOPPED:
-                            await asyncio.sleep(0.05)
+                    await wait_until_stopped(waiter)
                     exit_owner()
                     assert not model.release.is_set()
             elif settled_reply:
@@ -147,7 +161,17 @@ async def lose_owner(
 
 
 async def verify_after_owner_loss(
-    endpoint, home, scout, model, before_loss, *, settled_reply, recovery, restart=False
+    endpoint,
+    home,
+    scout,
+    model,
+    before_loss,
+    *,
+    settled_reply,
+    recovery,
+    restart=False,
+    stop_after_drain=False,
+    mismatched=False,
 ):
     import psutil
     from agent.turn_failure_copy import AUTOMATION_INTERRUPTED_NOTICE
@@ -184,6 +208,8 @@ async def verify_after_owner_loss(
                     delivery.process_id,
                 )
                 if held_restart:
+                    reply_tokens = (delivery.process_id, delivery.delivery_id, OWNER_STOPPED_ERROR)
+                if mismatched:
                     reply_tokens = (delivery.process_id, "exit code -")
                 note, stored = await wait_for_disconnected_reply(
                     scout, delivery.sender, delivery.original, reply_tokens, model
@@ -193,12 +219,18 @@ async def verify_after_owner_loss(
                 persisted = json.loads(completed_result_path(scout, delivery).read_bytes())
                 assert persisted["id"] == delivery.process_id
                 assert persisted["parent_session_id"] == delivery.sender
-                if held_restart:
+                if held_restart or stop_after_drain:
                     assert persisted["exit_code"] in {-9, -15}
                     assert not persisted["output"].strip()
                     assert not completed_result_path(home, delivery).exists()
-                    assert RECEIVER_REPLY not in stored["content"]
-                    assert delivery.delivery_id not in stored["content"]
+                    assert "exit code -" in stored["content"]
+                    if held_restart:
+                        assert RECEIVER_REPLY not in stored["content"]
+                    if mismatched:
+                        assert delivery.delivery_id not in stored["content"]
+                        assert OWNER_STOPPED_ERROR not in stored["content"]
+                    elif held_restart:
+                        assert "Do not resend blindly." in stored["content"]
                 else:
                     assert persisted["exit_code"] == (0 if settled_reply else 1)
                     assert delivery.delivery_id in persisted["output"]
@@ -335,7 +367,16 @@ async def verify_after_owner_loss(
             return delivery, expected_history, expected_admissions
 
 
-def run_owner_loss(tmp_path_factory, monkeypatch, *, settled_reply, recovery=False, restart=False):
+def run_owner_loss(
+    tmp_path_factory,
+    monkeypatch,
+    *,
+    settled_reply,
+    recovery=False,
+    restart=False,
+    stop_after_drain=False,
+    mismatched=False,
+):
     with local_reply_fixture(tmp_path_factory, monkeypatch) as (host, home, scout, env, model):
         launch = restartable_gateway_daemon if restart else crashable_gateway_daemon
         if restart:
@@ -356,10 +397,23 @@ def run_owner_loss(tmp_path_factory, monkeypatch, *, settled_reply, recovery=Fal
                         settled_reply=settled_reply,
                         recovery=recovery,
                         restart=restart,
+                        stop_after_drain=stop_after_drain,
                     )
                 )
         finally:
             model.release.set()
+        if stop_after_drain:
+            path = completed_result_path(scout, before[0])
+            result = json.loads(path.read_bytes()) if path.is_file() else {}
+            assert result.get("exit_code") in {-9, -15}
+            assert result.get("notification", {}).get("state") == "pending"
+        if mismatched:
+            path = completed_result_path(scout, before[0])
+            result = json.loads(path.read_bytes())
+            binding = result["notification"]["bot_reply_receipt"]
+            assert binding["target_session"] == before[0].target
+            binding["target_session"] = before[0].sender
+            path.write_text(json.dumps(result), encoding="utf-8")
         with gateway_daemon(host, home, env, "bot-after-loss") as successor:
             assert successor.instance_id != first.instance_id
             observed = asyncio.run(
@@ -372,6 +426,8 @@ def run_owner_loss(tmp_path_factory, monkeypatch, *, settled_reply, recovery=Fal
                     settled_reply=settled_reply,
                     recovery=recovery,
                     restart=restart,
+                    stop_after_drain=stop_after_drain,
+                    mismatched=mismatched,
                 )
             )
         if recovery:
@@ -431,3 +487,25 @@ def test_proposed_held_bot_reply_reconciles_after_planned_restart(tmp_path_facto
 
 def test_proposed_drained_bot_reply_reconciles_after_planned_restart(tmp_path_factory, monkeypatch):
     run_owner_loss(tmp_path_factory, monkeypatch, settled_reply=True, recovery=True, restart=True)
+
+
+def test_proposed_killed_waiter_restores_settled_receipt(tmp_path_factory, monkeypatch):
+    run_owner_loss(
+        tmp_path_factory,
+        monkeypatch,
+        settled_reply=True,
+        recovery=True,
+        restart=True,
+        stop_after_drain=True,
+    )
+
+
+def test_proposed_killed_waiter_refuses_mismatched_receipt(tmp_path_factory, monkeypatch):
+    run_owner_loss(
+        tmp_path_factory,
+        monkeypatch,
+        settled_reply=False,
+        recovery=True,
+        restart=True,
+        mismatched=True,
+    )
