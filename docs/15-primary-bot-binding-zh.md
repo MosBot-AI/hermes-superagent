@@ -46,6 +46,7 @@
 | Bot Mode 规范会话打开 | 源码构建的 Linux 名册在查询返回类型化错误时拒绝打开会话，在查询返回空结果但原生指针探测确认已有会话时也拒绝。重试时打开同一个本地未压缩会话。[本地 Bot Mode 证据](#当前固定版本的-bot-mode-规范会话拒绝与重试) | Desktop 安装包、压缩后会话的界面附加、SSH 和 OAuth 界面路由以及经认证的 owner 绑定需要独立证据。 |
 | 已保存 Webapp 令牌的回退 | 干净 Linux Electron 构建在命名 profile 查询返回空结果时探测远程启动 authority，并在同一次点击中通过第二次查询打开原会话。单独构建的提案探测命名 authority，拒绝不确定的打开操作，并在明确重试后打开原会话。[已保存 Webapp 证据](#当前固定版本的已保存-webapp-bot-mode-路由) | 干净固定版本仍有回退作用域缺口。受支持的使用需要已修正的宿主修订及该模式的专项验收。 |
 | Profile 与安装连续性 | 停机状态下的原生 profile CLI 和备份导入路径覆盖重命名、克隆、删除、同名重建、拒绝向已占用的 profile 导入，以及恢复后目标的 epoch 下限。在同一运行中的安装实例内，保留原有 host 作用域 WebSocket，覆盖 profile 退役及同名热上线。[Profile 生命周期](#当前固定版本的原生-profile-生命周期) · [保留的路由](#当前固定版本保留的原生-profile-路由) · [备份与恢复](#当前固定版本的原生备份与恢复) | 其他运行时切换和经认证的安装连续性需要当前目标、登记、规范谱系与冲突证据。复制的标记和名称无法消除安装实例的歧义。 |
+| 恢复副本的 Webapp 凭据清理 | Linux 原生恢复夹具覆盖完整归档复制浏览器凭据，以及 Webapp 关闭时通过私有 Unix 控制套接字替换恢复目标上的凭据。[恢复后轮换证据](#当前固定版本的恢复副本-webapp-凭据轮换) | 经认证的安装连续性、经 owner 授权的恢复，以及运行中的 Webapp 会话撤销，各自需要独立证据。 |
 | 本地调用方与接收 Bot | Linux 同 UID 控制票据证明本地操作者准入。干净宿主上的 owner 入口夹具在缺少受支持的接收侧适配器上下文时拒绝。[本地 Gateway](#当前固定版本的本地-bot-传输与重启) · [Owner 入口契约](../tests/contracts/test_owner_entry_contracts.py) | 受保护的原生命令和渠道入口需要宿主以受支持的方式证明原始调用方、接收方及会话，再校验当前 owner 和 grant。[命令上下文实验](23-host-command-context-experiment-zh.md)仍仅供评审。 |
 | 插件状态与子代理角色 | 公开 `ctx.subagent_lifecycle` 覆盖 `in_process` 和 `host` 两种隔离模式下的进程内父子关联。`ctx.state` 在两种模式下均经过验证，其中托管模式覆盖两个命名 profile。[子代理证据](#当前固定版本的子代理关联) | 受管 WorkerChannel 和 Kanban 接管需要各自的来源、grant 和撤销校验。[E0.4](13-enforcement-contracts-zh.md)覆盖独立的配置冻结和故障排查安全模式 worker 路径。 |
 | 原生 Bot 与 cron 投递 | 同一安装内的 `message_agent` 和 `bot_relay.deliver` 覆盖仅通知的作者归因及本地终态回执恢复。原生 cron 在响应丢失后复用同一个投递 ID，并报告 `transferred` 和 `queued` 回执。[Bot 消息](#当前固定版本的同一安装内-bot-消息) · [重启](#当前固定版本的本地-bot-传输与重启) · [延后投递](#当前固定版本的-bot-chat-延后投递) | 对需要回复、远程和其他生产者模式分别验证回执及作者对账。结果不确定时保留原投递 ID。 |
@@ -232,6 +233,14 @@ Bot Mode 的确切标题 `session.list` 查询携带所选后端 profile。列�
 | 在两个恢复后的根目录启动 | Authority 使用不同的夹具实例 ID 依次启动，各自推进本地 epoch 下限。两边的限定作用域名册读取均返回相同的隐藏 Bot Chat 根会话和压缩末端。已获授权的逻辑根会话仍解析到该物理末端。原来已开始的准入沿用原 ID，变为 `unknown`，其后的条目保持 `queued`。旧 epoch 的认领返回 `stale_epoch`。未解决条目阻挡 FIFO 时，当前 epoch 的认领返回 `unknown_execution`。 |
 
 每个原生维护锁约束各自的目标 home，epoch 约束该目标数据库中的认领操作。恢复到不同根目录后的自动连续性需要独立认证和位于复制数据之外的栅栏。拟议的绑定策略要求有歧义的恢复经 owner 审阅。[身份识别限制](#33-必须明确展示身份识别的限制)
+
+#### 当前固定版本的恢复副本 Webapp 凭据轮换
+
+在 Hermes `2281116525106e3c109993ccb5dc74d02bfc1427`，原生完整备份的文件选择规则可能将已存储的 Webapp 浏览器凭据带到另一个 home。目标 Gateway 正在运行且 Webapp 关闭时，原生登出处理器替换该 home 中已存储的凭据。Linux 私有控制套接字要求本地对端 UID 匹配，且使用私有请求。[完整归档选择规则](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_cli/backup.py#L318-L360) · [凭据存储](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/gateway/webapp_listener.py#L229-L254) · [登出处理器](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/gateway/webapp_listener.py#L405-L425) · [私有请求校验](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/gateway/control_socket.py#L333-L348) · [Linux 对端校验](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/gateway/control_socket.py#L411-L436)
+
+Linux 夹具通过原生 CLI 将停止状态的合成来源打包为完整 ZIP 归档，并导入空白且停止的目标。导入后校验凭据相等及文件的私有权限。随后只运行目标 Gateway，通过其私有 Unix 套接字发出原生 Webapp 状态查询和登出请求。检查覆盖目标凭据发生变化且存于夹具 UID 所有、权限为 `0600` 的常规文件，源凭据及归档保持不变，Webapp 仍关闭，目标 PID 和实例 ID 保持不变。夹具只通过布尔比较校验合成凭据。手动原生 Gateway 工作流在测试通过后发布 `webapp-restore-rotation.xml`。[原生轮换测试](../acceptance/live/test_native_webapp_restore_rotation.py) · [手动工作流](../.github/workflows/native-gateway.yml)
+
+本次观测的范围是在一个本地恢复 home 中替换已存储的凭据。运行中的 Webapp 会话撤销、浏览器准入、副本之间经认证的连续性，以及经 owner 授权的恢复，各自需要独立证据。
 
 其他真实运行环境下的 Desktop 路由与 profile 生命周期转换、恢复前后经认证的连续性、受支持的调用方与 worker 来源证明及更广泛的投递回执对账，仍属 E0.7 的开放事项。可选 HTTP 入口仍依赖 E0.6。经 owner 授权的登记、激活绑定及对账仍是 E1.6 和 E3.6 的独立工作。[Issue #33](https://github.com/MosBot-AI/hermes-superagent/issues/33)
 

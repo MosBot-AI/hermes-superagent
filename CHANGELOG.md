@@ -83,6 +83,8 @@ This file distinguishes design work, development changes, and released capabilit
 - Run runtime artifact acceptance on exact pull-request heads with read-only credentials; keep downloadable artifact publication push-only.
 ### Changed
 
+- Verify native backup and restore of a synthetic Webapp credential, followed by target-only rotation with Webapp disabled. The manual Gateway acceptance checks that the stopped source and archive remain unchanged (#33).
+
 - Add real Linux Electron acceptance for copied installation markers and stopped synthetic home copies. When Desktop discovery shows only the primary route, explicitly scoped reads still reach each Gateway's own transcript, including copies with equal session IDs (#33).
 
 - Verify live retirement and same-name hot serve over retained native Gateway and Linux Electron WebSockets. The Desktop Bot Mode click shows retry while the named profile is absent and opens its original chat after hot serve (#33).
