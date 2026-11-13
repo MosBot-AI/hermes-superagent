@@ -1,17 +1,99 @@
+diff --git a/gateway/run_common.py b/gateway/run_common.py
+index 937f8f0c..b708bf46 100644
+--- a/gateway/run_common.py
++++ b/gateway/run_common.py
+@@ -4,8 +4,13 @@ Kept import-cycle free (imports nothing from ``gateway.run``) because these valu
+ are used as default-argument sentinels, which must resolve at ``def`` time.
+ """
+ 
++import logging
+ from typing import Any
+ 
++from gateway.restart import GATEWAY_SERVICE_RESTART_EXIT_CODE
++
++logger = logging.getLogger("gateway.run")
++
+ # Sentinel for "caller did not pass metadata" vs "caller passed None".
+ _UNSET = object()
+ 
+@@ -17,3 +22,35 @@ def _csv_or_list_to_set(raw: Any) -> set[str]:
+     if isinstance(raw, list):
+         return {str(part).strip() for part in raw if str(part).strip()}
+     return {part.strip() for part in str(raw).split(",") if part.strip()}
++
++
++def _exit_with_failure_verdict(runner) -> bool:
++    """True (after logging the reason) when the runner asked for a failure exit."""
++    if not runner.should_exit_with_failure:
++        return False
++    if runner.exit_reason:
++        logger.error("Gateway exiting with failure: %s", runner.exit_reason)
++    return True
++
++
++def _resolve_gateway_exit_verdict(runner, signal_initiated_shutdown: bool) -> bool:
++    """Resolve the process verdict after either startup abort or normal shutdown."""
++    if _exit_with_failure_verdict(runner):
++        return False
++    if runner.exit_code is not None:
++        raise SystemExit(runner.exit_code)
++    if signal_initiated_shutdown and not runner._restart_requested:
++        logger.info(
++            "Exiting with code 1 (signal-initiated shutdown without restart "
++            "request) so the service manager can revive the gateway."
++        )
++        return False
++    # Older restart paths may not set ``runner.exit_code``; retain the service-restart fallback.
++    if runner._restart_via_service:
++        logger.info(
++            "Exiting with code %d (service-restart requested) so the service "
++            "manager relaunches the gateway.",
++            GATEWAY_SERVICE_RESTART_EXIT_CODE,
++        )
++        raise SystemExit(GATEWAY_SERVICE_RESTART_EXIT_CODE)
++    return True
 diff --git a/gateway/run_notifications.py b/gateway/run_notifications.py
-index fa876f13..802b2ec5 100644
+index fa876f13..c76a5e42 100644
 --- a/gateway/run_notifications.py
 +++ b/gateway/run_notifications.py
-@@ -68,6 +68,8 @@ _SELF_CLEARING_STORAGE_CAUSES = frozenset({"compression", "compression_closed",
- # Process-watcher retries of a refused completion: ~5 min at the default 5 s check interval.
- _MAX_COMPLETION_INJECTION_ATTEMPTS = 8
- _COMPLETION_INJECTION_RETRY_MAX_DELAY = 60
-+_BOT_RECEIPT_RETRIES = 3
-+_BOT_RECEIPT_RETRY_INTERVAL = 1.0
+@@ -25,6 +25,11 @@ from gateway.platforms.event import MessageEvent, MessageType
+ from gateway.session import SessionEntry, SessionSource, SessionStore
+ from gateway.run_shutdown import _delivery_target_key, _log_suppressed, _notice_target_key, _send_error, _send_failed
+ from gateway.run_notifications_update import GatewayUpdateNotificationsMixin
++from gateway.run_notifications_process import (
++    GatewayProcessWatcherMixin,
++    _COMPLETION_INJECTION_RETRY_MAX_DELAY,
++    _MAX_COMPLETION_INJECTION_ATTEMPTS,
++)
+ from gateway.run_notifications_ownership import GatewayNotificationOwnershipMixin, _local_completion_card
+ 
+ # Log-record parity with the origin module.
+@@ -59,15 +64,10 @@ def _safe_delivery_transport(platform, config, adapters, *, profile: Optional[st
+ 
+ 
+ _VIDEO_EXTS = {'.mp4', '.mov', '.avi', '.mkv', '.webm', '.3gp'}
+-# Routing fields copied verbatim from a process watcher onto its synthetic completion event.
+-_WATCHER_ROUTE_FIELDS = ("session_key", "platform", "chat_type", "chat_id", "thread_id", "user_id", "user_name")
+ _IMAGE_EXTS = {'.jpg', '.jpeg', '.png', '.webp', '.gif'}
+ # Storage causes that clear on their own (one session's lease/compression, not the store): the
+ # home-channel notice appends the operator restart tail for every OTHER cause.
+ _SELF_CLEARING_STORAGE_CAUSES = frozenset({"compression", "compression_closed", "turn_lease"})
+-# Process-watcher retries of a refused completion: ~5 min at the default 5 s check interval.
+-_MAX_COMPLETION_INJECTION_ATTEMPTS = 8
+-_COMPLETION_INJECTION_RETRY_MAX_DELAY = 60
  # Drain retries of a refused watch event follow the same bounded-backoff policy, keyed to the
  # 2 s drain cadence instead of the watcher's check interval (#140899).
  _WATCH_INJECTION_RETRY_BASE_DELAY = 4.0
-@@ -1509,7 +1511,8 @@ class GatewayNotificationsMixin(GatewayUpdateNotificationsMixin, GatewayNotifica
+@@ -171,7 +171,7 @@ def _watch_notification_metadata(evt: dict, source) -> dict[str, Any]:
+     return metadata
+ 
+ 
+-class GatewayNotificationsMixin(GatewayUpdateNotificationsMixin, GatewayNotificationOwnershipMixin):
++class GatewayNotificationsMixin(GatewayUpdateNotificationsMixin, GatewayNotificationOwnershipMixin, GatewayProcessWatcherMixin):
+     """Process/completion/update notifications, media delivery and async-delegation delivery for GatewayRunner."""
+ 
+     # Coalescing keys: process completions (short-window fan-in) and async delegations (+ parent session).
+@@ -1509,7 +1509,8 @@ class GatewayNotificationsMixin(GatewayUpdateNotificationsMixin, GatewayNotifica
          # A route key alone is not ownership: /new can leave old and new pins
          # in the same queue. Never settle one pin on another pin's acceptance.
          key = self._event_route_key(
@@ -21,77 +103,299 @@ index fa876f13..802b2ec5 100644
          )
          future = asyncio.get_running_loop().create_future()
          self._completion_notification_batches.setdefault(key, []).append((synth_text, evt, future))
-@@ -1772,7 +1775,7 @@ class GatewayNotificationsMixin(GatewayUpdateNotificationsMixin, GatewayNotifica
+@@ -1771,49 +1772,6 @@ class GatewayNotificationsMixin(GatewayUpdateNotificationsMixin, GatewayNotifica
+                     chat_id, message_text, metadata=_non_conversational_metadata(send_meta, platform=platform_name),
                  )
  
-     @staticmethod
+-    @staticmethod
 -    def _build_process_completion_event(watcher: dict, session, session_id: str) -> dict:
-+    def _build_process_completion_event(watcher: dict, session, session_id: str, *, receipt=None) -> dict:
-         """Build the synthetic ``completion`` event for an agent-notify watcher."""
-         from gateway.run import _redact_gateway_user_facing_secrets
-         from agent.redact import redact_terminal_output
-@@ -1782,7 +1785,10 @@ class GatewayNotificationsMixin(GatewayUpdateNotificationsMixin, GatewayNotifica
-         _raw = strip_ansi(session.output_buffer) if session.output_buffer else ""
-         _raw = transform_process_output(_raw, command=_command, returncode=session.exit_code,
-                                         task_id=getattr(session, "task_id", "") or "") if _raw else _raw
+-        """Build the synthetic ``completion`` event for an agent-notify watcher."""
+-        from gateway.run import _redact_gateway_user_facing_secrets
+-        from agent.redact import redact_terminal_output
+-        from tools.ansi_strip import strip_ansi
+-        from tools.process_registry import transform_process_output
+-        _command = getattr(session, "command", "") or ""
+-        _raw = strip_ansi(session.output_buffer) if session.output_buffer else ""
+-        _raw = transform_process_output(_raw, command=_command, returncode=session.exit_code,
+-                                        task_id=getattr(session, "task_id", "") or "") if _raw else _raw
 -        _raw = redact_terminal_output(_raw, _command)
+-        # Keep the last ~2000 chars snapped to a line boundary, with a marker when cut.
+-        _LIMIT = 2000
+-        # Truncate at line boundaries so notifications never start mid-line (fixes #23284). Keep the last
+-        # ~2000 chars but snap to the nearest preceding newline, then prepend a truncation marker when
+-        # output was cut.
+-        if len(_raw) > _LIMIT:
+-            _tail = _raw[-_LIMIT:]
+-            _nl = _tail.find("\n")
+-            _tail = _tail[_nl + 1:] if _nl != -1 else _tail
+-            _out = f"[… output truncated — showing last {len(_tail)} chars]\n{_tail}"
+-        else:
+-            _out = _raw
+-        return {
+-            "type": "completion",
+-            "session_id": session_id,
+-            **{k: watcher.get(k, "") for k in _WATCHER_ROUTE_FIELDS},
+-            "owner_task_id": getattr(session, "owner_task_id", "") or "",
+-            "task_id": getattr(session, "task_id", "") or "",
+-            "message_id": str(watcher.get("message_id") or "").strip() or None,
+-            "started_at": getattr(session, "started_at", None),
+-            "command": _redact_gateway_user_facing_secrets(_command),
+-            "exit_code": session.exit_code,
+-            "completion_reason": getattr(session, "completion_reason", "exited"),
+-            "termination_source": getattr(session, "termination_source", ""),
+-            "output": _redact_gateway_user_facing_secrets(_out),
+-            # Spawning session-db id: lets pre-flight drop this completion if the user /new'd first.
+-            "parent_session_id": (
+-                watcher.get("parent_session_id") or getattr(session, "parent_session_id", "") or ""
+-            ),
+-        }
+-
+     def _format_process_final_message(self, session_id: str, session, notify_mode: str) -> str:
+         """Human-facing completion message. Every mode shares the one-line status header; the
+         raw-output modes (all/result/error) append the bounded output tail under it instead of the
+@@ -1864,120 +1822,3 @@ class GatewayNotificationsMixin(GatewayUpdateNotificationsMixin, GatewayNotifica
+         prepares runs that profile's own ``transform_terminal_output`` hooks before any delivery."""
+         async with self._completion_event_scope(watcher):
+             await self._watch_process(watcher)
+-
+-    async def _watch_process(self, watcher: dict) -> None:
+-        """Poll a background process and push updates until it exits. Mode
+-        (``display.background_process_notifications``): concise (default one-liner; failures append
+-        the output tail) / all (running updates + final raw) / result (final raw) / error (final raw
+-        if exit != 0) / off."""
+-        from tools.process_registry import process_registry
+-        from tools.process_registry_notifications import format_process_notification, should_surface_notification
+-        session_id = watcher["session_id"]
+-        interval = watcher["check_interval"]
+-        platform_name = watcher.get("platform", "")
+-        chat_id = watcher.get("chat_id", "")
+-        thread_id = watcher.get("thread_id", "")
+-        agent_notify = watcher.get("notify_on_complete", False)
+-        notify_mode = self._load_background_notifications_mode()  # the owning profile's (scope bound above)
+-        logger.debug("Process watcher started: %s (every %ss, notify=%s, agent_notify=%s)",
+-                      session_id, interval, notify_mode, agent_notify)
+-        silent = notify_mode == "off" and not agent_notify
+-        last_output_len = 0
+-        completion_attempts = 0
+-        retry_interval = interval
+-        while True:
+-            await asyncio.sleep(retry_interval)
+-            session = process_registry.get(session_id)
+-            if session is None:
+-                break
+-            surface = should_surface_notification({
+-                "owner_task_id": getattr(session, "owner_task_id", ""),
+-                "task_id": getattr(session, "task_id", ""),
+-            })
+-            if not surface:
+-                # Recheck live ownership next tick: handoff retains notification intent.
+-                if session.exited:
+-                    break
+-                continue
+-            if silent:
+-                # Still wait for the process to exit so we can log it, but don't push any messages.
+-                if session.exited:
+-                    break
+-                continue
+-            current_output_len = len(session.output_buffer)
+-            has_new_output = current_output_len > last_output_len
+-            last_output_len = current_output_len
+-            if session.exited:
+-                # Agent-notify: inject a synthetic message unless the agent already consumed the result via
+-                # wait/log (poll() is read-only and deliberately does NOT mark consumed).
+-                if agent_notify and not process_registry.is_completion_consumed(session_id):
+-                    completion_evt = self._build_process_completion_event(watcher, session, session_id)
+-                    synth_text = format_process_notification(completion_evt)
+-                    if not synth_text:
+-                        break
+-                    # Captured before injection: afterwards the key is busy either way (the injected
+-                    # turn itself installs the guard).
+-                    turn_busy = await self._launching_turn_active(platform_name, watcher)
+-                    delivered = await self._enqueue_process_completion_notification(synth_text, completion_evt)
+-                    if delivered is not False:
+-                        # The agent normally reports the result itself, so the chat gets no separate
+-                        # receipt. While the launching turn is still running the injection only queues a
+-                        # follow-up, and the chat would stay mute for as long as that turn lasts
+-                        # (#112033): send the concise receipt now.
+-                        if turn_busy and (notify_mode in {"concise", "all", "result"} or (
+-                            notify_mode == "error" and session.exit_code not in {0, None}
+-                        )):
+-                            message_text = self._format_process_final_message(session_id, session, "concise")
+-                            await self._send_watcher_message(platform_name, chat_id, thread_id, message_text, watcher)
+-                        break
+-                    # A refusal may clear (adapter reconnecting, store draining), so retry with backoff
+-                    # for a few minutes, then fall through to the plain notice instead of dropping it.
+-                    completion_attempts += 1
+-                    if completion_attempts < _MAX_COMPLETION_INJECTION_ATTEMPTS:
+-                        retry_interval = jittered_backoff(
+-                            completion_attempts, base_delay=max(interval, 1) * 2,
+-                            max_delay=_COMPLETION_INJECTION_RETRY_MAX_DELAY, jitter_ratio=0.0)
+-                        continue
+-                    if (getattr(self, 'session_authority', None) is not None
+-                            and self._completion_delivery_identity(completion_evt) is not None):
+-                        from gateway.session_automation import completion_admission
+-                        try:
+-                            # The owning profile's authority, as on the delivery path.
+-                            async with self._completion_event_scope(completion_evt):
+-                                committed = completion_admission(self, completion_evt) is not None
+-                        except Exception:
+-                            # Failing open sends the notice; a dead watcher would send nothing.
+-                            logger.debug("Process watcher: admission recheck failed for %s", session_id,
+-                                         exc_info=True)
+-                            committed = False
+-                        if committed:
+-                            break  # The last refusal was a lost ACK: the turn is committed.
+-                    logger.warning(
+-                        "Process watcher: completion for %s was refused %d times; falling back to the "
+-                        "notify_mode=%s notice", session_id, completion_attempts, notify_mode,
+-                    )
+-                # Text-only notification; skip when already consumed via wait/log (the agent_notify branch
+-                # FALLS THROUGH here, hence the re-check).
+-                if process_registry.is_completion_consumed(session_id):
+-                    logger.debug(
+-                        "Process watcher: completion for %s already consumed "
+-                        "via wait/log — skipping raw notification (#65379)", session_id,
+-                    )
+-                    break
+-                if notify_mode in {"concise", "all", "result"} or (
+-                    notify_mode == "error" and session.exit_code not in {0, None}
+-                ):
+-                    message_text = self._format_process_final_message(session_id, session, notify_mode)
+-                    from gateway.warning_notifications import present_notification
+-                    # Non-zero exit is the automatic diagnostic; a clean completion is the requested result.
+-                    await present_notification(
+-                        lambda: self._send_watcher_message(platform_name, chat_id, thread_id, message_text, watcher),
+-                        platform=platform_name, diagnostic=session.exit_code not in {0, None})
+-                break
+-            elif has_new_output and notify_mode == "all" and not agent_notify:
+-                # New output — deliver a status update (only in "all" mode; agent_notify watchers
+-                # only care about completion).
+-                await self._send_watcher_message(
+-                    platform_name, chat_id, thread_id, self._format_process_running_message(session), watcher,
+-                )
+-        logger.debug("Process watcher ended%s: %s", " (silent)" if silent else "", session_id)
+diff --git a/gateway/run_notifications_process.py b/gateway/run_notifications_process.py
+new file mode 100644
+index 00000000..83b52491
+--- /dev/null
++++ b/gateway/run_notifications_process.py
+@@ -0,0 +1,235 @@
++"""Local process watcher polling and completion notification admission."""
++
++import asyncio
++import logging
++
++from agent.retry_utils import jittered_backoff
++
++logger = logging.getLogger("gateway.run")
++
++_WATCHER_ROUTE_FIELDS = ("session_key", "platform", "chat_type", "chat_id", "thread_id", "user_id", "user_name")
++_MAX_COMPLETION_INJECTION_ATTEMPTS = 8
++_COMPLETION_INJECTION_RETRY_MAX_DELAY = 60
++_BOT_RECEIPT_RETRIES = 3
++_BOT_RECEIPT_RETRY_INTERVAL = 1.0
++
++
++class GatewayProcessWatcherMixin:
++    """Watch process exits and submit their scoped completions through the Gateway."""
++
++    @staticmethod
++    def _build_process_completion_event(watcher: dict, session, session_id: str, *, receipt=None) -> dict:
++        """Build the synthetic ``completion`` event for an agent-notify watcher."""
++        from gateway.run import _redact_gateway_user_facing_secrets
++        from agent.redact import redact_terminal_output
++        from tools.ansi_strip import strip_ansi
++        from tools.process_registry import transform_process_output
++        _command = getattr(session, "command", "") or ""
++        _raw = strip_ansi(session.output_buffer) if session.output_buffer else ""
++        _raw = transform_process_output(_raw, command=_command, returncode=session.exit_code,
++                                        task_id=getattr(session, "task_id", "") or "") if _raw else _raw
 +        if receipt is not None:
 +            _raw = redact_terminal_output(receipt, _command, force=True)
 +        else:
 +            _raw = redact_terminal_output(_raw, _command)
-         # Keep the last ~2000 chars snapped to a line boundary, with a marker when cut.
-         _LIMIT = 2000
-         # Truncate at line boundaries so notifications never start mid-line (fixes #23284). Keep the last
-@@ -1812,6 +1818,9 @@ class GatewayNotificationsMixin(GatewayUpdateNotificationsMixin, GatewayNotifica
-             "parent_session_id": (
-                 watcher.get("parent_session_id") or getattr(session, "parent_session_id", "") or ""
-             ),
++        # Keep the last ~2000 chars snapped to a line boundary, with a marker when cut.
++        _LIMIT = 2000
++        # Truncate at line boundaries so notifications never start mid-line (fixes #23284). Keep the last
++        # ~2000 chars but snap to the nearest preceding newline, then prepend a truncation marker when
++        # output was cut.
++        if len(_raw) > _LIMIT:
++            _tail = _raw[-_LIMIT:]
++            _nl = _tail.find("\n")
++            _tail = _tail[_nl + 1:] if _nl != -1 else _tail
++            _out = f"[… output truncated — showing last {len(_tail)} chars]\n{_tail}"
++        else:
++            _out = _raw
++        return {
++            "type": "completion",
++            "session_id": session_id,
++            **{k: watcher.get(k, "") for k in _WATCHER_ROUTE_FIELDS},
++            "owner_task_id": getattr(session, "owner_task_id", "") or "",
++            "task_id": getattr(session, "task_id", "") or "",
++            "message_id": str(watcher.get("message_id") or "").strip() or None,
++            "started_at": getattr(session, "started_at", None),
++            "command": _redact_gateway_user_facing_secrets(_command),
++            "exit_code": session.exit_code,
++            "completion_reason": getattr(session, "completion_reason", "exited"),
++            "termination_source": getattr(session, "termination_source", ""),
++            "output": _redact_gateway_user_facing_secrets(_out),
++            # Spawning session-db id: lets pre-flight drop this completion if the user /new'd first.
++            "parent_session_id": (
++                watcher.get("parent_session_id") or getattr(session, "parent_session_id", "") or ""
++            ),
 +            # A Bot reply waiter produces a receipt for the sender. Keep the same
 +            # unattended presentation whether this watcher was started or recovered.
 +            **({"_bot_reply_waiter": True} if getattr(session, "recoverable_output", False) is True else {}),
-         }
- 
-     def _format_process_final_message(self, session_id: str, session, notify_mode: str) -> str:
-@@ -1872,6 +1881,7 @@ class GatewayNotificationsMixin(GatewayUpdateNotificationsMixin, GatewayNotifica
-         if exit != 0) / off."""
-         from tools.process_registry import process_registry
-         from tools.process_registry_notifications import format_process_notification, should_surface_notification
-+        from tools.process_registry_results import recoverable_results, settle_result_notification
-         session_id = watcher["session_id"]
-         interval = watcher["check_interval"]
-         platform_name = watcher.get("platform", "")
-@@ -1884,12 +1894,23 @@ class GatewayNotificationsMixin(GatewayUpdateNotificationsMixin, GatewayNotifica
-         silent = notify_mode == "off" and not agent_notify
-         last_output_len = 0
-         completion_attempts = 0
++        }
++
++    async def _watch_process(self, watcher: dict) -> None:
++        """Poll a background process and push updates until it exits. Mode
++        (``display.background_process_notifications``): concise (default one-liner; failures append
++        the output tail) / all (running updates + final raw) / result (final raw) / error (final raw
++        if exit != 0) / off."""
++        from tools.process_registry import process_registry
++        from tools.process_registry_notifications import format_process_notification, should_surface_notification
++        from tools.process_registry_results import settle_result_notification
++        session_id = watcher["session_id"]
++        interval = watcher["check_interval"]
++        platform_name = watcher.get("platform", "")
++        chat_id = watcher.get("chat_id", "")
++        thread_id = watcher.get("thread_id", "")
++        agent_notify = watcher.get("notify_on_complete", False)
++        notify_mode = self._load_background_notifications_mode()  # the owning profile's (scope bound above)
++        logger.debug("Process watcher started: %s (every %ss, notify=%s, agent_notify=%s)",
++                      session_id, interval, notify_mode, agent_notify)
++        silent = notify_mode == "off" and not agent_notify
++        last_output_len = 0
++        completion_attempts = 0
 +        receipt_retries = 0
-         retry_interval = interval
-         while True:
-             await asyncio.sleep(retry_interval)
--            session = process_registry.get(session_id)
--            if session is None:
--                break
-+            if watcher.get("retained_result"):
-+                retained = next(recoverable_results(session_id), None)
-+                if retained is None or retained[1] != "pending":
++        retry_interval = interval
++        while True:
++            await asyncio.sleep(retry_interval)
++            session = self._process_watcher_session(watcher)
++            if session is None:
++                break
++            surface = should_surface_notification({
++                "owner_task_id": getattr(session, "owner_task_id", ""),
++                "task_id": getattr(session, "task_id", ""),
++            })
++            if not surface:
++                # Recheck live ownership next tick: handoff retains notification intent.
++                if session.exited:
 +                    break
-+                session = retained[0]
-+                if (session.session_key != watcher.get("session_key")
-+                        or session.started_at != watcher.get("started_at")
-+                        or session.parent_session_id != watcher.get("parent_session_id")):
++                continue
++            if silent:
++                # Still wait for the process to exit so we can log it, but don't push any messages.
++                if session.exited:
 +                    break
-+            else:
-+                session = process_registry.get(session_id)
-+                if session is None:
-+                    break
-             surface = should_surface_notification({
-                 "owner_task_id": getattr(session, "owner_task_id", ""),
-                 "task_id": getattr(session, "task_id", ""),
-@@ -1911,7 +1932,21 @@ class GatewayNotificationsMixin(GatewayUpdateNotificationsMixin, GatewayNotifica
-                 # Agent-notify: inject a synthetic message unless the agent already consumed the result via
-                 # wait/log (poll() is read-only and deliberately does NOT mark consumed).
-                 if agent_notify and not process_registry.is_completion_consumed(session_id):
--                    completion_evt = self._build_process_completion_event(watcher, session, session_id)
++                continue
++            current_output_len = len(session.output_buffer)
++            has_new_output = current_output_len > last_output_len
++            last_output_len = current_output_len
++            if session.exited:
++                # Agent-notify: inject a synthetic message unless the agent already consumed the result via
++                # wait/log (poll() is read-only and deliberately does NOT mark consumed).
++                if agent_notify and not process_registry.is_completion_consumed(session_id):
 +                    receipt = None
 +                    if getattr(session, "bot_reply_receipt", None):
 +                        from tools.bot_waiter_receipt import RECEIPT_PENDING, read_terminated_reply
@@ -107,50 +411,161 @@ index fa876f13..802b2ec5 100644
 +                            await asyncio.to_thread(settle_result_notification, session, "consumed")
 +                            break
 +                    completion_evt = self._build_process_completion_event(watcher, session, session_id, receipt=receipt)
-                     synth_text = format_process_notification(completion_evt)
-                     if not synth_text:
-                         break
-@@ -1920,6 +1955,8 @@ class GatewayNotificationsMixin(GatewayUpdateNotificationsMixin, GatewayNotifica
-                     turn_busy = await self._launching_turn_active(platform_name, watcher)
-                     delivered = await self._enqueue_process_completion_notification(synth_text, completion_evt)
-                     if delivered is not False:
++                    synth_text = format_process_notification(completion_evt)
++                    if not synth_text:
++                        break
++                    # Captured before injection: afterwards the key is busy either way (the injected
++                    # turn itself installs the guard).
++                    turn_busy = await self._launching_turn_active(platform_name, watcher)
++                    delivered = await self._enqueue_process_completion_notification(synth_text, completion_evt)
++                    if delivered is not False:
 +                        if getattr(session, "recoverable_output", False) is True:
 +                            await asyncio.to_thread(settle_result_notification, session, "handled")
-                         # The agent normally reports the result itself, so the chat gets no separate
-                         # receipt. While the launching turn is still running the injection only queues a
-                         # follow-up, and the chat would stay mute for as long as that turn lasts
-@@ -1951,6 +1988,8 @@ class GatewayNotificationsMixin(GatewayUpdateNotificationsMixin, GatewayNotifica
-                                          exc_info=True)
-                             committed = False
-                         if committed:
-+                            if getattr(session, "recoverable_output", False) is True:
-+                                await asyncio.to_thread(settle_result_notification, session, "handled")
-                             break  # The last refusal was a lost ACK: the turn is committed.
-                     logger.warning(
-                         "Process watcher: completion for %s was refused %d times; falling back to the "
-@@ -1959,6 +1998,8 @@ class GatewayNotificationsMixin(GatewayUpdateNotificationsMixin, GatewayNotifica
-                 # Text-only notification; skip when already consumed via wait/log (the agent_notify branch
-                 # FALLS THROUGH here, hence the re-check).
-                 if process_registry.is_completion_consumed(session_id):
-+                    if getattr(session, "recoverable_output", False) is True:
-+                        await asyncio.to_thread(settle_result_notification, session, "consumed")
-                     logger.debug(
-                         "Process watcher: completion for %s already consumed "
-                         "via wait/log — skipping raw notification (#65379)", session_id,
-@@ -1973,6 +2014,8 @@ class GatewayNotificationsMixin(GatewayUpdateNotificationsMixin, GatewayNotifica
-                     await present_notification(
-                         lambda: self._send_watcher_message(platform_name, chat_id, thread_id, message_text, watcher),
-                         platform=platform_name, diagnostic=session.exit_code not in {0, None})
-+                if getattr(session, "recoverable_output", False) is True:
-+                    await asyncio.to_thread(settle_result_notification, session, "handled")
-                 break
-             elif has_new_output and notify_mode == "all" and not agent_notify:
-                 # New output — deliver a status update (only in "all" mode; agent_notify watchers
++                        # The agent normally reports the result itself, so the chat gets no separate
++                        # receipt. While the launching turn is still running the injection only queues a
++                        # follow-up, and the chat would stay mute for as long as that turn lasts
++                        # (#112033): send the concise receipt now.
++                        if turn_busy and (notify_mode in {"concise", "all", "result"} or (
++                            notify_mode == "error" and session.exit_code not in {0, None}
++                        )):
++                            message_text = self._format_process_final_message(session_id, session, "concise")
++                            await self._send_watcher_message(platform_name, chat_id, thread_id, message_text, watcher)
++                        break
++                    # A refusal may clear (adapter reconnecting, store draining), so retry with backoff
++                    # for a few minutes, then fall through to the plain notice instead of dropping it.
++                    completion_attempts += 1
++                    if completion_attempts < _MAX_COMPLETION_INJECTION_ATTEMPTS:
++                        retry_interval = jittered_backoff(
++                            completion_attempts, base_delay=max(interval, 1) * 2,
++                            max_delay=_COMPLETION_INJECTION_RETRY_MAX_DELAY, jitter_ratio=0.0)
++                        continue
++                    if await self._process_completion_committed(completion_evt, session):
++                        break
++                    logger.warning(
++                        "Process watcher: completion for %s was refused %d times; falling back to the "
++                        "notify_mode=%s notice", session_id, completion_attempts, notify_mode,
++                    )
++                await self._finish_process_watcher(watcher, session, notify_mode)
++                break
++            elif has_new_output and notify_mode == "all" and not agent_notify:
++                # New output — deliver a status update (only in "all" mode; agent_notify watchers
++                # only care about completion).
++                await self._send_watcher_message(
++                    platform_name, chat_id, thread_id, self._format_process_running_message(session), watcher,
++                )
++        logger.debug("Process watcher ended%s: %s", " (silent)" if silent else "", session_id)
++
++    @staticmethod
++    def _process_watcher_session(watcher):
++        from tools.process_registry import process_registry
++        from tools.process_registry_results import recoverable_results
++
++        session_id = watcher["session_id"]
++        if not watcher.get("retained_result"):
++            return process_registry.get(session_id)
++        retained = next(recoverable_results(session_id), None)
++        if retained is None or retained[1] != "pending":
++            return None
++        session = retained[0]
++        expected = (watcher.get("session_key"), watcher.get("started_at"), watcher.get("parent_session_id"))
++        actual = (session.session_key, session.started_at, session.parent_session_id)
++        return session if actual == expected else None
++
++    async def _finish_process_watcher(self, watcher, session, notify_mode):
++        """Deliver the plain notice when no synthetic admission was made."""
++        from tools.process_registry import process_registry
++        from tools.process_registry_results import settle_result_notification
++
++        session_id = watcher["session_id"]
++        recoverable = getattr(session, "recoverable_output", False) is True
++        if process_registry.is_completion_consumed(session_id):
++            if recoverable:
++                await asyncio.to_thread(settle_result_notification, session, "consumed")
++            logger.debug("Process watcher: completion for %s already consumed via wait/log", session_id)
++            return
++        if notify_mode in {"concise", "all", "result"} or (
++            notify_mode == "error" and session.exit_code not in {0, None}
++        ):
++            from gateway.warning_notifications import present_notification
++
++            platform = watcher.get("platform", "")
++            message = self._format_process_final_message(session_id, session, notify_mode)
++            await present_notification(
++                lambda: self._send_watcher_message(
++                    platform, watcher.get("chat_id", ""), watcher.get("thread_id", ""), message, watcher,
++                ),
++                platform=platform, diagnostic=session.exit_code not in {0, None},
++            )
++        if recoverable:
++            await asyncio.to_thread(settle_result_notification, session, "handled")
++
++    async def _process_completion_committed(self, event, session):
++        if getattr(self, "session_authority", None) is None or self._completion_delivery_identity(event) is None:
++            return False
++        from gateway.session_automation import completion_admission
++        from tools.process_registry_results import settle_result_notification
++
++        try:
++            async with self._completion_event_scope(event):
++                committed = completion_admission(self, event) is not None
++        except Exception:
++            # An unconfirmed admission still gets the usual plain fallback.
++            logger.debug("Process watcher: admission recheck failed for %s", event["session_id"], exc_info=True)
++            return False
++        if committed and getattr(session, "recoverable_output", False) is True:
++            await asyncio.to_thread(settle_result_notification, session, "handled")
++        return committed
 diff --git a/gateway/run_shutdown.py b/gateway/run_shutdown.py
-index 005887e4..bf42b7e4 100644
+index 005887e4..8b127401 100644
 --- a/gateway/run_shutdown.py
 +++ b/gateway/run_shutdown.py
-@@ -2195,6 +2195,12 @@ class GatewayShutdownMixin(GatewaySessionEndMixin, GatewayHomeShutdownNoticeMixi
+@@ -28,6 +28,7 @@ from gateway.restart import (
+     effective_stop_drain_timeout, effective_stop_watchdog_delay, resolve_cron_drain_budget
+ )
+ from gateway.run_common import _UNSET
++from gateway.run_common import _resolve_gateway_exit_verdict
+ from gateway.run_runtime import interrupt_side_agents, managed_turn_count, stop_managed_turns
+ from gateway.session_runtime_workers import uncounted_runtime_work_units
+ from gateway.run_shutdown_home_notice import (
+@@ -42,37 +43,6 @@ from gateway.shutdown_watchdog import arm_shutdown_watchdog, resolve_shutdown_wa
+ logger = logging.getLogger("gateway.run")
+ 
+ 
+-def _exit_with_failure_verdict(runner) -> bool:
+-    """True (after logging the reason) when the runner asked for a failure exit."""
+-    if not runner.should_exit_with_failure:
+-        return False
+-    if runner.exit_reason:
+-        logger.error("Gateway exiting with failure: %s", runner.exit_reason)
+-    return True
+-
+-
+-def _resolve_gateway_exit_verdict(runner, signal_initiated_shutdown: bool) -> bool:
+-    """Resolve the process verdict after either startup abort or normal shutdown."""
+-    if _exit_with_failure_verdict(runner):
+-        return False
+-    if runner.exit_code is not None:
+-        raise SystemExit(runner.exit_code)
+-    if signal_initiated_shutdown and not runner._restart_requested:
+-        logger.info(
+-            "Exiting with code 1 (signal-initiated shutdown without restart "
+-            "request) so the service manager can revive the gateway."
+-        )
+-        return False
+-    # Older restart paths may not set ``runner.exit_code``; retain the service-restart fallback.
+-    if runner._restart_via_service:
+-        logger.info(
+-            "Exiting with code %d (service-restart requested) so the service "
+-            "manager relaunches the gateway.",
+-            GATEWAY_SERVICE_RESTART_EXIT_CODE,
+-        )
+-        raise SystemExit(GATEWAY_SERVICE_RESTART_EXIT_CODE)
+-    return True
+-
+ # Windows has no bash/setsid chain: a tiny detached Python watcher waits for the gateway PID to
+ # exit (bounded), then spawns ``hermes gateway restart``.
+ _WINDOWS_RESTART_WATCHER = """
+@@ -2195,6 +2165,12 @@ class GatewayShutdownMixin(GatewaySessionEndMixin, GatewayHomeShutdownNoticeMixi
                  await GatewayRunner._stop_interrupt_remaining_work(self, ctx)
              from gateway.run_runtime import settle_gateway_runtime  # within what the leash has left
              await settle_gateway_runtime(self, _effective_watchdog_leash(self) - ctx.elapsed(), GatewayRunner._shutdown_interrupt_reason(self))
@@ -373,10 +788,10 @@ index 4faabf75..731e013a 100644
          except (ValueError, TypeError):
 diff --git a/tools/bot_waiter_receipt.py b/tools/bot_waiter_receipt.py
 new file mode 100644
-index 00000000..fc37631f
+index 00000000..e7045da5
 --- /dev/null
 +++ b/tools/bot_waiter_receipt.py
-@@ -0,0 +1,294 @@
+@@ -0,0 +1,300 @@
 +"""Read the exact native Bot receipt for a terminated local reply waiter."""
 +
 +import hashlib
@@ -409,8 +824,13 @@ index 00000000..fc37631f
 +    return [metadata.st_dev, metadata.st_ino]
 +
 +
++def _local_uid():
++    getuid = getattr(os, "getuid", None)
++    return getuid() if os.name == "posix" and getuid is not None else None
++
++
 +def _owned_metadata(metadata):
-+    return metadata.st_uid == os.getuid() and not metadata.st_mode & 0o022
++    return metadata.st_uid == _local_uid() and not metadata.st_mode & 0o022
 +
 +
 +def _profile_directory(path):
@@ -434,7 +854,8 @@ index 00000000..fc37631f
 +def bind_reply_receipt(record, author, sender_session):
 +    """Capture the already admitted delivery identity before the waiter starts."""
 +    if (
-+        hosted_scope() is not None
++        _local_uid() is None
++        or hosted_scope() is not None
 +        or not isinstance(record, dict)
 +        or not isinstance(sender_session, str)
 +        or not sender_session
@@ -457,7 +878,7 @@ index 00000000..fc37631f
 +            "target_session": record["session_id"],
 +            "delivery_id": record["delivery_id"],
 +            "admission_id": record["admission_id"],
-+            "principal_id": f"uid:{os.getuid()}",
++            "principal_id": f"uid:{_local_uid()}",
 +            "request_digest": _fingerprint(record["message"], author),
 +        }
 +    except (OSError, ValueError, RuntimeError, TypeError):
@@ -492,7 +913,7 @@ index 00000000..fc37631f
 +            metadata = os.fstat(stream.fileno())
 +            if (
 +                not stat.S_ISREG(metadata.st_mode)
-+                or metadata.st_uid != os.getuid()
++                or metadata.st_uid != _local_uid()
 +                or metadata.st_mode & 0o077
 +            ):
 +                return None
@@ -596,7 +1017,7 @@ index 00000000..fc37631f
 +    """Read a verified terminal receipt or signal temporary absence after scope checks."""
 +    binding = session.bot_reply_receipt
 +    if (
-+        os.name != "posix"
++        _local_uid() is None
 +        or session.sandbox_key
 +        or hosted_scope() is not None
 +        or not isinstance(binding, dict)
@@ -615,7 +1036,7 @@ index 00000000..fc37631f
 +            binding["sender_session"] != session.parent_session_id
 +            or binding["sender_home"] != str(sender)
 +            or binding["sender_directory"] != _directory_identity(sender.stat())
-+            or binding["principal_id"] != f"uid:{os.getuid()}"
++            or binding["principal_id"] != f"uid:{_local_uid()}"
 +        ):
 +            return None
 +        key = binding["delivery_id"]
@@ -672,18 +1093,10 @@ index 00000000..fc37631f
 +        {"outcome": outcome_line(who, payload), **payload}, ensure_ascii=False
 +    )
 diff --git a/tools/process_registry.py b/tools/process_registry.py
-index b8eb4898..5b2bd933 100644
+index b8eb4898..7bb7b49a 100644
 --- a/tools/process_registry.py
 +++ b/tools/process_registry.py
-@@ -19,6 +19,7 @@ import threading
- import time
- import uuid
- from pathlib import Path
-+from contextlib import contextmanager
- 
- _IS_WINDOWS = platform.system() == "Windows"
- # systemd transient scopes exist only on Linux; gate every scope-path branch on this
-@@ -35,12 +36,12 @@ from hermes_cli.config import get_hermes_home
+@@ -35,12 +35,12 @@ from hermes_cli.config import get_hermes_home
  
  from tools.process_registry_notifications import (
      format_process_notification, heartbeat_output_tail, is_child_process_notification, should_surface_notification)
@@ -698,7 +1111,7 @@ index b8eb4898..5b2bd933 100644
  from tools.process_registry_env_log import fallback_exit_code, log_delta_command, parse_log_delta_reply
  from tools.process_registry_wsl import _is_wsl_launcher_command
  
-@@ -574,7 +575,11 @@ class ProcessSession:
+@@ -574,7 +574,11 @@ class ProcessSession:
      handoff_note: str = ""                      # why a subagent handed this process to its parent (rides the notice)
      persist_on_release: bool = False           # opt out of agent-lifecycle cleanup (release()/turn-abandon kill
                                                  # sweeps), per terminal(background=true, persist_on_release=true) (#41225)
@@ -711,7 +1124,7 @@ index b8eb4898..5b2bd933 100644
      pty_fallback: str = ""                      # why a pty=true local spawn runs in pipe mode instead
      # Watcher/notification routing (persisted for crash recovery)
      watcher_platform: str = ""
-@@ -662,7 +667,7 @@ _CHECKPOINT_FIELDS = (
+@@ -662,7 +666,7 @@ _CHECKPOINT_FIELDS = (
      "started_at", "task_id", "owner_task_id", "session_key",
      *(f"watcher_{k}" for k in _WATCHER_ROUTE_KEYS), "watcher_interval",
      "parent_session_id", "notify_on_complete", "completion_output_chars", "watch_patterns",
@@ -720,7 +1133,7 @@ index b8eb4898..5b2bd933 100644
  _CHECKPOINT_DEFAULTS = {
      f.name: ([] if f.name == "watch_patterns" else f.default)
      for f in ProcessSession.__dataclass_fields__.values()
-@@ -1155,6 +1160,8 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
+@@ -1155,6 +1159,8 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
              # ghost entry if the interpreter cannot start another thread.
              reader.start()
              self._running[session.id] = session
@@ -729,7 +1142,7 @@ index b8eb4898..5b2bd933 100644
          self._write_checkpoint()
  
      def _spawn_local_pty(self, session: ProcessSession, safe_command: str, env_vars: dict) -> ProcessSession:
-@@ -1184,7 +1191,8 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
+@@ -1184,7 +1190,8 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
      def spawn_local(
          self, command: str, cwd: str | None = None, task_id: str = "", session_key: str = "",
          env_vars: dict | None = None, use_pty: bool = False, owner_task_id: str = "",
@@ -739,7 +1152,7 @@ index b8eb4898..5b2bd933 100644
          """Spawn a background process locally (TERMINAL_ENV=local; other backends: spawn_via_env()).
          ``use_pty`` asks ptyprocess/pywinpty for a pseudo-terminal; on failure: pipe + ``pty_fallback``.
          ``persist_on_release``: no agent kill sweeps (#41225); ``restore_login_path``: re-add reset PATH dirs (#56634)."""
-@@ -1196,8 +1204,13 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
+@@ -1196,8 +1203,13 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
          session = self._new_session(command, task_id, owner_task_id, session_key, _resolve_safe_cwd(cwd or os.getcwd()),
                                      persist_on_release=persist_on_release)
          pty_scope_attempted = False
@@ -755,7 +1168,7 @@ index b8eb4898..5b2bd933 100644
          if use_pty and log is None:
              try:
                  return self._spawn_local_pty(session, safe_command, env_vars)
-@@ -1537,9 +1550,41 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
+@@ -1537,7 +1549,8 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
          session lock (like kill_process's commit) so the check-and-write is atomic against other finishers."""
          with session._lock:
              recorded = session.mark_exited(exit_code, reason, source)
@@ -764,41 +1177,8 @@ index b8eb4898..5b2bd933 100644
 +            self._move_to_finished(session)
          return recorded
  
-+    @staticmethod
-+    @contextmanager
-+    def _reply_scope(session: ProcessSession):
-+        # The host shutdown sweep has no requesting profile. Bind persistence to
-+        # the home captured at spawn/adoption, without loading credentials.
-+        if session._reply_home is None or hosted_scope() is not None:
-+            yield
-+            return
-+        from hermes_constants import reset_hermes_home_override, set_hermes_home_override
-+        token = set_hermes_home_override(session._reply_home)
-+        try:
-+            yield
-+        finally:
-+            reset_hermes_home_override(token)
-+
-+    def wait_for_local_reply_handoffs(self, timeout: float) -> None:
-+        """Give already admitted, receipt-only waiters a bounded final collection window."""
-+        if timeout <= 0:
-+            return
-+        with self._lock:
-+            waiters = [
-+                session for session in self._running.values()
-+                if session._reply_home is not None and session.recoverable_output
-+                and session.notify_on_complete and session.watcher_platform == "local"
-+                and session.parent_session_id and session.session_key
-+            ]
-+        deadline = time.monotonic() + timeout
-+        for session in waiters:
-+            if not session._completion_event.wait(max(0.0, deadline - time.monotonic())):
-+                break
-+
      def _move_to_finished(self, session: ProcessSession) -> bool:
-         """Move a session from running to finished.
-         Idempotent: kill_process() and the reader thread can both call this; only
-@@ -1585,6 +1630,7 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
+@@ -1585,6 +1598,7 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
                  "task_id": session.task_id,
                  "owner_task_id": session.owner_task_id,
                  **producer_fields(session.sandbox_key),
@@ -806,7 +1186,47 @@ index b8eb4898..5b2bd933 100644
                  "command": session.command,
                  **({"handoff_note": session.handoff_note} if session.handoff_note else {}),
                  **self._exit_fields(session),
-@@ -1649,6 +1695,16 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
+@@ -1605,39 +1619,6 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
+             "termination_source": session.termination_source,
+         }
+ 
+-    def _release_finished_handles(self, session: ProcessSession):
+-        """Close a finished session's OS handles (Popen pipes / PTY master).
+-
+-        Best-effort and idempotent: the session may have no local Popen (env
+-        backends, detached recovery), or the handles may already be closed by
+-        the reader loop / kill path. Closing a Popen's stream objects does not
+-        kill anything — the child has already exited — it only releases the
+-        parent's pipe FDs, which is exactly the retained-resource leak.
+-        """
+-        proc = session.process
+-        if proc is not None:
+-            for stream in (proc.stdout, proc.stderr, proc.stdin):
+-                if stream is not None:
+-                    with suppress(OSError, ValueError):  # a stdin flush can hit EPIPE
+-                        stream.close()
+-        if session._pty is not None:
+-            # A live ptyprocess reader sits in a blocking read holding the PTY file
+-            # object's buffer lock, and that read only ends once every holder of
+-            # the slave side is gone. A descendant that setsid()s past the kill
+-            # keeps it open, so close() here would block forever (under _lock on
+-            # the prune path). The reader closes the PTY itself via
+-            # _finish_reader once its read ends. pywinpty reads don't block, so
+-            # Windows closes here as before.
+-            reader = session._reader_thread
+-            if (not _IS_WINDOWS and reader is not None and reader.is_alive()
+-                    and reader is not threading.current_thread()):
+-                return
+-            # ptyprocess/pywinpty close() is idempotent (``closed`` flag) and
+-            # closes the master fd exactly once; it raises only if the child
+-            # ignores SIGKILL, which we don't want to surface on the finish path.
+-            with suppress(Exception):
+-                session._pty.close()
+-
+     # ----- Query Methods -----
+ 
+     @staticmethod
+@@ -1649,6 +1630,16 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
          return (session._reader_finish_requested.is_set() and not session._completion_event.is_set()
                  and reader is not None and reader.is_alive())
  
@@ -823,7 +1243,7 @@ index b8eb4898..5b2bd933 100644
      def is_completion_consumed(self, session_id: str) -> bool:
          """Check if a completion notification was already consumed via wait/log."""
          return session_id in self._completion_consumed
-@@ -2046,7 +2102,7 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
+@@ -2046,7 +2037,7 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
              **self._status_head(session), "output": "\n".join(selected),
              "total_lines": total_lines, "showing": f"{len(selected)} lines"}
          if exited and observed_completion_output and not finalizing:
@@ -832,7 +1252,7 @@ index b8eb4898..5b2bd933 100644
          return result
  
      def wait(self, session_id: str, timeout: int | None = None) -> dict:
-@@ -2080,7 +2136,7 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
+@@ -2080,7 +2071,7 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
              self._reconcile_local_exit(session)  # orphaned-pipe reader guard
              result = None
              if session.exited and not self._reader_finalizing(session):
@@ -841,7 +1261,7 @@ index b8eb4898..5b2bd933 100644
                  result = self._exit_snapshot(session, "exited")
              elif _is_interrupted():
                  result = {
-@@ -2156,7 +2212,7 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
+@@ -2156,7 +2147,7 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
              # Only suppress the autonomous turn after its output is present in
              # the explicit kill result, matching wait/log consumption.
              if consume_output and not finalizing:
@@ -850,7 +1270,7 @@ index b8eb4898..5b2bd933 100644
              return result
          try:
              early = self._signal_kill(session, session_id, consume_output)
-@@ -2205,7 +2261,7 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
+@@ -2205,7 +2196,7 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
              with session._lock:
                  output = _completion_output(session)
                  if consume_output:
@@ -859,7 +1279,7 @@ index b8eb4898..5b2bd933 100644
                  session.exited = True
                  session.exit_code = -15  # SIGTERM
                  session.completion_reason = "killed"
-@@ -2214,9 +2270,10 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
+@@ -2214,9 +2205,10 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
              # blocks in the SIGKILL grace window: its ``save_completed_result``
              # then persists this kill as a plain ``exited``. Re-write the receipt
              # so the durable record matches what the caller was told.
@@ -873,7 +1293,7 @@ index b8eb4898..5b2bd933 100644
              return {
                  "status": "killed", "session_id": session.id, "completion_reason": session.completion_reason,
                  "termination_source": session.termination_source, **output}
-@@ -2261,7 +2318,7 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
+@@ -2261,7 +2253,7 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
                  with session._lock:
                      output = _completion_output(session)
                  if consume_output:
@@ -883,18 +1303,20 @@ index b8eb4898..5b2bd933 100644
                  # entry without queueing a completion, and do not signal a PID
                  # whose start time does not match.
 diff --git a/tools/process_registry_checkpoint.py b/tools/process_registry_checkpoint.py
-index fa82ea92..ef44fb3c 100644
+index fa82ea92..58de3d2d 100644
 --- a/tools/process_registry_checkpoint.py
 +++ b/tools/process_registry_checkpoint.py
-@@ -2,14 +2,88 @@
+@@ -1,15 +1,93 @@
+ """Running-process checkpoint persistence and PID-safe recovery."""
  
++from contextlib import contextmanager
  import json
  import logging
 +import re
  import time
 -from typing import Any, Dict, List, Optional
 +from pathlib import Path
-+from typing import Any, Optional
++from typing import TYPE_CHECKING, Any, Optional
  
  from agent.redact import redact_sensitive_text
 +from tools.environments.sandbox_scope import hosted_scope
@@ -902,6 +1324,9 @@ index fa82ea92..ef44fb3c 100644
 +from tools.process_registry_results import (
 +    RESULT_RETENTION_SECONDS, recoverable_results, settle_result_notification,
 +)
++
++if TYPE_CHECKING:
++    from tools.process_registry import ProcessSession
  
  logger = logging.getLogger("tools.process_registry")
  
@@ -976,7 +1401,7 @@ index fa82ea92..ef44fb3c 100644
  class ProcessCheckpointMixin:
      def _detached_host_fate(self, pid: Optional[int], expected_start: Optional[int]) -> str:
          """Subclass supplies the live PID decision. See ProcessRegistry."""
-@@ -20,7 +94,6 @@ class ProcessCheckpointMixin:
+@@ -20,7 +98,6 @@ class ProcessCheckpointMixin:
      def _write_checkpoint(self, extra_entries: Optional[list[dict[str, Any]]] = None):
          """Write running process metadata to the checkpoint file atomically."""
          from tools.process_registry import _checkpoint_path, _CHECKPOINT_FIELDS
@@ -984,7 +1409,7 @@ index fa82ea92..ef44fb3c 100644
  
          # A hosted caller only changes its own agent's records, which are never persisted here, so
          # it has no host change to write: it neither takes the lock nor rewrites this host's file.
-@@ -45,6 +118,8 @@ class ProcessCheckpointMixin:
+@@ -45,6 +122,8 @@ class ProcessCheckpointMixin:
                      # See #77484.
                      entry["command"] = redact_sensitive_text(s.command, code_file=True)
                      entry["owner_task_id"] = s.owner_task_id or s.task_id
@@ -993,7 +1418,7 @@ index fa82ea92..ef44fb3c 100644
                      entries.append(entry)
                  if extra_entries:
                      tracked_ids = {item.get("session_id") for item in entries}
-@@ -57,24 +132,54 @@ class ProcessCheckpointMixin:
+@@ -57,24 +136,100 @@ class ProcessCheckpointMixin:
              # its own table; a worker's output-log handoff is its only path to the next one, so a
              # writer keeps the handoffs it does not track (read-merge-write under one file lock).
              with _FileLock(path.with_name(path.name + ".lock")):
@@ -1059,10 +1484,56 @@ index fa82ea92..ef44fb3c 100644
 +            "notify_on_complete": session.notify_on_complete,
 +            "parent_session_id": session.parent_session_id,
 +        }
++
++    @staticmethod
++    @contextmanager
++    def _reply_scope(session: "ProcessSession"):
++        # The host shutdown sweep has no requesting profile. Bind persistence to
++        # the home captured at spawn/adoption, without loading credentials.
++        if session._reply_home is None or hosted_scope() is not None:
++            yield
++            return
++        from agent.runtime_scope import bind_state, scope_for_profile
++
++        with bind_state(scope_for_profile(session._reply_home), secrets={}, terminal=False):
++            yield
++
++    def wait_for_local_reply_handoffs(self, timeout: float) -> None:
++        """Give already admitted, receipt-only waiters a bounded final collection window."""
++        if timeout <= 0:
++            return
++        with self._lock:
++            waiters = [
++                session for session in self._running.values()
++                if session._reply_home is not None and session.recoverable_output
++                and session.notify_on_complete and session.watcher_platform == "local"
++                and session.parent_session_id and session.session_key
++            ]
++        deadline = time.monotonic() + timeout
++        for session in waiters:
++            if not session._completion_event.wait(max(0.0, deadline - time.monotonic())):
++                break
++
++    def _recover_pending_replies(self, entries, route_keys):
++        consumed_handoffs = {
++            _handoff_identity(entry) for entry in entries
++            if entry.get("completion_consumed") is True and _local_reply_log(entry)
++        }
++        completed = set()
++        for session, state in recoverable_results():
++            completed.add(session.id)
++            if state == "pending" and _process_identity(session) in consumed_handoffs:
++                settle_result_notification(session, "consumed")
++            elif state == "pending":
++                watcher = self._recovered_watcher(session, route_keys)
++                self.pending_watchers.append({
++                    **watcher, "retained_result": True, "started_at": session.started_at,
++                })
++        return completed, consumed_handoffs
  
      def recover_from_checkpoint(self) -> int:
          """On gateway startup, probe PIDs from the checkpoint file; returns how many
-@@ -83,24 +188,52 @@ class ProcessCheckpointMixin:
+@@ -83,24 +238,39 @@ class ProcessCheckpointMixin:
              ProcessSession, _CHECKPOINT_FIELDS, _checkpoint_path,
              _CHECKPOINT_DEFAULTS, _WATCHER_ROUTE_KEYS, _stop_systemd_unit,
          )
@@ -1076,20 +1547,7 @@ index fa82ea92..ef44fb3c 100644
          self._jobs_outlive_host = True
          checkpoint_path = _checkpoint_path()
 +        entries = _checkpoint_entries(checkpoint_path)
-+        consumed_handoffs = {
-+            _handoff_identity(entry) for entry in entries
-+            if entry.get("completion_consumed") is True and _local_reply_log(entry)
-+        }
-+        completed = set()
-+        for session, state in recoverable_results():
-+            completed.add(session.id)
-+            if state == "pending" and _process_identity(session) in consumed_handoffs:
-+                settle_result_notification(session, "consumed")
-+            elif state == "pending":
-+                watcher = self._recovered_watcher(session, _WATCHER_ROUTE_KEYS)
-+                self.pending_watchers.append({
-+                    **watcher, "retained_result": True, "started_at": session.started_at,
-+                })
++        completed, consumed_handoffs = self._recover_pending_replies(entries, _WATCHER_ROUTE_KEYS)
          if not checkpoint_path.exists():
              return 0
 -        try:
@@ -1111,9 +1569,9 @@ index fa82ea92..ef44fb3c 100644
 +            ):
 +                # A multiplex checkpoint can include copies from sibling profiles.
 +                # Let the log's own profile adopt this job with its output and route.
-+                continue
-+            if recoverable and not Path(log).is_file():
                  continue
++            if recoverable and not Path(log).is_file():
++                continue
 +            if reply_log := _local_reply_log(entry):
 +                exit_record = _exit_path(reply_log)
 +                if exit_record.exists() and not _handoff_exit_is_recent(reply_log):
@@ -1121,7 +1579,7 @@ index fa82ea92..ef44fb3c 100644
              # The registry is process-global, so every profile's checkpoint carries every live
              # process; a multiplexer recovering several homes must adopt each session once.
              with self._lock:
-@@ -120,7 +253,6 @@ class ProcessCheckpointMixin:
+@@ -120,7 +290,6 @@ class ProcessCheckpointMixin:
              fate = self._detached_host_fate(pid, entry.get("host_start_time"))
              # A worker spawn's output log and recorded exit outlive both the spawner and the PID,
              # so its reader decides the outcome (a recycled PID is never signalled: fate != running).
@@ -1129,7 +1587,7 @@ index fa82ea92..ef44fb3c 100644
              if log:
                  fate = "running"
              if fate == "reused":
-@@ -147,7 +279,14 @@ class ProcessCheckpointMixin:
+@@ -147,7 +316,14 @@ class ProcessCheckpointMixin:
              # detached: no Popen handle, but can report status + kill; a worker spawn's output log
              # (and recorded exit) outlives its spawner, so tail it from the start.
              fields["output_log"] = log
@@ -1144,7 +1602,7 @@ index fa82ea92..ef44fb3c 100644
              if session.output_log:
                  self._track_started(session, self._log_reader_loop, f"proc-log-reader-{session.id}")
              else:
-@@ -157,13 +296,6 @@ class ProcessCheckpointMixin:
+@@ -157,13 +333,6 @@ class ProcessCheckpointMixin:
              logger.info("Recovered detached process: %s (pid=%d)", session.command[:60], pid)
              # Re-enqueue watcher so gateway can resume notifications
              if session.watcher_interval > 0:
@@ -1160,9 +1618,18 @@ index fa82ea92..ef44fb3c 100644
          self._write_checkpoint(extra_entries=unresolved_scope_entries)
          return recovered
 diff --git a/tools/process_registry_notifications.py b/tools/process_registry_notifications.py
-index 604548e9..51f14b08 100644
+index 604548e9..ba2c18bb 100644
 --- a/tools/process_registry_notifications.py
 +++ b/tools/process_registry_notifications.py
+@@ -181,7 +181,7 @@ def delegation_wakes_parent(evt: dict) -> bool:
+ def completion_resumes_parent(evt: dict) -> bool:
+     """True for a result the parent asked to hear about and carries on from: an async delegation's
+     final result (not the early per-task notice, not a manual cron run's finished text) or a background
+-    process's exit, whatever its exit code. Its unviewed local parent runs it as a turn, as a watched one
++    process's exit, whatever its exit code, except a Bot reply waiter. Its unviewed local parent runs it as a turn, as a watched one
+     does, so the work goes on while no client is connected (a laptop asleep, a closed tab).
+     ``delegation_wakes_parent`` is the failed-delegation subset, whose wakes are bounded
+     (gateway/session_completion_notes.py); a process exit is never in it."""
 @@ -189,7 +189,7 @@ def completion_resumes_parent(evt: dict) -> bool:
          if evt.get("task_failure_notice"):
              return False
@@ -1173,7 +1640,7 @@ index 604548e9..51f14b08 100644
  
  _CONTENT_POLICY_RECOVERY = (
 diff --git a/tools/process_registry_output_log.py b/tools/process_registry_output_log.py
-index 8b88bddd..9188e26e 100644
+index 8b88bddd..e1b8cc21 100644
 --- a/tools/process_registry_output_log.py
 +++ b/tools/process_registry_output_log.py
 @@ -1,4 +1,4 @@
@@ -1182,7 +1649,7 @@ index 8b88bddd..9188e26e 100644
  
  A managed worker is a per-turn interpreter. A stdout pipe whose read end that worker's reader
  thread owns closes when the worker exits, so the child's next write raises SIGPIPE
-@@ -6,6 +6,7 @@ thread owns closes when the worker exits, so the child's next write raises SIGPI
+@@ -6,19 +6,26 @@ thread owns closes when the worker exits, so the child's next write raises SIGPI
  profile-scoped log instead and its shell records the exit status beside it (the contract the
  env-backend wrapper already uses), so whichever interpreter adopts the checkpoint entry next
  (the session's next worker, the owner at startup) tails the same file and collects the exit.
@@ -1190,7 +1657,27 @@ index 8b88bddd..9188e26e 100644
  """
  import codecs
  from contextlib import suppress
-@@ -29,10 +30,10 @@ def output_dir() -> Path:
+ import logging
+ import os
++import platform
++import threading
+ from pathlib import Path
+ import time
+-from typing import Optional
++from typing import TYPE_CHECKING, Optional
+ from hermes_dir_acl import make_user_dir
+ 
+ from hermes_constants import get_hermes_home
+ 
++if TYPE_CHECKING:
++    from tools.process_registry import ProcessSession
++
+ logger = logging.getLogger("tools.process_registry")
++_IS_WINDOWS = platform.system() == "Windows"
+ 
+ _TAIL_SECONDS = 0.2
+ # After the process ended: an orphaned grandchild may keep appending; stop draining after this.
+@@ -29,10 +36,10 @@ def output_dir() -> Path:
      return get_hermes_home() / "logs" / "process-output"
  
  
@@ -1204,6 +1691,43 @@ index 8b88bddd..9188e26e 100644
          return None
      directory = output_dir()
      make_user_dir(directory, mode=0o700, parents=True, exist_ok=True)
+@@ -133,3 +140,36 @@ class ProcessOutputLogMixin:
+             self._finish_exited(session, -1, reason="lost", source="backend_lost")
+         else:
+             self._finish_exited(session, code)
++
++    def _release_finished_handles(self, session: "ProcessSession"):
++        """Close a finished session's OS handles (Popen pipes / PTY master).
++
++        Best-effort and idempotent: the session may have no local Popen (env
++        backends, detached recovery), or the handles may already be closed by
++        the reader loop / kill path. Closing a Popen's stream objects does not
++        kill anything — the child has already exited — it only releases the
++        parent's pipe FDs, which is exactly the retained-resource leak.
++        """
++        proc = session.process
++        if proc is not None:
++            for stream in (proc.stdout, proc.stderr, proc.stdin):
++                if stream is not None:
++                    with suppress(OSError, ValueError):  # a stdin flush can hit EPIPE
++                        stream.close()
++        if session._pty is not None:
++            # A live ptyprocess reader sits in a blocking read holding the PTY file
++            # object's buffer lock, and that read only ends once every holder of
++            # the slave side is gone. A descendant that setsid()s past the kill
++            # keeps it open, so close() here would block forever (under _lock on
++            # the prune path). The reader closes the PTY itself via
++            # _finish_reader once its read ends. pywinpty reads don't block, so
++            # Windows closes here as before.
++            reader = session._reader_thread
++            if (not _IS_WINDOWS and reader is not None and reader.is_alive()
++                    and reader is not threading.current_thread()):
++                return
++            # ptyprocess/pywinpty close() is idempotent (``closed`` flag) and
++            # closes the master fd exactly once; it raises only if the child
++            # ignores SIGKILL, which we don't want to surface on the finish path.
++            with suppress(Exception):
++                session._pty.close()
 diff --git a/tools/process_registry_results.py b/tools/process_registry_results.py
 index 023bd732..373eead6 100644
 --- a/tools/process_registry_results.py

@@ -1,14 +1,14 @@
 {
   "status": "review_only",
   "hermes_base": "547739e46692b2db7b4c9cdd57e8f795573846a4",
-  "proposal_tree": "d93d217d67e2b7f5b0893a32f78d7e1e21f3e5b1",
-  "patch_sha256": "965e3a0e2430db97e3de6c4f17f2600b0b32da3c18a478feb1d9788773bf6489",
+  "proposal_tree": "2ec041850c1f9604274f9a0b5ef06099a192a513",
+  "patch_sha256": "3ba214f4712a52d79a788e22ca82a4517e83a5a6a0fca867ecc8754fdee70abd",
   "validation": {
     "python": "3.14.9",
     "platform": "Linux",
     "clean_live_controls_passed": 6,
     "candidate_live_cases_passed": 16,
-    "candidate_focused_tests_passed": 341,
+    "candidate_focused_tests_passed": 514,
     "candidate_focused_tests_skipped": 5
   }
 }
