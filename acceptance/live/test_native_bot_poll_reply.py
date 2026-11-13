@@ -1,4 +1,4 @@
-"""Manual evidence of a native same-install Bot reply persisted by the poll lane."""
+"""Manual evidence of native same-install Bot reply persistence and consumption."""
 
 import asyncio
 import hashlib
@@ -231,28 +231,78 @@ def assert_waiter_pid(root, host, wrapper):
     return matches[0] if len(matches) == 1 else None
 
 
-def waiter_settled(tracked, delivery):
-    # Inspect the finished buffer without consuming the native completion.
+def assert_settled_output(output, delivery):
     from tools.ansi_strip import strip_ansi
 
-    with tracked._lock:
-        lines = strip_ansi(tracked.output_buffer).splitlines()
     outcomes = []
-    for line in lines:
+    for line in strip_ansi(output).splitlines():
         try:
             candidate = json.loads(line)
         except ValueError:
             continue
         if isinstance(candidate, dict) and "delivery_id" in candidate:
             outcomes.append(candidate)
-    return len(outcomes) == 1 and (
+    assert len(outcomes) == 1 and (
         outcomes[0].get("status"),
         outcomes[0].get("delivery_id"),
         outcomes[0].get("reply"),
     ) == ("settled", delivery, shared.REPLY)
 
 
-async def exercise(fixture, endpoint, db, model, monkeypatch, *, installed):
+async def consume_before_persistence(tracked, delivery, model, monkeypatch):
+    from gateway.session_context import declare_stateless_channel
+    from tools.process_registry import process_registry
+    from tools.registry import registry
+
+    proc_id = tracked.id
+    (fallback,) = [
+        thread
+        for thread in threading.enumerate()
+        if thread.name == f"message-agent-reply-{proc_id}"
+    ]
+    at_decision, resume_decision = threading.Event(), threading.Event()
+    observed = []
+    native_check = process_registry.is_completion_consumed
+
+    def check(session_id):
+        if threading.current_thread() is not fallback or session_id != proc_id:
+            return native_check(session_id)
+        # Order the real fallback after the caller reads the real tool result.
+        at_decision.set()
+        if not resume_decision.wait(20):
+            observed.append(None)
+            return native_check(session_id)
+        consumed = native_check(session_id)
+        observed.append(consumed)
+        return consumed
+
+    def wait(timeout):
+        declare_stateless_channel()
+        args = {"action": "wait", "session_id": proc_id, "timeout": timeout}
+        return json.loads(registry.dispatch("process_manage", args, task_id=tracked.task_id))
+
+    with monkeypatch.context() as ordered:
+        ordered.setattr(process_registry, "is_completion_consumed", check)
+        try:
+            pending = await asyncio.to_thread(wait, 1)
+            assert pending["status"] == "timeout" and pending["process_running"] is True
+            assert not native_check(proc_id) and not at_decision.is_set()
+            assert not tracked.notify_on_complete
+            model.release.set()
+            completed = await asyncio.to_thread(wait, 14)
+            assert completed["status"] == "exited" and completed["exit_code"] == 0
+            assert "output_cut" not in completed
+            assert_settled_output(completed["output"], delivery)
+            assert native_check(proc_id)
+            assert await asyncio.to_thread(at_decision.wait, 4)
+        finally:
+            model.release.set()
+            resume_decision.set()
+            await asyncio.to_thread(fallback.join, 5)
+    assert not fallback.is_alive() and observed == [True]
+
+
+async def exercise(fixture, endpoint, db, model, monkeypatch, *, installed, consume):
     from gateway.session_results import admission_result
     from hermes_cli.gateway_client import connect_gateway
     from hermes_state import SessionDB
@@ -316,25 +366,27 @@ async def exercise(fixture, endpoint, db, model, monkeypatch, *, installed):
                             hashlib.sha256(str(payload.resolve()).encode()).hexdigest() == delivery
                         )
                         assert json.loads(intent.read_bytes())["delivery_id"] == delivery
-                        model.release.set()
-
-                        # Read the sender's DB first. process.wait/log consume the outcome and
-                        # could suppress this native durable fallback.
-                        async with asyncio.timeout(22):
-                            while len(rows := db.get_messages(SENDER)) == len(before):
-                                await asyncio.sleep(0.05)
-                        assert rows[:-1] == before and len(rows) == len(before) + 1
-                        completion = rows[-1]
-                        assert completion["role"] == "user"
-                        assert completion["display_kind"] == "process_complete"
-                        assert (
-                            shared.REPLY in completion["content"]
-                            and delivery in completion["content"]
-                        )
-                        assert ack["process_id"] in completion["content"]
-                        assert not process_registry.is_completion_consumed(tracked.id)
+                        if consume:
+                            await consume_before_persistence(tracked, delivery, model, sender)
+                            rows = db.get_messages(SENDER)
+                            assert rows == before
+                        else:
+                            model.release.set()
+                            async with asyncio.timeout(22):
+                                while len(rows := db.get_messages(SENDER)) == len(before):
+                                    await asyncio.sleep(0.05)
+                            assert rows[:-1] == before and len(rows) == len(before) + 1
+                            completion = rows[-1]
+                            assert completion["role"] == "user"
+                            assert completion["display_kind"] == "process_complete"
+                            assert all(
+                                value in completion["content"]
+                                for value in (shared.REPLY, delivery, tracked.id)
+                            )
+                            assert not process_registry.is_completion_consumed(tracked.id)
+                            with tracked._lock:
+                                assert_settled_output(tracked.output_buffer, delivery)
                         assert tracked.process.poll() == 0 and tracked._completion_event.is_set()
-                        assert waiter_settled(tracked, delivery), "Unexpected native waiter result"
                         assert (
                             not waiter.is_running() and not payload.exists() and not intent.exists()
                         )
@@ -387,9 +439,7 @@ async def exercise(fixture, endpoint, db, model, monkeypatch, *, installed):
         restrict()
 
 
-def test_native_stateless_bot_poll_reply_persists_unconsumed_completion(
-    tmp_path_factory, monkeypatch
-):
+def run_reply(tmp_path_factory, monkeypatch, *, consume):
     assert sys.platform == "linux" and os.environ.get("HERMES_BOT_POLL_NAMESPACE") == "1"
     assert sys.version_info[:2] == (3, 14)
     assert [name for _, name in socket.if_nameindex()] == ["lo"]
@@ -527,6 +577,7 @@ def test_native_stateless_bot_poll_reply_persists_unconsumed_completion(
                             model,
                             isolated,
                             installed=bool(prepared),
+                            consume=consume,
                         )
                     )
                 if prepared:
@@ -540,3 +591,13 @@ def test_native_stateless_bot_poll_reply_persists_unconsumed_completion(
                     )
         finally:
             deactivate()
+
+
+def test_native_stateless_bot_poll_reply_persists_unconsumed_completion(
+    tmp_path_factory, monkeypatch
+):
+    run_reply(tmp_path_factory, monkeypatch, consume=False)
+
+
+def test_native_stateless_bot_wait_consumes_reply_before_fallback(tmp_path_factory, monkeypatch):
+    run_reply(tmp_path_factory, monkeypatch, consume=True)
