@@ -199,6 +199,8 @@
 
 ### 新增
 
+- 在源码构建和捆绑式 Linux x64 Desktop 中，通过已保存 Webapp 令牌验证压缩 Bot Chat 的历史加载。其他三个 profile 存储中的同 ID 干扰记录不会进入所选会话历史（#33）。
+
 - 在捆绑式 Linux x64 AppImage 中复现已保存 Webapp 的 Bot Chat 回退，并在对应评审镜像中验证命名 profile 作用域和显式重试（#33）。
 
 - 用固定 Hermes 版本构建的捆绑式 Linux x64 AppImage 验证本地 Bot Mode 的拒绝与重试。验收检查运行中的打包可执行文件，并在显式重试时打开原规范会话（#33）。

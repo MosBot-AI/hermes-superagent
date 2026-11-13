@@ -5,6 +5,7 @@ import * as path from 'node:path'
 
 import { expect, type ElectronApplication, test } from '@playwright/test'
 
+import { launchBotDesktop } from './desktop_bot_appimage'
 import {
   focus,
   installCanonicalObserver,
@@ -15,6 +16,7 @@ import {
   type WireSocket
 } from './desktop_bot_canonical_observer'
 import {
+  configureSavedWebapp,
   type Gateway,
   privateEnv,
   readEndpoint,
@@ -24,7 +26,7 @@ import {
   stopGateway,
   waitForEndpoint
 } from './desktop_native_gateway_fixture'
-import { composer, createCoreSandbox, launchCoreApp, REPO_ROOT, sandboxProcesses } from './harness'
+import { composer, createCoreSandbox, freePort, REPO_ROOT, sandboxProcesses } from './harness'
 import { startScriptedProvider } from './provider'
 
 const fixture = 'apps.desktop.e2e.core.desktop_compressed_adoption_fixture'
@@ -62,6 +64,7 @@ interface AdoptionInventory {
 interface HistoryRead {
   id: string
   scoped: boolean
+  tokenHeader: boolean
   includesCompacted: boolean
   status: number
   targetMatches?: boolean
@@ -71,14 +74,22 @@ interface HistoryRead {
   decoyMarkers?: number
 }
 
-test('native adoption of compressed chat hydrates the exact Bot Mode profile', async () => {
+for (const mode of ['local private ticket', 'saved Webapp token'] as const) {
+  test(`native adoption hydrates the exact compressed Bot Chat over the ${mode}`, async () => {
+    await verifyCompressedHistory(mode === 'saved Webapp token')
+  })
+}
+
+async function verifyCompressedHistory(savedToken: boolean) {
   test.setTimeout(180_000)
   expect(process.platform).toBe('linux')
   expect(path.isAbsolute(process.env.HERMES_E2E_PYTHON ?? '')).toBe(true)
   expect(process.env.HERMES_E2E_CORE_ROOT).toBeTruthy()
   const provider = await startScriptedProvider()
   const box = createCoreSandbox('a')
-  let gateway: Gateway | undefined
+  const peer = savedToken ? createCoreSandbox('b') : null
+  const gateways: Gateway[] = []
+  const connectionId = savedToken ? 'spare' : 'local'
   let app: ElectronApplication | undefined
   let completed = false
   try {
@@ -86,12 +97,41 @@ test('native adoption of compressed chat hydrates the exact Bot Mode profile', a
     const control = path.join(box.root, 'adoption')
     fs.mkdirSync(control, { mode: 0o700 })
     fs.writeFileSync(path.join(control, 'rest.jsonl'), '', { mode: 0o600 })
-    seedInstall(box, env, provider.url, profile, 'adopt', '8'.repeat(32))
+    const webappPort = savedToken ? await freePort() : undefined
+    seedInstall(box, env, provider.url, profile, 'adopt', '8'.repeat(32), webappPort)
     runPython(env, `from ${fixture} import seed; seed()`)
     expect(Buffer.byteLength(path.join(box.hermesHome, 'gateway.sock'))).toBeLessThan(104)
-    installCanonicalObserver(box.hermesHome)
-    gateway = startGateway(box, { ...env, HERMES_ADOPTION_OBSERVER: control }, ['-m', fixture])
+    const desktop = peer ?? box
+    installCanonicalObserver(desktop.hermesHome)
+    const gateway = startGateway(box, { ...env, HERMES_ADOPTION_OBSERVER: control }, ['-m', fixture])
+    gateways.push(gateway)
     const endpoint = await waitForEndpoint(gateway, profile)
+    let desktopEnv = env
+    let peerGateway: Gateway | undefined
+    const peerControl = peer && path.join(peer.root, 'adoption')
+    if (peer && peerControl) {
+      desktopEnv = privateEnv(peer)
+      seedInstall(peer, desktopEnv, provider.url, profile, 'peer', '9'.repeat(32))
+      runPython(desktopEnv, `from ${fixture} import seed_peer; seed_peer()`)
+      fs.mkdirSync(peerControl, { mode: 0o700 })
+      fs.writeFileSync(path.join(peerControl, 'rest.jsonl'), '', { mode: 0o600 })
+      peerGateway = startGateway(peer, { ...desktopEnv, HERMES_ADOPTION_OBSERVER: peerControl }, ['-m', fixture])
+      gateways.push(peerGateway)
+      const peerEndpoint = await waitForEndpoint(peerGateway, profile)
+      expect(peerEndpoint.instanceId).not.toBe(endpoint.instanceId)
+      expect(peerEndpoint.origin).not.toBe(endpoint.origin)
+      expect(endpoint.origin).toBe(`http://127.0.0.1:${webappPort}`)
+      configureSavedWebapp(peer, box, endpoint.origin, connectionId, profile)
+    }
+    const peerEndpointBefore = peerGateway && readEndpoint(peerGateway, profile)
+    const peerHistory = peer && storedChats(peer.hermesHome, profile)
+    if (peerHistory) {
+      expect(peerHistory.map(item => item.sessions.map(row => row.id))).toEqual([[tip], [tip]])
+      expect(peerHistory.map(item => item.messages.map(row => row.content))).toEqual([
+        ['fixture-peer-default-same-tip-id'],
+        ['fixture-peer-scout-same-tip-id']
+      ])
+    }
     const port = new URL(endpoint.origin).port
     const inspect = () =>
       JSON.parse(runPython(env, `from ${fixture} import inventory; inventory()`)) as [
@@ -161,8 +201,9 @@ test('native adoption of compressed chat hydrates the exact Bot Mode profile', a
     expect(adopt()).toEqual({ eligible: false, dry: false, adopted: false, empty: true })
     expect(inspect()).toEqual(after)
     expect(readEndpoint(gateway, profile)).toEqual(endpoint)
+    runPython(env, `import asyncio; from ${fixture} import assert_canonical_lineage; asyncio.run(assert_canonical_lineage())`)
 
-    const live = await launchCoreApp(env)
+    const live = await launchBotDesktop(desktopEnv)
     app = live.app
     const { page } = live
     const sockets = new Map<WireFrame, WireSocket>()
@@ -170,17 +211,28 @@ test('native adoption of compressed chat hydrates the exact Bot Mode profile', a
     await page.reload({ waitUntil: 'domcontentloaded' })
     await expect(composer(page)).toBeVisible({ timeout: 45_000 })
     await page.waitForFunction(() => Boolean(window.__E07_CANONICAL_FOCUS__), undefined, { timeout: 45_000 })
+    if (savedToken) {
+      await expect
+        .poll(() => page.evaluate(() => window.__E07_CANONICAL_ROUTE__?.()), { timeout: 45_000 })
+        .toEqual({ connectionId, profile, gateway: 'open' })
+    }
     await page
       .getByRole('button', { name: 'Bots', exact: true })
       .or(page.getByRole('tab', { name: 'Bots', exact: true }))
       .first()
       .click()
-    const scout = page.locator('[data-slot="bots-roster"] [data-roster-key="local::scout"]')
+    const roster = page.locator('[data-slot="bots-roster"]')
+    const scout = roster.locator(`[data-roster-key="${connectionId}::${profile}"]`)
+    if (savedToken) {
+      await expect(roster.locator('[data-roster-key="local::scout"]')).toBeVisible()
+    }
     await expect(scout).toBeVisible()
     const oldFocus = await focus(page)
     expect(oldFocus.id).not.toBe(tip)
     const from = wire.length
-    fs.writeFileSync(path.join(control, 'armed'), '', { flag: 'wx', mode: 0o600 })
+    for (const directory of peerControl ? [control, peerControl] : [control]) {
+      fs.writeFileSync(path.join(directory, 'armed'), '', { flag: 'wx', mode: 0o600 })
+    }
     await scout.click()
     const viewport = page.locator('[data-slot="aui_thread-viewport"]').filter({ visible: true }).first()
     for (const marker of [rootMarker, tipMarker]) {
@@ -188,8 +240,10 @@ test('native adoption of compressed chat hydrates the exact Bot Mode profile', a
       await expect(message).toBeVisible({ timeout: 35_000 })
       await expect(message).toHaveCount(1)
     }
-    await expect(viewport.getByText(defaultMarker, { exact: true })).toHaveCount(0)
-    await expect.poll(() => focus(page)).toEqual({ id: tip, owner: { connectionId: 'local', profile } })
+    for (const marker of [defaultMarker, 'fixture-peer-default-same-tip-id', 'fixture-peer-scout-same-tip-id']) {
+      await expect(viewport.getByText(marker, { exact: true })).toHaveCount(0)
+    }
+    await expect.poll(() => focus(page)).toEqual({ id: tip, owner: { connectionId, profile } })
     await expect(page.getByRole('alert').filter({ hasText: /Could not open .*’s chat/ })).toHaveCount(0)
     const clickFrames = wire.slice(from)
     const reads = clickFrames.filter(lookup)
@@ -209,7 +263,7 @@ test('native adoption of compressed chat hydrates the exact Bot Mode profile', a
     expect(opens.some(frame => frame.method === 'session.resume')).toBe(true)
     for (const frame of opens) {
       expect(frame).toMatchObject({ port, profile, sessionId: tip, reply: {} })
-      expect(sockets.get(frame)).toMatchObject({ savedToken: false })
+      expect(sockets.get(frame)).toMatchObject({ savedToken })
     }
     const historyReads = fs
       .readFileSync(path.join(control, 'rest.jsonl'), 'utf8')
@@ -219,6 +273,7 @@ test('native adoption of compressed chat hydrates the exact Bot Mode profile', a
     expect(historyReads).toContainEqual({
       id: tip,
       scoped: true,
+      tokenHeader: savedToken,
       includesCompacted: true,
       status: 200,
       targetMatches: true,
@@ -227,22 +282,29 @@ test('native adoption of compressed chat hydrates the exact Bot Mode profile', a
       tipMarkers: 1,
       decoyMarkers: 0
     })
-    expect(historyReads.every(entry => entry.id === tip && entry.scoped)).toBe(true)
+    expect(historyReads.every(entry => entry.id === tip && entry.scoped && entry.tokenHeader === savedToken)).toBe(true)
+    if (peerControl) {
+      expect(fs.readFileSync(path.join(peerControl, 'rest.jsonl'), 'utf8')).toBe('')
+    }
     expect(wire.filter(frame => ['session.create', 'prompt.submit'].includes(frame.method))).toEqual([])
     expect(chats()).toEqual(historyBefore)
     expect(inspect()).toEqual(after)
     expect(readEndpoint(gateway, profile)).toEqual(endpoint)
+    if (peer && peerGateway) {
+      expect(storedChats(peer.hermesHome, profile)).toEqual(peerHistory)
+      expect(readEndpoint(peerGateway, profile)).toEqual(peerEndpointBefore)
+    }
     expect(provider.completions.length).toBe(0)
     completed = true
   } finally {
     await app?.close().catch(() => undefined)
-    const stopped = await Promise.allSettled(gateway ? [stopGateway(gateway)] : [])
+    const stopped = await Promise.allSettled(gateways.map(stopGateway))
     await provider.close()
-    const live = sandboxProcesses(box)
-    box.cleanup()
-    if (completed) {
-      expect(stopped.every(result => result.status === 'fulfilled')).toBe(true)
-      expect(live).toHaveLength(0)
+    for (const sandbox of peer ? [box, peer] : [box]) {
+      const live = sandboxProcesses(sandbox)
+      sandbox.cleanup()
+      if (completed) expect(live).toHaveLength(0)
     }
+    if (completed) expect(stopped.every(result => result.status === 'fulfilled')).toBe(true)
   }
-})
+}

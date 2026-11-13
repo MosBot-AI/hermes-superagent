@@ -136,6 +136,43 @@ with SessionDB(Path(home) / "state.db") as db:
   }
 }
 
+export function configureSavedWebapp(
+  local: CoreSandbox,
+  remote: CoreSandbox,
+  origin: string,
+  source: string,
+  profile: string
+) {
+  const token = fs.readFileSync(path.join(remote.hermesHome, 'webapp', 'session-token'), 'utf8').trim()
+  expect(/^[A-Za-z0-9_-]{43}$/.test(token), 'native test Webapp token is available').toBe(true)
+  fs.writeFileSync(
+    path.join(local.userDataDir, 'connections.json'),
+    JSON.stringify({
+      version: 2,
+      primary: source,
+      launchMode: 'primary',
+      lastUsed: source,
+      connections: [
+        { id: 'local', kind: 'local', label: 'This device' },
+        {
+          id: source,
+          kind: 'remote',
+          label: 'Spare',
+          url: origin,
+          authMode: 'token',
+          token: { encoding: 'plain', value: token }
+        }
+      ]
+    }),
+    { mode: 0o600 }
+  )
+  fs.writeFileSync(
+    path.join(local.userDataDir, 'active-profile.json'),
+    JSON.stringify({ profile, connectionProfiles: { [source]: profile } }),
+    { mode: 0o600 }
+  )
+}
+
 export function startGateway(box: CoreSandbox, env: Record<string, string>, args = ['-m', 'gateway.run']): Gateway {
   const log = fs.openSync(path.join(box.root, 'gateway.log'), 'w', 0o600)
   try {

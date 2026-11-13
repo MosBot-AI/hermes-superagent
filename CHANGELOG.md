@@ -199,6 +199,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Verify compressed Bot Chat hydration over the saved Webapp token in source-built and bundled Linux x64 Desktop. Same-ID decoys in three other profile stores remain outside the selected transcript (#33).
+
 - Reproduce the saved Webapp Bot Chat fallback in a bundled Linux x64 AppImage and verify named-profile scoping and explicit retry in the matching review image (#33).
 
 - Verify local Bot Mode refusal and retry from a bundled Linux x64 AppImage built at the pinned Hermes revision. The acceptance checks the running packaged executable and opens the original canonical chat on explicit retry (#33).
