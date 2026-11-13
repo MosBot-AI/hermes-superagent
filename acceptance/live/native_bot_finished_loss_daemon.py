@@ -1,6 +1,7 @@
 """Synthetic fault gate after result persistence and before native completion admission."""
 
 import asyncio
+import errno
 import json
 import os
 import runpy
@@ -8,10 +9,25 @@ from pathlib import Path
 
 from gateway.run_notifications import GatewayNotificationsMixin
 from gateway.session_context import clear_session_vars, set_session_vars
+from tools import process_registry_results
 from tools.process_registry import process_registry
 
 root = Path(os.environ["HERMES_BOT_ACCEPTANCE_ROOT"])
+results = Path(os.environ["HERMES_HOME"]) / "profiles/scout/logs/process-results"
 original_enqueue = GatewayNotificationsMixin._enqueue_process_completion_notification
+original_result_write = process_registry_results.atomic_json_write
+
+
+def write_process_result(path, record, **kwargs):
+    fault = root / "fail-finished-result"
+    if (
+        path.parent == results
+        and fault.is_file()
+        and path.stem == fault.read_text(encoding="ascii")
+    ):
+        (root / "finished-result-write-failed").touch(mode=0o600)
+        raise OSError(errno.ENOSPC, "Synthetic Bot result write failure")
+    return original_result_write(path, record, **kwargs)
 
 
 async def block_bot_completion(self, text, event):
@@ -22,7 +38,9 @@ async def block_bot_completion(self, text, event):
             assert await original_enqueue(self, text, event) is True
         pid = event["session_id"]
         ready = root / "finished-waiter"
-        ready.write_text(pid, encoding="ascii")
+        staged = ready.with_suffix(".tmp")
+        staged.write_text(json.dumps([pid, event["started_at"]]), encoding="ascii")
+        staged.replace(ready)
         async with asyncio.timeout(90):
             while True:
                 consume = root / "consume-finished-waiter"
@@ -45,4 +63,5 @@ async def block_bot_completion(self, text, event):
 
 
 GatewayNotificationsMixin._enqueue_process_completion_notification = block_bot_completion
+process_registry_results.atomic_json_write = write_process_result
 runpy.run_module("gateway.run", run_name="__main__")

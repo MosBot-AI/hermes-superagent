@@ -6,8 +6,9 @@
   "validation": {
     "python": "3.14.9",
     "platform": "Linux",
-    "clean_live_controls_passed": 3,
-    "candidate_live_cases_passed": 5,
+    "clean_live_controls_passed": 4,
+    "candidate_live_cases_passed": 6,
+    "candidate_live_counterexamples_verified": 1,
     "candidate_focused_tests_passed": 167,
     "candidate_focused_tests_skipped": 1,
     "skipped": [

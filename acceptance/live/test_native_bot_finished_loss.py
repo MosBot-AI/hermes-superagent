@@ -4,7 +4,11 @@ import asyncio
 import json
 from pathlib import Path
 
-from native_gateway_fixture import crashable_gateway_daemon, gateway_daemon
+from native_gateway_fixture import (
+    crashable_gateway_daemon,
+    gateway_daemon,
+    restartable_gateway_daemon,
+)
 from native_profile_cli_fixture import retained_host_client
 from test_native_bot_owner_loss import completed_result_path, verify_no_repeat
 from test_native_bot_push_reply import (
@@ -29,7 +33,7 @@ async def read_barrier(path):
     return value
 
 
-async def crash_after_waiter(first, host, home, scout, model, crash, *, phase, recovery):
+async def finish_waiter(first, host, home, scout, model, *, phase, recovery):
     root = home.parent
     with gateway_dial(home, first) as owner_pid:
         async with asyncio.timeout(50), retained_host_client(home, first) as client:
@@ -37,23 +41,43 @@ async def crash_after_waiter(first, host, home, scout, model, crash, *, phase, r
             await owned_waiter(host, root, owner_pid)
             if phase == "admitted":
                 (root / "admit-finished-waiter").touch()
-        return await commit_crash(first, home, scout, model, crash, delivery, phase, recovery)
+            if phase == "write-failed":
+                checkpoint = json.loads((scout / "processes.json").read_bytes())
+                (tracked,) = [row for row in checkpoint if row["session_id"] == delivery.process_id]
+                assert tracked["notify_on_complete"] is True
+                (root / "fail-finished-result").write_text(delivery.process_id, encoding="ascii")
+        return await observe_finished(first, home, scout, model, delivery, phase, recovery)
 
 
-async def commit_crash(first, home, scout, model, crash, delivery, phase, recovery):
+async def observe_finished(first, home, scout, model, delivery, phase, recovery):
     root = home.parent
     async with asyncio.timeout(35), retained_host_client(home, first) as client:
         model.release.set()
-        assert await read_barrier(root / "finished-waiter") == delivery.process_id
+        process_id, started_at = json.loads(await read_barrier(root / "finished-waiter"))
+        assert process_id == delivery.process_id
         await verify_recipient(client, home, delivery)
         path = completed_result_path(scout, delivery)
-        result = json.loads(path.read_bytes())
-        assert result["id"] == delivery.process_id and result["exit_code"] == 0
-        assert result["parent_session_id"] == delivery.sender
-        assert RECEIVER_REPLY in result["output"] and delivery.delivery_id in result["output"]
-        assert path.stat().st_mode & 0o777 == 0o600
-        if recovery:
-            assert result["notification"]["state"] == "pending"
+        if phase == "write-failed":
+            assert (root / "finished-result-write-failed").is_file()
+            assert not path.exists()
+            checkpoint = json.loads((scout / "processes.json").read_bytes())
+            assert all(row["session_id"] != process_id for row in checkpoint)
+            output = scout / "logs" / "process-output" / f"{process_id}.log"
+            content = output.read_text(encoding="utf-8")
+            assert RECEIVER_REPLY in content and delivery.delivery_id in content
+            assert output.with_suffix(".exit").read_text(encoding="utf-8").strip() == "0"
+        else:
+            result = json.loads(path.read_bytes())
+            assert (result["id"], result["started_at"], result["exit_code"]) == (
+                process_id,
+                started_at,
+                0,
+            )
+            assert result["parent_session_id"] == delivery.sender
+            assert RECEIVER_REPLY in result["output"] and delivery.delivery_id in result["output"]
+            assert path.stat().st_mode & 0o777 == 0o600
+            if recovery:
+                assert result["notification"]["state"] == "pending"
         if phase == "consumed":
             (root / "consume-finished-waiter").touch()
             observed = json.loads(await read_barrier(root / "consumed-waiter"))
@@ -69,7 +93,7 @@ async def commit_crash(first, home, scout, model, crash, delivery, phase, recove
             assert json.loads(note["request_id"]) == [
                 "completion",
                 delivery.process_id,
-                result["started_at"],
+                started_at,
             ]
             original.append(note["admission_id"])
             assert json.loads(path.read_bytes())["notification"]["state"] == "pending"
@@ -78,8 +102,7 @@ async def commit_crash(first, home, scout, model, crash, delivery, phase, recove
             1 if phase == "admitted" else 0
         )
         assert [row["admission_id"] for row in admissions(scout, delivery.sender)] == original
-        crash()
-        return delivery, history, original, result["started_at"]
+        return delivery, history, original, started_at
 
 
 async def verify_successor(endpoint, home, scout, model, before, *, recover_note):
@@ -107,18 +130,19 @@ async def verify_successor(endpoint, home, scout, model, before, *, recover_note
     return delivery, history, original
 
 
-def run_finished_loss(tmp_path_factory, monkeypatch, *, recovery, phase="pending"):
+def run_finished_loss(tmp_path_factory, monkeypatch, *, recovery, phase="pending", restart=False):
     entrypoint = Path(__file__).with_name("native_bot_finished_loss_daemon.py").resolve()
+    launch = restartable_gateway_daemon if restart else crashable_gateway_daemon
     with local_reply_fixture(tmp_path_factory, monkeypatch) as (host, home, scout, env, model):
         try:
-            with crashable_gateway_daemon(
-                host, home, env, "bot-finished-before-loss", entrypoint=entrypoint
-            ) as (first, crash):
+            with launch(host, home, env, "bot-finished-first", entrypoint=entrypoint) as (
+                first,
+                exit_owner,
+            ):
                 before = asyncio.run(
-                    crash_after_waiter(
-                        first, host, home, scout, model, crash, phase=phase, recovery=recovery
-                    )
+                    finish_waiter(first, host, home, scout, model, phase=phase, recovery=recovery)
                 )
+                exit_owner()
         finally:
             model.release.set()
         with gateway_daemon(host, home, env, "bot-finished-successor") as successor:
@@ -138,10 +162,14 @@ def run_finished_loss(tmp_path_factory, monkeypatch, *, recovery, phase="pending
             with gateway_daemon(host, home, env, "bot-finished-restarted") as restarted:
                 assert restarted.instance_id not in (first.instance_id, successor.instance_id)
                 asyncio.run(verify_no_repeat(restarted, home, scout, model, observed))
-            result = json.loads(completed_result_path(scout, before[0]).read_bytes())
-            assert result["notification"]["state"] == (
-                "consumed" if phase == "consumed" else "handled"
-            )
+            path = completed_result_path(scout, before[0])
+            if phase == "write-failed":
+                assert not path.exists()
+            else:
+                result = json.loads(path.read_bytes())
+                assert result["notification"]["state"] == (
+                    "consumed" if phase == "consumed" else "handled"
+                )
 
 
 def test_native_finished_bot_reply_needs_sender_recovery(tmp_path_factory, monkeypatch):
@@ -160,3 +188,21 @@ def test_proposed_consumed_bot_result_stays_consumed_after_owner_loss(
 
 def test_proposed_admitted_bot_completion_is_not_duplicated(tmp_path_factory, monkeypatch):
     run_finished_loss(tmp_path_factory, monkeypatch, recovery=True, phase="admitted")
+
+
+def test_native_planned_restart_drops_pending_sender_notification(tmp_path_factory, monkeypatch):
+    run_finished_loss(tmp_path_factory, monkeypatch, recovery=False, restart=True)
+
+
+def test_proposed_planned_restart_recovers_pending_sender_notification(
+    tmp_path_factory, monkeypatch
+):
+    run_finished_loss(tmp_path_factory, monkeypatch, recovery=True, restart=True)
+
+
+def test_proposed_failed_result_write_loses_pending_sender_notification(
+    tmp_path_factory, monkeypatch
+):
+    run_finished_loss(
+        tmp_path_factory, monkeypatch, recovery=True, phase="write-failed", restart=True
+    )

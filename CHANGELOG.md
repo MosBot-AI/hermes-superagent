@@ -83,6 +83,8 @@ This file distinguishes design work, development changes, and released capabilit
 - Run runtime artifact acceptance on exact pull-request heads with read-only credentials; keep downloadable artifact publication push-only.
 ### Changed
 
+- Compare native planned Bot reply restart on the clean pin and reviewed Hermes candidate. The candidate restores one saved pending completion, and a scoped result write failure exposes a remaining recovery gap while the original recipient receipt stays available (#33).
+
 - Extend the review-only Hermes sender recovery patch to finished waiters. An outstanding completion can replay after owner loss, with durable consumption and native admission deduplication (#33).
 
 - Add a review-only Hermes patch that restores one native sender completion after each of two abrupt Gateway loss scenarios. The clean compatibility pin remains in use (#33).

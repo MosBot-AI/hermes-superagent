@@ -642,9 +642,11 @@ sh acceptance/live/run_native_bot_poll_reply.sh \
   --settled-loss --receipt /path/to/result.xml
 ```
 
-This case verifies exact-receipt recovery when the recipient settled before abrupt process loss and the waiter had yet to read the reply. Automatic restoration to the sender remains open for this window. Loss after the waiter has already persisted output, planned restart, installed-plugin push, packaged Desktop, external transports, authenticated owner binding and real providers require independent acceptance.
+This case verifies exact-receipt recovery when the recipient settled before abrupt process loss and the waiter had yet to read the reply. Automatic restoration to the sender remains open for this window. The following cases cover loss after the waiter finishes. Installed-plugin push, packaged Desktop, external transports, authenticated owner binding and real providers require independent acceptance.
 
 A [review-only native candidate](../experiments/bot-sender-recovery/README.md) uses the existing process output log and session authority. On a disposable patched host it restores one sender note for each abrupt-loss case above and replays a finished waiter result that had not reached the session queue. Explicitly consumed output and an already admitted completion do not create another note. The cases verify no recipient resend or duplicate note after a second Gateway startup. This result applies to the candidate tree. The official pin remains on the clean host.
+
+With a finished waiter and its notification still outside the queue, native `SIGUSR1` planned restart also preserves the recipient receipt on both hosts. The clean pin leaves the sender without a completion. The candidate admits the original completion once if the sender result was saved. An injected pre-write `ENOSPC` on the candidate shows the remaining gap. The native output log and original recipient receipt survive, but without the result or the live checkpoint entry the successor does not restore the sender note. See the [reproduction and boundaries](../experiments/bot-sender-recovery/README.md#evidence).
 
 ## 9. Events, Errors and Client Recovery
 
