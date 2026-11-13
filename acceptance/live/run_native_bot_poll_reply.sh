@@ -9,7 +9,8 @@ usage() {
         '       sh acceptance/live/run_native_bot_poll_reply.sh --hermes CHECKOUT --hermes-python PYTHON [--receipt RESULT.xml] MODE [--review-recovery]' \
         'Modes: --push --reconnect --owner-loss --settled-loss --finished-loss --planned-restart' \
         '       --held-waiter-restart --drained-waiter-restart' \
-        'Review only: --consumed-loss --admitted-loss --result-write-failure --consumed-write-failure --admitted-write-failure'
+        'Review only: --killed-settled-receipt --mismatched-waiter-receipt' \
+        '             --consumed-loss --admitted-loss --result-write-failure --consumed-write-failure --admitted-write-failure'
 }
 
 host=
@@ -30,7 +31,7 @@ while [ "$#" -gt 0 ]; do
             mode=consume
             case_name=test_native_stateless_bot_wait_consumes_reply_before_fallback
             shift ;;
-        --push|--reconnect|--owner-loss|--settled-loss|--finished-loss|--consumed-loss|--admitted-loss|--planned-restart|--held-waiter-restart|--drained-waiter-restart|--result-write-failure|--consumed-write-failure|--admitted-write-failure)
+        --push|--reconnect|--owner-loss|--settled-loss|--finished-loss|--consumed-loss|--admitted-loss|--planned-restart|--held-waiter-restart|--drained-waiter-restart|--killed-settled-receipt|--mismatched-waiter-receipt|--result-write-failure|--consumed-write-failure|--admitted-write-failure)
             if [ "$mode" != poll ]; then usage >&2; exit 2; fi
             mode=${1#--}
             test_file=test_native_bot_push_reply.py
@@ -46,6 +47,8 @@ while [ "$#" -gt 0 ]; do
                 held-waiter-restart)
                     test_file=test_native_bot_owner_loss.py
                     case_name=test_native_held_bot_reply_reconciles_after_planned_restart ;;
+                killed-settled-receipt|mismatched-waiter-receipt)
+                    test_file=test_native_bot_owner_loss.py ;;
                 drained-waiter-restart)
                     test_file=test_native_bot_owner_loss.py
                     case_name=test_native_drained_bot_reply_reconciles_after_planned_restart ;;
@@ -76,7 +79,7 @@ if [ "$installed" -eq 1 ] && [ "$test_file" != test_native_bot_poll_reply.py ]; 
 fi
 
 case "$mode" in
-    consumed-loss|admitted-loss|result-write-failure|consumed-write-failure|admitted-write-failure)
+    consumed-loss|admitted-loss|result-write-failure|consumed-write-failure|admitted-write-failure|killed-settled-receipt|mismatched-waiter-receipt)
         if [ "$review_recovery" -ne 1 ]; then usage >&2; exit 2; fi ;;
 esac
 if [ "$review_recovery" -eq 1 ]; then
@@ -89,6 +92,8 @@ if [ "$review_recovery" -eq 1 ]; then
         planned-restart) case_name=test_proposed_planned_restart_recovers_pending_sender_notification ;;
         held-waiter-restart) case_name=test_proposed_held_bot_reply_reconciles_after_planned_restart ;;
         drained-waiter-restart) case_name=test_proposed_drained_bot_reply_reconciles_after_planned_restart ;;
+        killed-settled-receipt) case_name=test_proposed_killed_waiter_restores_settled_receipt ;;
+        mismatched-waiter-receipt) case_name=test_proposed_killed_waiter_refuses_mismatched_receipt ;;
         result-write-failure) case_name=test_proposed_failed_result_write_recovers_pending_sender_notification ;;
         consumed-write-failure) case_name=test_proposed_failed_result_write_preserves_consumption ;;
         admitted-write-failure) case_name=test_proposed_failed_result_write_does_not_repeat_admission ;;

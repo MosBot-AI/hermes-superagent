@@ -83,6 +83,8 @@ This file distinguishes design work, development changes, and released capabilit
 - Run runtime artifact acceptance on exact pull-request heads with read-only credentials; keep downloadable artifact publication push-only.
 ### Changed
 
+- Add review-only read-only receipt recovery for a terminated Bot waiter. The original sender completion can include the verified reply or shutdown failure, with an exit-only fallback when target evidence mismatches (#33).
+
 - Verify planned restart with an active native Bot waiter. The review-only candidate collects a drained reply and preserves a killed waiter's process-exit notice in the sender profile. Exact retry continues to reconcile the original recipient receipt (#33).
 
 - Keep the original local Bot handoff in the review-only Hermes checkpoint after a scoped result-write failure. The successor rebuilds the result and preserves pending, consumed and already-admitted behavior without resending (#33).
