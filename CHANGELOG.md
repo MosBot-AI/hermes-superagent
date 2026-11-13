@@ -199,6 +199,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Verify local Bot Mode refusal and retry from a bundled Linux x64 AppImage built at the pinned Hermes revision. The acceptance checks the running packaged executable and opens the original canonical chat on explicit retry (#33).
+
 - Add explicit LOCAL `origin RECORD_ID` and optional SDK `record_origin` inspection, separating historical acceptance, current state and latest editing route through bounded readonly metadata without reconstructing forgotten payload or claiming authorship/authority (#157).
 
 - Add optional operator-only retained-source discovery and native LOCAL recovery pages with snapshot-fenced pagination, exact status identities and metadata-only reads; no schema migration or automatic replay/discard.

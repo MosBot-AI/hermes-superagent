@@ -18,6 +18,7 @@ GATEWAY_FIXTURE = "desktop_native_gateway_fixture.ts"
 CANONICAL_FIXTURE = "desktop_bot_canonical_fixture.py"
 CANONICAL_OBSERVER = "desktop_bot_canonical_observer.ts"
 INSTALL_AMBIGUITY_SPEC = "desktop_install_ambiguity_ipc.spec.ts"
+CANONICAL_CASE = "bot-canonical"
 SAVED_TOKEN_CASE = "bot-canonical-saved-token"
 WEBAPP_SIGNOUT_CASE = "active-webapp-sign-out"
 PROPOSAL = ROOT / "experiments/bot-webapp-canonical"
@@ -27,7 +28,7 @@ CASES = {
         (GATEWAY_FIXTURE,),
         "profile routing",
     ),
-    "bot-canonical": (
+    CANONICAL_CASE: (
         "desktop_bot_canonical_refusal.spec.ts",
         (GATEWAY_FIXTURE, CANONICAL_FIXTURE, CANONICAL_OBSERVER),
         "Bot Mode canonical chat",
@@ -88,6 +89,13 @@ ip link set lo up
 test "$(ip -o link show | wc -l)" -eq 1
 test -z "$(ip -4 route show default)"
 test -z "$(ip -6 route show default)"
+if [ -n "${HERMES_E2E_APPIMAGE:-}" ]; then
+    (
+        cd "$HERMES_E2E_APPIMAGE_WORK"
+        setpriv --inh-caps=-all --ambient-caps=-all --bounding-set=-all --no-new-privs \
+            "$HERMES_E2E_APPIMAGE" --appimage-extract >appimage-extract.log 2>&1
+    )
+fi
 # Keep a shell as PID 1 so Xvfb can signal its xvfb-run parent on readiness.
 setpriv --inh-caps=-all --ambient-caps=-all --bounding-set=-all --no-new-privs \
   xvfb-run -a -e /dev/stderr --server-args='-screen 0 1280x1024x24 -nolisten tcp' "$@"
@@ -138,7 +146,7 @@ def verify_proposal(host, base, env):
     return commit
 
 
-def verify_build(host, python, node, env, *, review_proposal=False):
+def verify_build(host, python, node, env, *, review_proposal=False, packaged=False):
     compatibility = json.loads((ROOT / "compatibility.json").read_text(encoding="utf-8"))
     expected_commit = compatibility["hermes_commit"]
     if review_proposal:
@@ -161,6 +169,9 @@ def verify_build(host, python, node, env, *, review_proposal=False):
         raise ValueError(f"Prepared Hermes requires Python {compatibility['python']}")
 
     desktop = host / "apps/desktop"
+    if packaged:
+        return desktop
+
     stamp = json.loads((desktop / "build/install-stamp.json").read_text(encoding="utf-8"))
     if stamp["commit"] != expected_commit or stamp["dirty"] is not False:
         raise ValueError("Desktop build stamp must match the verified clean source commit")
@@ -253,13 +264,22 @@ def run_probe(
     title_filter=None,
     review_proposal=False,
     chromium=None,
+    appimage=None,
 ):
     env = isolated_environment(work, python, node)
     if chromium is not None:
         env["HERMES_E2E_CHROMIUM"] = str(chromium)
     if spec == CASES[SAVED_TOKEN_CASE][0]:
         env["HERMES_E2E_BOT_WEBAPP_EXPECTATION"] = "proposal" if review_proposal else "baseline"
-    desktop = verify_build(host, python, node, env, review_proposal=review_proposal)
+    desktop = verify_build(
+        host, python, node, env, review_proposal=review_proposal, packaged=appimage is not None
+    )
+    if appimage is not None:
+        env["HERMES_E2E_APPIMAGE"] = str(appimage)
+        env["HERMES_E2E_APPIMAGE_WORK"] = str(work)
+        env["HERMES_E2E_PACKAGED_PIN"] = json.loads((ROOT / "compatibility.json").read_bytes())[
+            "hermes_commit"
+        ]
     cli = desktop / "node_modules/@playwright/test/cli.js"
     if not cli.is_file():
         raise ValueError("Install the pinned Desktop workspace dependencies before running")
@@ -274,6 +294,9 @@ def run_probe(
                 "--user",
                 "--map-current-user",
                 "--keep-caps",
+                "--mount",
+                "--propagation",
+                "private",
                 "--net",
                 "--pid",
                 "--mount-proc",
@@ -299,7 +322,7 @@ def run_probe(
             start_new_session=True,
         ) as process:
             try:
-                status = process.wait(timeout=210)
+                status = process.wait(timeout=330 if appimage is not None else 210)
             finally:
                 if process.poll() is None:
                     # unshare's death signal kills PID 1 and the remaining fixture processes.
@@ -320,6 +343,7 @@ def main():
     parser.add_argument("--hermes-python", type=Path, required=True, help="Hermes interpreter")
     parser.add_argument("--node", type=Path, required=True, help="Pinned Hermes Node executable")
     parser.add_argument("--chromium", type=Path, help="Prepared Chromium executable for Webapp")
+    parser.add_argument("--appimage", type=Path, help="Local bundled Hermes Desktop AppImage")
     parser.add_argument("--scratch", type=Path, default=Path("/var/tmp"), help="Short temp parent")
     parser.add_argument("--case", choices=CASES, default="profile-routing", help="Acceptance case")
     parser.add_argument(
@@ -339,6 +363,12 @@ def main():
         inputs += (args.chromium,)
         if not args.chromium.is_file() or not os.access(args.chromium, os.X_OK):
             parser.error("--chromium must identify an executable file")
+    if args.appimage is not None:
+        if args.case != CANONICAL_CASE:
+            parser.error(f"--appimage requires --case {CANONICAL_CASE}")
+        if not args.appimage.is_file() or not os.access(args.appimage, os.X_OK):
+            parser.error("--appimage must identify an executable file")
+        inputs += (args.appimage,)
     if any(
         location.is_relative_to("/tmp")
         for path in inputs
@@ -359,6 +389,7 @@ def main():
             title_filter=CASE_TITLE_FILTERS.get(args.case),
             review_proposal=args.review_proposal,
             chromium=args.chromium.absolute() if args.chromium is not None else None,
+            appimage=args.appimage.resolve() if args.appimage is not None else None,
         )
     except (OSError, ValueError, subprocess.SubprocessError) as exc:
         parser.exit(1, f"{exc}\nPrivate diagnostics: {work}\n")
@@ -367,6 +398,8 @@ def main():
     shutil.rmtree(work)
     variant = " proposal" if args.review_proposal else ""
     product = "Chromium" if args.case == WEBAPP_SIGNOUT_CASE else "Electron"
+    if args.appimage is not None:
+        product = "packaged Electron"
     print(f"One real {product} {description}{variant} case passed")
 
 
