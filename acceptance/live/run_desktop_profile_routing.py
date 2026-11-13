@@ -25,6 +25,8 @@ CANONICAL_CASE = "bot-canonical"
 SSH_CASE = "bot-canonical-ssh"
 SSH_ALIAS_CASE = "bot-canonical-ssh-alias"
 SSH_RECONNECT_CASE = "bot-canonical-ssh-reconnect"
+SSH_ALIAS_RECONNECT_CASE = "bot-canonical-ssh-alias-reconnect"
+SSH_ALIAS_EDIT_CASE = "bot-canonical-ssh-alias-edit"
 SSH_SPEC = "desktop_bot_ssh.spec.ts"
 SSH_FIXTURES = (GATEWAY_FIXTURE, CANONICAL_OBSERVER, APPIMAGE_FIXTURE)
 SAVED_TOKEN_CASE = "bot-canonical-saved-token"
@@ -42,6 +44,8 @@ APPIMAGE_CASES = (
     SSH_CASE,
     SSH_ALIAS_CASE,
     SSH_RECONNECT_CASE,
+    SSH_ALIAS_RECONNECT_CASE,
+    SSH_ALIAS_EDIT_CASE,
     SAVED_TOKEN_CASE,
     COMPRESSED_LOCAL_CASE,
     COMPRESSED_SAVED_CASE,
@@ -62,6 +66,8 @@ CASES = {
     SSH_CASE: (SSH_SPEC, SSH_FIXTURES, "OpenSSH Bot Mode"),
     SSH_ALIAS_CASE: (SSH_SPEC, SSH_FIXTURES, "OpenSSH Bot Mode profile alias"),
     SSH_RECONNECT_CASE: (SSH_SPEC, SSH_FIXTURES, "OpenSSH Bot Mode reconnection"),
+    SSH_ALIAS_RECONNECT_CASE: (SSH_SPEC, SSH_FIXTURES, "OpenSSH Bot Mode alias reconnection"),
+    SSH_ALIAS_EDIT_CASE: (SSH_SPEC, SSH_FIXTURES, "OpenSSH Bot Mode alias edit"),
     SAVED_TOKEN_CASE: (
         "desktop_bot_saved_token_refusal.spec.ts",
         CANONICAL_FIXTURES,
@@ -102,6 +108,8 @@ CASE_TITLE_FILTERS = {
     SSH_CASE: "opens the named canonical chat over OpenSSH$",
     SSH_ALIAS_CASE: "opens the canonical chat behind an OpenSSH profile alias$",
     SSH_RECONNECT_CASE: "refuses an offline OpenSSH route and reopens the original chat$",
+    SSH_ALIAS_RECONNECT_CASE: "reopens the original chat behind an offline OpenSSH alias$",
+    SSH_ALIAS_EDIT_CASE: "opens the new OpenSSH alias target after a live edit$",
     COMPRESSED_LOCAL_CASE: "compressed Bot Chat over the local private ticket$",
     COMPRESSED_SAVED_CASE: "compressed Bot Chat over the saved Webapp token$",
     "install-marker-collision": (
@@ -421,7 +429,7 @@ def main():
     args = parser.parse_args()
     if sys.platform != "linux":
         parser.error("This acceptance requires Linux namespaces and Xvfb")
-    if args.case in (SSH_CASE, SSH_ALIAS_CASE, SSH_RECONNECT_CASE):
+    if CASES[args.case][0] == SSH_SPEC:
         if any(
             not shutil.which(command, path="/usr/bin:/bin")
             for command in ("/usr/sbin/sshd", "ssh", "ssh-keygen")
