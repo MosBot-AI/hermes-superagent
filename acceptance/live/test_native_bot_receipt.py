@@ -173,6 +173,10 @@ async def create_and_send(endpoint, home, sender_home):
             hidden=True,
             toolsets=[],
         )
+    return await send_to_chat(sender_home, created["session_id"])
+
+
+async def send_to_chat(sender_home, session_id):
     accepted = await asyncio.to_thread(notify, sender_home)
     assert accepted["status"] in {"queued", "claimed", "settled"}
     assert accepted["to"] == "@hermes" and accepted["expects_reply"] is False
@@ -180,7 +184,7 @@ async def create_and_send(endpoint, home, sender_home):
     return {
         "id": accepted["delivery_id"],
         "profile": "default",
-        "session_id": created["session_id"],
+        "session_id": session_id,
         "message": MESSAGE,
         "author": AUTHOR,
     }
@@ -248,16 +252,20 @@ def refuse_old_instance(home, instance_id):
 
 
 async def replay(endpoint, params, admission_id):
-    from hermes_cli.gateway_client import GatewayRPCError, connect_gateway
+    from hermes_cli.gateway_client import connect_gateway
 
     async with asyncio.timeout(15), connect_gateway(endpoint=endpoint) as client:
-        result = await client.rpc("bot_relay.deliver", **params)
-        assert result["status"] == "settled" and result["admission_id"] == admission_id
-        assert result["delivery_id"] == params["id"] and result["reply"] == REPLY
-        with pytest.raises(GatewayRPCError, match="^admission_conflict$"):
-            await client.rpc(
-                "bot_relay.deliver", **(params | {"message": "Changed synthetic notice"})
-            )
+        await replay_delivery(client, params, admission_id)
+
+
+async def replay_delivery(client, params, admission_id):
+    from hermes_cli.gateway_client import GatewayRPCError
+
+    result = await client.rpc("bot_relay.deliver", **params)
+    assert result["status"] == "settled" and result["admission_id"] == admission_id
+    assert result["delivery_id"] == params["id"] and result["reply"] == REPLY
+    with pytest.raises(GatewayRPCError, match="^admission_conflict$"):
+        await client.rpc("bot_relay.deliver", **(params | {"message": "Changed synthetic notice"}))
 
 
 def test_native_named_bot_reply_repairs_stale_receipt_on_restart(tmp_path_factory, monkeypatch):
