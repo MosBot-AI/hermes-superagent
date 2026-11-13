@@ -85,6 +85,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 - Verify same-install Bot reply persistence in an isolated Linux operator case. One native target receipt and one unconsumed sender completion record carry the same delivery ID and synthetic reply (#33).
 
+- Verify the officially installed plugin can capture and reopen a task in the same hidden canonical Bot Chat across a local Gateway restart (#33).
+
 - Verify a deferred native cron result transfers to the original named Bot Chat after a local Gateway restart. The source spool, one receiver admission and the completed receipt retain the same delivery ID (#33).
 
 - Verify generation-fenced Stop for a named managed worker waiting on a native clarification. The manual case checks the interrupted receipt and the queued successor's independent completion (#33).
