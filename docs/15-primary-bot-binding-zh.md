@@ -189,7 +189,11 @@ NODE_OPTIONS="--import=$ABSOLUTE_PRELOAD_PATH" scripts/build-bundle.sh
 
 [源码构建的 Electron 用例](../tests/desktop/desktop_compressed_adoption.spec.ts)在执行同一原生接管流程后点击内置 `local::scout` 条目。本地私有票据 WebSocket 按确切标题查询隐藏的 `Bot Chat`，并在 `scout` 上针对末端发送 `session.resume`。真实的 `GET /api/sessions/{id}/messages` 请求携带 `profile=scout` 和 `include_compacted=true`，返回 `200`、末端 ID 及按顺序排列的根会话和末端标记。界面在 `local/scout` 聚焦该末端，两条标记各显示一次。隐藏的 `default` 干扰会话拥有相同的末端 ID，其不同内容未出现在响应或视口中。界面打开期间，所比较的已存会话和接管投影保持一致。测试未观察到 `session.create`、`prompt.submit` 或模型补全。在[验收运行器命令](#当前固定版本的-electron-profile-路由)中添加 `--case compressed-history-adoption` 即可复现。[Gateway 夹具](../tests/desktop/desktop_compressed_adoption_fixture.py)
 
-这些观测适用于同一安装、同一操作系统用户的原生操作者及单一 owner 的合成谱系。经认证的 Primary Bot owner 登记及 grant 校验、跨安装移交、混合 owner 谱系、投递对账、已安装的 Desktop 及其他凭据模式需要独立证据。
+同一夹具也从独立的 Desktop 安装验证已保存 Webapp 令牌。Desktop 连接前，原生 CLI 在目标安装中完成谱系接管。远端默认 profile 与本地安装的两个 profile 在相同末端 ID 下各自保存了不同的消息。已保存令牌的 WebSocket 精确选择命名路由并恢复原末端。目标 Gateway 收到带会话令牌头和 profile 作用域的历史请求，按顺序返回根与末端消息标记。点击后本地 Gateway 未收到相应历史请求。界面各显示一次两条原始消息，三个干扰标记均未出现。接管后的四组会话、消息和准入快照保持一致，且未提交提示词或触发模型补全。
+
+本地私有票据和已保存令牌两种用例均在固定版本源码构建和对应的本地未签名 Linux x64 AppImage 上通过。使用 `--case compressed-history-adoption` 验证本地路由，或使用 `--case compressed-history-saved-token` 验证已保存令牌路由。按照 [Bot Mode 构建说明](#当前固定版本的-bot-mode-规范会话拒绝与重试)添加 `--appimage` 以验证打包客户端。
+
+测试使用单一 owner 的合成谱系。经认证的 Primary Bot owner 登记和授权、跨安装迁移、混合 owner 谱系、投递对账、签名发行包及其他凭据仍需分别验证。
 
 ### 当前固定版本的已保存 Webapp Bot Mode 路由
 
@@ -209,7 +213,7 @@ Bot Mode 的确切标题 `session.list` 查询携带所选后端 profile。列�
 
 单独构建的提案在回退探测中发送 `profile: scout`。原生审计确认凭据仍为相同类别的已保存令牌，请求由命名的 `scout` 处理器处理。成功响应识别出未归档的现有 Bot Chat。注入故障的点击显示重试通知并保留原焦点，未发出打开、创建或提交提示词的 RPC。之后明确点击重试时，正常查询打开原有的 `spare::scout` 会话。SQLite 快照保持不变，服务商记录到零次补全。[仅供评审的补丁、构建与证据](../experiments/bot-webapp-canonical/README-zh.md)
 
-[验收运行器](../acceptance/live/run_desktop_profile_routing.py)通过 `--case bot-canonical-saved-token` 复现干净基线，并在验证独立源码树时添加 `--review-proposal`。源码运行检查 Desktop 和 Webapp 构建是否最新。两种行为也在本地构建的捆绑式 Linux x64 AppImage 上复现，且安装标记与各自提交完全匹配。干净镜像探测 `default` 后在同一次点击中恢复。候选镜像探测 `scout`，在显式重试时打开原会话。夹具拒绝在候选模式下传入的干净镜像。签名发行、上游采用、已保存 Webapp 路由的压缩会话附加、其他凭据模式和经认证的 owner 绑定仍需分别验证。
+[验收运行器](../acceptance/live/run_desktop_profile_routing.py)通过 `--case bot-canonical-saved-token` 复现干净基线，并在验证独立源码树时添加 `--review-proposal`。源码运行检查 Desktop 和 Webapp 构建是否最新。两种行为也在本地构建的捆绑式 Linux x64 AppImage 上复现，且安装标记与各自提交完全匹配。干净镜像探测 `default` 后在同一次点击中恢复。候选镜像探测 `scout`，在显式重试时打开原会话。夹具拒绝在候选模式下传入的干净镜像。签名发行、上游采用、其他凭据模式和经认证的 owner 绑定仍需分别验证。
 
 ### 当前固定版本的原生 Profile 生命周期
 

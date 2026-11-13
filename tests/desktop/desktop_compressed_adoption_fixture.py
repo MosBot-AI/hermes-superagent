@@ -1,5 +1,6 @@
 """Seed and observe the owned compressed-chat Desktop fixture."""
 
+import asyncio
 import json
 import os
 import sqlite3
@@ -57,6 +58,32 @@ def seed():
         assert db.set_session_hidden(TIP, True)
         db.end_session(TIP, "session_switch")
         assert db.get_compression_tip(ROOT) == TIP
+
+
+def seed_peer():
+    from hermes_constants import get_hermes_home
+    from hermes_state import SessionDB
+
+    home = get_hermes_home()
+    for directory, slug in ((home, "default"), (home / "profiles" / PROFILE, PROFILE)):
+        with SessionDB(directory / "state.db") as db:
+            assert db.delete_session(f"fixture-peer-{slug}")
+            db.create_session(TIP, source="desktop", model="mock-model", cwd=str(directory))
+            assert db.set_session_title(TIP, "Bot Chat")
+            assert db.set_session_hidden(TIP, True)
+            db.append_message(TIP, "user", f"fixture-peer-{slug}-same-tip-id")
+
+
+async def assert_canonical_lineage():
+    from hermes_cli.gateway_client import connect_gateway
+    from hermes_cli.gateway_runtime import discover_gateway_endpoint
+    from hermes_constants import get_hermes_home
+
+    endpoint = discover_gateway_endpoint(get_hermes_home() / "profiles" / PROFILE).endpoint
+    assert endpoint is not None
+    async with asyncio.timeout(8), connect_gateway(endpoint=endpoint) as client:
+        result = await client.rpc("session.list", title="Bot Chat", include_hidden=True, limit=200)
+    assert [(row["id"], row["resolved_id"]) for row in result["sessions"]] == [(ROOT, TIP)]
 
 
 def inventory():
@@ -140,8 +167,10 @@ def run_gateway():
             return await original(self, scope, receive, send)
 
         query = parse_qs(scope.get("query_string", b"").decode(), keep_blank_values=True)
+        headers = dict(scope.get("headers", ()))
         observation = {
             "id": session_id,
+            "tokenHeader": bool(headers.get(b"x-hermes-session-token")),
             "scoped": query.get("profile") == [PROFILE],
             "includesCompacted": query.get("include_compacted") == ["true"],
         }

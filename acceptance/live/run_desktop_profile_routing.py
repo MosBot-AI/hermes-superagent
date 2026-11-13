@@ -22,6 +22,16 @@ CANONICAL_FIXTURES = (GATEWAY_FIXTURE, CANONICAL_FIXTURE, CANONICAL_OBSERVER, AP
 INSTALL_AMBIGUITY_SPEC = "desktop_install_ambiguity_ipc.spec.ts"
 CANONICAL_CASE = "bot-canonical"
 SAVED_TOKEN_CASE = "bot-canonical-saved-token"
+COMPRESSED_LOCAL_CASE = "compressed-history-adoption"
+COMPRESSED_SAVED_CASE = "compressed-history-saved-token"
+COMPRESSED_SPEC = "desktop_compressed_adoption.spec.ts"
+COMPRESSED_FIXTURES = (
+    GATEWAY_FIXTURE,
+    "desktop_compressed_adoption_fixture.py",
+    CANONICAL_OBSERVER,
+    APPIMAGE_FIXTURE,
+)
+APPIMAGE_CASES = (CANONICAL_CASE, SAVED_TOKEN_CASE, COMPRESSED_LOCAL_CASE, COMPRESSED_SAVED_CASE)
 WEBAPP_SIGNOUT_CASE = "active-webapp-sign-out"
 PROPOSAL = ROOT / "experiments/bot-webapp-canonical"
 CASES = {
@@ -45,10 +55,15 @@ CASES = {
         (GATEWAY_FIXTURE, "desktop_profile_retirement_fixture.py", CANONICAL_OBSERVER),
         "saved Webapp profile retirement",
     ),
-    "compressed-history-adoption": (
-        "desktop_compressed_adoption.spec.ts",
-        (GATEWAY_FIXTURE, "desktop_compressed_adoption_fixture.py", CANONICAL_OBSERVER),
-        "compressed Bot Mode history adoption",
+    COMPRESSED_LOCAL_CASE: (
+        COMPRESSED_SPEC,
+        COMPRESSED_FIXTURES,
+        "local compressed Bot Mode history",
+    ),
+    COMPRESSED_SAVED_CASE: (
+        COMPRESSED_SPEC,
+        COMPRESSED_FIXTURES,
+        "saved Webapp token compressed Bot Mode history",
     ),
     WEBAPP_SIGNOUT_CASE: (
         "desktop_webapp_signout.spec.ts",
@@ -67,6 +82,8 @@ CASES = {
     ),
 }
 CASE_TITLE_FILTERS = {
+    COMPRESSED_LOCAL_CASE: "compressed Bot Chat over the local private ticket$",
+    COMPRESSED_SAVED_CASE: "compressed Bot Chat over the saved Webapp token$",
     "install-marker-collision": (
         "copied install marker collapses discovery while exact sources stay distinct$"
     ),
@@ -366,8 +383,8 @@ def main():
         if not args.chromium.is_file() or not os.access(args.chromium, os.X_OK):
             parser.error("--chromium must identify an executable file")
     if args.appimage is not None:
-        if args.case not in (CANONICAL_CASE, SAVED_TOKEN_CASE):
-            parser.error(f"--appimage requires --case {CANONICAL_CASE} or {SAVED_TOKEN_CASE}")
+        if args.case not in APPIMAGE_CASES:
+            parser.error(f"--appimage requires --case {' or '.join(APPIMAGE_CASES)}")
         if not args.appimage.is_file() or not os.access(args.appimage, os.X_OK):
             parser.error("--appimage must identify an executable file")
         inputs += (args.appimage,)

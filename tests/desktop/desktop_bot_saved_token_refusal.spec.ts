@@ -15,6 +15,7 @@ import {
   storedChats
 } from './desktop_bot_canonical_observer'
 import {
+  configureSavedWebapp,
   type Gateway,
   privateEnv,
   readEndpoint,
@@ -94,34 +95,7 @@ test('Bot Mode checks the named canonical chat on the saved Webapp token route',
     const port = new URL(remoteEndpoint.origin).port
     runPython(remoteEnv, `import asyncio; from ${fixtureModule} import warm_canonical; asyncio.run(warm_canonical())`)
 
-    const token = fs.readFileSync(path.join(remoteBox.hermesHome, 'webapp', 'session-token'), 'utf8').trim()
-    expect(/^[A-Za-z0-9_-]{43}$/.test(token), 'native test Webapp token is available').toBe(true)
-    fs.writeFileSync(
-      path.join(localBox.userDataDir, 'connections.json'),
-      JSON.stringify({
-        version: 2,
-        primary: source,
-        launchMode: 'primary',
-        lastUsed: source,
-        connections: [
-          { id: 'local', kind: 'local', label: 'This device' },
-          {
-            id: source,
-            kind: 'remote',
-            label: 'Spare',
-            url: remoteEndpoint.origin,
-            authMode: 'token',
-            token: { encoding: 'plain', value: token }
-          }
-        ]
-      }),
-      { mode: 0o600 }
-    )
-    fs.writeFileSync(
-      path.join(localBox.userDataDir, 'active-profile.json'),
-      JSON.stringify({ profile, connectionProfiles: { [source]: profile } }),
-      { mode: 0o600 }
-    )
+    configureSavedWebapp(localBox, remoteBox, remoteEndpoint.origin, source, profile)
 
     const live = await launchBotDesktop(localEnv)
     app = live.app
