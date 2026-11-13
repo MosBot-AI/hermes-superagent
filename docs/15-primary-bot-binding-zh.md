@@ -50,7 +50,8 @@
 | 恢复副本的 Webapp 凭据清理 | Linux 原生恢复夹具覆盖完整归档复制浏览器凭据，以及 Webapp 关闭时通过私有 Unix 控制套接字替换恢复目标上的凭据。[恢复后轮换证据](#当前固定版本的恢复副本-webapp-凭据轮换) | 经认证的安装连续性和经 owner 授权的恢复需要独立证据。 |
 | 运行中的 Webapp 登出 | Linux 本地操作者登出选定的运行中 Webapp，原生连接与另一安装的访问继续有效。Chromium 中的原版 Webapp 重新加载后返回 Basic 登录，登录后重新打开原会话。[运行中 Webapp 证据](#当前固定版本的运行中-webapp-登出) | Owner 身份、跨安装恢复、其他凭据模式和进行中操作的结果需要独立证据。 |
 | 本地调用方与接收 Bot | Linux 同 UID 控制票据证明本地操作者准入。干净宿主上的 owner 入口夹具在缺少受支持的接收侧适配器上下文时拒绝。[本地 Gateway](#当前固定版本的本地-bot-传输与重启) · [Owner 入口契约](../tests/contracts/test_owner_entry_contracts.py) | 受保护的原生命令和渠道入口需要宿主以受支持的方式证明原始调用方、接收方及会话，再校验当前 owner 和 grant。[命令上下文实验](23-host-command-context-experiment-zh.md)仍仅供评审。 |
-| 插件状态与子代理角色 | 公开 `ctx.subagent_lifecycle` 覆盖 `in_process` 和 `host` 两种隔离模式下的进程内父子关联。`ctx.state` 在两种模式下均经过验证，其中托管模式覆盖两个命名 profile。[子代理证据](#当前固定版本的子代理关联) | 受管 WorkerChannel 和 Kanban 接管需要各自的来源、grant 和撤销校验。[E0.4](13-enforcement-contracts-zh.md)覆盖独立的配置冻结和故障排查安全模式 worker 路径。 |
+| 插件状态与子代理角色 | 公开 `ctx.subagent_lifecycle` 覆盖 `in_process` 和 `host` 两种隔离模式下的进程内父子关联。`ctx.state` 在两种模式下均经过验证，其中托管模式覆盖两个命名 profile。[子代理证据](#当前固定版本的子代理关联) | 可信调用方身份、绑定 owner 的 grant 和撤销需要独立检查。[E0.4](13-enforcement-contracts-zh.md)覆盖独立的配置冻结和故障排查安全模式 worker 路径。 |
+| 原生受管 WorkerChannel | 命名 profile 的普通 Gateway 路径关联已准入的 prompt、原生子进程、有序持久化回执及完成后的对话记录。[受管 worker 证据](#当前固定版本的原生受管-workerchannel) | 人类 owner 授权、当前撤销状态、受管委派及 Kanban 接管需要独立证明。仅供评审的纯文本 worker 契约有独立门禁。 |
 | 原生 Bot 与 cron 投递 | 同一安装内的 `message_agent` 和 `bot_relay.deliver` 覆盖仅通知的作者归因及本地终态回执恢复。原生 cron 在响应丢失后复用同一个投递 ID，并报告 `transferred` 和 `queued` 回执。[Bot 消息](#当前固定版本的同一安装内-bot-消息) · [重启](#当前固定版本的本地-bot-传输与重启) · [延后投递](#当前固定版本的-bot-chat-延后投递) | 对需要回复、远程和其他生产者模式分别验证回执及作者对账。结果不确定时保留原投递 ID。 |
 | 插件注入 | 原生调度器证据显示，`ctx.inject_message` 可在随后发生派发失败之前返回 `True`。[注入证据](#8-消息例行任务与回执) | 插件负责的持久投递需要受支持的幂等准入与回执查询。使用布尔接口时保持持久主动投递不可用。 |
 | 可选 HTTP | [客户端契约](14-client-api-contracts-zh.md#3-鉴权不等于领域授权)记录原生凭据形态和 E0.6 传输边界。 | 只有受支持的可信主体和 profile 传递、领域授权以及逐能力的传输和恢复验收都完成后，才启用 Primary Bot HTTP 操作。 |
@@ -422,6 +423,16 @@ V1 **不支持自动跨 profile/跨宿主接管**。应使用 E8.3 下经过单�
 
 原生 `ctx.subagent_lifecycle` 服务按当前父会话和进程注册表检查句柄。子代理在 Hermes 进程内运行，托管插件也通过 Hermes 侧接口访问该服务。跨重启的持久恢复、经认证的调用方、绑定 owner 的 worker 授权以及当前撤销状态，均需独立证据。[现有 E0.4 worker 检查](13-enforcement-contracts-zh.md)覆盖配置冻结及故障排除安全模式的插件抑制。Gateway 管理的 worker 接管和 Kanban worker 来源属于独立的运行路径。[生命周期服务](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/agent/subagent_lifecycle.py#L269-L290) · [句柄检查](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/agent/subagent_lifecycle.py#L389-L400) · [托管接口](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_cli/plugin_isolation.py#L58-L61)
 
+### 当前固定版本的原生受管 WorkerChannel
+
+在 Hermes `2281116525106e3c109993ccb5dc74d02bfc1427` 上，CLI 平台的普通本地会话在冻结策略显式启用受管执行，并选择带基地址的自定义服务商时，才进入这条执行路径。Gateway 将 `agent.managed_worker` 启动为独立进程，对照其启动的进程验证 worker 的存活 PID 和启动标识，再为已开始的准入记录保留执行。子进程绑定分配给它的策略，通过 Gateway 接管该保留项，并使用 `WorkerChannel` 传递进程帧。执行所属 authority 的存储根据执行分配按顺序应用 worker 操作。[模式选择与冻结策略](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/gateway/session_managed_worker.py#L40-L57) · [子进程启动](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/gateway/session_managed_worker.py#L585-L616) · [执行保留](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/gateway/session_worker_reservation.py#L20-L110) · [子进程通道与策略](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/agent/managed_worker.py#L130-L156) · [子进程接管](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/agent/managed_worker.py#L331-L351) · [持久化回执](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_state_runtime.py#L953-L998)
+
+[Linux 手动验收夹具](../acceptance/live/test_native_managed_worker.py)通过私有 Unix 票据和环回 WebSocket，在 `scout` 创建一个隐藏的 CLI 来源 `Bot Chat`，并提交一条合成 prompt。结果确定的环回模型替身暂缓响应，直到夹具观测到一个存活的 `agent.managed_worker` 进程，其直接父进程为 Gateway。`compute` 执行记录通过 `admission-worker:<admission_id>` 关联已开始的准入，并与其会话、命名 authority 的 epoch 和 generation 一致。该准入携带原生操作系统主体。替身响应后，准入进入 `terminal`，结果为 `completed`，同一执行也进入 `terminal`，其持久回执序号从 `1` 到 `last_sequence` 连续无缺口。
+
+原生 `prompt.receipt` 使用 `include_result: true` 返回确切的最终响应、命名 profile 和会话引用、原准入 ID、authority epoch 及 generation。`session.resume` 恰好返回合成用户消息，随后是脚本化的助手响应。使用相同输入 ID 和载荷重复 `prompt.submit` 会返回原终态准入。使用该 ID 提交不同文本时返回 `4001`，原因为 `admission_conflict`。执行记录和回执序号保持一致，模型补全次数仍为一次。`default` 和 `watch` 中所比较的会话和消息字段保持一致，两个同级 profile 的准入、执行及 worker 回执数仍为零。原子进程退出，Gateway 的 PID 和实例 ID 保持不变，直至按计划停止。手动原生 Gateway 工作流在测试通过后发布 `managed-worker.xml`。[手动工作流](../.github/workflows/native-gateway.yml)
+
+这项 worker 证据限于普通本地 Gateway 路径。[进程内子代理关联](#当前固定版本的子代理关联)与 [E0.4 安全模式和冻结配置检查](13-enforcement-contracts-zh.md)覆盖不同路径。#143 的[仅供评审的纯文本 worker 提案](101-current-host-text-worker-zh.md)仍需自己的受支持契约与验收。经验证的人类 owner 身份与 grant、撤销、受管委派、Kanban 接管、真实服务商行为及外部副作用需要独立证据。
+
 ### 当前固定版本的同一安装内 Bot 消息
 
 在 Hermes `2281116525106e3c109993ccb5dc74d02bfc1427`，注入工具前会检查 Bot Mode 协议设置、精确的 `Bot Chat` 标题和受管理安装标记。工具处理器会重新检查标题和标记。如果调用方有会话数据库，其 home 决定发送方 profile。Profile slug 决定结构化作者 ID `bot:<profile>`，名册提供消息前缀使用的 handle 和显示元数据。这些值来自宿主的调用上下文和名册。[工具资格检查](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/tools/bot_mode_dm.py#L127-L168) · [发送方归属与本地路由](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/tools/bot_mode_dm.py#L239-L364) · [调用 agent 上下文](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/tools/bot_mode_dm.py#L1008-L1025)
@@ -541,7 +552,7 @@ Payload 携带 ID、修订号、epoch 和原因码，不包含会话记录、non
 
 | ID | 状态与依赖 | 交付物 |
 |---|---|---|
-| E0.7 Verify Primary Bot Contracts | M0，In Progress。依赖 E0.1/E0.2，并使用 E0.4 发现。 | [适配器状态](#受支持的适配器状态)记录当前固定版本的证据与剩余门禁。已安装发行包及其他远程传输、运行中的 profile 转换、恢复前后经认证的连续性、可信调用方和接收端上下文、受管理 worker 的来源与授权，以及更广泛的作者和回执对账仍待完成。可选 HTTP 还需要 E0.6。 |
+| E0.7 Verify Primary Bot Contracts | M0，In Progress。依赖 E0.1/E0.2，并使用 E0.4 发现。 | [适配器状态](#受支持的适配器状态)记录当前固定版本的证据与剩余门禁。已安装发行包及其他远程传输、运行中的 profile 转换、恢复前后经认证的连续性、可信调用方和接收端上下文、其他受管 worker 模式、绑定 owner 的 worker grant 与撤销，以及更广泛的作者和回执对账仍待完成。可选 HTTP 还需要 E0.6。 |
 | E1.6 Bind Primary Bot | 可选后续；Backlog；E0.7、E1.1–E1.5、E2.1 | Owner 确认的登记与恢复、唯一 active 绑定、修订号/epoch 栅栏、审计和角色策略；不无条件启用写入 |
 | E3.6 Reconcile Primary Bot Sessions | 启用 Bot 绑定路径时为 M1 门禁，M2 继续扩展；Backlog；E1.6、E3.2/E3.5、E4.3/E4.4 | 规范会话解析、worker handoff 关联、投递/恢复和原生回执对账 |
 

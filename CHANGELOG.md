@@ -83,6 +83,8 @@ This file distinguishes design work, development changes, and released capabilit
 - Run runtime artifact acceptance on exact pull-request heads with read-only credentials; keep downloadable artifact publication push-only.
 ### Changed
 
+- Verify ordinary named-profile prompt execution in a real native managed worker with a synthetic loopback model. The manual Gateway case correlates the worker, admission and terminal receipt and checks that a same-ID retry does not start another execution (#33).
+
 - Verify that signing out of one serving Webapp closes its browser connection while the installation's native client and a second installation's clients keep their existing sessions (#33).
 
 - Verify native adoption of existing compressed history in a named profile and its subsequent opening in Linux Desktop Bot Mode. The acceptance checks that Desktop shows the named history when the default profile contains a different chat with the same session ID (#33).
