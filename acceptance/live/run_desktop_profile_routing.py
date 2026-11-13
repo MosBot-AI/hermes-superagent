@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -21,6 +22,7 @@ CANONICAL_OBSERVER = "desktop_bot_canonical_observer.ts"
 CANONICAL_FIXTURES = (GATEWAY_FIXTURE, CANONICAL_FIXTURE, CANONICAL_OBSERVER, APPIMAGE_FIXTURE)
 INSTALL_AMBIGUITY_SPEC = "desktop_install_ambiguity_ipc.spec.ts"
 CANONICAL_CASE = "bot-canonical"
+SSH_CASE = "bot-canonical-ssh"
 SAVED_TOKEN_CASE = "bot-canonical-saved-token"
 COMPRESSED_LOCAL_CASE = "compressed-history-adoption"
 COMPRESSED_SAVED_CASE = "compressed-history-saved-token"
@@ -31,7 +33,13 @@ COMPRESSED_FIXTURES = (
     CANONICAL_OBSERVER,
     APPIMAGE_FIXTURE,
 )
-APPIMAGE_CASES = (CANONICAL_CASE, SAVED_TOKEN_CASE, COMPRESSED_LOCAL_CASE, COMPRESSED_SAVED_CASE)
+APPIMAGE_CASES = (
+    CANONICAL_CASE,
+    SSH_CASE,
+    SAVED_TOKEN_CASE,
+    COMPRESSED_LOCAL_CASE,
+    COMPRESSED_SAVED_CASE,
+)
 WEBAPP_SIGNOUT_CASE = "active-webapp-sign-out"
 PROPOSAL = ROOT / "experiments/bot-webapp-canonical"
 CASES = {
@@ -44,6 +52,11 @@ CASES = {
         "desktop_bot_canonical_refusal.spec.ts",
         CANONICAL_FIXTURES,
         "Bot Mode canonical chat",
+    ),
+    SSH_CASE: (
+        "desktop_bot_ssh.spec.ts",
+        (GATEWAY_FIXTURE, CANONICAL_OBSERVER, APPIMAGE_FIXTURE),
+        "OpenSSH Bot Mode",
     ),
     SAVED_TOKEN_CASE: (
         "desktop_bot_saved_token_refusal.spec.ts",
@@ -108,6 +121,27 @@ ip link set lo up
 test "$(ip -o link show | wc -l)" -eq 1
 test -z "$(ip -4 route show default)"
 test -z "$(ip -6 route show default)"
+if [ -n "${HERMES_E2E_SSH_STATE:-}" ]; then
+    account_home="$HERMES_E2E_SSH_STATE/account"
+    # OpenSSH resolves its home through the account database, independently of HOME.
+    awk -F: -v uid="$(id -u)" -v home="$account_home" '
+        BEGIN { OFS=FS }
+        $3 == uid { $6=home; matches++ }
+        { print }
+        END { if (matches != 1) exit 1 }
+    ' /etc/passwd >"$HERMES_E2E_SSH_STATE/passwd"
+    mount --bind "$HERMES_E2E_SSH_STATE/passwd" /etc/passwd
+    test "$(getent passwd "$(id -u)" | cut -d: -f6)" = "$account_home"
+    if [ -d /etc/ssh/ssh_config.d ]; then
+        mount -t tmpfs -o mode=755,size=1m tmpfs /etc/ssh/ssh_config.d
+    fi
+    for f in /etc/ssh/ssh_config /etc/bash.bashrc /etc/ssh/sshrc; do
+        if [ -e "$f" ]; then
+            test -f "$f" && test ! -L "$f"
+            mount --bind "$HERMES_E2E_SSH_STATE/empty" "$f"
+        fi
+    done
+fi
 if [ -n "${HERMES_E2E_APPIMAGE:-}" ]; then
     (
         cd "$HERMES_E2E_APPIMAGE_WORK"
@@ -288,6 +322,13 @@ def run_probe(
     env = isolated_environment(work, python, node)
     if chromium is not None:
         env["HERMES_E2E_CHROMIUM"] = str(chromium)
+    if spec == CASES[SSH_CASE][0]:
+        ssh_state = work / "ssh"
+        ssh_state.mkdir(mode=0o700)
+        (ssh_state / "account").mkdir(mode=0o700)
+        (ssh_state / "account" / ".ssh").mkdir(mode=0o700)
+        (ssh_state / "empty").touch(mode=0o600)
+        env["HERMES_E2E_SSH_STATE"] = str(ssh_state)
     if spec == CASES[SAVED_TOKEN_CASE][0]:
         env["HERMES_E2E_BOT_WEBAPP_EXPECTATION"] = "proposal" if review_proposal else "baseline"
     desktop, expected_commit = verify_build(
@@ -373,6 +414,15 @@ def main():
     args = parser.parse_args()
     if sys.platform != "linux":
         parser.error("This acceptance requires Linux namespaces and Xvfb")
+    if args.case == SSH_CASE:
+        if any(
+            not shutil.which(command, path="/usr/bin:/bin")
+            for command in ("/usr/sbin/sshd", "ssh", "ssh-keygen")
+        ):
+            parser.error(f"--case {SSH_CASE} requires OpenSSH server and client")
+        # The account home is also used as a literal in the OpenSSH configuration.
+        if not re.fullmatch(r"[a-zA-Z0-9_./-]+", str(args.scratch.resolve())):
+            parser.error(f"--case {SSH_CASE} requires a simple absolute scratch path")
     if args.review_proposal and args.case != SAVED_TOKEN_CASE:
         parser.error(f"--review-proposal requires --case {SAVED_TOKEN_CASE}")
     if (args.chromium is not None) != (args.case == WEBAPP_SIGNOUT_CASE):

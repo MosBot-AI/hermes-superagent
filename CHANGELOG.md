@@ -199,6 +199,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Verify Bot Mode opens the existing remote named chat over a saved OpenSSH key connection in source-built and bundled Linux x64 Desktop, with a same-name local profile and unchanged chat stores (#33).
+
 - Verify compressed Bot Chat hydration over the saved Webapp token in source-built and bundled Linux x64 Desktop. Same-ID decoys in three other profile stores remain outside the selected transcript (#33).
 
 - Reproduce the saved Webapp Bot Chat fallback in a bundled Linux x64 AppImage and verify named-profile scoping and explicit retry in the matching review image (#33).
