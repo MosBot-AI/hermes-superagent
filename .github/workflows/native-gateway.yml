@@ -107,8 +107,8 @@ jobs:
             acceptance/live/test_packaged_gateway_memory.py \
             acceptance/live/test_packaged_gateway_handoff.py \
             --junitxml="$RUNNER_TEMP/native-gateway-evidence/packaged-results.xml"
-      - name: Verify installed package in the canonical Bot Chat
-        timeout-minutes: 7
+      - name: Verify installed package in the canonical Bot Chat and native delivery
+        timeout-minutes: 9
         shell: bash
         run: |
           set -euo pipefail
@@ -125,14 +125,18 @@ jobs:
           from xml.etree import ElementTree
 
           result = ElementTree.parse(sys.argv[1])
-          cases = result.findall(".//testcase")
+          cases = [case.get("name") for case in result.findall(".//testcase")]
+          expected = {
+              "test_installed_task_commands_reopen_original_canonical_bot_chat",
+              "test_installed_recipient_keeps_native_bot_delivery_and_task_after_restart",
+          }
           excluded = ("error", "failure", "skipped", "system-out", "system-err")
           if (
-              len(cases) != 1
-              or cases[0].get("name") != "test_installed_task_commands_reopen_original_canonical_bot_chat"
+              len(cases) != len(expected)
+              or set(cases) != expected
               or any(result.findall(f".//{tag}") for tag in excluded)
           ):
-              raise SystemExit("Expected one clean passing installed Bot Chat case")
+              raise SystemExit("Expected both installed Bot Chat cases to pass cleanly")
           PY
           install -m 600 "$result" "$RUNNER_TEMP/native-gateway-evidence/packaged-bot.xml"
       - name: Upload synthetic native Gateway test receipt

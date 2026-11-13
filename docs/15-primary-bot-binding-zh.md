@@ -55,7 +55,7 @@
 | 插件状态与子代理角色 | 公开 `ctx.subagent_lifecycle` 覆盖 `in_process` 和 `host` 两种隔离模式下的进程内父子关联。`ctx.state` 在两种模式下均经过验证，其中托管模式覆盖两个命名 profile。[子代理证据](#当前固定版本的子代理关联) | 可信调用方身份、绑定 owner 的 grant 和撤销需要独立检查。[E0.4](13-enforcement-contracts-zh.md)覆盖独立的配置冻结和故障排查安全模式 worker 路径。 |
 | 原生受管 WorkerChannel | 命名 profile 的普通 Gateway 路径关联原生子进程、其准入、有序回执及完成后的对话记录。在同一 Gateway 上，经 generation 检查的停止请求中断等待澄清的 worker，随后排队的输入完成。后继 Gateway 将丢失 worker 的准入保留为 `unknown`，直到显式处理。[受管 worker 证据](#当前固定版本的原生受管-workerchannel) · [停止](#当前固定版本的受管-worker-停止) · [重启对账](#当前固定版本的受管-worker-重启对账) | 人类 owner 授权、当前撤销状态、受管委派及 Kanban 接管需要独立证明。仅供评审的纯文本 worker 契约有独立门禁。 |
 | 原生 Bot 与 cron 投递 | 同一安装内的 `message_agent` 和 `bot_relay.deliver` 覆盖仅通知的作者归因、本地终态回执恢复及非推送会话的发送方回复持久化。原生 cron 在响应丢失后复用同一个投递 ID。另一项真实本地 Gateway 用例将离线结果移交给原有的命名 Bot Chat，并结算一个回合。[Bot 消息](#当前固定版本的同一安装内-bot-消息) · [重启](#当前固定版本的本地-bot-传输与重启) · [回复持久化](#当前固定版本的同一安装内-bot-回复持久化) · [延后投递](#当前固定版本的-bot-chat-延后投递) | 对推送投递、远程凭据和其他生产者模式分别验证回执及作者对账。结果不确定时保留原投递 ID。 |
-| Bot Chat 中的已安装插件 | 经官方流程扫描安装的插件，在本地 Gateway 正常重启前后，通过同一隐藏规范会话记录一条任务并原样重放。[插件安装证据](#当前固定版本的-bot-chat-插件安装验收) | 已安装发行包的 Bot 消息投递、Desktop 和其他传输模式、经认证的 owner 绑定均需独立验证。 |
+| Bot Chat 中的已安装插件 | 经官方流程扫描安装的插件在本地 Gateway 正常重启前后，通过同一隐藏规范会话记录任务并原样重放。另一个仅通知的 Bot 间投递用例在已安装插件的接收 profile 中保留原生对话记录和已结算回执。[插件安装证据](#当前固定版本的-bot-chat-插件安装验收) | 已安装环境的回复型和推送投递、Desktop 安装包、其他传输模式及经认证的 owner 绑定均需独立验证。 |
 | 插件注入 | 原生调度器证据显示，`ctx.inject_message` 可在随后发生派发失败之前返回 `True`。[注入证据](#8-消息例行任务与回执) | 插件负责的持久投递需要受支持的幂等准入与回执查询。使用布尔接口时保持持久主动投递不可用。 |
 | 可选 HTTP | [客户端契约](14-client-api-contracts-zh.md#3-鉴权不等于领域授权)记录原生凭据形态和 E0.6 传输边界。 | 只有受支持的可信主体和 profile 传递、领域授权以及逐能力的传输和恢复验收都完成后，才启用 Primary Bot HTTP 操作。 |
 
@@ -537,7 +537,9 @@ Linux Gateway 验收在同一固定版本上覆盖另一种情况。Gateway 在 
 
 名册和精确标题查询起初均报告无 Bot Chat。原生显式创建建立一个隐藏的规范会话。两种查询返回相同的根会话 ID 和解析后会话 ID，通过该会话调用已安装的 `personal-tasks` 命令可记录一条合成任务。计划停机后，新 Gateway 实例的 authority epoch 更高，并拒绝为旧实例签发票据。使用新本地票据可打开同一个会话。已安装命令能读取原任务，原样重放添加命令时返回原结果。只读数据库核查确认只有一个隐藏会话和一条任务，消息数和回合准入数均为零。
 
-手动工作流发布 `packaged-bot.xml`。用例覆盖官方插件安装及仅执行命令的本地 Bot Chat 恢复。Desktop 安装包、安装插件后的 Bot 间投递、真实模型执行、远程 authority 和经认证的 owner 绑定需要独立证据。[原生 Gateway 工作流](../.github/workflows/native-gateway.yml)
+第二个用例使用通过官方流程安装插件的接收 profile，以及通过原生 `message_agent` 发送仅通知消息的合成命名发送方。接收会话记录一条带作者归因的 `terminal/completed` 准入、一条 `settled` 回执，以及一次脚本回环模型响应产生的确切对话记录。计划重启后，使用新的本地票据打开原会话。原样重放 `bot_relay.deliver` 返回相同的准入和回复。使用原投递 ID 提交不同内容时返回 `admission_conflict`。已安装任务命令返回原任务及添加重放回执，不产生额外记录。
+
+手动工作流在 `packaged-bot.xml` 发布两个用例，覆盖通过官方流程安装插件的接收 profile、本地命令重放及同一安装内仅通知投递。已安装环境的回复型或推送投递、Desktop 安装包、真实模型执行、远程 authority 和经认证的 owner 绑定需要独立证据。[原生 Gateway 工作流](../.github/workflows/native-gateway.yml)
 
 ### 当前固定版本的本地 Bot 传输与重启
 
