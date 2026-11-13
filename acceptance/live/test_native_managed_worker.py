@@ -43,22 +43,30 @@ class ScriptedModel(BaseHTTPRequestHandler):
             self.server.unexpected += 1
         self.send_error(404)
 
-    def do_POST(self):
+    def completion_request(self):
         self.connection.settimeout(5)
         try:
             length = int(self.headers.get("Content-Length", "0"))
             if not 0 < length <= 1_000_000:
                 raise ValueError("invalid model request length")
             body = json.loads(self.rfile.read(length))
+            if not isinstance(body, dict):
+                raise ValueError("invalid model request body")
         except ValueError, OSError:
             self.server.unexpected += 1
             self.send_error(400)
-            return
+            return None
         if self.path == "/api/show" and body == {"name": MODEL}:
             self.send_error(404)
+            return None
+        return body
+
+    def do_POST(self):
+        body = self.completion_request()
+        if body is None:
             return
 
-        messages = body.get("messages", []) if isinstance(body, dict) else []
+        messages = body.get("messages", [])
         users = [
             row.get("content")
             for row in messages
@@ -71,7 +79,6 @@ class ScriptedModel(BaseHTTPRequestHandler):
         if (
             self.path != "/v1/chat/completions"
             or self.headers.get("Authorization") != f"Bearer {expected_key}"
-            or not isinstance(body, dict)
             or body.get("model") != MODEL
             or not (first or follower)
             or body.get("tools")
@@ -92,18 +99,24 @@ class ScriptedModel(BaseHTTPRequestHandler):
             with suppress(BrokenPipeError, ConnectionResetError):
                 self.send_error(500)
             return
+        self.send_completion(body, {"role": "assistant", "content": REPLY})
+
+    def send_completion(self, body, message):
+        calls = message.get("tool_calls", [])
+        choice = {"index": 0, "finish_reason": "tool_calls" if calls else "stop"}
         reply = {
             "id": "fixture",
             "model": MODEL,
-            "choices": [{"index": 0, "finish_reason": "stop"}],
+            "choices": [choice],
         }
-        message = {"role": "assistant", "content": REPLY}
         if body.get("stream"):
-            reply["choices"][0]["delta"] = message
+            choice["delta"] = message
+            for index, call in enumerate(calls):
+                call["index"] = index
             content = ("data: " + json.dumps(reply) + "\n\ndata: [DONE]\n\n").encode()
             content_type = "text/event-stream"
         else:
-            reply["choices"][0]["message"] = message
+            choice["message"] = message
             content = json.dumps(reply).encode()
             content_type = "application/json"
         with suppress(BrokenPipeError, ConnectionResetError):
@@ -115,8 +128,8 @@ class ScriptedModel(BaseHTTPRequestHandler):
 
 
 @contextmanager
-def scripted_model(*, follower=None):
-    with ThreadingHTTPServer(("127.0.0.1", 0), ScriptedModel) as server:
+def scripted_model(*, follower=None, handler=ScriptedModel):
+    with ThreadingHTTPServer(("127.0.0.1", 0), handler) as server:
         server.completions = server.unexpected = 0
         server.observed, server.release = threading.Event(), threading.Event()
         server.follower_observed, server.follower_release = threading.Event(), threading.Event()
@@ -322,7 +335,7 @@ class ManagedFixture:
 
 
 @contextmanager
-def managed_fixture(tmp_path_factory, monkeypatch, *, follower=None):
+def managed_fixture(tmp_path_factory, monkeypatch, *, follower=None, handler=ScriptedModel):
     assert sys.platform == "linux", "This acceptance uses the Linux private control socket"
     host = Path(os.environ["HERMES_TEST_ROOT"]).resolve(strict=True)
     pin = json.loads((REPO / "compatibility.json").read_bytes())["hermes_commit"]
@@ -396,7 +409,7 @@ def managed_fixture(tmp_path_factory, monkeypatch, *, follower=None):
             from hermes_cli import gateway_client
 
             assert Path(gateway_client.__file__).resolve().is_relative_to(host)
-            with scripted_model(follower=follower) as model:
+            with scripted_model(follower=follower, handler=handler) as model:
                 url = f"http://127.0.0.1:{model.server_port}/v1"
                 seed_profiles(home, scout, watch, url)
                 child_env = env | {"HERMES_MANAGED_FIXTURE_MODEL_PORT": str(model.server_port)}

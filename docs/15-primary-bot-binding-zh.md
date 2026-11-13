@@ -53,7 +53,7 @@
 | 运行中的 Webapp 登出 | Linux 本地操作者登出选定的运行中 Webapp，原生连接与另一安装的访问继续有效。Chromium 中的原版 Webapp 重新加载后返回 Basic 登录，登录后重新打开原会话。[运行中 Webapp 证据](#当前固定版本的运行中-webapp-登出) | Owner 身份、跨安装恢复、其他凭据模式和进行中操作的结果需要独立证据。 |
 | 本地调用方与接收 Bot | Linux 同 UID 控制票据证明本地操作者准入。干净宿主上的 owner 入口夹具在缺少受支持的接收侧适配器上下文时拒绝。[本地 Gateway](#当前固定版本的本地-bot-传输与重启) · [Owner 入口契约](../tests/contracts/test_owner_entry_contracts.py) | 受保护的原生命令和渠道入口需要宿主以受支持的方式证明原始调用方、接收方及会话，再校验当前 owner 和 grant。[命令上下文实验](23-host-command-context-experiment-zh.md)仍仅供评审。 |
 | 插件状态与子代理角色 | 公开 `ctx.subagent_lifecycle` 覆盖 `in_process` 和 `host` 两种隔离模式下的进程内父子关联。`ctx.state` 在两种模式下均经过验证，其中托管模式覆盖两个命名 profile。[子代理证据](#当前固定版本的子代理关联) | 可信调用方身份、绑定 owner 的 grant 和撤销需要独立检查。[E0.4](13-enforcement-contracts-zh.md)覆盖独立的配置冻结和故障排查安全模式 worker 路径。 |
-| 原生受管 WorkerChannel | 命名 profile 的普通 Gateway 路径关联原生子进程、其准入、有序回执及完成后的对话记录。后继 Gateway 将丢失 worker 的准入保留为 `unknown`，待显式处理后运行排队的后续输入。[受管 worker 证据](#当前固定版本的原生受管-workerchannel) · [重启对账](#当前固定版本的受管-worker-重启对账) | 人类 owner 授权、当前撤销状态、受管委派及 Kanban 接管需要独立证明。仅供评审的纯文本 worker 契约有独立门禁。 |
+| 原生受管 WorkerChannel | 命名 profile 的普通 Gateway 路径关联原生子进程、其准入、有序回执及完成后的对话记录。在同一 Gateway 上，经 generation 检查的停止请求中断等待澄清的 worker，随后排队的输入完成。后继 Gateway 将丢失 worker 的准入保留为 `unknown`，直到显式处理。[受管 worker 证据](#当前固定版本的原生受管-workerchannel) · [停止](#当前固定版本的受管-worker-停止) · [重启对账](#当前固定版本的受管-worker-重启对账) | 人类 owner 授权、当前撤销状态、受管委派及 Kanban 接管需要独立证明。仅供评审的纯文本 worker 契约有独立门禁。 |
 | 原生 Bot 与 cron 投递 | 同一安装内的 `message_agent` 和 `bot_relay.deliver` 覆盖仅通知的作者归因及本地终态回执恢复。原生 cron 在响应丢失后复用同一个投递 ID，并报告 `transferred` 和 `queued` 回执。[Bot 消息](#当前固定版本的同一安装内-bot-消息) · [重启](#当前固定版本的本地-bot-传输与重启) · [延后投递](#当前固定版本的-bot-chat-延后投递) | 对需要回复、远程和其他生产者模式分别验证回执及作者对账。结果不确定时保留原投递 ID。 |
 | 插件注入 | 原生调度器证据显示，`ctx.inject_message` 可在随后发生派发失败之前返回 `True`。[注入证据](#8-消息例行任务与回执) | 插件负责的持久投递需要受支持的幂等准入与回执查询。使用布尔接口时保持持久主动投递不可用。 |
 | 可选 HTTP | [客户端契约](14-client-api-contracts-zh.md#3-鉴权不等于领域授权)记录原生凭据形态和 E0.6 传输边界。 | 只有受支持的可信主体和 profile 传递、领域授权以及逐能力的传输和恢复验收都完成后，才启用 Primary Bot HTTP 操作。 |
@@ -452,6 +452,14 @@ V1 **不支持自动跨 profile/跨宿主接管**。应使用 E8.3 下经过单�
 [Linux 手动验收夹具](../acceptance/live/test_native_managed_worker.py)通过私有 Unix 票据和环回 WebSocket，在 `scout` 创建一个隐藏的 CLI 来源 `Bot Chat`，并提交一条合成 prompt。结果确定的环回模型替身暂缓响应，直到夹具观测到一个存活的 `agent.managed_worker` 进程，其直接父进程为 Gateway。`compute` 执行记录通过 `admission-worker:<admission_id>` 关联已开始的准入，并与其会话、命名 authority 的 epoch 和 generation 一致。该准入携带原生操作系统主体。替身响应后，准入进入 `terminal`，结果为 `completed`，同一执行也进入 `terminal`，其持久回执序号从 `1` 到 `last_sequence` 连续无缺口。
 
 原生 `prompt.receipt` 使用 `include_result: true` 返回确切的最终响应、命名 profile 和会话引用、原准入 ID、authority epoch 及 generation。`session.resume` 恰好返回合成用户消息，随后是脚本化的助手响应。使用相同输入 ID 和载荷重复 `prompt.submit` 会返回原终态准入。使用该 ID 提交不同文本时返回 `4001`，原因为 `admission_conflict`。执行记录和回执序号保持一致，模型补全次数仍为一次。`default` 和 `watch` 中所比较的会话和消息字段保持一致，两个同级 profile 的准入、执行及 worker 回执数仍为零。原子进程退出，Gateway 的 PID 和实例 ID 保持不变，直至按计划停止。手动原生 Gateway 工作流在测试通过后发布 `managed-worker.xml`。[手动工作流](../.github/workflows/native-gateway.yml)
+
+#### 当前固定版本的受管 worker 停止
+
+[Linux 手动夹具](../acceptance/live/test_native_managed_worker_stop.py)使用 Hermes `2281116525106e3c109993ccb5dc74d02bfc1427` 的普通 `scout` 命名 profile 受管 worker 路径，并保留到同一可丢弃 Gateway 的私有票据原生连接。脚本化环回响应调用原生澄清工具。Worker 等待回答时，第二条输入在同一会话中排队。夹具不回答澄清请求。
+
+原生 `clarify.request` 事件及会话快照标识正在等待回答的问题、prompt ID 和 generation。使用错误 generation 调用 `session.interrupt` 返回 `4001`，原因为 `stale_generation`，澄清仍处于等待状态。Gateway 向受管子进程发送停止帧前检查会话控制能力和活跃 generation。被接受的 RPC 返回原 generation 的句柄。随后 `clarify.settled` 事件携带相同 prompt ID 和 generation，待处理提示快照为空。带 `include_result: true` 的 `prompt.receipt` 返回 `terminal`、结果 `interrupted` 及 `result.interrupted: true`。[原生分派](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/gateway/session_controls.py#L922-L926) · [受管停止](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/gateway/session_managed_worker.py#L349-L356) · [Worker 停止处理程序](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/agent/managed_worker.py#L178-L206)
+
+排队的后续输入由同一 Gateway 的另一个直接受管子进程执行，保持同一 `scout` authority epoch，并采用更高的 generation。后续输入运行时，使用首条输入 generation 的停止请求返回 `4001`，原因为 `stale_generation`。后续输入达到 `terminal`，结果为 `completed`，并返回准确的脚本化最终响应。按原样重试首条输入返回原中断准入及相同回执。环回替身观察到恰好两次补全请求，`default` 和 `watch` 中所比较的状态保持一致。两个 worker 均退出，Gateway 保持进程身份和实例 ID，直到按计划停止。手动 Native Gateway 工作流在测试通过后发布 `managed-worker-stop.xml`。该证据覆盖 worker 等待澄清时的本地中断。服务商侧取消、外部副作用结果和绑定 owner 的 grant 仍需独立证据。[手动工作流](../.github/workflows/native-gateway.yml)
 
 #### 当前固定版本的受管 worker 重启对账
 
