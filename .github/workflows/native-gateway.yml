@@ -32,7 +32,7 @@ jobs:
           cd "$upstream"
           python -m pm.build_env --source . --out "$RUNNER_TEMP/hermes-test-venv" \
             --group dev --group test --python "$(command -v python)"
-      - name: Verify native Bot receipts, profile retirement, restore rotation and history adoption
+      - name: Verify native Bot and Webapp lifecycle cases
         timeout-minutes: 8
         shell: bash
         run: |
@@ -43,7 +43,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           test "$(git -C "$upstream" rev-parse HEAD)" = "$pin"
           mkdir -p "$RUNNER_TEMP/native-gateway-evidence"
-          for fixture in bot_receipt profile_retirement webapp_restore_rotation history_adoption; do
+          for fixture in bot_receipt profile_retirement webapp_restore_rotation history_adoption webapp_signout; do
             sandbox="$(mktemp -d "$RUNNER_TEMP/native-bot.XXXXXX")"
             mkdir -p "$sandbox/home" "$sandbox/tmp"
             receipt="${fixture//_/-}.xml"

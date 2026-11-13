@@ -47,7 +47,8 @@
 | 本地旧版压缩历史 | 命名 profile 的原生 CLI 检查并接管符合条件的 Gateway 前压缩末端。Linux 源码构建的 Bot Mode 在所选 profile 路由打开该末端，并显示已存储的祖先与末端消息。[压缩历史证据](#当前固定版本的压缩历史接管) | 经 owner 授权的跨安装接管、混合 owner 谱系、其他凭据模式和投递对账需要独立证据。 |
 | 已保存 Webapp 令牌的回退 | 干净 Linux Electron 构建在命名 profile 查询返回空结果时探测远程启动 authority，并在同一次点击中通过第二次查询打开原会话。单独构建的提案探测命名 authority，拒绝不确定的打开操作，并在明确重试后打开原会话。[已保存 Webapp 证据](#当前固定版本的已保存-webapp-bot-mode-路由) | 干净固定版本仍有回退作用域缺口。受支持的使用需要已修正的宿主修订及该模式的专项验收。 |
 | Profile 与安装连续性 | 停机状态下的原生 profile CLI 和备份导入路径覆盖重命名、克隆、删除、同名重建、拒绝向已占用的 profile 导入，以及恢复后目标的 epoch 下限。在同一运行中的安装实例内，保留原有 host 作用域 WebSocket，覆盖 profile 退役及同名热上线。[Profile 生命周期](#当前固定版本的原生-profile-生命周期) · [保留的路由](#当前固定版本保留的原生-profile-路由) · [备份与恢复](#当前固定版本的原生备份与恢复) | 其他运行时切换和经认证的安装连续性需要当前目标、登记、规范谱系与冲突证据。复制的标记和名称无法消除安装实例的歧义。 |
-| 恢复副本的 Webapp 凭据清理 | Linux 原生恢复夹具覆盖完整归档复制浏览器凭据，以及 Webapp 关闭时通过私有 Unix 控制套接字替换恢复目标上的凭据。[恢复后轮换证据](#当前固定版本的恢复副本-webapp-凭据轮换) | 经认证的安装连续性、经 owner 授权的恢复，以及运行中的 Webapp 会话撤销，各自需要独立证据。 |
+| 恢复副本的 Webapp 凭据清理 | Linux 原生恢复夹具覆盖完整归档复制浏览器凭据，以及 Webapp 关闭时通过私有 Unix 控制套接字替换恢复目标上的凭据。[恢复后轮换证据](#当前固定版本的恢复副本-webapp-凭据轮换) | 经认证的安装连续性和经 owner 授权的恢复需要独立证据。 |
+| 运行中的 Webapp 登出 | Linux 本地操作者登出选定的运行中 Webapp，原生连接与另一安装的访问继续有效。Chromium 中的原版 Webapp 重新加载后返回 Basic 登录，登录后重新打开原会话。[运行中 Webapp 证据](#当前固定版本的运行中-webapp-登出) | Owner 身份、跨安装恢复、其他凭据模式和进行中操作的结果需要独立证据。 |
 | 本地调用方与接收 Bot | Linux 同 UID 控制票据证明本地操作者准入。干净宿主上的 owner 入口夹具在缺少受支持的接收侧适配器上下文时拒绝。[本地 Gateway](#当前固定版本的本地-bot-传输与重启) · [Owner 入口契约](../tests/contracts/test_owner_entry_contracts.py) | 受保护的原生命令和渠道入口需要宿主以受支持的方式证明原始调用方、接收方及会话，再校验当前 owner 和 grant。[命令上下文实验](23-host-command-context-experiment-zh.md)仍仅供评审。 |
 | 插件状态与子代理角色 | 公开 `ctx.subagent_lifecycle` 覆盖 `in_process` 和 `host` 两种隔离模式下的进程内父子关联。`ctx.state` 在两种模式下均经过验证，其中托管模式覆盖两个命名 profile。[子代理证据](#当前固定版本的子代理关联) | 受管 WorkerChannel 和 Kanban 接管需要各自的来源、grant 和撤销校验。[E0.4](13-enforcement-contracts-zh.md)覆盖独立的配置冻结和故障排查安全模式 worker 路径。 |
 | 原生 Bot 与 cron 投递 | 同一安装内的 `message_agent` 和 `bot_relay.deliver` 覆盖仅通知的作者归因及本地终态回执恢复。原生 cron 在响应丢失后复用同一个投递 ID，并报告 `transferred` 和 `queued` 回执。[Bot 消息](#当前固定版本的同一安装内-bot-消息) · [重启](#当前固定版本的本地-bot-传输与重启) · [延后投递](#当前固定版本的-bot-chat-延后投递) | 对需要回复、远程和其他生产者模式分别验证回执及作者对账。结果不确定时保留原投递 ID。 |
@@ -253,7 +254,19 @@ Bot Mode 的确切标题 `session.list` 查询携带所选后端 profile。列�
 
 Linux 夹具通过原生 CLI 将停止状态的合成来源打包为完整 ZIP 归档，并导入空白且停止的目标。导入后校验凭据相等及文件的私有权限。随后只运行目标 Gateway，通过其私有 Unix 套接字发出原生 Webapp 状态查询和登出请求。检查覆盖目标凭据发生变化且存于夹具 UID 所有、权限为 `0600` 的常规文件，源凭据及归档保持不变，Webapp 仍关闭，目标 PID 和实例 ID 保持不变。夹具只通过布尔比较校验合成凭据。手动原生 Gateway 工作流在测试通过后发布 `webapp-restore-rotation.xml`。[原生轮换测试](../acceptance/live/test_native_webapp_restore_rotation.py) · [手动工作流](../.github/workflows/native-gateway.yml)
 
-本次观测的范围是在一个本地恢复 home 中替换已存储的凭据。运行中的 Webapp 会话撤销、浏览器准入、副本之间经认证的连续性，以及经 owner 授权的恢复，各自需要独立证据。
+本次观测的范围是在一个本地恢复 home 中替换已存储的凭据。[运行中的 Webapp 用例](#当前固定版本的运行中-webapp-登出)覆盖独立创建的安装上浏览器连接的撤销。副本之间经认证的连续性及经 owner 授权的恢复需要独立证据。
+
+### 当前固定版本的运行中 Webapp 登出
+
+在 Hermes `2281116525106e3c109993ccb5dc74d02bfc1427`，运行中的 Webapp 接到私有控制请求后，其处理器替换所选 home 已存储的浏览器凭据，并轮换监听器正在使用的凭据。套接字跟踪器以 `4401` 关闭通过旧凭据准入的浏览器套接字。原生客户端的 grant 采用独立准入路径。在 Webapp 登录关卡后，浏览器登录 cookie 绑定到当前浏览器凭据。[控制处理器](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/gateway/webapp_listener.py#L405-L428) · [凭据轮换](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_cli/browser_credential.py#L69-L77) · [套接字跟踪与关闭](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_cli/web_session_sockets.py#L77-L131) · [浏览器登录绑定](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_cli/webapp_sign_in.py#L68-L104)
+
+[Linux 原生夹具](../acceptance/live/test_native_webapp_signout.py)在环回地址启动两个独立的 Gateway 安装，各有不同的浏览器凭据及自己的隐藏 `scout` Bot Chat。每个 Webapp 使用同源套接字票据准入一个浏览器 WebSocket，每个 Gateway 另用私有 Unix 票据准入一个原生 WebSocket。所选安装的原生 CLI 登出报告关闭一个浏览器连接，该套接字收到 `4401`。其余三个套接字无需重连即可返回各自原有的 `scout` Bot Chat ID。只有所选安装的浏览器凭据发生变化，两个凭据文件均保持私有。两个安装的默认与命名 profile 存储中，所比较的会话、消息和准入字段保持一致。两个 Webapp 继续提供服务，PID 与实例 ID 保持不变，直至按计划停止。手动原生 Gateway 工作流在测试通过后发布 `webapp-signout.xml`。[手动工作流](../.github/workflows/native-gateway.yml)
+
+[原版 Webapp 用例](../tests/desktop/desktop_webapp_signout.spec.ts)使用干净的 Linux 源码构建、Chromium `154.0.8037.92`、Electron `44.9.3` 及 Node.js `26.12.1`。两个隔离的 Chromium 上下文通过内置 Basic 表单登录，各自打开自己的 `scout` Bot Chat。原生 CLI 在页面重新加载前关闭所选浏览器的原套接字。第二个浏览器使用原套接字切换到自己的默认 Bot Chat。所选安装的原生 Electron 客户端通过公开 SDK，分别在登出前、登出后和浏览器重新登录后，使用同一套接字读取自己的默认 Bot Chat。
+
+显式重新加载后，所选浏览器显示 Basic 表单，消息输入区隐藏。通过该表单登录后，原 `scout` 会话经新套接字打开。两个 Gateway 端点的 PID 和实例 ID 均保持不变。四个 SQLite 存储中，所比较的会话、消息及准入字段保持一致。测试未观察到 `session.create`、`prompt.submit` 或模型补全。在[验收运行器命令](#当前固定版本的-electron-profile-路由)中添加 `--case active-webapp-sign-out --chromium /path/to/chromium` 即可复现。
+
+这些观测覆盖本地操作者登出、浏览器 Basic 重新认证，以及所测路径中对合成 Bot Chat 记录的持续访问。经验证的人类 owner 身份、经授权的跨安装恢复、其他凭据模式，以及已准入的操作是完成还是被取消，需要独立证据。
 
 其他真实运行环境下的 Desktop 路由与 profile 生命周期转换、恢复前后经认证的连续性、受支持的调用方与 worker 来源证明及更广泛的投递回执对账，仍属 E0.7 的开放事项。可选 HTTP 入口仍依赖 E0.6。经 owner 授权的登记、激活绑定及对账仍是 E1.6 和 E3.6 的独立工作。[Issue #33](https://github.com/MosBot-AI/hermes-superagent/issues/33)
 
