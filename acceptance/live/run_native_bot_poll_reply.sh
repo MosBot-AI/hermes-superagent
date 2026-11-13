@@ -6,7 +6,7 @@ umask 077
 usage() {
     printf '%s\n' \
         'Usage: sh acceptance/live/run_native_bot_poll_reply.sh --hermes CHECKOUT --hermes-python PYTHON [--receipt RESULT.xml] [--installed] [--consume]' \
-        '       sh acceptance/live/run_native_bot_poll_reply.sh --hermes CHECKOUT --hermes-python PYTHON [--receipt RESULT.xml] (--push | --reconnect | --owner-loss | --settled-loss | --finished-loss | --consumed-loss | --admitted-loss) [--review-recovery]'
+        '       sh acceptance/live/run_native_bot_poll_reply.sh --hermes CHECKOUT --hermes-python PYTHON [--receipt RESULT.xml] (--push | --reconnect | --owner-loss | --settled-loss | --finished-loss | --consumed-loss | --admitted-loss | --planned-restart | --result-write-failure) [--review-recovery]'
 }
 
 host=
@@ -27,7 +27,7 @@ while [ "$#" -gt 0 ]; do
             mode=consume
             case_name=test_native_stateless_bot_wait_consumes_reply_before_fallback
             shift ;;
-        --push|--reconnect|--owner-loss|--settled-loss|--finished-loss|--consumed-loss|--admitted-loss)
+        --push|--reconnect|--owner-loss|--settled-loss|--finished-loss|--consumed-loss|--admitted-loss|--planned-restart|--result-write-failure)
             if [ "$mode" != poll ]; then usage >&2; exit 2; fi
             mode=${1#--}
             test_file=test_native_bot_push_reply.py
@@ -40,9 +40,12 @@ while [ "$#" -gt 0 ]; do
                 settled-loss)
                     test_file=test_native_bot_owner_loss.py
                     case_name=test_native_settled_bot_reply_reconciles_after_owner_loss ;;
-                finished-loss|consumed-loss|admitted-loss)
+                finished-loss|consumed-loss|admitted-loss|result-write-failure)
                     test_file=test_native_bot_finished_loss.py
                     case_name=test_native_finished_bot_reply_needs_sender_recovery ;;
+                planned-restart)
+                    test_file=test_native_bot_finished_loss.py
+                    case_name=test_native_planned_restart_drops_pending_sender_notification ;;
             esac
             shift ;;
         --hermes|--hermes-python|--receipt)
@@ -64,7 +67,7 @@ if [ "$installed" -eq 1 ] && [ "$test_file" != test_native_bot_poll_reply.py ]; 
 fi
 
 case "$mode" in
-    consumed-loss|admitted-loss)
+    consumed-loss|admitted-loss|result-write-failure)
         if [ "$review_recovery" -ne 1 ]; then usage >&2; exit 2; fi ;;
 esac
 if [ "$review_recovery" -eq 1 ]; then
@@ -74,6 +77,8 @@ if [ "$review_recovery" -eq 1 ]; then
         finished-loss) case_name=test_proposed_finished_bot_sender_recovers_after_owner_loss ;;
         consumed-loss) case_name=test_proposed_consumed_bot_result_stays_consumed_after_owner_loss ;;
         admitted-loss) case_name=test_proposed_admitted_bot_completion_is_not_duplicated ;;
+        planned-restart) case_name=test_proposed_planned_restart_recovers_pending_sender_notification ;;
+        result-write-failure) case_name=test_proposed_failed_result_write_loses_pending_sender_notification ;;
         *) usage >&2; exit 2 ;;
     esac
 fi

@@ -1,5 +1,6 @@
 """Process custody for the manual native Gateway socket checks."""
 
+import json
 import signal
 import socket
 import subprocess
@@ -13,20 +14,30 @@ import pytest
 
 @contextmanager
 def gateway_daemon(host, home, child_env, label):
-    with _owned_gateway(host, home, child_env, label, crash_expected=False) as (endpoint, _):
+    with _owned_gateway(host, home, child_env, label, exit_mode="stop") as (endpoint, _):
         yield endpoint
 
 
 @contextmanager
 def crashable_gateway_daemon(host, home, child_env, label, *, entrypoint=None):
     with _owned_gateway(
-        host, home, child_env, label, crash_expected=True, entrypoint=entrypoint
+        host, home, child_env, label, exit_mode="crash", entrypoint=entrypoint
     ) as daemon:
         yield daemon
 
 
 @contextmanager
-def _owned_gateway(host, home, child_env, label, *, crash_expected, entrypoint=None):
+def restartable_gateway_daemon(host, home, child_env, label, *, entrypoint):
+    with _owned_gateway(
+        host, home, child_env, label, exit_mode="restart", entrypoint=entrypoint
+    ) as daemon:
+        yield daemon
+
+
+@contextmanager
+def _owned_gateway(host, home, child_env, label, *, exit_mode, entrypoint=None):
+    from gateway.restart import GATEWAY_SERVICE_RESTART_EXIT_CODE
+    from gateway.restart_notice import planned_restart_marker_path
     from gateway.status import get_process_start_time, terminate_pid, write_planned_stop_marker
     from hermes_cli.gateway_runtime import discover_gateway_endpoint
     from hermes_cli.gateway_runtime_discovery import query_identify
@@ -69,10 +80,10 @@ def _owned_gateway(host, home, child_env, label, *, crash_expected, entrypoint=N
             )
             assert initial_start and get_process_start_time(process.pid) == initial_start
             assert (home.parent / f"socket-guard-{process.pid}").is_file()
-            crashed = False
+            exited = False
 
-            def crash():
-                nonlocal crashed
+            def exit_owner():
+                nonlocal exited
                 current = query_identify(home, timeout=2)
                 assert (
                     current["pid"] == process.pid and current["instance_id"] == endpoint.instance_id
@@ -80,22 +91,30 @@ def _owned_gateway(host, home, child_env, label, *, crash_expected, entrypoint=N
                 assert (
                     process.poll() is None and get_process_start_time(process.pid) == initial_start
                 )
-                terminate_pid(process.pid, force=True, expected_start_time=initial_start)
-                assert process.wait(timeout=8) == -signal.SIGKILL
-                crashed = True
+                if exit_mode == "crash":
+                    terminate_pid(process.pid, force=True, expected_start_time=initial_start)
+                    assert process.wait(timeout=8) == -signal.SIGKILL
+                else:
+                    marker_path = planned_restart_marker_path(home)
+                    assert not marker_path.exists()
+                    process.send_signal(signal.SIGUSR1)
+                    assert process.wait(timeout=35) == GATEWAY_SERVICE_RESTART_EXIT_CODE
+                    marker = json.loads(marker_path.read_bytes())
+                    assert marker["via_service"] is True and marker["detached"] is False
+                exited = True
 
-            yield endpoint, crash if crash_expected else None
-            if crash_expected:
-                assert crashed
-                with pytest.raises(ConnectionRefusedError):
-                    with socket.create_connection(("127.0.0.1", origin.port), timeout=2):
-                        pass
-                return
-            assert process.poll() is None and get_process_start_time(process.pid) == initial_start
-            assert write_planned_stop_marker(process.pid)
-            assert process.wait(timeout=35) == 0
-            assert discover_gateway_endpoint(home, timeout=2).state == "absent"
-            assert not (home / "gateway.pid").exists()
+            yield endpoint, None if exit_mode == "stop" else exit_owner
+            if exit_mode == "stop":
+                assert (
+                    process.poll() is None and get_process_start_time(process.pid) == initial_start
+                )
+                assert write_planned_stop_marker(process.pid)
+                assert process.wait(timeout=35) == 0
+            else:
+                assert exited
+            if exit_mode != "crash":
+                assert discover_gateway_endpoint(home, timeout=2).state == "absent"
+                assert not (home / "gateway.pid").exists()
             with pytest.raises(ConnectionRefusedError):
                 with socket.create_connection(("127.0.0.1", origin.port), timeout=2):
                     pass

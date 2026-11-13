@@ -24,21 +24,26 @@ test -z "$(git -C "$DISPOSABLE_HERMES" status --porcelain)"
 git -C "$DISPOSABLE_HERMES" apply --check "$artifact/bot-sender-recovery.patch"
 git -C "$DISPOSABLE_HERMES" apply --index "$artifact/bot-sender-recovery.patch"
 git -C "$DISPOSABLE_HERMES" commit -m 'fix(bot): recover local reply completions across gateway loss'
-for mode in --owner-loss --settled-loss --finished-loss --consumed-loss --admitted-loss; do
+for mode in --owner-loss --settled-loss --finished-loss --consumed-loss --admitted-loss \
+    --planned-restart --result-write-failure; do
   sh acceptance/live/run_native_bot_poll_reply.sh \
     --hermes "$DISPOSABLE_HERMES" --hermes-python "$PINNED_PYTHON" \
     "$mode" --review-recovery
 done
 ```
 
-Run `--owner-loss`, `--settled-loss` and `--finished-loss` against the unmodified pin without `--review-recovery` for the controls.
+Run `--owner-loss`, `--settled-loss`, `--finished-loss` and `--planned-restart` against the unmodified pin without `--review-recovery` for the controls.
 
 ## Evidence
 
-On Linux with Python 3.14.9, the three clean controls reproduced the missing sender completion. The reviewed tree passed both pre-exit live Gateway cases. The settled reply appears once in the original sender chat with its original delivery and process IDs and exit code zero. The interrupted case produces one ambiguous completion that tells the sender to retain the receipt and avoid resending, with exit code one. Both verify one original recipient model request, no sender inference during recovery, exact recipient receipt replay, a profile-scoped retained process result, and no duplicate completion after one additional clean Gateway restart. The focused upstream suite passed 167 tests with one Windows-only shell test skipped. Its profile regression exercises the same checkpoint entry appearing in both the launch and sender profiles.
+On Linux with Python 3.14.9, the three abrupt-loss clean controls reproduced the missing sender completion. The reviewed tree passed both pre-exit live Gateway cases. The settled reply appears once in the original sender chat with its original delivery and process IDs and exit code zero. The interrupted case produces one ambiguous completion that tells the sender to retain the receipt and avoid resending, with exit code one. Both verify one original recipient model request, no sender inference during recovery, exact recipient receipt replay, a profile-scoped retained process result, and no duplicate completion after one additional clean Gateway restart. The focused upstream suite passed 167 tests with one Windows-only shell test skipped. Its profile regression exercises the same checkpoint entry appearing in both the launch and sender profiles.
 
 The finished-result control retains the original reply without presenting a sender completion. The patched host presents it once if the result is pending. A real log read before the fault prevents presentation, while a completion admitted before the fault stays a single record after recovery. All three patched cases retain the recipient reply and one original inference, and check again after an additional clean restart.
 
+The planned restart case sends native `SIGUSR1` to the owned Gateway after the waiter finishes and before the sender completion enters the session queue. It verifies the planned restart marker, service-restart exit status and released endpoint before starting the successor. The clean host preserves the recipient reply but does not restore the sender note. The candidate restores one note without a new inference or a duplicate after another restart.
+
+The candidate-only result write case injects `ENOSPC` for the original sender process result before the atomic write, while allowing the live checkpoint rewrite. The waiter output log and exit record survive, but the finished entry is removed from the checkpoint and the result is absent. After the same planned restart the recipient receipt is still readable and no resend occurs. The successor does not restore the sender note, even though later writes are available. This is a recovery gap in the candidate.
+
 ## Boundaries
 
-The recovery contract covers a single abrupt owner loss before the waiter has finished, followed by a successor and one subsequent clean restart. The post-persistence cases separately cover an unadmitted result, a consumed result and an admitted completion whose local acknowledgement was lost. A failed checkpoint write, planned restart, multiple failures during handoff, attached-viewer startup races, remote routes, Windows, installed adoption and real providers require separate evidence. This candidate is inactive and has not been submitted upstream.
+The recovery contract covers a single abrupt owner loss before the waiter has finished, followed by a successor and one subsequent clean restart. The post-persistence cases separately cover an unadmitted result, a consumed result and an admitted completion whose local acknowledgement was lost. A failed checkpoint write, planned restart with an unfinished waiter, multiple failures during handoff, attached-viewer startup races, remote routes, Windows, installed adoption and real providers require separate evidence. This candidate is inactive and has not been submitted upstream.

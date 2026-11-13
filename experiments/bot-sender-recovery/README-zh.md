@@ -24,21 +24,26 @@ test -z "$(git -C "$DISPOSABLE_HERMES" status --porcelain)"
 git -C "$DISPOSABLE_HERMES" apply --check "$artifact/bot-sender-recovery.patch"
 git -C "$DISPOSABLE_HERMES" apply --index "$artifact/bot-sender-recovery.patch"
 git -C "$DISPOSABLE_HERMES" commit -m 'fix(bot): recover local reply completions across gateway loss'
-for mode in --owner-loss --settled-loss --finished-loss --consumed-loss --admitted-loss; do
+for mode in --owner-loss --settled-loss --finished-loss --consumed-loss --admitted-loss \
+    --planned-restart --result-write-failure; do
   sh acceptance/live/run_native_bot_poll_reply.sh \
     --hermes "$DISPOSABLE_HERMES" --hermes-python "$PINNED_PYTHON" \
     "$mode" --review-recovery
 done
 ```
 
-对未修改的固定版本运行 `--owner-loss`、`--settled-loss` 和 `--finished-loss`，并省略 `--review-recovery`，即可验证对照组。
+对未修改的固定版本运行 `--owner-loss`、`--settled-loss`、`--finished-loss` 和 `--planned-restart`，并省略 `--review-recovery`，即可验证对照组。
 
 ## 证据
 
-Linux 和 Python 3.14.9 下，三项未修改宿主对照用例复现了发送端完成通知缺失。评审树通过了两项等待进程退出前的真实 Gateway 用例。已结算回复在原发送会话中出现一次，保留原投递 ID、进程 ID 和退出码零。中断用例产生一次不确定的完成记录，告知发送端保留回执、避免重发，退出码为一。两项均验证只有原接收方的一次模型请求、恢复期间无发送方推理、接收方原回执可原样重放、保留的进程结果限定在发送方 profile，且 Gateway 再正常重启一次也不会产生重复完成记录。上游专项套件通过 167 项，跳过一项仅在 Windows 运行的 Shell 测试。其中 profile 回归用例验证启动和发送方 profile 均保存同一检查点条目时的接管行为。
+Linux 和 Python 3.14.9 下，三项未修改宿主意外退出对照用例复现了发送端完成通知缺失。评审树通过了两项等待进程退出前的真实 Gateway 用例。已结算回复在原发送会话中出现一次，保留原投递 ID、进程 ID 和退出码零。中断用例产生一次不确定的完成记录，告知发送端保留回执、避免重发，退出码为一。两项均验证只有原接收方的一次模型请求、恢复期间无发送方推理、接收方原回执可原样重放、保留的进程结果限定在发送方 profile，且 Gateway 再正常重启一次也不会产生重复完成记录。上游专项套件通过 167 项，跳过一项仅在 Windows 运行的 Shell 测试。其中 profile 回归用例验证启动和发送方 profile 均保存同一检查点条目时的接管行为。
 
 等待进程结果已保存的对照用例保留原回复，但不会显示发送端完成通知。候选宿主对待通知结果呈现一次。故障前真实读取日志会阻止通知，故障前已准入的完成记录在恢复后仍只有一条。三项补丁用例均验证接收方保留原回复且仅执行一次推理，并在再次正常重启后复查。
 
+计划重启用例在等待进程结束且发送方完成通知尚未进入会话队列时，向夹具持有的 Gateway 发送原生 `SIGUSR1`。用例验证计划重启标记、服务重启退出状态和端点释放，再启动后继进程。未修改宿主保留接收方回复，但不会恢复发送方记录。候选方案恢复一条记录，不触发再次推理，再重启一次也没有重复记录。
+
+仅在候选方案上运行的结果写入用例，对原发送进程的结果在原子写入前注入 `ENOSPC`，同时允许运行中进程检查点重写。等待进程的输出日志和退出记录仍在，但检查点移除了已完成条目，结果文件也不存在。按相同方式计划重启后，仍能读取接收方回执，且没有重发。即使后继进程可以正常写入，也没有恢复发送方记录。这是候选方案仍存在的恢复缺口。
+
 ## 边界
 
-恢复契约覆盖等待进程尚未退出时的一次宿主意外退出、后继进程接管以及随后一次正常重启。输出已持久化的用例分别覆盖尚未准入、已消费，以及已准入但本地确认丢失三种情况。检查点写入失败、计划重启、接管期间的多次故障、启动时已有客户端连接的竞态、远程路由、Windows、已安装环境的采用以及真实服务商均需要独立证据。候选方案尚未启用，也尚未提交上游。
+恢复契约覆盖等待进程尚未退出时的一次宿主意外退出、后继进程接管以及随后一次正常重启。输出已持久化的用例分别覆盖尚未准入、已消费，以及已准入但本地确认丢失三种情况。检查点写入失败、等待进程尚未结束时的计划重启、接管期间的多次故障、启动时已有客户端连接的竞态、远程路由、Windows、已安装环境的采用以及真实服务商均需要独立证据。候选方案尚未启用，也尚未提交上游。
