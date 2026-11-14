@@ -17,7 +17,7 @@ import {
   type WireFrame,
   type WireSocket
 } from './desktop_bot_canonical_observer'
-import { privateEnv, seedInstall, startGateway, stopGateway, waitForEndpoint } from './desktop_native_gateway_fixture'
+import { privateEnv, runPython, seedInstall, startGateway, stopGateway, waitForEndpoint } from './desktop_native_gateway_fixture'
 import { appLogTail, backendProcesses, composer, type CoreSandbox, createCoreSandbox, freePort, REPO_ROOT, sandboxProcesses } from './harness'
 import { listProcesses } from './process-census'
 import { gate, type ScriptedProvider, startScriptedProvider } from './provider'
@@ -35,6 +35,7 @@ interface TurnInterruption {
   reloadDraft?: boolean
   restartDraft?: 'graceful' | 'abrupt'
   coldRead?: boolean
+  replaceDraftEndpoint?: boolean
 }
 
 function shellQuote(value: string) {
@@ -453,6 +454,58 @@ async function sshDraftStorage(page: Page, text: string) {
   }, { sessionId: canonical, text })
 }
 
+async function verifyReplacementKeepsDraftPrivate(
+  page: Page,
+  original: Awaited<ReturnType<typeof prepareSshServer>>,
+  replacement: Awaited<ReturnType<typeof prepareSshServer>>,
+  originalHome: string,
+  replacementHome: string,
+  wire: WireFrame[],
+  text: string,
+  prepared: string[],
+  owner: { connectionId: string; profile: string }
+) {
+  const originalChats = storedChats(originalHome, profile)
+  const replacementChats = storedChats(replacementHome, profile)
+  const logins = replacement.acceptedKeys()
+  const selectEndpoint = async (server: typeof original) => {
+    expect(await saveSshConnection(page, {
+      remoteProfile: profile,
+      host: `${server.sshUser}@127.0.0.1:${server.port}`,
+      keyPath: server.clientKey,
+      remoteHermesPath: server.remoteLauncher
+    })).toEqual({ ok: true, id: connectionId, remoteProfile: profile, port: server.port })
+  }
+  const from = wire.length
+  await selectEndpoint(replacement)
+  await page.locator(`[data-roster-key="${owner.connectionId}::${owner.profile}"]`).click()
+  const viewport = page.locator('[data-slot="aui_thread-viewport"]').filter({ visible: true }).first()
+  await expect(viewport.getByText('fixture-replacement-only', { exact: true })).toBeVisible({ timeout: 55_000 })
+  await expect.poll(() => focus(page)).toEqual({ id: canonical, owner })
+  const lookupOnReplacement = wire.slice(from).find(frame => lookup(frame) && frame.profile === profile)
+  expect(lookupOnReplacement).toMatchObject({ reply: {} })
+  await expect.poll(() => wire.slice(from).some(frame =>
+    frame.method === 'session.resume' && frame.port === lookupOnReplacement?.port &&
+    frame.profile === profile && frame.sessionId === canonical && frame.reply?.code === undefined &&
+    frame.reply !== undefined
+  )).toBe(true)
+  expect(replacement.acceptedKeys()).toBeGreaterThan(logins)
+  await expect(viewport.getByText(text, { exact: true })).toHaveCount(0)
+  await expect(composer(page)).toHaveText('')
+  await expect(page.getByRole('button', { name: 'Review unconfirmed draft', exact: true })).toHaveCount(0)
+  expect(await sshDraftStorage(page, text)).toEqual({ draft: false, retryId: undefined, prepared })
+  expect(storedChats(originalHome, profile)).toEqual(originalChats)
+  expect(storedChats(replacementHome, profile)).toEqual(replacementChats)
+  expect(wire.slice(from).filter(frame => ['prompt.submit', 'session.create'].includes(frame.method))).toEqual([])
+
+  await page.locator('[data-roster-key="local::default"]').click()
+  await expect.poll(() => focus(page)).toEqual({
+    id: 'fixture-local-default',
+    owner: { connectionId: 'local', profile: 'default' }
+  })
+  await selectEndpoint(original)
+}
+
 async function verifyInterruptedTurn(
   page: Page,
   remote: CoreSandbox,
@@ -463,7 +516,8 @@ async function verifyInterruptedTurn(
   port: string,
   owner: { connectionId: string; profile: string },
   { lostAck, gatewayLoss, disableContinuation, reloadDraft, restartDraft, coldRead }: TurnInterruption,
-  restartDesktop?: () => Promise<Page>
+  restartDesktop?: () => Promise<Page>,
+  visitReplacement?: (page: Page, text: string, prepared: string[]) => Promise<void>
 ) {
   const autoContinue = gatewayLoss && !disableContinuation
   const reviewCrashDraft = restartDraft === 'abrupt' && process.env.HERMES_E2E_SSH_DRAFT_RECOVERY === '1'
@@ -591,6 +645,11 @@ async function verifyInterruptedTurn(
       expect(wire.slice(restartFrom).filter(frame =>
         frame.sessionId === canonical && ['session.resume', 'session.activate'].includes(frame.method)
       )).toEqual([])
+      if (visitReplacement) {
+        expect(preparedBeforeExit).toBeDefined()
+        await visitReplacement(page, input, preparedBeforeExit!)
+        expect(provider.completions).toHaveLength(1)
+      }
     }
     const markerPath = path.join(remote.hermesHome, 'profiles', profile, 'desktop', 'interrupted_turns.json')
     if (coldRead) {
@@ -797,7 +856,7 @@ async function verifySshBotChat(
   const provider = await startScriptedProvider()
   const local = createCoreSandbox('a')
   const remote = createCoreSandbox('b')
-  const successor = replace ? createCoreSandbox('c') : undefined
+  const successor = replace || turn?.replaceDraftEndpoint ? createCoreSandbox('c') : undefined
   const boxes = successor ? [local, remote, successor] : [local, remote]
   let gateway: ReturnType<typeof startGateway> | undefined
   const servers: Awaited<ReturnType<typeof prepareSshServer>>[] = []
@@ -809,7 +868,20 @@ async function verifySshBotChat(
     const successorEnv = successor && privateEnv(successor)
     seedInstall(local, localEnv, provider.url, profile, 'local', '1'.repeat(32))
     seedInstall(remote, remoteEnv, provider.url, edit ? [profile, editedProfile] : profile, 'ssh', '2'.repeat(32))
-    if (successor) seedInstall(successor, successorEnv!, provider.url, profile, 'replacement', '3'.repeat(32))
+    if (successor) {
+      const label = turn?.replaceDraftEndpoint ? 'ssh' : 'replacement'
+      seedInstall(successor, successorEnv!, provider.url, profile, label, '3'.repeat(32))
+      if (turn?.replaceDraftEndpoint) {
+        runPython(successorEnv!, `
+import sys
+from pathlib import Path
+from hermes_state import SessionDB
+home, session_id = sys.argv[1:]
+with SessionDB(Path(home) / "state.db") as db:
+    db.append_message(session_id, "user", "fixture-replacement-only")
+`, path.join(successor.hermesHome, 'profiles', profile), canonical)
+      }
+    }
     if (turn?.disableContinuation) {
       fs.appendFileSync(path.join(remote.hermesHome, 'profiles', profile, 'config.yaml'),
         '\ndesktop:\n  auto_continue:\n    enabled: false\n')
@@ -930,7 +1002,7 @@ async function verifySshBotChat(
       }
       loginsBeforeRecovery = original.acceptedKeys()
     }
-    if (edit || replacement) {
+    if (edit || replace) {
       const socket = sockets.get(sdkRead!)!
       expect(socket.closed).toBe(false)
       const endpoint = replacement && {
@@ -977,7 +1049,7 @@ async function verifySshBotChat(
       expect(frame).toMatchObject({ port: reads[0]!.port, profile: expectedProfile, sessionId: expectedChat })
     }
     expect(frames.filter((frame) => ['session.create', 'prompt.submit'].includes(frame.method))).toEqual([])
-    if (edit || replacement) {
+    if (edit || replace) {
       const replayFrom = wire.length
       // The captured descriptor still resolves through the saved connection ID.
       const replayChat = replacement ? expectedChat : canonical
@@ -1020,9 +1092,15 @@ async function verifySshBotChat(
         observeWire(restarted.page, sockets, wire)
         return restarted.page
       } : undefined
+      const visitReplacement = turn.replaceDraftEndpoint
+        ? (next: Page, text: string, prepared: string[]) => verifyReplacementKeepsDraftPrivate(
+          next, original, replacement!, remote.hermesHome, successor!.hermesHome,
+          wire, text, prepared, { connectionId, profile: routeProfile }
+        )
+        : undefined
       await verifyInterruptedTurn(
         page, remote, original, provider, wire, sockets, reads[0]!.port,
-        { connectionId, profile: routeProfile }, turn, restartDesktop
+        { connectionId, profile: routeProfile }, turn, restartDesktop, visitReplacement
       )
       expect(initial().slice(0, 3)).toEqual(before.slice(0, 3))
     }
@@ -1167,4 +1245,15 @@ test('Bot Mode reopens the abrupt-exit SSH chat with continuation disabled', asy
 test('Bot Mode reads the interrupted SSH chat before resuming it', async () => {
   test.setTimeout(180_000)
   await verifySshBotChat('default', { gatewayLoss: true, coldRead: true })
+})
+
+test('Bot Mode keeps an abrupt-exit SSH draft off a replacement endpoint', async () => {
+  test.setTimeout(240_000)
+  await verifySshBotChat('default', {
+    gatewayLoss: true,
+    lostAck: true,
+    disableContinuation: true,
+    restartDraft: 'abrupt',
+    replaceDraftEndpoint: true
+  })
 })
