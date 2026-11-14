@@ -42,6 +42,7 @@ SSH_DRAFT_RESTART_DISABLED_CASE = "bot-canonical-ssh-draft-restart-no-continue"
 SSH_DRAFT_CRASH_CASE = "bot-canonical-ssh-draft-crash"
 SSH_DRAFT_CRASH_DISABLED_CASE = "bot-canonical-ssh-draft-crash-no-continue"
 SSH_DRAFT_REPLACEMENT_CASE = "bot-canonical-ssh-draft-endpoint-replacement"
+SSH_DRAFT_UNCHANGED_ROUTE_CASE = "bot-canonical-ssh-draft-unchanged-route"
 SSH_COLD_READ_CASE = "bot-canonical-ssh-cold-chat-read"
 SSH_SPEC = "desktop_bot_ssh.spec.ts"
 SSH_FIXTURES = (GATEWAY_FIXTURE, CANONICAL_OBSERVER, APPIMAGE_FIXTURE)
@@ -77,6 +78,7 @@ APPIMAGE_CASES = (
     SSH_DRAFT_CRASH_CASE,
     SSH_DRAFT_CRASH_DISABLED_CASE,
     SSH_DRAFT_REPLACEMENT_CASE,
+    SSH_DRAFT_UNCHANGED_ROUTE_CASE,
     SSH_COLD_READ_CASE,
     SAVED_TOKEN_CASE,
     COMPRESSED_LOCAL_CASE,
@@ -89,6 +91,7 @@ DRAFT_CRASH_CASES = (
     SSH_DRAFT_CRASH_CASE,
     SSH_DRAFT_CRASH_DISABLED_CASE,
     SSH_DRAFT_REPLACEMENT_CASE,
+    SSH_DRAFT_UNCHANGED_ROUTE_CASE,
 )
 CASES = {
     "profile-routing": (
@@ -140,6 +143,11 @@ CASES = {
         SSH_SPEC,
         SSH_FIXTURES,
         "OpenSSH Bot Mode draft endpoint replacement",
+    ),
+    SSH_DRAFT_UNCHANGED_ROUTE_CASE: (
+        SSH_SPEC,
+        SSH_FIXTURES,
+        "OpenSSH Bot Mode draft ambiguity on an unchanged route",
     ),
     SSH_COLD_READ_CASE: (SSH_SPEC, SSH_FIXTURES, "OpenSSH Bot Mode cold chat read"),
     SAVED_TOKEN_CASE: (
@@ -199,6 +207,7 @@ CASE_TITLE_FILTERS = {
     SSH_DRAFT_CRASH_CASE: "reopens the SSH chat after abrupt Desktop exit$",
     SSH_DRAFT_CRASH_DISABLED_CASE: "reopens the abrupt-exit SSH chat with continuation disabled$",
     SSH_DRAFT_REPLACEMENT_CASE: "keeps an abrupt-exit SSH draft off a replacement endpoint$",
+    SSH_DRAFT_UNCHANGED_ROUTE_CASE: "observes draft review ambiguity on an unchanged SSH route$",
     SSH_COLD_READ_CASE: "reads the interrupted SSH chat before resuming it$",
     COMPRESSED_LOCAL_CASE: "compressed Bot Chat over the local private ticket$",
     COMPRESSED_SAVED_CASE: "compressed Bot Chat over the saved Webapp token$",

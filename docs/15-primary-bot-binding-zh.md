@@ -326,6 +326,14 @@ Bot Mode 的确切标题 `session.list` 查询携带所选后端 profile。列�
 
 运行 `--case bot-canonical-ssh-draft-endpoint-replacement`。[提案操作说明](../experiments/ssh-draft-recovery/README-zh.md#linux-打包验收)链接了匹配的构建摘要和验收步骤。测试可识别已编辑端点与未变更的配置路径。仅凭相同的路径值无法验证安装或 owner 的连续性。
 
+#### 当前固定版本在配置不变的 OpenSSH 路径上查看草稿
+
+夹具禁用续跑，在 Desktop 异常退出后停止原合成 Gateway，并通过相同的 SSH 监听配置提供另一个 Hermes 数据目录。两边的主机密钥、客户端凭据、Desktop 注册表字节、profile 别名、安装标记及已存储 Bot Chat ID 均相同。严格验证的 SSH 登录到达新目录，替换端独有的消息记录确认了实际打开的会话。
+
+干净 AppImage 的输入框为空，没有草稿查看操作。匹配的未签名提案 AppImage 的输入框也为空，但替换会话中仍出现**查看未确认的草稿**。干净及提案源码构建复现了各自 AppImage 的结果。夹具在该会话中不点击此操作。两次运行均保留原待提交 ID，两个会话的消息记录均未更改，也没有新建会话、新的提交或 provider 调用。切回原数据目录后，客户端重开原会话记录，提案版恢复带有保护的查看操作。
+
+使用[匹配的干净或提案构建](../experiments/ssh-draft-recovery/README-zh.md#linux-打包验收)运行 `--case bot-canonical-ssh-draft-unchanged-route`。这是提案仍待满足的条件。重连后要安全提供草稿查看，必须有当前后端确实拥有原会话的证据。未变更的 SSH 端点及复制的安装标记无法提供该证据。在具备原生连续性信号并单独验证 owner 之前，此候选方案仅供审阅。
+
 #### 当前固定版本的 OpenSSH 恢复前读取
 
 命名 profile 的 SSH Gateway 在回合中退出后，夹具切到本地对照会话。原 OpenSSH 监听器仍可连接，并保留默认启用的原生续跑配置。远端原会话包含已提交的用户消息，原生中断标记仍记录已终止的进程为写入者。

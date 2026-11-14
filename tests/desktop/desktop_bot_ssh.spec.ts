@@ -35,7 +35,7 @@ interface TurnInterruption {
   reloadDraft?: boolean
   restartDraft?: 'graceful' | 'abrupt'
   coldRead?: boolean
-  replaceDraftEndpoint?: boolean
+  replaceDraftEndpoint?: 'edited' | 'unchanged'
 }
 
 function shellQuote(value: string) {
@@ -221,22 +221,27 @@ async function prepareSshServer(
     { mode: 0o700 }
   )
   const remoteCommand = path.join(state, 'remote-command')
-  const remoteSettings = {
-    HOME: remote.home,
-    HERMES_HOME: remote.hermesHome,
-    HERMES_RUNTIME_DIR: remoteEnv.HERMES_RUNTIME_DIR!,
-    PATH: remoteEnv.PATH!,
-    LANG: 'C.UTF-8',
-    PYTHONDONTWRITEBYTECODE: '1',
-    HERMES_ENABLE_PROJECT_PLUGINS: '0'
+  let servedBox = remote
+  const configureFixtureHome = (box: CoreSandbox, env: Record<string, string>) => {
+    const settings = {
+      HOME: box.home,
+      HERMES_HOME: box.hermesHome,
+      HERMES_RUNTIME_DIR: env.HERMES_RUNTIME_DIR!,
+      PATH: env.PATH!,
+      LANG: 'C.UTF-8',
+      PYTHONDONTWRITEBYTECODE: '1',
+      HERMES_ENABLE_PROJECT_PLUGINS: '0'
+    }
+    fs.writeFileSync(
+      remoteCommand,
+      `#!/bin/sh\nexec /usr/bin/env -i ${Object.entries(settings)
+        .map(([key, value]) => shellQuote(`${key}=${value}`))
+        .join(' ')} /bin/sh -c "$SSH_ORIGINAL_COMMAND"\n`,
+      { mode: 0o700 }
+    )
+    servedBox = box
   }
-  fs.writeFileSync(
-    remoteCommand,
-    `#!/bin/sh\nexec /usr/bin/env -i ${Object.entries(remoteSettings)
-      .map(([key, value]) => shellQuote(`${key}=${value}`))
-      .join(' ')} /bin/sh -c "$SSH_ORIGINAL_COMMAND"\n`,
-    { mode: 0o700 }
-  )
+  configureFixtureHome(remote, remoteEnv)
   const config = path.join(state, 'sshd.conf')
   const log = path.join(state, 'sshd.log')
   fs.writeFileSync(
@@ -274,7 +279,7 @@ async function prepareSshServer(
     await expect.poll(() => sshLog().slice(before).includes('Server listening')).toBe(true)
   }
   const acceptedKeys = () => sshLog().match(/Accepted publickey/g)?.length ?? 0
-  const verifyLogin = () => {
+  const verifyLogin = (expectedHome = remote.hermesHome, concurrent = false) => {
     const loginsBefore = acceptedKeys()
     const login = spawnSync(
       'ssh',
@@ -298,8 +303,12 @@ async function prepareSshServer(
       fs.writeFileSync(path.join(state, 'login.log'), login.stderr ?? '', { mode: 0o600 })
     }
     expect(login.status, 'ephemeral OpenSSH key and host key accepted').toBe(0)
-    expect(login.stdout).toBe(remote.hermesHome)
-    expect(acceptedKeys()).toBe(loginsBefore + 1)
+    expect(login.stdout).toBe(expectedHome)
+    if (concurrent) {
+      expect(acceptedKeys()).toBeGreaterThanOrEqual(loginsBefore + 1)
+    } else {
+      expect(acceptedKeys()).toBe(loginsBefore + 1)
+    }
   }
 
   return {
@@ -310,6 +319,25 @@ async function prepareSshServer(
     startServer,
     verifyLogin,
     acceptedKeys,
+    async switchFixtureHome(box: CoreSandbox, env: Record<string, string>) {
+      // Preserve the listener's configured address, credentials and launcher.
+      const pins = fs.readFileSync(knownHosts)
+      await interruptSshServer({ listener: () => listener })
+      // The fixture is replacing the installation. Retire the old synthetic
+      // runtime as well as the listener, including any detached Gateway.
+      for (const { pid } of backendProcesses(servedBox)) {
+        try {
+          process.kill(pid, 'SIGTERM')
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error
+        }
+      }
+      await expect.poll(() => backendProcesses(servedBox)).toEqual([])
+      configureFixtureHome(box, env)
+      await startServer()
+      verifyLogin(box.hermesHome, true)
+      expect(fs.readFileSync(knownHosts)).toEqual(pins)
+    },
     prepareHostKeyRotation() {
       const replacement = path.join(state, 'rotated-host')
       createSshKey(replacement, localEnv)
@@ -333,7 +361,7 @@ async function prepareSshServer(
   }
 }
 
-async function interruptSshServer(server: Awaited<ReturnType<typeof prepareSshServer>>) {
+async function interruptSshServer(server: { listener: () => ReturnType<typeof spawn> | undefined }) {
   const listener = server.listener()!
   const stopped = once(listener, 'exit')
   stopSshSessions(listener.pid!)
@@ -454,20 +482,21 @@ async function sshDraftStorage(page: Page, text: string) {
   }, { sessionId: canonical, text })
 }
 
-async function verifyReplacementKeepsDraftPrivate(
+async function visitReplacementChat(
   page: Page,
   original: Awaited<ReturnType<typeof prepareSshServer>>,
-  replacement: Awaited<ReturnType<typeof prepareSshServer>>,
+  replacement: Awaited<ReturnType<typeof prepareSshServer>> | undefined,
   originalHome: string,
   replacementHome: string,
   wire: WireFrame[],
   text: string,
   prepared: string[],
-  owner: { connectionId: string; profile: string }
+  owner: { connectionId: string; profile: string },
+  switchUnchangedRoute?: (side: 'replacement' | 'original') => Promise<void>
 ) {
   const originalChats = storedChats(originalHome, profile)
   const replacementChats = storedChats(replacementHome, profile)
-  const logins = replacement.acceptedKeys()
+  const logins = (replacement ?? original).acceptedKeys()
   const selectEndpoint = async (server: typeof original) => {
     expect(await saveSshConnection(page, {
       remoteProfile: profile,
@@ -477,7 +506,11 @@ async function verifyReplacementKeepsDraftPrivate(
     })).toEqual({ ok: true, id: connectionId, remoteProfile: profile, port: server.port })
   }
   const from = wire.length
-  await selectEndpoint(replacement)
+  if (switchUnchangedRoute) {
+    await switchUnchangedRoute('replacement')
+  } else {
+    await selectEndpoint(replacement!)
+  }
   await page.locator(`[data-roster-key="${owner.connectionId}::${owner.profile}"]`).click()
   const viewport = page.locator('[data-slot="aui_thread-viewport"]').filter({ visible: true }).first()
   await expect(viewport.getByText('fixture-replacement-only', { exact: true })).toBeVisible({ timeout: 55_000 })
@@ -489,10 +522,16 @@ async function verifyReplacementKeepsDraftPrivate(
     frame.profile === profile && frame.sessionId === canonical && frame.reply?.code === undefined &&
     frame.reply !== undefined
   )).toBe(true)
-  expect(replacement.acceptedKeys()).toBeGreaterThan(logins)
+  expect((replacement ?? original).acceptedKeys()).toBeGreaterThan(logins + Number(Boolean(switchUnchangedRoute)))
   await expect(viewport.getByText(text, { exact: true })).toHaveCount(0)
   await expect(composer(page)).toHaveText('')
-  await expect(page.getByRole('button', { name: 'Review unconfirmed draft', exact: true })).toHaveCount(0)
+  const review = page.getByRole('button', { name: 'Review unconfirmed draft', exact: true })
+  if (switchUnchangedRoute && process.env.HERMES_E2E_SSH_DRAFT_RECOVERY === '1') {
+    // Record the current candidate's ambiguous offer. Never open it on this route.
+    await expect(review).toBeEnabled()
+  } else {
+    await expect(review).toHaveCount(0)
+  }
   expect(await sshDraftStorage(page, text)).toEqual({ draft: false, retryId: undefined, prepared })
   expect(storedChats(originalHome, profile)).toEqual(originalChats)
   expect(storedChats(replacementHome, profile)).toEqual(replacementChats)
@@ -503,7 +542,11 @@ async function verifyReplacementKeepsDraftPrivate(
     id: 'fixture-local-default',
     owner: { connectionId: 'local', profile: 'default' }
   })
-  await selectEndpoint(original)
+  if (switchUnchangedRoute) {
+    await switchUnchangedRoute('original')
+  } else {
+    await selectEndpoint(original)
+  }
 }
 
 async function verifyInterruptedTurn(
@@ -515,7 +558,7 @@ async function verifyInterruptedTurn(
   sockets: Map<WireFrame, WireSocket>,
   port: string,
   owner: { connectionId: string; profile: string },
-  { lostAck, gatewayLoss, disableContinuation, reloadDraft, restartDraft, coldRead }: TurnInterruption,
+  { lostAck, gatewayLoss, disableContinuation, reloadDraft, restartDraft, coldRead, replaceDraftEndpoint }: TurnInterruption,
   restartDesktop?: () => Promise<Page>,
   visitReplacement?: (page: Page, text: string, prepared: string[]) => Promise<void>
 ) {
@@ -827,9 +870,14 @@ async function verifyInterruptedTurn(
     expect(provider.completions.map(turn => turn.marker)).toEqual(autoContinue ? [input, input] : [input])
     expect(wire.slice(from).filter(frame => frame.method === 'session.create')).toEqual([])
     if (gatewayLoss) {
-      expect(server.listener()).toBe(listener)
-      expect(listener.exitCode).toBeNull()
-      expect(listener.signalCode).toBeNull()
+      if (replaceDraftEndpoint === 'unchanged') {
+        expect(server.listener()).not.toBe(listener)
+        expect(listener.exitCode !== null || listener.signalCode !== null).toBe(true)
+      } else {
+        expect(server.listener()).toBe(listener)
+      }
+      expect(server.listener()!.exitCode).toBeNull()
+      expect(server.listener()!.signalCode).toBeNull()
     }
     expect(server.acceptedKeys()).toBeGreaterThan(logins)
   } finally {
@@ -857,6 +905,7 @@ async function verifySshBotChat(
   const local = createCoreSandbox('a')
   const remote = createCoreSandbox('b')
   const successor = replace || turn?.replaceDraftEndpoint ? createCoreSandbox('c') : undefined
+  const unchangedRoute = turn?.replaceDraftEndpoint === 'unchanged'
   const boxes = successor ? [local, remote, successor] : [local, remote]
   let gateway: ReturnType<typeof startGateway> | undefined
   const servers: Awaited<ReturnType<typeof prepareSshServer>>[] = []
@@ -870,7 +919,7 @@ async function verifySshBotChat(
     seedInstall(remote, remoteEnv, provider.url, edit ? [profile, editedProfile] : profile, 'ssh', '2'.repeat(32))
     if (successor) {
       const label = turn?.replaceDraftEndpoint ? 'ssh' : 'replacement'
-      seedInstall(successor, successorEnv!, provider.url, profile, label, '3'.repeat(32))
+      seedInstall(successor, successorEnv!, provider.url, profile, label, (unchangedRoute ? '2' : '3').repeat(32))
       if (turn?.replaceDraftEndpoint) {
         runPython(successorEnv!, `
 import sys
@@ -900,7 +949,7 @@ with SessionDB(Path(home) / "state.db") as db:
     servers.push(original)
     await original.startServer()
     original.verifyLogin()
-    const replacement = successor && await prepareSshServer(
+    const replacement = successor && !unchangedRoute && await prepareSshServer(
       path.join(state!, 'replacement'), sshConfig, python!, localEnv, successor, successorEnv!
     )
     if (replacement) {
@@ -1092,12 +1141,22 @@ with SessionDB(Path(home) / "state.db") as db:
         observeWire(restarted.page, sockets, wire)
         return restarted.page
       } : undefined
-      const visitReplacement = turn.replaceDraftEndpoint
-        ? (next: Page, text: string, prepared: string[]) => verifyReplacementKeepsDraftPrivate(
-          next, original, replacement!, remote.hermesHome, successor!.hermesHome,
-          wire, text, prepared, { connectionId, profile: routeProfile }
-        )
-        : undefined
+      const visitReplacement = turn.replaceDraftEndpoint && successor
+        ? async (next: Page, text: string, prepared: string[]) => {
+          const registry = path.join(local.userDataDir, 'connections.json')
+          const originalRegistry = fs.readFileSync(registry)
+          await visitReplacementChat(
+            next, original, replacement || undefined, remote.hermesHome, successor.hermesHome,
+            wire, text, prepared, { connectionId, profile: routeProfile },
+            unchangedRoute ? side => {
+              expect(fs.readFileSync(registry)).toEqual(originalRegistry)
+              return side === 'replacement'
+                ? original.switchFixtureHome(successor, successorEnv!)
+                : original.switchFixtureHome(remote, remoteEnv)
+            } : undefined
+          )
+          if (unchangedRoute) expect(fs.readFileSync(registry)).toEqual(originalRegistry)
+        } : undefined
       await verifyInterruptedTurn(
         page, remote, original, provider, wire, sockets, reads[0]!.port,
         { connectionId, profile: routeProfile }, turn, restartDesktop, visitReplacement
@@ -1254,6 +1313,17 @@ test('Bot Mode keeps an abrupt-exit SSH draft off a replacement endpoint', async
     lostAck: true,
     disableContinuation: true,
     restartDraft: 'abrupt',
-    replaceDraftEndpoint: true
+    replaceDraftEndpoint: 'edited'
+  })
+})
+
+test('Bot Mode observes draft review ambiguity on an unchanged SSH route', async () => {
+  test.setTimeout(240_000)
+  await verifySshBotChat('default', {
+    gatewayLoss: true,
+    lostAck: true,
+    disableContinuation: true,
+    restartDraft: 'abrupt',
+    replaceDraftEndpoint: 'unchanged'
   })
 })
