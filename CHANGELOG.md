@@ -199,6 +199,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Verify scoped stored-message inspection before SSH Bot Chat resume after Gateway loss. The read preserves the interrupted turn and starts no inference. Explicit resume can start native continuation (#33).
+
 - Verify that the restored SSH draft retains its retry guard after fully exiting and relaunching Desktop before reopening the interrupted Bot Chat, with native continuation enabled or disabled (#33).
 
 - Verify that the restored draft retains its retry guard after reloading the Desktop renderer following SSH acknowledgement and Gateway loss, with native continuation enabled and disabled (#33).

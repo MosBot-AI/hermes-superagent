@@ -34,6 +34,7 @@ interface TurnInterruption {
   disableContinuation?: boolean
   reloadDraft?: boolean
   restartDraft?: boolean
+  coldRead?: boolean
 }
 
 function shellQuote(value: string) {
@@ -398,6 +399,37 @@ function providerBackendPid(remote: CoreSandbox, provider: ScriptedProvider) {
   return owners[0]!.pid
 }
 
+async function readColdTranscript(page: Page, route: ProfileRoute) {
+  return page.evaluate(async ({ route, canonical }) => {
+    const sdk = window.__E07_SSH_ROUTE_PROBE__!
+    const transcript = { session_id: canonical, profile: route.targetProfile }
+    // An unopened legacy runtime can reject history by stored id. Record the
+    // wire verdict independently and never resume in response to that refusal.
+    try {
+      await sdk.requestProfile(route, 'session.history', transcript, 25_000, { spawnPriority: 'foreground' })
+    } catch {
+      // The test checks the exact RPC reply code on the observed forward.
+    }
+    const desktop = (window as unknown as {
+      hermesDesktop: {
+        api(request: { connectionId: string; profile: string; path: string }): Promise<unknown>
+      }
+    }).hermesDesktop
+    const query = new URLSearchParams({
+      profile: route.targetProfile,
+      limit: '10',
+      offset: '0',
+      order: 'oldest',
+      include_compacted: 'true'
+    })
+    return desktop.api({
+      connectionId: route.connectionId,
+      profile: route.targetProfile,
+      path: `/api/sessions/${encodeURIComponent(canonical)}/messages?${query}`
+    })
+  }, { route, canonical })
+}
+
 async function verifyInterruptedTurn(
   page: Page,
   remote: CoreSandbox,
@@ -407,7 +439,7 @@ async function verifyInterruptedTurn(
   sockets: Map<WireFrame, WireSocket>,
   port: string,
   owner: { connectionId: string; profile: string },
-  { lostAck, gatewayLoss, disableContinuation, reloadDraft }: TurnInterruption,
+  { lostAck, gatewayLoss, disableContinuation, reloadDraft, coldRead }: TurnInterruption,
   restartDesktop?: () => Promise<Page>
 ) {
   const autoContinue = gatewayLoss && !disableContinuation
@@ -515,6 +547,37 @@ async function verifyInterruptedTurn(
       expect(named()).toEqual(interrupted)
       expect(submissions()).toEqual(submitted)
     }
+    const markerPath = path.join(remote.hermesHome, 'profiles', profile, 'desktop', 'interrupted_turns.json')
+    if (coldRead) {
+      const markerBytes = fs.readFileSync(markerPath)
+      const marker = JSON.parse(markerBytes.toString('utf8'))[canonical]
+      expect(marker).toMatchObject({ writer_pid: stoppedPid, prompt: input, attempts: 0, auto_continue: true })
+
+      const fromRead = wire.length
+      const focused = await focus(page)
+      const route = await readSshChat(page, owner.profile, false)
+      const observed = wire.slice(fromRead).find(frame => lookup(frame) && frame.limit === 17)
+      expect(observed).toMatchObject({ profile, includeHidden: true, reply: {} })
+      expect(observed!.port).not.toBe(port)
+
+      const result = await readColdTranscript(page, route)
+      const reads = wire.slice(fromRead)
+      const history = reads.find(frame => frame.method === 'session.history' && frame.sessionId === canonical)
+      expect(history).toMatchObject({ port: observed!.port, profile, reply: { code: 4001 } })
+      expect(result).toMatchObject({
+        session_id: canonical,
+        profile,
+        messages: interrupted.messages.map(({ id, role, content }) => ({ id, role, content })),
+        pagination: { offset: 0, limit: 10, order: 'oldest', returned: interrupted.messages.length }
+      })
+      expect(reads.filter(frame => frame.sessionId === canonical &&
+        ['session.resume', 'session.activate'].includes(frame.method))).toEqual([])
+      expect(reads.filter(frame => ['session.create', 'prompt.submit'].includes(frame.method))).toEqual([])
+      expect(await focus(page)).toEqual(focused)
+      expect(named()).toEqual(interrupted)
+      expect(provider.completions).toHaveLength(1)
+      expect(fs.readFileSync(markerPath)).toEqual(markerBytes)
+    }
     const reopenFrom = wire.length
     await row().click()
     await expect(viewport().getByText(canonical, { exact: true })).toBeVisible({ timeout: 55_000 })
@@ -608,6 +671,12 @@ async function verifyInterruptedTurn(
       expect(await page.evaluate(() => window.__E07_LOST_ACK__?.withheld)).toBe(
         restartDesktop ? undefined : reloadDraft ? 0 : 1
       )
+    }
+    if (coldRead) {
+      await expect.poll(() => {
+        if (!fs.existsSync(markerPath)) return false
+        return Object.hasOwn(JSON.parse(fs.readFileSync(markerPath, 'utf8')), canonical)
+      }).toBe(false)
     }
     expect(interrupted.sessions).toEqual(beforeLoss.sessions)
     expect(interrupted.messages.filter(message => message.role === 'user' && message.content === input)).toHaveLength(1)
@@ -988,4 +1057,9 @@ test('Bot Mode guards the restarted SSH draft with continuation disabled', async
     disableContinuation: true,
     restartDraft: true
   })
+})
+
+test('Bot Mode reads the interrupted SSH chat before resuming it', async () => {
+  test.setTimeout(180_000)
+  await verifySshBotChat('default', { gatewayLoss: true, coldRead: true })
 })

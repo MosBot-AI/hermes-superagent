@@ -39,6 +39,7 @@ SSH_DRAFT_RELOAD_CASE = "bot-canonical-ssh-draft-reload"
 SSH_DRAFT_RELOAD_DISABLED_CASE = "bot-canonical-ssh-draft-reload-no-continue"
 SSH_DRAFT_RESTART_CASE = "bot-canonical-ssh-draft-restart"
 SSH_DRAFT_RESTART_DISABLED_CASE = "bot-canonical-ssh-draft-restart-no-continue"
+SSH_COLD_READ_CASE = "bot-canonical-ssh-cold-chat-read"
 SSH_SPEC = "desktop_bot_ssh.spec.ts"
 SSH_FIXTURES = (GATEWAY_FIXTURE, CANONICAL_OBSERVER, APPIMAGE_FIXTURE)
 SAVED_TOKEN_CASE = "bot-canonical-saved-token"
@@ -70,6 +71,7 @@ APPIMAGE_CASES = (
     SSH_DRAFT_RELOAD_DISABLED_CASE,
     SSH_DRAFT_RESTART_CASE,
     SSH_DRAFT_RESTART_DISABLED_CASE,
+    SSH_COLD_READ_CASE,
     SAVED_TOKEN_CASE,
     COMPRESSED_LOCAL_CASE,
     COMPRESSED_SAVED_CASE,
@@ -116,6 +118,7 @@ CASES = {
         SSH_FIXTURES,
         "OpenSSH Bot Mode draft after restart with continuation disabled",
     ),
+    SSH_COLD_READ_CASE: (SSH_SPEC, SSH_FIXTURES, "OpenSSH Bot Mode cold chat read"),
     SAVED_TOKEN_CASE: (
         "desktop_bot_saved_token_refusal.spec.ts",
         CANONICAL_FIXTURES,
@@ -170,6 +173,7 @@ CASE_TITLE_FILTERS = {
     SSH_DRAFT_RELOAD_DISABLED_CASE: "guards the reloaded SSH draft with continuation disabled$",
     SSH_DRAFT_RESTART_CASE: "guards the restored SSH draft after Desktop restart$",
     SSH_DRAFT_RESTART_DISABLED_CASE: "guards the restarted SSH draft with continuation disabled$",
+    SSH_COLD_READ_CASE: "reads the interrupted SSH chat before resuming it$",
     COMPRESSED_LOCAL_CASE: "compressed Bot Chat over the local private ticket$",
     COMPRESSED_SAVED_CASE: "compressed Bot Chat over the saved Webapp token$",
     "install-marker-collision": (
