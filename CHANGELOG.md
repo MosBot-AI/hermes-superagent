@@ -199,6 +199,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Verify Telegram command denials through the real plugin host child. The command RPC omits receiver and message provenance, and native allowlist refusals stop before IPC (#14).
+
 - Verify owner-entry denials through the native Telegram command adapter and Gateway. Direct, forwarded and edited DMs can have the same public source fields, and Gateway still checks its current allowlist after adapter intake (#14).
 
 - Verify scoped stored-message inspection before SSH Bot Chat resume after Gateway loss. The read preserves the interrupted turn and starts no inference. Explicit resume can start native continuation (#33).
