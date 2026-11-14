@@ -55,6 +55,10 @@ class SessionMemoryTools(SessionTaskTools):
 
     def _execute(self, operation: str, payload: dict, session_id: str) -> dict:
         try:
+            if "assertion_kind" in payload:
+                raise MemoryError("assertion_scope_required")
+            if operation in {"get", "list", "search", "search_terms", "recall", "export"}:
+                payload = {**payload, "record_format": "epistemic_v1"}
             with open_memory_backend(
                 self.bound_home, session_id, source_kind="activated_session_model"
             ) as backend:

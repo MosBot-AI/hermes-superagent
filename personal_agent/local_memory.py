@@ -28,7 +28,7 @@ from .memory_checkpoints import CHECKPOINT_SCHEMA, checkpoint_status, create_che
 from .memory_progress import PROGRESS_SCHEMA, advance_consumer, get_changes, get_consumer
 
 _APPLICATION_ID = 0x50414D45
-_SCHEMA_VERSION = 13
+_SCHEMA_VERSION = 14
 _SCHEMA_V1 = {
     "namespace": "CREATE TABLE namespace (id TEXT PRIMARY KEY NOT NULL)",
     "records": """CREATE TABLE records (
@@ -74,7 +74,17 @@ _SCHEMA_V9 = {**_SCHEMA_V8, **memory_edits.SCHEMA_V9}
 _SCHEMA_V10 = {**_SCHEMA_V8, **memory_edits.SCHEMA}
 _SCHEMA_V11 = {**_SCHEMA_V10, **memory_sources.SCHEMA}
 _SCHEMA_V12 = {**_SCHEMA_V11, **retained_sources.SCHEMA_V12}
-_SCHEMA = {**_SCHEMA_V11, **retained_sources.SCHEMA}
+_SCHEMA_V13 = {**_SCHEMA_V11, **retained_sources.SCHEMA}
+_ASSERTION_COLUMN = (
+    "assertion_kind TEXT DEFAULT 'unspecified' CHECK(assertion_kind IS NULL "
+    "OR assertion_kind IN ('unspecified','claim','inference'))"
+)
+_SCHEMA = {
+    **_SCHEMA_V13,
+    "records": _SCHEMA_V13["records"].replace(
+        "expires_at TEXT,", "expires_at TEXT, " + _ASSERTION_COLUMN + ","
+    ),
+}
 
 _COLUMNS = (
     "record_id",
@@ -87,6 +97,7 @@ _COLUMNS = (
     "created_at",
     "updated_at",
     "expires_at",
+    "assertion_kind",
 )
 
 
@@ -133,6 +144,7 @@ class LocalMemoryBackend:
                 "multi_term_fts",
                 "bounded_record_export",
                 "bounded_recall",
+                "epistemic_labels",
                 "metadata_changes",
                 "durable_consumer_cursor",
                 "local_metadata_checkpoint",
@@ -302,6 +314,13 @@ class LocalMemoryBackend:
                 )
                 connection.execute("DROP TABLE retained_source_decisions_v12")
                 connection.execute(f"PRAGMA user_version={_SCHEMA_VERSION}")
+            if 0 <= version <= 13:
+                connection.execute("ALTER TABLE records ADD COLUMN " + _ASSERTION_COLUMN)
+                connection.execute(
+                    "UPDATE records SET assertion_kind=NULL WHERE status='forgotten'"
+                )
+                connection.execute(f"PRAGMA user_version={_SCHEMA_VERSION}")
+            self._validate_assertions(connection)
             memory_sources.validate(connection)
             retained_sources.validate_store(connection, None)
             memory_fts.validate_index_config(connection)
@@ -332,7 +351,8 @@ class LocalMemoryBackend:
             10: _SCHEMA_V10,
             11: _SCHEMA_V11,
             12: _SCHEMA_V12,
-            13: _SCHEMA,
+            13: _SCHEMA_V13,
+            14: _SCHEMA,
         }.get(version)
         return expected is not None and dict(rows) == expected and len(rows) == len(expected)
 
@@ -393,7 +413,7 @@ class LocalMemoryBackend:
         rows = connection.execute(
             "SELECT name, sql FROM sqlite_master WHERE name NOT GLOB 'sqlite_*'"
         ).fetchall()
-        allowed = (10, 11, 12, 13) if historical_snapshot else (_SCHEMA_VERSION,)
+        allowed = (10, 11, 12, 13, 14) if historical_snapshot else (_SCHEMA_VERSION,)
         if version not in allowed or not LocalMemoryBackend._valid_schema(version, rows):
             raise MemoryError("readonly_schema_unavailable")
         if connection.execute("SELECT id FROM namespace").fetchall() != [(namespace_id,)]:
@@ -411,6 +431,8 @@ class LocalMemoryBackend:
 
     def execute(self, operation: str, payload: dict) -> dict:
         request = validate_request(operation, payload)
+        if "assertion_kind" in request and self._source_kind != "explicit_local_operator":
+            raise MemoryError("assertion_scope_required")
         if (
             operation in {"record_origin", "source_discover"}
             and self._source_kind == "activated_session_model"
@@ -487,6 +509,7 @@ class LocalMemoryBackend:
                 "source_discover",
             }:
                 memory_sources.validate(conn)
+            self._validate_assertions(conn)
             now = datetime.fromisoformat(memory_expiry.utc_now())
             if operation == "record_origin":
                 result = memory_record_origin.inspect_origin(self, conn, request, now)
@@ -521,12 +544,16 @@ class LocalMemoryBackend:
             elif operation == "checkpoint_status":
                 result = checkpoint_status(conn, request["checkpoint_id"])
             elif operation == "get":
-                result = self._get(conn, request["record_id"], now)
+                result = self._get(
+                    conn, request["record_id"], now, typed="record_format" in request
+                )
             elif operation == "recall":
                 result = self._recall(conn, request, now)
             elif operation == "export":
                 result = {
-                    "schema_version": "personal.memory.record_page.v1",
+                    "schema_version": "personal.memory.epistemic_record_page.v1"
+                    if "record_format" in request
+                    else "personal.memory.record_page.v1",
                     "namespace_id": self._namespace,
                     "watermark": conn.execute(
                         "SELECT coalesce(max(sequence),0) FROM events"
@@ -547,11 +574,20 @@ class LocalMemoryBackend:
             raise
 
     @staticmethod
-    def _record(row, now):
+    def _record(row, now, *, typed=False):
         record = dict(zip(_COLUMNS, row, strict=True))
         expiry = validate_expiry(record["expires_at"], error_code="storage_corrupt")
         if record["status"] == "forgotten" and expiry is not None:
             raise MemoryError("storage_corrupt")
+        kind = record["assertion_kind"]
+        if (record["status"] == "forgotten" and kind is not None) or (
+            record["status"] != "forgotten" and kind not in {"unspecified", "claim", "inference"}
+        ):
+            raise MemoryError("storage_corrupt")
+        if typed:
+            record["record_format"] = "epistemic_v1"
+        else:
+            record.pop("assertion_kind")
         record["expired"] = expiry is not None and datetime.fromisoformat(expiry) <= now
         return record
 
@@ -567,13 +603,22 @@ class LocalMemoryBackend:
             if status == "forgotten" and expiry is not None:
                 raise MemoryError("storage_corrupt")
 
-    def _get(self, conn, record_id, now):
+    @staticmethod
+    def _validate_assertions(conn):
+        if conn.execute(
+            "SELECT 1 FROM records WHERE (status='forgotten' AND assertion_kind IS NOT NULL) "
+            "OR (status='active' AND (assertion_kind IS NULL OR assertion_kind NOT IN "
+            "('unspecified','claim','inference'))) LIMIT 1"
+        ).fetchone():
+            raise MemoryError("storage_corrupt")
+
+    def _get(self, conn, record_id, now, *, typed=False):
         row = conn.execute(
             f"SELECT {','.join(_COLUMNS)} FROM records WHERE record_id=?", (record_id,)
         ).fetchone()
         if row is None:
             raise MemoryError("not_found")
-        return self._record(row, now)
+        return self._record(row, now, typed=typed)
 
     def _recall(self, conn, request, now):
         """Rank current whole records inside this call's existing read transaction.
@@ -595,7 +640,7 @@ class LocalMemoryBackend:
             raise MemoryError("record_limit")
         ranked = []
         for row in rows:
-            record = self._record(row[1:], now)
+            record = self._record(row[1:], now, typed="record_format" in request)
             if record["expired"]:
                 continue
             matches = [
@@ -623,7 +668,9 @@ class LocalMemoryBackend:
             items.append(record)
             used_chars = size
         return {
-            "schema_version": "personal.memory.recall.v1",
+            "schema_version": "personal.memory.epistemic_recall.v1"
+            if "record_format" in request
+            else "personal.memory.recall.v1",
             "evaluated_at": now.isoformat().replace("+00:00", "Z"),
             "items": items,
             "watermark": conn.execute("SELECT coalesce(max(sequence),0) FROM events").fetchone()[0],
@@ -672,7 +719,10 @@ class LocalMemoryBackend:
             args,
         ).fetchall()
         more = len(rows) > request["limit"]
-        items = [self._record(row, now) for row in rows[: request["limit"]]]
+        items = [
+            self._record(row, now, typed="record_format" in request)
+            for row in rows[: request["limit"]]
+        ]
         return {
             **(
                 {
@@ -694,6 +744,8 @@ class LocalMemoryBackend:
         }
 
     def _mutate(self, conn, operation, request, now):
+        if "assertion_kind" in request and self._source_kind != "explicit_local_operator":
+            raise MemoryError("assertion_scope_required")
         digest = memory_mutation_status.normalized_request_digest(operation, request)
         old = conn.execute(
             "SELECT digest,receipt FROM receipts WHERE request_id=?", (request["request_id"],)
@@ -719,7 +771,8 @@ class LocalMemoryBackend:
             record_id, revision, status = str(uuid4()), 1, "active"
             conn.execute(
                 "INSERT INTO records(record_id,revision,status,content,topic,source,session_ref,"
-                "created_at,updated_at,expires_at) VALUES (?,1,'active',?,?,?,?,?,?,?)",
+                "created_at,updated_at,expires_at,assertion_kind) "
+                "VALUES (?,1,'active',?,?,?,?,?,?,?,?)",
                 (
                     record_id,
                     request["content"],
@@ -729,11 +782,12 @@ class LocalMemoryBackend:
                     timestamp,
                     timestamp,
                     request.get("expires_at"),
+                    request.get("assertion_kind", "unspecified"),
                 ),
             )
         else:
             record_id = request["record_id"]
-            current = self._get(conn, record_id, now)
+            current = self._get(conn, record_id, now, typed=True)
             if current["status"] == "forgotten":
                 raise MemoryError("record_forgotten")
             if current["revision"] != request["expected_revision"]:
@@ -745,7 +799,7 @@ class LocalMemoryBackend:
             topic = None if operation == "forget" else request.get("topic", current["topic"])
             conn.execute(
                 "UPDATE records SET revision=?,status=?,content=?,topic=?,source=?,session_ref=?,"
-                "updated_at=?,expires_at=? WHERE record_id=? AND revision=?",
+                "updated_at=?,expires_at=?,assertion_kind=? WHERE record_id=? AND revision=?",
                 (
                     revision,
                     status,
@@ -757,6 +811,12 @@ class LocalMemoryBackend:
                     None
                     if operation == "forget"
                     else request.get("expires_at", current["expires_at"]),
+                    None
+                    if operation == "forget"
+                    else request.get(
+                        "assertion_kind",
+                        "unspecified" if "content" in request else current["assertion_kind"],
+                    ),
                     record_id,
                     request["expected_revision"],
                 ),
