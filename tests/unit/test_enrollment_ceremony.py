@@ -259,23 +259,27 @@ def test_storage_schema_and_caller_transaction_refused(ceremony):
         c.challenges.initialize()
 
 
-def test_current_new_policy_cannot_confirm_old_scope_snapshot(ceremony):
+@pytest.mark.parametrize("through_pause", [False, True])
+def test_current_new_policy_cannot_confirm_old_scope_snapshot(ceremony, through_pause):
     c, a, _, _ = ceremony
     key = issue(c, a)
-    c.enrollment.run(
-        "set_policy",
-        {**KEY, "expected_revision": 1, "expected_enrollment_revision": 1, "scope": SCOPE},
-    )
+    cas = {**KEY, "expected_revision": 1, "expected_enrollment_revision": 1}
+    if through_pause:
+        c.enrollment.run("pause", cas)
+        c.enrollment.run("resume", {**cas, "expected_revision": 2})
+    else:
+        c.enrollment.run("set_policy", {**cas, "scope": SCOPE})
+    current_epoch = 2 if through_pause else 1
     result = c.run(
         "confirm",
         KEY,
-        expected_revision=2,
+        expected_revision=current_epoch + 1,
         expected_enrollment_revision=1,
-        expected_epoch=1,
+        expected_epoch=current_epoch,
         challenge_id=key,
         live_handle=a.issue("confirm", key),
     )
-    assert result["state"] == "consumed"  # even a no-op policy change fences old evidence
+    assert result["state"] == "consumed"  # Current revisions cannot repair a stale challenge.
 
 
 def test_independent_connections_confirm_only_once(tmp_path):

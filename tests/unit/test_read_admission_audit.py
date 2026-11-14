@@ -285,27 +285,46 @@ def test_invalid_trusted_callback_metadata_fails_without_audit(setup, value):
     assert audit(store) == []
 
 
-def test_exact_v1_upgrade_preserves_rows_and_admin_events(tmp_path):
+V2_AUDIT_SCHEMA = """CREATE TABLE read_admissions (
+        sequence INTEGER PRIMARY KEY,
+        owner_id TEXT NOT NULL, profile_id TEXT NOT NULL, enrollment_id TEXT NOT NULL,
+        enrollment_revision INTEGER NOT NULL, policy_revision INTEGER NOT NULL,
+        epoch INTEGER NOT NULL, prepared_at TEXT NOT NULL,
+        resource_count INTEGER NOT NULL CHECK(resource_count BETWEEN 1 AND 32),
+        outcome TEXT NOT NULL CHECK(outcome = 'snapshot_prepared'))"""
+
+
+@pytest.mark.parametrize("version", [1, 2])
+def test_exact_legacy_upgrade_preserves_rows_and_audits(tmp_path, version):
     path = tmp_path / "enrollment.db"
     with sqlite3.connect(path) as connection:
         legacy(connection)
+        if version == 2:
+            connection.execute(V2_AUDIT_SCHEMA)
+            connection.execute("PRAGMA user_version=2")
+            connection.execute(
+                "INSERT INTO read_admissions VALUES (7,?,?,?,?,?,?,?,?,?)",
+                (*KEY.values(), 1, 1, 0, NOW.isoformat(), 1, "snapshot_prepared"),
+            )
+            connection.commit()
         before = (
             connection.execute("SELECT * FROM enrollments").fetchall(),
             connection.execute("SELECT * FROM events").fetchall(),
         )
         store = EnrollmentStore(connection)
         store.initialize()
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 3
         assert before == (
             connection.execute("SELECT * FROM enrollments").fetchall(),
             connection.execute("SELECT * FROM events").fetchall(),
         )
-        assert audit(store) == []
+        assert [item["sequence"] for item in audit(store)] == ([7] if version == 2 else [])
         assert store.run("get", KEY)["state"] == "revoked"
+        assert store.policy_history(KEY)["current_state"] == "revoked"
     with sqlite3.connect(path) as connection:
         store = EnrollmentStore(connection)
         store.initialize()
-        assert audit(store) == []
+        assert [item["sequence"] for item in audit(store)] == ([7] if version == 2 else [])
 
 
 @pytest.mark.parametrize(
@@ -329,25 +348,29 @@ def test_migration_refuses_non_exact_predecessor_without_change(sql):
         assert not connection.in_transaction
 
 
-@pytest.mark.parametrize("failure", ["create_table", "version", "commit"])
-def test_failed_upgrade_is_atomic(failure):
+@pytest.mark.parametrize("version", [1, 2])
+@pytest.mark.parametrize("failure", ["copy_events", "version", "commit"])
+def test_failed_upgrade_is_atomic(failure, version):
     with sqlite3.connect(":memory:") as connection:
         legacy(connection)
+        if version == 2:
+            connection.execute(V2_AUDIT_SCHEMA)
+            connection.execute("PRAGMA user_version=2")
         before = list(connection.iterdump())
         connection.set_authorizer(
             lambda action, name, arg, *rest: (
                 sqlite3.SQLITE_DENY
                 if (
                     (
-                        failure == "create_table"
-                        and action == sqlite3.SQLITE_CREATE_TABLE
-                        and name == "read_admissions"
+                        failure == "copy_events"
+                        and action == sqlite3.SQLITE_INSERT
+                        and name == "events"
                     )
                     or (
                         failure == "version"
                         and action == sqlite3.SQLITE_PRAGMA
                         and name == "user_version"
-                        and arg == "2"
+                        and arg == "3"
                     )
                     or (
                         failure == "commit"
@@ -363,7 +386,7 @@ def test_failed_upgrade_is_atomic(failure):
             store.initialize()
         connection.set_authorizer(None)
         assert list(connection.iterdump()) == before
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 1
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == version
         assert not connection.in_transaction
         with pytest.raises(EnrollmentError, match="not_initialized"):
             store.read_admission_history(KEY)
@@ -425,7 +448,8 @@ def test_fresh_and_upgraded_schema_are_identical():
 
 
 @pytest.mark.parametrize("phase", ["before_commit", "after_commit"])
-def test_process_exit_around_commit_preserves_truthful_prepared_event(tmp_path, phase):
+@pytest.mark.parametrize("operation", ["read", "pause"])
+def test_process_exit_around_commit_preserves_exact_effect(tmp_path, phase, operation):
     import os
     import subprocess
     import sys
@@ -453,15 +477,19 @@ connection = sqlite3.connect(sys.argv[1], factory=Connection)
 store = EnrollmentStore(connection)
 store.initialize()
 connection.armed = True
-store.with_audited_read(
-    {"owner_id":"owner","profile_id":"profile","enrollment_id":"enrollment"},
-    expected_revision=1, expected_enrollment_revision=1, expected_epoch=0,
-    operation=lambda record: PreparedRead("synthetic payload", datetime(2026,1,1,tzinfo=UTC), 1),
-)
+key = {"owner_id":"owner","profile_id":"profile","enrollment_id":"enrollment"}
+if sys.argv[3] == "pause":
+    store.run("pause", {**key, "expected_revision": 1, "expected_enrollment_revision": 1})
+else:
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    store.with_audited_read(
+        key, expected_revision=1, expected_enrollment_revision=1, expected_epoch=0,
+        operation=lambda record: PreparedRead("synthetic payload", now, 1),
+    )
 raise AssertionError("No successful return is expected")
 """
     result = subprocess.run(
-        [sys.executable, "-c", child, str(path), phase],
+        [sys.executable, "-c", child, str(path), phase, operation],
         env={"PATH": os.environ.get("PATH", ""), "PYTHONPATH": str(Path(__file__).parents[2])},
         capture_output=True,
         text=True,
@@ -472,5 +500,12 @@ raise AssertionError("No successful return is expected")
     with sqlite3.connect(path) as connection:
         store = EnrollmentStore(connection)
         store.initialize()
-        assert len(audit(store)) == (0 if phase == "before_commit" else 1)
+        committed = phase == "after_commit"
+        paused = committed and operation == "pause"
+        assert len(audit(store)) == int(committed and operation == "read")
+        history = store.policy_history(KEY)
+        assert history["current_state"] == ("paused" if paused else "pending")
+        assert [item["operation"] for item in history["items"]] == (
+            ["create", "pause"] if paused else ["create"]
+        )
         assert connection.execute("PRAGMA integrity_check").fetchone() == ("ok",)

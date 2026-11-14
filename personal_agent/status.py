@@ -276,7 +276,8 @@ def build_status(
             "activation_supported": False,
             "grant_issuance_supported": False,
             "scope": (
-                "Unwired pending/revoked metadata only; profiles are not authenticated owners."
+                "Internal pending, paused and revoked policy metadata. "
+                "Profiles do not establish owner identity."
             ),
         },
         "read_admission": {

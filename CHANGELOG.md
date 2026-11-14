@@ -205,6 +205,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Add internal pause and explicit resume for pending enrollment policy. Schema v3 preserves existing administrative and read audit history and invalidates pre-pause confirmations across resume (#16).
+
 - Verify Telegram command denials through the real plugin host child. The command RPC omits receiver and message provenance, and native allowlist refusals stop before IPC (#14).
 
 - Verify owner-entry denials through the native Telegram command adapter and Gateway. Direct, forwarded and edited DMs can have the same public source fields, and Gateway still checks its current allowlist after adapter intake (#14).
