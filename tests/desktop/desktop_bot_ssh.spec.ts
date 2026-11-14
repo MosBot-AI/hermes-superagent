@@ -33,7 +33,7 @@ interface TurnInterruption {
   lostAck?: boolean
   disableContinuation?: boolean
   reloadDraft?: boolean
-  restartDraft?: boolean
+  restartDraft?: 'graceful' | 'abrupt'
   coldRead?: boolean
 }
 
@@ -430,6 +430,29 @@ async function readColdTranscript(page: Page, route: ProfileRoute) {
   }, { route, canonical })
 }
 
+async function sshDraftStorage(page: Page, text: string) {
+  return page.evaluate(async ({ sessionId, text }) => {
+    const stash = JSON.parse(localStorage.getItem('hermes:composer-drafts:v4') ?? '{}')
+    const retry = JSON.parse(localStorage.getItem(`hermes:composer-draft-retry:v1:${sessionId}`) ?? 'null')
+    const desktop = (window as unknown as {
+      hermesDesktop: { preparedSubmissions: { read(): Promise<string> } }
+    }).hermesDesktop
+    const journal = JSON.parse(await desktop.preparedSubmissions.read()) as Record<string, {
+      id: string
+      legacyAttempted?: boolean
+    }>
+    const prepared = Object.entries(journal).flatMap(([key, record]) => {
+      const [, target, draft] = JSON.parse(key)
+      return target === sessionId && draft === text && record.legacyAttempted === true ? [record.id] : []
+    })
+    return {
+      draft: stash.drafts?.[sessionId]?.text === text,
+      retryId: retry?.text === text ? retry.id : undefined,
+      prepared
+    }
+  }, { sessionId: canonical, text })
+}
+
 async function verifyInterruptedTurn(
   page: Page,
   remote: CoreSandbox,
@@ -439,7 +462,7 @@ async function verifyInterruptedTurn(
   sockets: Map<WireFrame, WireSocket>,
   port: string,
   owner: { connectionId: string; profile: string },
-  { lostAck, gatewayLoss, disableContinuation, reloadDraft, coldRead }: TurnInterruption,
+  { lostAck, gatewayLoss, disableContinuation, reloadDraft, restartDraft, coldRead }: TurnInterruption,
   restartDesktop?: () => Promise<Page>
 ) {
   const autoContinue = gatewayLoss && !disableContinuation
@@ -526,26 +549,47 @@ async function verifyInterruptedTurn(
     const interrupted = named()
     expect(interrupted.admissions).toEqual([])
 
-    // Leave the stale pane before reopening. This exercises a fresh attach
-    // instead of depending on the already-fronted tab's background refresh.
     const localRow = page.locator('[data-roster-key="local::default"]')
-    await localRow.click()
-    await expect.poll(() => focus(page)).toEqual({
-      id: 'fixture-local-default',
-      owner: { connectionId: 'local', profile: 'default' }
-    })
+    let preparedBeforeExit: string[] | undefined
+    if (restartDraft === 'abrupt') {
+      // Kill the app with the interrupted chat still focused.
+      expect(await focus(page)).toEqual({ id: canonical, owner })
+      const storage = await sshDraftStorage(page, input)
+      expect(storage.draft).toBe(true)
+      expect(storage.retryId).toEqual(expect.any(String))
+      expect(storage.prepared).toEqual([storage.retryId])
+      preparedBeforeExit = storage.prepared
+    } else {
+      // Leave the stale pane to exercise a fresh attach.
+      await localRow.click()
+      await expect.poll(() => focus(page)).toEqual({
+        id: 'fixture-local-default',
+        owner: { connectionId: 'local', profile: 'default' }
+      })
+    }
     if (gatewayLoss && lostAck) {
       expect(provider.completions).toHaveLength(1)
       expect(named()).toEqual(interrupted)
     }
     if (restartDesktop) {
+      const restartFrom = wire.length
       page = await restartDesktop()
       expect(await page.evaluate(() => window.__E07_LOST_ACK__)).toBeUndefined()
+      if (restartDraft === 'abrupt') {
+        expect(await sshDraftStorage(page, input)).toEqual({
+          draft: false,
+          retryId: undefined,
+          prepared: preparedBeforeExit
+        })
+      }
       await page.getByRole('button', { name: 'Bots', exact: true })
         .or(page.getByRole('tab', { name: 'Bots', exact: true })).first().click()
       expect(provider.completions).toHaveLength(1)
       expect(named()).toEqual(interrupted)
       expect(submissions()).toEqual(submitted)
+      expect(wire.slice(restartFrom).filter(frame =>
+        frame.sessionId === canonical && ['session.resume', 'session.activate'].includes(frame.method)
+      )).toEqual([])
     }
     const markerPath = path.join(remote.hermesHome, 'profiles', profile, 'desktop', 'interrupted_turns.json')
     if (coldRead) {
@@ -664,7 +708,9 @@ async function verifyInterruptedTurn(
         expect(submissions()).toEqual(submitted)
       }
     }
-    if (lostAck) {
+    if (restartDraft === 'abrupt') {
+      await expect(composer(page)).toHaveText('')
+    } else if (lostAck) {
       await expect(composer(page)).toContainText(input)
       await composer(page).press('Enter')
       await expect(page.getByText('This server could not confirm the earlier send of this message,', { exact: false })).toBeVisible()
@@ -918,9 +964,16 @@ async function verifySshBotChat(
     if (turn) {
       const restartDesktop = turn.restartDraft ? async () => {
         const originalProcess = app!.process()
-        await app!.close()
-        expect(originalProcess.exitCode).toBe(0)
         expect(originalProcess.pid).toBeDefined()
+        if (turn.restartDraft === 'abrupt') {
+          const exited = once(originalProcess, 'exit')
+          expect(originalProcess.kill('SIGKILL')).toBe(true)
+          await expect.poll(() => originalProcess.signalCode).toBe('SIGKILL')
+          expect(await exited).toEqual([null, 'SIGKILL'])
+        } else {
+          await app!.close()
+          expect(originalProcess.exitCode).toBe(0)
+        }
         expect(listProcesses().some(proc => proc.pid === originalProcess.pid)).toBe(false)
 
         const restarted = await launchBotDesktop(localEnv)
@@ -1046,7 +1099,7 @@ test('Bot Mode guards the reloaded SSH draft with continuation disabled', async 
 
 test('Bot Mode guards the restored SSH draft after Desktop restart', async () => {
   test.setTimeout(180_000)
-  await verifySshBotChat('default', { gatewayLoss: true, lostAck: true, restartDraft: true })
+  await verifySshBotChat('default', { gatewayLoss: true, lostAck: true, restartDraft: 'graceful' })
 })
 
 test('Bot Mode guards the restarted SSH draft with continuation disabled', async () => {
@@ -1055,7 +1108,22 @@ test('Bot Mode guards the restarted SSH draft with continuation disabled', async
     gatewayLoss: true,
     lostAck: true,
     disableContinuation: true,
-    restartDraft: true
+    restartDraft: 'graceful'
+  })
+})
+
+test('Bot Mode reopens the SSH chat after abrupt Desktop exit', async () => {
+  test.setTimeout(180_000)
+  await verifySshBotChat('default', { gatewayLoss: true, lostAck: true, restartDraft: 'abrupt' })
+})
+
+test('Bot Mode reopens the abrupt-exit SSH chat with continuation disabled', async () => {
+  test.setTimeout(180_000)
+  await verifySshBotChat('default', {
+    gatewayLoss: true,
+    lostAck: true,
+    disableContinuation: true,
+    restartDraft: 'abrupt'
   })
 })
 
