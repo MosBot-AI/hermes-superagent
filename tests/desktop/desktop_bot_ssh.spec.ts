@@ -928,13 +928,20 @@ async function verifySshBotChat(
       seedInstall(successor, successorEnv!, provider.url, profile, label, (unchangedRoute ? '2' : '3').repeat(32))
       if (turn?.replaceDraftEndpoint) {
         runPython(successorEnv!, `
+import sqlite3
 import sys
 from pathlib import Path
 from hermes_state import SessionDB
-home, session_id = sys.argv[1:]
+home, session_id, original_home = sys.argv[1:]
+if original_home:
+    from contextlib import closing
+    with closing(sqlite3.connect(Path(original_home) / "state.db")) as source:
+        with closing(sqlite3.connect(Path(home) / "state.db")) as target:
+            source.backup(target)
 with SessionDB(Path(home) / "state.db") as db:
     db.append_message(session_id, "user", "fixture-replacement-only")
-`, path.join(successor.hermesHome, 'profiles', profile), canonical)
+`, path.join(successor.hermesHome, 'profiles', profile), canonical,
+        unchangedRoute ? path.join(remote.hermesHome, 'profiles', profile) : '')
       }
     }
     if (turn?.disableContinuation) {
