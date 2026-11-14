@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "status": "Review-only, unsubmitted and inactive",
+  "base": "2281116525106e3c109993ccb5dc74d02bfc1427",
+  "proposal_commit_observed": "5773a9fadf7cd98cb412112a6587f5128eb86de4",
+  "proposal_tree": "3b5dd87bc0bd0656943dd5d70797d70661d83fcc",
+  "patch_sha256": "5c185b3dccb6b225b0aad42118e95b8f64ff6acc23634422f86cc2d2efd1a79f",
+  "acceptance": {
+    "linux_native_gateway": "passed",
+    "source_lock_pending_admission_and_destination_controls": "passed",
+    "original_policy_compression_and_terminal_admission": "passed",
+    "clean_pin_rename_and_recreation_controls": "passed"
+  }
+}
