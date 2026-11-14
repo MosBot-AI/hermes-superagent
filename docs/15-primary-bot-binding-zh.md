@@ -402,6 +402,8 @@ Bot Mode 的确切标题 `session.list` 查询携带所选后端 profile。列�
 
 [独立的仅供审阅 LOCAL 回执候选](../experiments/local-receipt-rename/README-zh.md)提供了 Linux 下停止 Gateway 后显式重命名的选项。候选使用原 home 的原生所有权锁及原生 SQLite 重命名事务，将经过验证的 LOCAL 回执随物理存储一起迁移。夹具核对新路由下的原 Bot Chat 和压缩末端，并保留已结算的合成准入。在线重命名、profile 恢复、上游采纳及经认证的所有者恢复仍是独立门禁。
 
+候选现在会在发布目录前记录这次离线重命名。在隔离 Linux 测试中，移动前、SQLite 改键事务即将提交时、提交和收尾后终止 CLI，或模拟一次打开存储的 I/O 错误，均可通过显式重试恢复。恢复待处理时，普通的所有权预留会被拒绝。世代元数据相同的物理副本无法结算已记录的迁移。恢复后的后继 Gateway 仍可访问原策略、根、压缩末端、消息记录和终态准入。[精确候选及夹具](../experiments/local-receipt-rename/README-zh.md)
+
 #### 当前固定版本的原生 profile 重建
 
 [Linux 手动夹具](../acceptance/live/test_native_profile_recreate.py)使用 Hermes `2281116525106e3c109993ccb5dc74d02bfc1427`、可丢弃的多路复用 Gateway 和同一条保留的 host 作用域原生 WebSocket。原生 CLI 从该提交的私有源码导出目录运行，使用 `--yes` 删除合成的 `scout` profile，再使用 `--no-alias --no-skills` 在同一路径创建全新 profile。固定版本的 CLI 对旧 home 写入删除标记并撤销其路由，再请求运行中的多路复用器清理该名称的路由身份。CLI 在发布全新 home 前清除删除标记，并请求多路复用器重新协调。[原生删除](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_cli/profiles.py#L1699-L1797) · [运行时身份清理](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/gateway/run_profile_reconcile.py#L737-L767) · [原生创建](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_cli/profiles.py#L1395-L1429)

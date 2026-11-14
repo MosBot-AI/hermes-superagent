@@ -217,6 +217,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 - Add a review-only Linux profile rename candidate that preserves the original LOCAL receipt, compressed Bot Chat and settled admission when the original store is moved offline (#33).
 
+- Verify that the review-only offline rename recovers the same LOCAL receipt after process interruption and a simulated store-open I/O error. A copied store cannot settle the pending rename (#33).
+
 - Add a review-only Hermes Desktop proposal to recover an uncertain SSH text draft from the scoped native journal after abrupt exit and block unchanged resubmission (#33).
 
 - Verify explicit SSH Bot Chat reopen after abrupt Desktop exit. The native prepared submission survives, while the restored draft and its retry identity are lost in the tested window (#33).
