@@ -18,7 +18,7 @@ import {
   type WireSocket
 } from './desktop_bot_canonical_observer'
 import { privateEnv, seedInstall, startGateway, stopGateway, waitForEndpoint } from './desktop_native_gateway_fixture'
-import { appLogTail, composer, type CoreSandbox, createCoreSandbox, freePort, REPO_ROOT, sandboxProcesses } from './harness'
+import { appLogTail, backendProcesses, composer, type CoreSandbox, createCoreSandbox, freePort, REPO_ROOT, sandboxProcesses } from './harness'
 import { listProcesses } from './process-census'
 import { gate, type ScriptedProvider, startScriptedProvider } from './provider'
 
@@ -27,6 +27,8 @@ const connectionId = 'fixture-ssh'
 const canonical = 'fixture-ssh-scout'
 const editedProfile = 'harbor'
 const decoys = ['fixture-ssh-default', 'fixture-local-default', 'fixture-local-scout']
+
+type TurnInterruption = 'turn' | 'lost-ack' | 'gateway-loss' | 'gateway-loss-no-continue'
 
 function shellQuote(value: string) {
   return "'" + value.replaceAll("'", "'\\''") + "'"
@@ -375,6 +377,21 @@ async function installLegacyAcknowledgementFilter(page: Page) {
   await page.reload()
 }
 
+function providerBackendPid(remote: CoreSandbox, provider: ScriptedProvider) {
+  const port = new URL(provider.url).port
+  const connected = spawnSync('ss', ['-Hntp', 'state', 'established', 'dport', '=', `:${port}`], {
+    encoding: 'utf8',
+    timeout: 5_000
+  })
+  expect(connected.status, 'inspect the fixture provider connection').toBe(0)
+  const peers = new Set(Array.from(connected.stdout.matchAll(/pid=(\d+),/g), match => Number(match[1])))
+  const owners = backendProcesses(remote).filter(process => peers.has(process.pid))
+  expect(owners, 'one owned remote backend is streaming the provider response').toHaveLength(1)
+  expect(owners[0]!.cmdline).toContain(`--profile ${profile} serve --isolated`)
+  expect(owners[0]!.cmdline).toContain('--ssh-owner-nonce')
+  return owners[0]!.pid
+}
+
 async function verifyInterruptedTurn(
   page: Page,
   row: Locator,
@@ -385,11 +402,16 @@ async function verifyInterruptedTurn(
   sockets: Map<WireFrame, WireSocket>,
   port: string,
   owner: { connectionId: string; profile: string },
-  lostAck: boolean
+  interruption: TurnInterruption
 ) {
+  const lostAck = interruption === 'lost-ack'
+  const gatewayLoss = interruption === 'gateway-loss' || interruption === 'gateway-loss-no-continue'
+  const autoContinue = interruption === 'gateway-loss'
   const input = 'U18-sshturn'
   const partial = 'Synthetic partial reply'
   const tail = 'Synthetic reply after release'
+  const continuedReply = 'Synthetic reply from the successor process'
+  const continuationNote = '[System note: Your previous turn was interrupted mid-run'
   const hold = gate()
   provider.script(input, [{ text: [partial, tail], holdAfterFirstChunk: hold }])
   const from = wire.length
@@ -421,24 +443,50 @@ async function verifyInterruptedTurn(
 
     const socket = sockets.get(submit!)!
     expect(socket.closed).toBe(false)
-    await interruptSshServer(server)
+    if (gatewayLoss) {
+      // The pin journals the streamed tail in the renderer before the remote reply is durable.
+      await expect.poll(() => page.evaluate(({ canonical, partial }) =>
+        Object.keys(localStorage).some(key =>
+          key.startsWith('hermes.desktop.inflightTurnJournal.v2:') &&
+          key.endsWith(encodeURIComponent(canonical)) &&
+          localStorage.getItem(key)?.includes(partial)
+        ), { canonical, partial })
+      ).toBe(true)
+    }
+    const listener = server.listener()!
+    const previousPids = gatewayLoss ? backendProcesses(remote).map(proc => proc.pid) : []
+    const stoppedPid = gatewayLoss ? providerBackendPid(remote, provider) : undefined
+    if (stoppedPid !== undefined) {
+      process.kill(stoppedPid, 'SIGKILL')
+      await expect.poll(() => backendProcesses(remote).some(proc => proc.pid === stoppedPid)).toBe(false)
+      await expect.poll(() => provider.completions[0]?.aborted).toBe(true)
+    } else {
+      await interruptSshServer(server)
+    }
     await expect.poll(() => socket.closed).toBe(true)
     if (lostAck) {
       const failure = page.getByRole('alert').filter({ hasText: 'Prompt failed' })
       await expect(failure).toContainText('Hermes gateway connection closed')
       expect(submissions()).toEqual(submitted)
     }
-    expect(provider.completions[0]).toMatchObject({ aborted: false, finished: false })
     const logins = server.acceptedKeys()
-    hold.open()
-    await expect.poll(() => named().messages.filter(message =>
-      message.role === 'assistant' && String(message.content).includes(tail)
-    ), { timeout: 25_000 }).toHaveLength(1)
-    expect(provider.completions[0]).toMatchObject({ aborted: false, finished: true, sentText: partial + tail })
-    const committedOffline = named()
-    expect(committedOffline.admissions).toEqual([])
-    expect(server.acceptedKeys()).toBe(logins)
-    await server.startServer()
+    if (gatewayLoss) {
+      expect(provider.completions[0]).toMatchObject({ aborted: true, finished: false, sentText: partial })
+      expect(named()).toEqual(beforeLoss)
+      server.verifyLogin()
+      if (autoContinue) provider.script(input, [{ text: [continuedReply] }])
+    } else {
+      expect(provider.completions[0]).toMatchObject({ aborted: false, finished: false })
+      hold.open()
+      await expect.poll(() => named().messages.filter(message =>
+        message.role === 'assistant' && String(message.content).includes(tail)
+      ), { timeout: 25_000 }).toHaveLength(1)
+      expect(provider.completions[0]).toMatchObject({ aborted: false, finished: true, sentText: partial + tail })
+      expect(server.acceptedKeys()).toBe(logins)
+      await server.startServer()
+    }
+    const interrupted = named()
+    expect(interrupted.admissions).toEqual([])
 
     // Leave the stale pane before reopening. This exercises a fresh attach
     // instead of depending on the already-fronted tab's background refresh.
@@ -453,24 +501,69 @@ async function verifyInterruptedTurn(
     await expect(viewport.getByText(canonical, { exact: true })).toBeVisible({ timeout: 55_000 })
     await expect.poll(() => focus(page)).toEqual({ id: canonical, owner })
     await expect(viewport.getByText(input, { exact: true })).toBeVisible({ timeout: 20_000 })
-    await expect(viewport.getByText(partial + tail, { exact: true })).toBeVisible({ timeout: 20_000 })
+    if (gatewayLoss) {
+      await expect(viewport.getByText(partial + tail, { exact: true })).toHaveCount(0)
+      await expect.poll(() => backendProcesses(remote).filter(proc =>
+        !previousPids.includes(proc.pid) && proc.cmdline.includes(`--profile ${profile} serve --isolated`) &&
+        proc.cmdline.includes('--ssh-owner-nonce')
+      )).toHaveLength(1)
+    } else {
+      await expect(viewport.getByText(partial + tail, { exact: true })).toBeVisible({ timeout: 20_000 })
+    }
     if (lostAck) {
       await expect(composer(page)).toContainText(input)
       await composer(page).press('Enter')
       await expect(page.getByText('Check the conversation before sending it again.', { exact: false })).toBeVisible()
       expect(await page.evaluate(() => window.__E07_LOST_ACK__?.withheld)).toBe(1)
     }
-    expect(committedOffline.sessions).toEqual(beforeLoss.sessions)
-    expect(committedOffline.messages.filter(message => message.role === 'user' && message.content === input)).toHaveLength(1)
-    expect(named()).toEqual(committedOffline)
+    const namedResumes = () => wire.slice(reopenFrom).filter(frame =>
+      frame.method === 'session.resume' && frame.sessionId === canonical
+    )
+    await expect.poll(() => namedResumes().some(frame =>
+      frame.port !== port && frame.profile === profile && frame.reply !== undefined && frame.reply.code === undefined
+    )).toBe(true)
+    expect(namedResumes().every(frame => frame.port !== port)).toBe(true)
+    if (autoContinue) {
+      await expect.poll(() => provider.completions[1]?.finished, { timeout: 35_000 }).toBe(true)
+      await expect(viewport.getByText(continuedReply, { exact: true })).toBeVisible()
+      await expect.poll(() => named().messages.at(-1)?.content).toBe(continuedReply)
+      const settled = named()
+      expect(settled.sessions).toEqual(interrupted.sessions)
+      expect(settled.admissions).toEqual([])
+      expect(settled.messages.slice(0, interrupted.messages.length)).toEqual(interrupted.messages)
+      expect(settled.messages.slice(interrupted.messages.length)).toEqual([
+        expect.objectContaining({
+          session_id: canonical,
+          role: 'user',
+          content: expect.stringMatching(new RegExp(`^\\[System note: Your previous turn was interrupted mid-run.*\\n\\n${input}$`))
+        }),
+        expect.objectContaining({ session_id: canonical, role: 'assistant', content: continuedReply })
+      ])
+      const lastUser = provider.completions[1]!.body.messages.findLast((message: { role: string }) => message.role === 'user')
+      expect(JSON.stringify(lastUser.content)).toContain(continuationNote)
+      expect(JSON.stringify(lastUser.content)).toContain(input)
+    } else if (gatewayLoss) {
+      // The same client can restore its journaled fragment even after renderer reload.
+      await page.reload()
+      await page.getByRole('button', { name: 'Bots', exact: true })
+        .or(page.getByRole('tab', { name: 'Bots', exact: true })).first().click()
+      await row.click()
+      await expect.poll(() => focus(page)).toEqual({ id: canonical, owner })
+      await expect(viewport.getByText(input, { exact: true })).toBeVisible()
+      await expect(viewport.getByText(partial, { exact: true }).first()).toBeVisible()
+      await expect(viewport.getByText(partial + tail, { exact: true })).toHaveCount(0)
+    }
+    expect(interrupted.sessions).toEqual(beforeLoss.sessions)
+    expect(interrupted.messages.filter(message => message.role === 'user' && message.content === input)).toHaveLength(1)
+    if (!autoContinue) expect(named()).toEqual(interrupted)
     expect(submissions()).toEqual(submitted)
-    expect(provider.completions.map(turn => turn.marker)).toEqual([input])
-    const recovery = wire.slice(reopenFrom)
-    expect(recovery.filter(frame => frame.method === 'session.create')).toEqual([])
-    const resumes = recovery.filter(frame => frame.method === 'session.resume')
-    expect(resumes.some(frame => frame.port !== port && frame.profile === profile && frame.sessionId === canonical)).toBe(true)
-    const namedResumes = resumes.filter(frame => frame.sessionId === canonical)
-    expect(namedResumes.every(frame => frame.port !== port)).toBe(true)
+    expect(provider.completions.map(turn => turn.marker)).toEqual(autoContinue ? [input, input] : [input])
+    expect(wire.slice(from).filter(frame => frame.method === 'session.create')).toEqual([])
+    if (gatewayLoss) {
+      expect(server.listener()).toBe(listener)
+      expect(listener.exitCode).toBeNull()
+      expect(listener.signalCode).toBeNull()
+    }
     expect(server.acceptedKeys()).toBeGreaterThan(logins)
   } finally {
     hold.open()
@@ -479,7 +572,7 @@ async function verifyInterruptedTurn(
 
 async function verifySshBotChat(
   routeProfile: string,
-  transition?: 'reconnect' | 'edit' | 'replace' | 'rotate' | 'turn' | 'lost-ack'
+  transition?: 'reconnect' | 'edit' | 'replace' | 'rotate' | TurnInterruption
 ) {
   const rotate = transition === 'rotate'
   const reconnect = transition === 'reconnect' || rotate
@@ -508,6 +601,10 @@ async function verifySshBotChat(
     seedInstall(local, localEnv, provider.url, profile, 'local', '1'.repeat(32))
     seedInstall(remote, remoteEnv, provider.url, edit ? [profile, editedProfile] : profile, 'ssh', '2'.repeat(32))
     if (successor) seedInstall(successor, successorEnv!, provider.url, profile, 'replacement', '3'.repeat(32))
+    if (transition === 'gateway-loss-no-continue') {
+      fs.appendFileSync(path.join(remote.hermesHome, 'profiles', profile, 'config.yaml'),
+        '\ndesktop:\n  auto_continue:\n    enabled: false\n')
+    }
     const initial = () => [
       ...boxes.flatMap(box => storedChats(box.hermesHome, profile)),
       ...(edit ? [storedChats(remote.hermesHome, editedProfile)[1]] : [])
@@ -692,10 +789,11 @@ async function verifySshBotChat(
     }
     expect(initial()).toEqual(before)
     expect(provider.completions.length).toBe(0)
-    if (transition === 'turn' || transition === 'lost-ack') {
+    if (transition === 'turn' || transition === 'lost-ack' ||
+      transition === 'gateway-loss' || transition === 'gateway-loss-no-continue') {
       await verifyInterruptedTurn(
         page, row, remote, original, provider, wire, sockets, reads[0]!.port,
-        { connectionId, profile: routeProfile }, transition === 'lost-ack'
+        { connectionId, profile: routeProfile }, transition
       )
       expect(initial().slice(0, 3)).toEqual(before.slice(0, 3))
     }
@@ -770,4 +868,14 @@ test('Bot Mode reopens the canonical chat after SSH loss during a turn', async (
 test('Bot Mode recovers the committed SSH Bot turn after losing its acknowledgement', async () => {
   test.setTimeout(180_000)
   await verifySshBotChat('default', 'lost-ack')
+})
+
+test('Bot Mode reopens the canonical SSH chat after an in-flight Gateway exits', async () => {
+  test.setTimeout(180_000)
+  await verifySshBotChat('default', 'gateway-loss')
+})
+
+test('Bot Mode reopens the canonical SSH chat with native continuation disabled', async () => {
+  test.setTimeout(180_000)
+  await verifySshBotChat('default', 'gateway-loss-no-continue')
 })

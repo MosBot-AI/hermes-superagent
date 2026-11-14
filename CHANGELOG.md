@@ -199,6 +199,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Verify OpenSSH Bot Mode recovery after remote Gateway process loss. Explicit reopen triggers one native continuation by default. Disabling native continuation recovers the chat without another provider request (#33).
+
 - Verify that a lost legacy SSH prompt acknowledgement restores the draft and that Desktop warns on its explicit retry without resubmitting. The original reply remains available in the reopened chat (#33).
 
 - Verify that a legacy SSH Bot Mode turn can finish while the transport is down and that an explicit reopen reads the committed reply without resubmitting. Record the missing durable admission receipt (#33).
