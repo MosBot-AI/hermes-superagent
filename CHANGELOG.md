@@ -205,6 +205,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 - Verify the review-only SSH draft recovery in locally built unsigned Linux x64 AppImages for both continuation modes and reject a mismatched build before launch (#33).
 
+- Verify SSH draft isolation across an endpoint edit when two installations share the same profile and chat ID, with recovery available again on the original endpoint in the review build (#33).
+
 - Add a review-only Hermes Desktop proposal to recover an uncertain SSH text draft from the scoped native journal after abrupt exit and block unchanged resubmission (#33).
 
 - Verify explicit SSH Bot Chat reopen after abrupt Desktop exit. The native prepared submission survives, while the restored draft and its retry identity are lost in the tested window (#33).

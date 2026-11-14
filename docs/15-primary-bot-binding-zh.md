@@ -320,6 +320,12 @@ Bot Mode 的确切标题 `session.list` 查询携带所选后端 profile。列�
 
 使用同一运行器的 `--case bot-canonical-ssh-draft-crash` 或 `--case bot-canonical-ssh-draft-crash-no-continue`，并可添加 `--appimage`。本用例覆盖草稿刚恢复后进程立即异常退出的情况。渲染进程草稿及重试身份的持久恢复仍有缺口。跨客户端恢复、自动重连及经 owner 授权的写入需单独验收。[仅供审阅的草稿恢复提案](../experiments/ssh-draft-recovery/README-zh.md)支持从原作用域的原生日志显式恢复，同时保留未确认旧协议提交的保护。源码版及两个本地构建的未签名 Linux x64 AppImage 在两种续跑配置下复现了干净版和提案版的行为。打包提案用例在 Electron 启动前通过安装标记拒绝干净镜像。
 
+#### 当前固定版本在 OpenSSH 端点编辑后隔离草稿
+
+异常退出后的替换用例禁用原生续跑，在打开 Bot Chat 前将已保存的 SSH 条目切换到第二个经过认证的夹具监听端点。两条路径的已保存连接 ID、Desktop profile、目标 profile 和已存储会话 ID 均相同。替换端独有的消息记录确认了 Desktop 打开的是哪个安装。两个源码构建和两个本地构建的未签名 Linux x64 镜像均使输入框保持为空，并在本地日志中保留原条目。访问不新建会话、不修改两个会话的消息记录，也不发出新的提示提交或 provider 调用。恢复原端点后，候选构建再次提供草稿查看操作，继续保留未确认提交的保护。
+
+运行 `--case bot-canonical-ssh-draft-endpoint-replacement`。[提案操作说明](../experiments/ssh-draft-recovery/README-zh.md#linux-打包验收)链接了匹配的构建摘要和验收步骤。测试可识别已编辑端点与未变更的配置路径。仅凭相同的路径值无法验证安装或 owner 的连续性。
+
 #### 当前固定版本的 OpenSSH 恢复前读取
 
 命名 profile 的 SSH Gateway 在回合中退出后，夹具切到本地对照会话。原 OpenSSH 监听器仍可连接，并保留默认启用的原生续跑配置。远端原会话包含已提交的用户消息，原生中断标记仍记录已终止的进程为写入者。

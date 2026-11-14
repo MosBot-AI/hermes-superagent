@@ -41,6 +41,7 @@ SSH_DRAFT_RESTART_CASE = "bot-canonical-ssh-draft-restart"
 SSH_DRAFT_RESTART_DISABLED_CASE = "bot-canonical-ssh-draft-restart-no-continue"
 SSH_DRAFT_CRASH_CASE = "bot-canonical-ssh-draft-crash"
 SSH_DRAFT_CRASH_DISABLED_CASE = "bot-canonical-ssh-draft-crash-no-continue"
+SSH_DRAFT_REPLACEMENT_CASE = "bot-canonical-ssh-draft-endpoint-replacement"
 SSH_COLD_READ_CASE = "bot-canonical-ssh-cold-chat-read"
 SSH_SPEC = "desktop_bot_ssh.spec.ts"
 SSH_FIXTURES = (GATEWAY_FIXTURE, CANONICAL_OBSERVER, APPIMAGE_FIXTURE)
@@ -75,6 +76,7 @@ APPIMAGE_CASES = (
     SSH_DRAFT_RESTART_DISABLED_CASE,
     SSH_DRAFT_CRASH_CASE,
     SSH_DRAFT_CRASH_DISABLED_CASE,
+    SSH_DRAFT_REPLACEMENT_CASE,
     SSH_COLD_READ_CASE,
     SAVED_TOKEN_CASE,
     COMPRESSED_LOCAL_CASE,
@@ -83,7 +85,11 @@ APPIMAGE_CASES = (
 WEBAPP_SIGNOUT_CASE = "active-webapp-sign-out"
 PROPOSAL = ROOT / "experiments/bot-webapp-canonical"
 DRAFT_RECOVERY_PROPOSAL = ROOT / "experiments/ssh-draft-recovery"
-DRAFT_CRASH_CASES = (SSH_DRAFT_CRASH_CASE, SSH_DRAFT_CRASH_DISABLED_CASE)
+DRAFT_CRASH_CASES = (
+    SSH_DRAFT_CRASH_CASE,
+    SSH_DRAFT_CRASH_DISABLED_CASE,
+    SSH_DRAFT_REPLACEMENT_CASE,
+)
 CASES = {
     "profile-routing": (
         "desktop_profile_route_ipc.spec.ts",
@@ -129,6 +135,11 @@ CASES = {
         SSH_SPEC,
         SSH_FIXTURES,
         "OpenSSH Bot Mode abrupt-exit draft with continuation disabled",
+    ),
+    SSH_DRAFT_REPLACEMENT_CASE: (
+        SSH_SPEC,
+        SSH_FIXTURES,
+        "OpenSSH Bot Mode draft endpoint replacement",
     ),
     SSH_COLD_READ_CASE: (SSH_SPEC, SSH_FIXTURES, "OpenSSH Bot Mode cold chat read"),
     SAVED_TOKEN_CASE: (
@@ -187,6 +198,7 @@ CASE_TITLE_FILTERS = {
     SSH_DRAFT_RESTART_DISABLED_CASE: "guards the restarted SSH draft with continuation disabled$",
     SSH_DRAFT_CRASH_CASE: "reopens the SSH chat after abrupt Desktop exit$",
     SSH_DRAFT_CRASH_DISABLED_CASE: "reopens the abrupt-exit SSH chat with continuation disabled$",
+    SSH_DRAFT_REPLACEMENT_CASE: "keeps an abrupt-exit SSH draft off a replacement endpoint$",
     SSH_COLD_READ_CASE: "reads the interrupted SSH chat before resuming it$",
     COMPRESSED_LOCAL_CASE: "compressed Bot Chat over the local private ticket$",
     COMPRESSED_SAVED_CASE: "compressed Bot Chat over the saved Webapp token$",

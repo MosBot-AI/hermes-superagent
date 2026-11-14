@@ -38,6 +38,14 @@
       "sha256": "99e6085ab612cc2676eb582c6124f6ca5635c80118996d5f428f757301223d6b",
       "cases_passed": 2
     },
-    "clean_image_refused_before_candidate_launch": true
+    "clean_image_refused_before_candidate_launch": true,
+    "endpoint_replacement": {
+      "case": "bot-canonical-ssh-draft-endpoint-replacement",
+      "source_clean_passed": true,
+      "source_proposal_passed": true,
+      "native_continuation": false,
+      "clean_passed": true,
+      "proposal_passed": true
+    }
   }
 }
