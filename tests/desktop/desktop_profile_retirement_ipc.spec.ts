@@ -4,6 +4,7 @@ import * as path from 'node:path'
 
 import { expect, type ElectronApplication, type Page, test } from '@playwright/test'
 
+import { launchBotDesktop } from './desktop_bot_appimage'
 import { lookup, observeWire, storedChats, type WireFrame, type WireSocket } from './desktop_bot_canonical_observer'
 import {
   type Gateway,
@@ -15,7 +16,7 @@ import {
   stopGateway,
   waitForEndpoint
 } from './desktop_native_gateway_fixture'
-import { composer, createCoreSandbox, freePort, launchCoreApp, sandboxProcesses } from './harness'
+import { composer, createCoreSandbox, freePort, sandboxProcesses } from './harness'
 import { startScriptedProvider } from './provider'
 
 const fixtureModule = 'apps.desktop.e2e.core.desktop_profile_retirement_fixture'
@@ -210,7 +211,7 @@ test('saved Webapp Desktop refuses a parked named profile and reopens its chat a
       mode: 0o600
     })
 
-    const live = await launchCoreApp(localEnv)
+    const live = await launchBotDesktop(localEnv)
     app = live.app
     const { page } = live
     const sockets = new Map<WireFrame, WireSocket>()

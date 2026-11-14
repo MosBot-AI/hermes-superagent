@@ -143,6 +143,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 - Verify live retirement and same-name hot serve over retained native Gateway and Linux Electron WebSockets. The Desktop Bot Mode click shows retry while the named profile is absent and opens its original chat after hot serve (#33).
 
+- Verify saved Webapp token profile retirement and same-name hot serve in a matching unsigned Linux x64 Desktop AppImage, with the original scoped socket and transcript preserved (#33).
+
 - Verify the saved Webapp token Bot Mode lookup on the clean Hermes pin and a separate proposed build. The proposal scopes the existing chat probe to the selected backend profile and restores the retry prompt after an uncertain empty lookup (#33).
 
 - Add real Linux Electron acceptance for Bot Mode canonical chat refusal and retry. The fixture checks that permission refusal and an uncertain empty lookup leave the current view intact before an ordinary retry opens the existing chat (#33).

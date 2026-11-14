@@ -143,6 +143,8 @@
 
 - 通过保持连接的原生 Gateway 和 Linux Electron WebSocket 验证运行时退役及同名热上线。命名 profile 缺席时，点击 Desktop Bot Mode 会提示重试；热上线后可打开其原聊天（#33）。
 
+- 在匹配的未签名 Linux x64 Desktop AppImage 中验证已保存 Webapp token 路由的 profile 退役和同名热上线，保留原作用域套接字及会话记录（#33）。
+
 - 在干净的固定 Hermes 版本和独立候选构建上验证已保存 Webapp Token 的 Bot Mode 查询。候选将原聊天探查限定到选定的后端 profile，并在出现不确定的空查询结果后恢复重试提示（#33）。
 
 - 新增真实 Linux Electron 验收，覆盖 Bot Mode 规范聊天的拒绝与重试。夹具检查权限拒绝和不确定的空查询结果均保留当前视图，随后正常重试可打开已有聊天（#33）。

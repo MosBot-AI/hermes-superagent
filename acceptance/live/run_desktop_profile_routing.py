@@ -47,6 +47,7 @@ SSH_COLD_READ_CASE = "bot-canonical-ssh-cold-chat-read"
 SSH_SPEC = "desktop_bot_ssh.spec.ts"
 SSH_FIXTURES = (GATEWAY_FIXTURE, CANONICAL_OBSERVER, APPIMAGE_FIXTURE)
 SAVED_TOKEN_CASE = "bot-canonical-saved-token"
+PROFILE_RETIREMENT_CASE = "profile-retirement"
 COMPRESSED_LOCAL_CASE = "compressed-history-adoption"
 COMPRESSED_SAVED_CASE = "compressed-history-saved-token"
 COMPRESSED_SPEC = "desktop_compressed_adoption.spec.ts"
@@ -81,6 +82,7 @@ APPIMAGE_CASES = (
     SSH_DRAFT_UNCHANGED_ROUTE_CASE,
     SSH_COLD_READ_CASE,
     SAVED_TOKEN_CASE,
+    PROFILE_RETIREMENT_CASE,
     COMPRESSED_LOCAL_CASE,
     COMPRESSED_SAVED_CASE,
 )
@@ -156,9 +158,14 @@ CASES = {
         CANONICAL_FIXTURES,
         "saved Webapp token Bot Mode",
     ),
-    "profile-retirement": (
+    PROFILE_RETIREMENT_CASE: (
         "desktop_profile_retirement_ipc.spec.ts",
-        (GATEWAY_FIXTURE, "desktop_profile_retirement_fixture.py", CANONICAL_OBSERVER),
+        (
+            GATEWAY_FIXTURE,
+            "desktop_profile_retirement_fixture.py",
+            CANONICAL_OBSERVER,
+            APPIMAGE_FIXTURE,
+        ),
         "saved Webapp profile retirement",
     ),
     COMPRESSED_LOCAL_CASE: (
