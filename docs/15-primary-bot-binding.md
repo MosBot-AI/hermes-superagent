@@ -302,7 +302,15 @@ Both combined acknowledgement and Gateway loss cases also have a renderer-reload
 
 In both variants the new renderer warns that the earlier send could not be confirmed and issues no additional `prompt.submit`. The transcript, provider request count and three control chats remain unchanged after the first reopen settles. With continuation disabled, the original provider request remains the only attempt. There is still no durable admission ID.
 
-Run `--case bot-canonical-ssh-draft-reload` or `--case bot-canonical-ssh-draft-reload-no-continue` with the same runner and optional `--appimage`. This covers a reload in the same Desktop user-data directory. A full app restart, another client, a new submission and authenticated owner writes require separate evidence.
+Run `--case bot-canonical-ssh-draft-reload` or `--case bot-canonical-ssh-draft-reload-no-continue` with the same runner and optional `--appimage`. This covers a reload in the same Desktop user-data directory. The [Desktop restart cases](#current-pin-openssh-draft-recovery-after-desktop-restart) close the Electron process before the first reopen.
+
+#### Current-Pin OpenSSH Draft Recovery After Desktop Restart
+
+After the combined acknowledgement and Gateway loss, Desktop restores the original draft. The fixture switches to the local control chat and closes Electron before reopening the interrupted chat. It verifies that the first Electron process exited and launches a different process using the same Desktop user-data directory, without an acknowledgement filter. The OpenSSH listener stays available. The remote transcript and provider request count remain unchanged through the relaunch and opening the Bot Mode roster.
+
+An explicit click resumes the original named chat through a new forward. A relaunch can leave more than one fixture-owned named-profile backend. The scoped transcript and provider count distinguish the continuation from backend startup. The native default starts one continuation and persists its interruption note and reply. With `desktop.auto_continue.enabled: false` in the named profile, the original user message remains and the provider receives no second request. In both modes the restored draft survives the full app restart. One unedited Enter displays the uncertainty warning without another submit, provider request or transcript change. No new session or durable admission ID is observed, and the three control chats stay unchanged.
+
+Run `--case bot-canonical-ssh-draft-restart` or `--case bot-canonical-ssh-draft-restart-no-continue` with the same runner and optional `--appimage`. These cases cover a normal Desktop exit and relaunch in the same user-data directory. Recovery from an abrupt Desktop exit, another client, automatic reattachment and authenticated owner writes require separate evidence.
 
 ### Current-Pin Native Profile Lifecycle
 

@@ -33,6 +33,7 @@ interface TurnInterruption {
   lostAck?: boolean
   disableContinuation?: boolean
   reloadDraft?: boolean
+  restartDraft?: boolean
 }
 
 function shellQuote(value: string) {
@@ -399,7 +400,6 @@ function providerBackendPid(remote: CoreSandbox, provider: ScriptedProvider) {
 
 async function verifyInterruptedTurn(
   page: Page,
-  row: Locator,
   remote: CoreSandbox,
   server: Awaited<ReturnType<typeof prepareSshServer>>,
   provider: ScriptedProvider,
@@ -407,7 +407,8 @@ async function verifyInterruptedTurn(
   sockets: Map<WireFrame, WireSocket>,
   port: string,
   owner: { connectionId: string; profile: string },
-  { lostAck, gatewayLoss, disableContinuation, reloadDraft }: TurnInterruption
+  { lostAck, gatewayLoss, disableContinuation, reloadDraft }: TurnInterruption,
+  restartDesktop?: () => Promise<Page>
 ) {
   const autoContinue = gatewayLoss && !disableContinuation
   const input = 'U18-sshturn'
@@ -419,7 +420,8 @@ async function verifyInterruptedTurn(
   provider.script(input, [{ text: [partial, tail], holdAfterFirstChunk: hold }])
   const from = wire.length
   const named = () => storedChats(remote.hermesHome, profile)[1]!
-  const viewport = page.locator('[data-slot="aui_thread-viewport"]').filter({ visible: true }).first()
+  const viewport = () => page.locator('[data-slot="aui_thread-viewport"]').filter({ visible: true }).first()
+  const row = () => page.locator(`[data-roster-key="${owner.connectionId}::${owner.profile}"]`)
   const submissions = () => wire.slice(from).filter(frame => frame.method === 'prompt.submit')
 
   try {
@@ -441,7 +443,7 @@ async function verifyInterruptedTurn(
     if (lostAck) {
       await expect.poll(() => page.evaluate(() => window.__E07_LOST_ACK__?.withheld)).toBe(1)
     } else {
-      await expect(viewport.getByText(partial, { exact: true })).toBeVisible()
+      await expect(viewport().getByText(partial, { exact: true })).toBeVisible()
     }
 
     const socket = sockets.get(submit!)!
@@ -504,19 +506,35 @@ async function verifyInterruptedTurn(
       expect(provider.completions).toHaveLength(1)
       expect(named()).toEqual(interrupted)
     }
+    if (restartDesktop) {
+      page = await restartDesktop()
+      expect(await page.evaluate(() => window.__E07_LOST_ACK__)).toBeUndefined()
+      await page.getByRole('button', { name: 'Bots', exact: true })
+        .or(page.getByRole('tab', { name: 'Bots', exact: true })).first().click()
+      expect(provider.completions).toHaveLength(1)
+      expect(named()).toEqual(interrupted)
+      expect(submissions()).toEqual(submitted)
+    }
     const reopenFrom = wire.length
-    await row.click()
-    await expect(viewport.getByText(canonical, { exact: true })).toBeVisible({ timeout: 55_000 })
+    await row().click()
+    await expect(viewport().getByText(canonical, { exact: true })).toBeVisible({ timeout: 55_000 })
     await expect.poll(() => focus(page)).toEqual({ id: canonical, owner })
-    await expect(viewport.getByText(input, { exact: true })).toBeVisible({ timeout: 20_000 })
+    await expect(viewport().getByText(input, { exact: true })).toBeVisible({ timeout: 20_000 })
     if (gatewayLoss) {
-      await expect(viewport.getByText(partial + tail, { exact: true })).toHaveCount(0)
-      await expect.poll(() => backendProcesses(remote).filter(proc =>
+      await expect(viewport().getByText(partial + tail, { exact: true })).toHaveCount(0)
+      const successors = () => backendProcesses(remote).filter(proc =>
         !previousPids.includes(proc.pid) && proc.cmdline.includes(`--profile ${profile} serve --isolated`) &&
         proc.cmdline.includes('--ssh-owner-nonce')
-      )).toHaveLength(1)
+      )
+      if (restartDesktop) {
+        // Relaunch can leave more than one named-profile backend. Verify the
+        // scoped chat's execution with the transcript and provider counts below.
+        await expect.poll(() => successors().length).toBeGreaterThan(0)
+      } else {
+        await expect.poll(successors).toHaveLength(1)
+      }
     } else {
-      await expect(viewport.getByText(partial + tail, { exact: true })).toBeVisible({ timeout: 20_000 })
+      await expect(viewport().getByText(partial + tail, { exact: true })).toBeVisible({ timeout: 20_000 })
     }
     const namedResumes = () => wire.slice(reopenFrom).filter(frame =>
       frame.method === 'session.resume' && frame.sessionId === canonical
@@ -528,7 +546,7 @@ async function verifyInterruptedTurn(
     let recovered = interrupted
     if (autoContinue) {
       await expect.poll(() => provider.completions[1]?.finished, { timeout: 35_000 }).toBe(true)
-      await expect(viewport.getByText(continuedReply, { exact: true })).toBeVisible()
+      await expect(viewport().getByText(continuedReply, { exact: true })).toBeVisible()
       await expect.poll(() => named().messages.at(-1)?.content).toBe(continuedReply)
       recovered = named()
       expect(recovered.sessions).toEqual(interrupted.sessions)
@@ -564,16 +582,16 @@ async function verifyInterruptedTurn(
       }
       await page.getByRole('button', { name: 'Bots', exact: true })
         .or(page.getByRole('tab', { name: 'Bots', exact: true })).first().click()
-      await row.click()
+      await row().click()
       await expect.poll(() => focus(page)).toEqual({ id: canonical, owner })
-      await expect(viewport.getByText(input, { exact: true })).toBeVisible()
+      await expect(viewport().getByText(input, { exact: true })).toBeVisible()
       if (autoContinue) {
-        await expect(viewport.getByText(continuedReply, { exact: true })).toBeVisible()
+        await expect(viewport().getByText(continuedReply, { exact: true })).toBeVisible()
       }
       if (recoverFragment) {
-        await expect(viewport.getByText(partial, { exact: true }).first()).toBeVisible()
+        await expect(viewport().getByText(partial, { exact: true }).first()).toBeVisible()
       }
-      await expect(viewport.getByText(partial + tail, { exact: true })).toHaveCount(0)
+      await expect(viewport().getByText(partial + tail, { exact: true })).toHaveCount(0)
       if (reloadDraft) {
         await expect.poll(() => wire.slice(reloadFrom).some(frame =>
           frame.method === 'session.resume' && frame.port !== port && frame.profile === profile &&
@@ -587,7 +605,9 @@ async function verifyInterruptedTurn(
       await expect(composer(page)).toContainText(input)
       await composer(page).press('Enter')
       await expect(page.getByText('This server could not confirm the earlier send of this message,', { exact: false })).toBeVisible()
-      expect(await page.evaluate(() => window.__E07_LOST_ACK__?.withheld)).toBe(reloadDraft ? 0 : 1)
+      expect(await page.evaluate(() => window.__E07_LOST_ACK__?.withheld)).toBe(
+        restartDesktop ? undefined : reloadDraft ? 0 : 1
+      )
     }
     expect(interrupted.sessions).toEqual(beforeLoss.sessions)
     expect(interrupted.messages.filter(message => message.role === 'user' && message.content === input)).toHaveLength(1)
@@ -827,9 +847,23 @@ async function verifySshBotChat(
     expect(initial()).toEqual(before)
     expect(provider.completions.length).toBe(0)
     if (turn) {
+      const restartDesktop = turn.restartDraft ? async () => {
+        const originalProcess = app!.process()
+        await app!.close()
+        expect(originalProcess.exitCode).toBe(0)
+        expect(originalProcess.pid).toBeDefined()
+        expect(listProcesses().some(proc => proc.pid === originalProcess.pid)).toBe(false)
+
+        const restarted = await launchBotDesktop(localEnv)
+        app = restarted.app
+        expect(app.process().pid).toBeDefined()
+        expect(app.process().pid).not.toBe(originalProcess.pid)
+        observeWire(restarted.page, sockets, wire)
+        return restarted.page
+      } : undefined
       await verifyInterruptedTurn(
-        page, row, remote, original, provider, wire, sockets, reads[0]!.port,
-        { connectionId, profile: routeProfile }, turn
+        page, remote, original, provider, wire, sockets, reads[0]!.port,
+        { connectionId, profile: routeProfile }, turn, restartDesktop
       )
       expect(initial().slice(0, 3)).toEqual(before.slice(0, 3))
     }
@@ -938,5 +972,20 @@ test('Bot Mode guards the reloaded SSH draft with continuation disabled', async 
     lostAck: true,
     disableContinuation: true,
     reloadDraft: true
+  })
+})
+
+test('Bot Mode guards the restored SSH draft after Desktop restart', async () => {
+  test.setTimeout(180_000)
+  await verifySshBotChat('default', { gatewayLoss: true, lostAck: true, restartDraft: true })
+})
+
+test('Bot Mode guards the restarted SSH draft with continuation disabled', async () => {
+  test.setTimeout(180_000)
+  await verifySshBotChat('default', {
+    gatewayLoss: true,
+    lostAck: true,
+    disableContinuation: true,
+    restartDraft: true
   })
 })
