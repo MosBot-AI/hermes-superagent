@@ -1,0 +1,273 @@
+diff --git a/hermes_cli/profile_cmd.py b/hermes_cli/profile_cmd.py
+index dfde72addfb4f9523d96e21ee060b8e31a5eb9d9..c2b4275248f123fc84a8893cdb9fbc6d6fde28c3 100644
+--- a/hermes_cli/profile_cmd.py
++++ b/hermes_cli/profile_cmd.py
+@@ -441,12 +441,16 @@ def _profile_alias(args):
+ 
+ def _profile_rename(args):
+     from hermes_cli.profiles import normalize_profile_name, rename_profile
++    from gateway.runtime_ownership import OwnershipConflict
+     try:
+-        new_dir = rename_profile(args.old_name, args.new_name)
++        options = {}
++        if getattr(args, "preserve_local_sessions", False):
++            options["preserve_local_sessions"] = True
++        new_dir = rename_profile(args.old_name, args.new_name, **options)
+         if normalize_profile_name(args.old_name) != "default":
+             print(f"\nProfile renamed: {args.old_name} → {args.new_name}")
+             print(f"Path: {new_dir}\n")
+-    except (ValueError, FileExistsError, FileNotFoundError) as e:
++    except (ValueError, OSError, OwnershipConflict) as e:
+         _die(f"Error: {e}")
+ 
+ 
+diff --git a/hermes_cli/profile_identity.py b/hermes_cli/profile_identity.py
+index 98ce4556ad03c64f8dfc143e4e0a4dc65115f9f2..038963adee843c768c1a0d49c9175a1073722402 100644
+--- a/hermes_cli/profile_identity.py
++++ b/hermes_cli/profile_identity.py
+@@ -22,10 +22,84 @@ Checkpoint project state has no live in-memory owner and is rekeyed locally afte
+ from __future__ import annotations
+ 
+ import contextlib
++import ctypes
++import errno
++import os
++import sqlite3
++import stat
+ import sys
+ from pathlib import Path
+ 
+ 
++def _rename_noreplace(source: Path, destination: Path) -> None:
++    """Linux rename with an atomic refusal if any destination entry exists."""
++    libc = ctypes.CDLL(None, use_errno=True)
++    try:
++        renameat2 = libc.renameat2
++    except AttributeError as exc:
++        raise ValueError("LOCAL receipt preservation requires renameat2 support") from exc
++    renameat2.argtypes = (ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint)
++    renameat2.restype = ctypes.c_int
++    # Keep the standard rename audit visible to tooling around the native CLI.
++    sys.audit("os.rename", source, destination, -1, -1)
++    at_fdcwd, rename_noreplace = -100, 1
++    if renameat2(at_fdcwd, os.fsencode(source), at_fdcwd, os.fsencode(destination), rename_noreplace):
++        error = ctypes.get_errno()
++        if error in (errno.ENOSYS, errno.EINVAL, errno.EOPNOTSUPP):
++            raise ValueError("This filesystem does not support exclusive profile rename")
++        raise OSError(error, os.strerror(error), str(source), None, str(destination))
++
++
++def rename_with_local_receipts(old: str, new: str) -> Path:
++    """Run only as an explicit same-installation rename of the actual stopped home."""
++    from gateway.runtime_ownership import exclusive_maintenance
++    from gateway.session_policy import restore_policy
++    from hermes_cli.profiles import _rename_profile, get_profile_dir
++    from hermes_state_registry import acquire, release_or_close
++    from hermes_state_runtime import RuntimeStoreError
++
++    root, source, destination = (get_profile_dir(name) for name in ("default", old, new))
++    if source.is_symlink() or not source.is_dir() or source.parent.resolve() != root.resolve() / "profiles":
++        raise ValueError("LOCAL receipt preservation requires the original profile directory")
++    if destination.exists() or destination.is_symlink():
++        raise FileExistsError("The destination profile already exists")
++    identity = source.stat()
++
++    def move(old_dir, new_dir):
++        current = old_dir.lstat()
++        if (current.st_dev, current.st_ino) != (identity.st_dev, identity.st_ino):
++            raise ValueError("The profile directory changed during rename")
++        db_path = old_dir / "state.db"
++        info = db_path.lstat()
++        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
++            raise ValueError("LOCAL receipt preservation requires a private state database")
++        # The held lock inode travels with the directory. Publish the receipt and
++        # its native routing changes before releasing that lock.
++        _rename_noreplace(old_dir, new_dir)
++        try:
++            db = acquire(new_dir / "state.db")
++            try:
++                def validate_policy(data):
++                    policy = restore_policy(data)
++                    if Path(policy.cwd).resolve().is_relative_to(old_dir.resolve()):
++                        raise RuntimeStoreError("invalid_params", detail="LOCAL policy uses the moved profile as its workspace")
++                db.rekey_profile_state(old, new, local_receipt_policy=validate_policy)
++            finally:
++                release_or_close(db)
++        except (RuntimeStoreError, sqlite3.IntegrityError) as exc:
++            # A validation error rolls back the SQLite transaction. Restore the
++            # prior namespace before any sidecar, alias or service is republished.
++            _rename_noreplace(new_dir, old_dir)
++            if isinstance(exc, RuntimeStoreError) and exc.detail:
++                raise ValueError(f"{exc.reason}: {exc.detail}") from exc
++            raise
++        except (OSError, sqlite3.Error, ValueError) as exc:
++            raise ValueError("LOCAL receipt migration could not confirm settlement after the move") from exc
++
++    with exclusive_maintenance([root, source], purpose="profile-rename"):
++        return _rename_profile(old, new, move=move)
++
++
+ def migrate_profile_identity(old_name: str, new_name: str) -> bool:
+     """Retry the durable identity migration of a rename that already completed.
+ 
+diff --git a/hermes_cli/profiles.py b/hermes_cli/profiles.py
+index 15a147c862ca6d60ab5175eb79efb569d5361772..a6b9cea3c3f7580d893423c1759cfb4838d88921 100644
+--- a/hermes_cli/profiles.py
++++ b/hermes_cli/profiles.py
+@@ -2210,11 +2210,22 @@ def _refuse_rename_without_file_tooling(old_canon: str) -> None:
+             "backend under that name, and renaming it there is not supported. Nothing was changed.")
+ 
+ 
+-def rename_profile(old_name: str, new_name: str) -> Path:
++def rename_profile(old_name: str, new_name: str, *, preserve_local_sessions: bool = False) -> Path:
+     """Rename a profile: directory, wrapper script, service, active_profile. The default
+     profile's home IS the installation root, so "renaming" it sets a presentation-only
+     ``display_name`` instead — the canonical id stays ``default``."""
+     old_canon = _canon_valid(old_name)
++    if preserve_local_sessions:
++        new_canon = _canon_valid(new_name)
++        if sys.platform != "linux" or {old_canon, new_canon} & {"default", "main"}:
++            raise ValueError("LOCAL receipt preservation requires stopped named Linux profiles outside the default namespace")
++        from hermes_cli.profile_identity import rename_with_local_receipts
++
++        return rename_with_local_receipts(old_canon, new_canon)
++    return _rename_profile(old_canon, new_name)
++
++
++def _rename_profile(old_canon: str, new_name: str, *, move=None) -> Path:
+     if old_canon == "default":
+         if not (new_name or "").strip():
+             raise ValueError("Display name cannot be empty.")
+@@ -2266,7 +2277,10 @@ def rename_profile(old_name: str, new_name: str) -> Path:
+     try:
+         if live_mux and not wait_profile_unowned(old_dir):  # same owner wait as delete_profile
+             raise RuntimeError("a running gateway still owns this profile; retry the rename once it settles")
+-        old_dir.rename(new_dir)
++        if move is None:
++            old_dir.rename(new_dir)
++        else:
++            move(old_dir, new_dir)
+     except Exception:
+         if live_mux:
+             clear_named_profile_deleted(old_dir)
+diff --git a/hermes_cli/subcommands/profile.py b/hermes_cli/subcommands/profile.py
+index a67300f912262596d1a268ec9982c77b76939ab3..f84963a6ee56ff760fc6f5e68e6ba1331f5de112 100644
+--- a/hermes_cli/subcommands/profile.py
++++ b/hermes_cli/subcommands/profile.py
+@@ -89,6 +89,9 @@ def build_profile_parser(subparsers, *, cmd_profile: Callable) -> None:
+     profile_rename.add_argument(
+         "new_name",
+         help="New profile name (for 'default': a display name — the canonical id stays 'default')")
++    profile_rename.add_argument(
++        "--preserve-local-sessions", action="store_true",
++        help="Migrate verified LOCAL session receipts in a stopped named profile")
+ 
+     profile_purge = profile_subparsers.add_parser(
+         "purge-identity",
+diff --git a/hermes_state_gateway.py b/hermes_state_gateway.py
+index 3359e196553bfd8405f6049c78efde245b5a0290..e6cd80a30ce1346e57c22ff35b22bc0caf5a6e06 100644
+--- a/hermes_state_gateway.py
++++ b/hermes_state_gateway.py
+@@ -670,7 +670,7 @@ class SessionGatewayMixin:
+             return
+         self._write_sql("DELETE FROM gateway_hygiene_state WHERE session_key = ?", (session_key,))
+ 
+-    def rekey_profile_state(self, old_name: str, new_name: str) -> dict[str, int]:
++    def rekey_profile_state(self, old_name: str, new_name: str, *, local_receipt_policy=None) -> dict[str, int]:
+         """Atomically rewrite exact profile identity in this state database."""
+         old, new = (old_name or "").strip(), (new_name or "").strip()
+         counts: dict[str, int] = {}
+@@ -709,6 +709,10 @@ class SessionGatewayMixin:
+                 if collision is not None:
+                     raise ValueError(f"profile identity collision in {table}")
+ 
++            if local_receipt_policy is not None:
++                from hermes_state_profile_rename import rekey_local_receipts
++                counts["local_receipts"] = rekey_local_receipts(self, conn, old, new, local_receipt_policy)
++
+             counts["sessions_profile_name"] = conn.execute(
+                 "UPDATE sessions SET profile_name = ? WHERE profile_name = ?", (new, old)).rowcount
+             counts["gateway_heartbeats_profile"] = conn.execute(
+diff --git a/hermes_state_profile_rename.py b/hermes_state_profile_rename.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..5c39277ba5d34468d78d2f9ecab67325e34a9e50
+--- /dev/null
++++ b/hermes_state_profile_rename.py
+@@ -0,0 +1,77 @@
++"""Preserve a validated LOCAL receipt in the native profile rekey transaction."""
++
++import json
++
++from hermes_state_keys import local_identity
++from hermes_state_local import POLICY_PREFIX
++from hermes_state_local_lineage import validate_local_lineage
++from hermes_state_mutation_guards import require_idle
++from hermes_state_runtime import RuntimeStoreError, _json
++from hermes_state_errors import SessionCompressionInProgressError, SessionTurnLeaseLostError
++from hermes_state_errors import SessionCompressionInProgressError, SessionTurnLeaseLostError
++
++
++def rekey_local_receipts(db, conn, old, new, validate_policy):
++    if db._own_profile_name() != new:
++        raise RuntimeStoreError("profile_mismatch")
++    rows = conn.execute(
++        "SELECT key, value FROM state_meta WHERE key GLOB ?",
++        (POLICY_PREFIX + "*",),
++    ).fetchall()
++    updated = 0
++    old_prefix, new_prefix = f"agent:{old}:local:dm:", f"agent:{new}:local:dm:"
++    for key, raw in rows:
++        try:
++            receipt = json.loads(raw)
++            route = receipt["route"]
++            if not route.startswith((old_prefix, new_prefix)):
++                continue
++            sid = key[len(POLICY_PREFIX):]
++            entry = receipt["entry"]
++            subject = receipt["principal_id"]
++            source = entry["origin"]
++            routed = conn.execute(
++                "SELECT entry_json FROM gateway_routing WHERE scope='' AND session_key=?",
++                (route,),
++            ).fetchone()
++            if (not isinstance(subject, str) or not subject
++                    or receipt["session_id"] != sid
++                    or route not in (old_prefix + sid, new_prefix + sid)
++                    or "legacy_session_id" in receipt
++                    or local_identity(receipt["profile_id"], subject, receipt["request_id"]) != sid
++                    or not isinstance(receipt["policy"], dict)):
++                raise ValueError("invalid creation identity")
++            owner = old if route.startswith(old_prefix) else new
++            if (entry["session_key"] != route or source["profile"] != owner
++                    or (source["platform"], source["chat_type"], source["chat_id"], source["user_id"])
++                    != ("local", "dm", sid, subject)):
++                raise ValueError("invalid receipt route")
++            target = validate_local_lineage(conn, receipt)
++            affected = receipt.get("lineage", [sid])
++            for segment in affected:
++                row = conn.execute(
++                    "SELECT session_key, chat_id, user_id, profile_name FROM sessions WHERE id=?",
++                    (segment,),
++                ).fetchone()
++                if row is None or tuple(row) != (route, sid, subject, owner):
++                    raise ValueError("invalid stored segment")
++            route_entry = json.loads(routed[0]) if routed is not None else {}
++            if (route_entry.get("session_id") != target or route_entry.get("session_key") != route
++                    or route_entry.get("origin") != source):
++                raise ValueError("invalid routing entry")
++            if owner == new:
++                continue
++            validate_policy(receipt["policy"])
++            require_idle(db, conn, affected)
++        except (SessionCompressionInProgressError, SessionTurnLeaseLostError) as exc:
++            raise RuntimeStoreError("session_busy") from exc
++        except RuntimeStoreError:
++            raise
++        except (AttributeError, KeyError, TypeError, ValueError) as exc:
++            raise RuntimeStoreError("storage_unavailable", detail="Invalid LOCAL receipt in renamed profile") from exc
++
++        entry["origin"] = {**source, "profile": new}
++        receipt["route"] = entry["session_key"] = new_prefix + sid
++        conn.execute("UPDATE state_meta SET value=? WHERE key=?", (_json(receipt), key))
++        updated += 1
++    return updated

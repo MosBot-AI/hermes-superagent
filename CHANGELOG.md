@@ -215,6 +215,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 - Verify that a renamed profile's original LOCAL Bot Chat remains unavailable after native identity retries and a clean Gateway restart. An explicit inverse rename recovers the same chat on its original route (#33).
 
+- Add a review-only Linux profile rename candidate that preserves the original LOCAL receipt, compressed Bot Chat and settled admission when the original store is moved offline (#33).
+
 - Add a review-only Hermes Desktop proposal to recover an uncertain SSH text draft from the scoped native journal after abrupt exit and block unchanged resubmission (#33).
 
 - Verify explicit SSH Bot Chat reopen after abrupt Desktop exit. The native prepared submission survives, while the restored draft and its retry identity are lost in the tested window (#33).

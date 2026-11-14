@@ -26,7 +26,11 @@ from test_native_profile_retirement import (
 REPO = Path(__file__).resolve().parents[2]
 SIBLINGS = ("default", "watch")
 CREATE = ["profile", "create", "scout", "--no-alias", "--no-skills"]
-RENAME_COMMANDS = (["rename", "scout", "renamed"], ["rename", "renamed", "scout"])
+RENAME_COMMANDS = (
+    (["rename", "scout", "renamed"], "renamed"),
+    (["rename", "renamed", "scout"], "scout"),
+    (["rename", "scout", "renamed", "--preserve-local-sessions"], "renamed"),
+)
 SEED_ESSENTIAL_SKILLS = (
     "import json; from tools.skills_sync import sync_skills; "
     "r = sync_skills(quiet=True); print(json.dumps(r))"
@@ -81,8 +85,10 @@ def activate_profile_cli(root, host):
             # Native startup provenance and alias collision probes are read-only.
             if not (
                 binary == "which"
-                and sys.orig_argv[-3:] in RENAME_COMMANDS
-                and command == ["which", sys.orig_argv[-1]]
+                and any(
+                    sys.orig_argv[-len(args) :] == args and command == ["which", target]
+                    for args, target in RENAME_COMMANDS
+                )
                 and directory == host
                 and child_env is None
                 or binary == "git"
@@ -289,7 +295,7 @@ async def create_canonical(client, profile, workspace, request_id):
 
 
 @contextmanager
-def profile_cli_installation(tmp_path_factory, monkeypatch):
+def profile_cli_installation(tmp_path_factory, monkeypatch, *, proposal=None):
     assert sys.platform == "linux", "Profile CLI fixture requires the Linux private control socket"
     host = Path(os.environ["HERMES_TEST_ROOT"]).resolve(strict=True)
     pin = json.loads((REPO / "compatibility.json").read_bytes())["hermes_commit"]
@@ -346,8 +352,13 @@ def profile_cli_installation(tmp_path_factory, monkeypatch):
             ),
             HERMES_BOT_ACCEPTANCE_ROOT=str(root),
         )
+        commit = pin
+        if proposal is not None:
+            from acceptance.live.run_desktop_profile_routing import verify_proposal
+
+            commit = verify_proposal(host, pin, env, proposal)
         for command, expected in (
-            (["rev-parse", "HEAD"], pin),
+            (["rev-parse", "HEAD"], commit),
             (["status", "--porcelain", "--untracked-files=no"], ""),
         ):
             actual = subprocess.check_output(
@@ -359,7 +370,7 @@ def profile_cli_installation(tmp_path_factory, monkeypatch):
                 stdin=subprocess.DEVNULL,
             )
             assert actual.strip() == expected
-        cli_source, cli_env = prepare_cli_source(host, pin, root, guard, env)
+        cli_source, cli_env = prepare_cli_source(host, commit, root, guard, env)
         for key in tuple(os.environ):
             if key not in env:
                 isolated.delenv(key)
