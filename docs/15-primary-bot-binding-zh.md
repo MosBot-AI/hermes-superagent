@@ -382,11 +382,13 @@ Bot Mode 的确切标题 `session.list` 查询携带所选后端 profile。列�
 
 #### 当前固定版本的 Desktop Profile 退役
 
-[真实 Electron 夹具](../tests/desktop/desktop_profile_retirement_ipc.spec.ts)运行干净的 Linux 源码构建，使用 Hermes `2281116525106e3c109993ccb5dc74d02bfc1427`、Electron `44.9.3` 和 Node.js `26.12.1`。已保存的 Webapp token 连接 `spare/default` 处于活跃状态。对应 Gateway 同时服务 `scout`，另一独立本地 Gateway 则在同名 profile 下有一个标题相同但 ID 不同的聊天。夹具使用公开 Desktop SDK、内置 Bot Mode 名册和真实的渲染进程 WebSocket。远程 Gateway 的转换由私有 Unix 控制和停放标记驱动。[验收运行器](../acceptance/live/run_desktop_profile_routing.py)通过 `--case profile-retirement` 在仅有环回的命名空间内运行该用例。
+[真实 Electron 夹具](../tests/desktop/desktop_profile_retirement_ipc.spec.ts)在干净的 Linux 源码构建及对应的本地未签名 Linux x64 AppImage 上通过，使用 Hermes `2281116525106e3c109993ccb5dc74d02bfc1427`、Electron `44.9.3` 和 Node.js `26.12.1`。已保存的 Webapp token 连接 `spare/default` 处于活跃状态。对应 Gateway 同时服务 `scout`，另一独立本地 Gateway 则在同名 profile 下有一个标题相同但 ID 不同的聊天。夹具使用公开 Desktop SDK、内置 Bot Mode 名册和真实的渲染进程 WebSocket。远程 Gateway 的转换由私有 Unix 控制和停放标记驱动。两个夹具拥有的 Gateway 均从固定源码检出运行。
 
 `spare/scout` 停放期间，所有权锁已释放，实时和持久化上线集合均只剩 `default`。Desktop 仍列出该已安装 profile 的路由描述符。原生名册行不再包含规范、最近及 worker 会话字段。显式 SDK 查询与 Bot Mode 点击均通过保留的已保存令牌 WebSocket 发送 `profile: scout`，并收到 `4001/profile_mismatch`。点击显示重试提示并保持默认聊天焦点，没有发出打开、创建或提示词提交 RPC。默认路由和本地同名聊天仍各自返回原 ID。
 
-同名热上线在相同 Gateway 进程及实例中恢复 `scout` 的锁，且只有其 epoch 增加。原 Desktop 路由和 WebSocket 再次找到已有的 `scout` 聊天。原生名册恢复规范会话指针，正常点击打开原会话记录。四个存储中核对的会话、消息和准入行保持原样。夹具记录的模型完成数为零。证据覆盖一个安装实例内活跃的已保存令牌源码构建。Desktop 安装包、其他凭据模式和经认证的安装连续性仍需各自验收。
+同名热上线在相同 Gateway 进程及实例中恢复 `scout` 的锁，且只有其 epoch 增加。原 Desktop 路由和 WebSocket 再次找到已有的 `scout` 聊天。原生名册恢复规范会话指针，正常点击打开原会话记录。四个存储中核对的会话、消息和准入行保持原样。夹具记录的模型完成数为零。其他凭据、签名分发及经认证的安装连续性仍需各自验收。
+
+使用[验收运行器](../acceptance/live/run_desktop_profile_routing.py)的 `--case profile-retirement` 在仅有环回的命名空间内运行。验收安装包时，增加 `--appimage /absolute/path/to/Hermes.AppImage`，并使用[干净固定版本的打包构建](#当前固定版本的-bot-mode-规范会话拒绝与重试)。已测镜像的 SHA-256 为 `758c07c5a86829bb70b8904b459329f73f000c3218e1829f32db8e67af08d887`。夹具检查镜像提交标记、可执行的内置 CLI、运行中 Electron 的打包身份和 ASAR。另一个 SSH 草稿连续性候选镜像在 Electron 启动前未通过提交标记检查。
 
 #### 当前固定版本的原生 profile 重命名
 
