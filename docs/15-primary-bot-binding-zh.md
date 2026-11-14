@@ -302,7 +302,15 @@ Bot Mode 的确切标题 `session.list` 查询携带所选后端 profile。列�
 
 两个变体的新渲染进程均提示无法确认先前的发送结果，且未再发送 `prompt.submit`。第一次重开的结果确定后，消息记录、provider 请求次数和三份对照会话保持一致。禁用续跑时，原 provider 请求仍是唯一一次执行尝试。两种配置仍无持久准入 ID。
 
-使用同一运行器的 `--case bot-canonical-ssh-draft-reload` 或 `--case bot-canonical-ssh-draft-reload-no-continue`，并可添加 `--appimage`。本用例覆盖在同一个 Desktop 用户数据目录中重新加载页面。完整退出并重启应用、使用另一个客户端、新的提交及经 owner 授权的写入仍需单独取证。
+使用同一运行器的 `--case bot-canonical-ssh-draft-reload` 或 `--case bot-canonical-ssh-draft-reload-no-continue`，并可添加 `--appimage`。本用例覆盖在同一个 Desktop 用户数据目录中重新加载页面。[Desktop 重启用例](#当前固定版本的-openssh-desktop-重启后草稿恢复)会在首次重开前关闭 Electron 进程。
+
+#### 当前固定版本的 OpenSSH Desktop 重启后草稿恢复
+
+提交确认丢失且 Gateway 退出后，Desktop 恢复原草稿。夹具切到本地对照会话，在重开中断的会话前关闭 Electron。夹具确认第一个 Electron 进程已退出，再使用同一 Desktop 用户数据目录启动另一个进程，且不安装确认过滤器。OpenSSH 监听器仍可连接。重启应用并打开 Bot Mode 列表期间，远端消息记录和 provider 请求次数保持不变。
+
+显式点击后，Desktop 通过新的转发恢复原命名会话。重启后可能有多个夹具拥有的命名 profile 后端。通过检查对应作用域的消息记录和 provider 请求次数，可以区分回合续跑与后端启动。原生默认配置启动一次续跑，并写入中断提示和回复。在命名 profile 中设置 `desktop.auto_continue.enabled: false` 后，原用户消息仍在，provider 不会收到第二次请求。两种配置下，完整重启应用后仍可恢复草稿。保留原文按一次 Enter 会显示结果不确定的警告，且不会再次提交、调用 provider 或改变消息记录。未观察到新建会话或持久准入 ID，三份对照会话保持不变。
+
+使用同一运行器的 `--case bot-canonical-ssh-draft-restart` 或 `--case bot-canonical-ssh-draft-restart-no-continue`，并可添加 `--appimage`。本用例覆盖在同一个用户数据目录中正常退出并重启 Desktop。Desktop 异常退出后的恢复、使用另一个客户端、自动重连及经 owner 授权的写入仍需单独取证。
 
 ### 当前固定版本的原生 Profile 生命周期
 

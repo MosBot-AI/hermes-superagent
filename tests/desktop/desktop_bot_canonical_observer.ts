@@ -59,8 +59,11 @@ declare global {
   }
 }
 
-export function observeWire(page: Page, sockets?: Map<WireFrame, WireSocket>): WireFrame[] {
-  const frames: WireFrame[] = []
+export function observeWire(
+  page: Page,
+  sockets?: Map<WireFrame, WireSocket>,
+  frames: WireFrame[] = []
+): WireFrame[] {
   page.on('websocket', socket => {
     const url = new URL(socket.url())
     if (url.pathname !== '/api/ws') {
