@@ -318,7 +318,7 @@ Bot Mode 的确切标题 `session.list` 查询携带所选后端 profile。列�
 
 重新启动后，渲染进程存储中的草稿和重试 ID 均已丢失，原生日志仍保留同一条旧协议记录。打开 Bot Mode 列表时，远端会话和 provider 请求次数保持不变。显式点击前，夹具未观测到对该会话的 resume 或 activate 请求。点击后，Desktop 通过新的转发打开原命名会话。原用户消息可见，composer 为空。默认配置续跑中断回合一次。禁用原生续跑后，最初的 provider 请求仍是唯一一次。未出现额外提交、新会话或持久准入 ID，三份对照会话均保持不变。
 
-使用同一运行器的 `--case bot-canonical-ssh-draft-crash` 或 `--case bot-canonical-ssh-draft-crash-no-continue`，并可添加 `--appimage`。本用例覆盖草稿刚恢复后进程立即异常退出的情况。渲染进程草稿及重试身份的持久恢复仍有缺口。跨客户端恢复、自动重连及经 owner 授权的写入需单独验收。
+使用同一运行器的 `--case bot-canonical-ssh-draft-crash` 或 `--case bot-canonical-ssh-draft-crash-no-continue`，并可添加 `--appimage`。本用例覆盖草稿刚恢复后进程立即异常退出的情况。渲染进程草稿及重试身份的持久恢复仍有缺口。跨客户端恢复、自动重连及经 owner 授权的写入需单独验收。[仅供审阅的草稿恢复提案](../experiments/ssh-draft-recovery/README-zh.md)支持从原作用域的原生日志显式恢复，同时保留未确认旧协议提交的保护。
 
 #### 当前固定版本的 OpenSSH 恢复前读取
 

@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "status": "Review-only, unsubmitted and inactive",
+  "base": "2281116525106e3c109993ccb5dc74d02bfc1427",
+  "proposal_commit_observed": "c57a69bce1369bc1f1e3c5a44e1733ace1fdc201",
+  "proposal_tree": "94260c86f63b93084d97acd2df76a2aa838bf608",
+  "patch_file": "ssh-draft-recovery.patch",
+  "patch_sha256": "ce9f9cca3fc3e47050d075b7e198d7748a4d70efbbfa4bd9a6355ae8ff208f73",
+  "patch_files": [
+    "apps/desktop/src/app/chat/composer/hooks/use-composer-draft.ts",
+    "apps/desktop/src/app/chat/composer/hooks/use-composer-submit.ts",
+    "apps/desktop/src/app/chat/composer/index.tsx",
+    "apps/desktop/src/app/chat/composer/prepared-image-recovery.tsx",
+    "apps/desktop/src/app/session/hooks/use-prompt-actions/prepared-submissions.test.ts",
+    "apps/desktop/src/app/session/hooks/use-prompt-actions/prepared-submissions.ts",
+    "apps/desktop/src/app/session/hooks/use-prompt-actions/submit.ts",
+    "apps/desktop/src/i18n/en.ts",
+    "apps/desktop/src/i18n/types.ts",
+    "apps/desktop/src/i18n/zh.ts",
+    "apps/desktop/src/store/composer-draft-retry.ts"
+  ]
+}
