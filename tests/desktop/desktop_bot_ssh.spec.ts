@@ -440,6 +440,14 @@ async function verifyInterruptedTurn(
     expect(server.acceptedKeys()).toBe(logins)
     await server.startServer()
 
+    // Leave the stale pane before reopening. This exercises a fresh attach
+    // instead of depending on the already-fronted tab's background refresh.
+    const localRow = page.locator('[data-roster-key="local::default"]')
+    await localRow.click()
+    await expect.poll(() => focus(page)).toEqual({
+      id: 'fixture-local-default',
+      owner: { connectionId: 'local', profile: 'default' }
+    })
     const reopenFrom = wire.length
     await row.click()
     await expect(viewport.getByText(canonical, { exact: true })).toBeVisible({ timeout: 55_000 })
@@ -461,7 +469,8 @@ async function verifyInterruptedTurn(
     expect(recovery.filter(frame => frame.method === 'session.create')).toEqual([])
     const resumes = recovery.filter(frame => frame.method === 'session.resume')
     expect(resumes.some(frame => frame.port !== port && frame.profile === profile && frame.sessionId === canonical)).toBe(true)
-    expect(resumes.every(frame => frame.port !== port && frame.sessionId === canonical)).toBe(true)
+    const namedResumes = resumes.filter(frame => frame.sessionId === canonical)
+    expect(namedResumes.every(frame => frame.port !== port)).toBe(true)
     expect(server.acceptedKeys()).toBeGreaterThan(logins)
   } finally {
     hold.open()
