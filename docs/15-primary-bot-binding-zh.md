@@ -456,6 +456,8 @@ Linux 夹具通过原生 CLI 将停止状态的合成来源打包为完整 ZIP �
 
 在[验收运行器命令](#当前固定版本的-electron-profile-路由)中添加 `--case desktop-saved-token-sign-out` 即可复现。Linux Desktop 源码构建和本地打包的未签名 Linux x64 AppImage 都在同一固定版本上通过。AppImage 的 SHA-256 为 `758c07c5a86829bb70b8904b459329f73f000c3218e1829f32db8e67af08d887`。添加 `--appimage /path/to/HermesBundled-linux-x86_64.AppImage` 可测试打包版本。探索性测试中，保存替换令牌后仅重新加载窗口仍显示 Gateway 连接错误。回归用例执行完整的 Desktop 重启。经验证的人类 owner 身份、经授权的跨安装恢复、其他凭据模式以及已准入操作的完成或取消，需要独立证据。
 
+[仅供评审的 Desktop 恢复补丁](../experiments/desktop-saved-token-recovery/README-zh.md)在用户为注册表中同一 URL 保存替换令牌后，使主连接缓存的描述失效。真实 Electron 用例沿用原渲染文档和进程，再通过显式点击 Bot Mode，经新的限定作用域连接打开原 `scout` 会话。独立作用域的原生路由仍可读取自己的会话。在采纳修复后的宿主并重新验证前，受支持的固定版本沿用上述重启路径。
+
 其他真实运行环境下的 Desktop 路由与 profile 生命周期转换、恢复前后经认证的连续性、受支持的调用方与 worker 来源证明及更广泛的投递回执对账，仍属 E0.7 的开放事项。可选 HTTP 入口仍依赖 E0.6。经 owner 授权的登记、激活绑定及对账仍是 E1.6 和 E3.6 的独立工作。[Issue #33](https://github.com/MosBot-AI/hermes-superagent/issues/33)
 
 ## 3. 身份、存储与作用域

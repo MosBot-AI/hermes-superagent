@@ -97,6 +97,7 @@ APPIMAGE_CASES = (
 )
 WEBAPP_SIGNOUT_CASE = "active-webapp-sign-out"
 PROPOSAL = ROOT / "experiments/bot-webapp-canonical"
+SAVED_TOKEN_RECOVERY_PROPOSAL = ROOT / "experiments/desktop-saved-token-recovery"
 DRAFT_RECOVERY_PROPOSAL = ROOT / "experiments/ssh-draft-recovery"
 DRAFT_CONTINUITY_PROPOSAL = ROOT / "experiments/ssh-draft-continuity"
 DRAFT_CRASH_CASES = (
@@ -465,6 +466,8 @@ def run_probe(
         env["HERMES_E2E_BOT_WEBAPP_EXPECTATION"] = (
             "proposal" if proposal == PROPOSAL else "baseline"
         )
+    if proposal == SAVED_TOKEN_RECOVERY_PROPOSAL:
+        env["HERMES_E2E_SAVED_TOKEN_RECOVERY"] = "1"
     if proposal in (DRAFT_RECOVERY_PROPOSAL, DRAFT_CONTINUITY_PROPOSAL):
         env["HERMES_E2E_SSH_DRAFT_RECOVERY"] = "1"
     if proposal == DRAFT_CONTINUITY_PROPOSAL:
@@ -574,6 +577,8 @@ def main():
     elif args.review_proposal:
         if args.case == SAVED_TOKEN_CASE:
             proposal = PROPOSAL
+        elif args.case == SAVED_TOKEN_SIGNOUT_CASE:
+            proposal = SAVED_TOKEN_RECOVERY_PROPOSAL
         elif args.case in DRAFT_CRASH_CASES:
             proposal = DRAFT_RECOVERY_PROPOSAL
         else:

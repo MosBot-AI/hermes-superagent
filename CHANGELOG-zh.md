@@ -137,6 +137,8 @@
 
 - 验证 Linux Desktop 中已保存的 Webapp 令牌会被撤销，显式保存替换令牌并重启 Desktop 后可重新打开原 Bot Chat（#33）。
 
+- 新增仅供评审的 Hermes 补丁。显式替换已保存令牌后重连 Desktop 主连接，并验证可在无需重启 Desktop 的情况下打开原 Bot Chat（#33）。
+
 - 验证在命名 profile 中原生接管已有压缩历史，并在 Linux Desktop Bot Mode 中打开该会话。即使默认 profile 有一个会话 ID 相同的不同聊天，验收仍确认 Desktop 显示命名 profile 的历史（#33）。
 
 - 验证合成 Webapp 凭据的原生备份与恢复，并在 Webapp 保持关闭时仅轮换恢复目标的凭据。手动 Gateway 验收检查停机的源安装与归档保持不变（#33）。

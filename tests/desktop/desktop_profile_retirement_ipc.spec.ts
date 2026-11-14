@@ -418,6 +418,7 @@ test('saved Webapp Desktop refuses a parked named profile and reopens its chat a
 test('saved Webapp Desktop reopens the original chat after explicit token replacement', async () => {
   test.setTimeout(180_000)
   expect(process.platform).toBe('linux')
+  const liveRecovery = process.env.HERMES_E2E_SAVED_TOKEN_RECOVERY === '1'
   const provider = await startScriptedProvider()
   const localBox = createCoreSandbox('a')
   const remoteBox = createCoreSandbox('b')
@@ -493,12 +494,14 @@ test('saved Webapp Desktop reopens the original chat after explicit token replac
     const sibling = await read(decoy, 62, decoyChat, localPort)
     expect(sibling.savedToken).toBe(false)
     const openChat = async () => {
-      await page
-        .getByRole('button', { name: 'Bots', exact: true })
-        .or(page.getByRole('tab', { name: 'Bots', exact: true }))
-        .first()
-        .click()
       const row = page.locator(`[data-roster-key="${source}::${profile}"]`)
+      if (!(await row.isVisible())) {
+        await page
+          .getByRole('button', { name: 'Bots', exact: true })
+          .or(page.getByRole('tab', { name: 'Bots', exact: true }))
+          .first()
+          .click()
+      }
       const viewport = page.locator('[data-slot="aui_thread-viewport"]').filter({ visible: true }).first()
       await expect(row).toContainText(namedChat)
       const beforeOpen = wire.length
@@ -555,6 +558,9 @@ test('saved Webapp Desktop reopens the original chat after explicit token replac
     expect(control.savedToken).toBe(false)
     expect(snapshot()).toEqual(before)
 
+    const desktopProcess = initial.app.process()
+    const documentTimeOrigin = await page.evaluate(() => performance.timeOrigin)
+    const beforeSave = wire.length
     // The private clipboard keeps the replacement out of Playwright arguments and output.
     await initial.app.evaluate(async ({ clipboard }, filename) => {
       const fs = process.getBuiltinModule('node:fs')!
@@ -579,10 +585,19 @@ test('saved Webapp Desktop reopens the original chat after explicit token replac
     } finally {
       await initial.app.evaluate(({ clipboard }) => clipboard.clear())
     }
-    const desktopProcess = initial.app.process()
-    await initial.app.close()
-    expect(desktopProcess.exitCode).toBe(0)
-    page = (await launch()).page
+    if (liveRecovery) {
+      await expect
+        .poll(() => page.evaluate(() => window.__E07_RETIREMENT_HOST__?.active()), { timeout: 45_000 })
+        .toMatchObject({ connectionId: source, gateway: 'open' })
+      expect(desktopProcess.exitCode).toBeNull()
+      expect(await page.evaluate(() => performance.timeOrigin)).toBe(documentTimeOrigin)
+      expect(wire.slice(beforeSave).filter(frame => openMethods.has(frame.method))).toEqual([])
+    } else {
+      expect(await requestChat(page, target, 67)).toEqual({ refused: 'unexpected' })
+      await initial.app.close()
+      expect(desktopProcess.exitCode).toBe(0)
+      page = (await launch()).page
+    }
     const reopened = await read(target, 65, namedChat, String(webappPort))
     expect(reopened).not.toBe(retired)
     expect(reopened.savedToken).toBe(true)
