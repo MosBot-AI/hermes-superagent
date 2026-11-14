@@ -55,6 +55,7 @@ declare global {
   interface Window {
     __E07_SSH_ROUTE_PROBE__?: RouteProbe
     __E07_SSH_RELEASE__?: () => void
+    __E07_LOST_ACK__?: { port: string; withheld: number }
   }
 }
 
@@ -329,6 +330,51 @@ async function interruptSshServer(server: Awaited<ReturnType<typeof prepareSshSe
   await stopped
 }
 
+async function installLegacyAcknowledgementFilter(page: Page) {
+  await page.addInitScript(() => {
+    window.__E07_LOST_ACK__ = { port: '', withheld: 0 }
+    const state = window.__E07_LOST_ACK__
+    const NativeSocket = window.WebSocket
+    const readFrame = (data: string) => {
+      try {
+        return JSON.parse(data)
+      } catch {
+        return null
+      }
+    }
+
+    window.WebSocket = class extends NativeSocket {
+      private readonly pending = new Set<string>()
+
+      constructor(url: string | URL, protocols?: string | string[]) {
+        super(url, protocols)
+        // Install before Desktop's own listener so the matching reply cannot
+        // resolve its request. The native socket still exposes it to Playwright.
+        this.addEventListener('message', event => {
+          if (!this.pending.size || typeof event.data !== 'string') return
+          const reply = readFrame(event.data)
+          if (!reply || !this.pending.delete(String(reply.id)) || !reply.result || state.withheld) return
+          state.withheld += 1
+          event.stopImmediatePropagation()
+        })
+      }
+
+      override send(data: Parameters<WebSocket['send']>[0]) {
+        const url = new URL(this.url)
+        if (url.port === state.port && url.pathname === '/api/ws' && typeof data === 'string') {
+          const request = readFrame(data)
+          if (request?.method === 'prompt.submit' && request.id !== undefined &&
+              !request.params?.submission_id && !request.params?.input_id) {
+            this.pending.add(String(request.id))
+          }
+        }
+        super.send(data)
+      }
+    }
+  })
+  await page.reload()
+}
+
 async function verifyInterruptedTurn(
   page: Page,
   row: Locator,
@@ -338,7 +384,8 @@ async function verifyInterruptedTurn(
   wire: WireFrame[],
   sockets: Map<WireFrame, WireSocket>,
   port: string,
-  owner: { connectionId: string; profile: string }
+  owner: { connectionId: string; profile: string },
+  lostAck: boolean
 ) {
   const input = 'U18-sshturn'
   const partial = 'Synthetic partial reply'
@@ -366,12 +413,21 @@ async function verifyInterruptedTurn(
     const beforeLoss = named()
     expect(beforeLoss.admissions).toEqual([])
     expect(beforeLoss.messages.filter(message => message.role === 'user' && message.content === input)).toHaveLength(1)
-    await expect(viewport.getByText(partial, { exact: true })).toBeVisible()
+    if (lostAck) {
+      await expect.poll(() => page.evaluate(() => window.__E07_LOST_ACK__?.withheld)).toBe(1)
+    } else {
+      await expect(viewport.getByText(partial, { exact: true })).toBeVisible()
+    }
 
     const socket = sockets.get(submit!)!
     expect(socket.closed).toBe(false)
     await interruptSshServer(server)
     await expect.poll(() => socket.closed).toBe(true)
+    if (lostAck) {
+      const failure = page.getByRole('alert').filter({ hasText: 'Prompt failed' })
+      await expect(failure).toContainText('Hermes gateway connection closed')
+      expect(submissions()).toEqual(submitted)
+    }
     expect(provider.completions[0]).toMatchObject({ aborted: false, finished: false })
     const logins = server.acceptedKeys()
     hold.open()
@@ -390,6 +446,12 @@ async function verifyInterruptedTurn(
     await expect.poll(() => focus(page)).toEqual({ id: canonical, owner })
     await expect(viewport.getByText(input, { exact: true })).toBeVisible({ timeout: 20_000 })
     await expect(viewport.getByText(partial + tail, { exact: true })).toBeVisible({ timeout: 20_000 })
+    if (lostAck) {
+      await expect(composer(page)).toContainText(input)
+      await composer(page).press('Enter')
+      await expect(page.getByText('Check the conversation before sending it again.', { exact: false })).toBeVisible()
+      expect(await page.evaluate(() => window.__E07_LOST_ACK__?.withheld)).toBe(1)
+    }
     expect(committedOffline.sessions).toEqual(beforeLoss.sessions)
     expect(committedOffline.messages.filter(message => message.role === 'user' && message.content === input)).toHaveLength(1)
     expect(named()).toEqual(committedOffline)
@@ -408,7 +470,7 @@ async function verifyInterruptedTurn(
 
 async function verifySshBotChat(
   routeProfile: string,
-  transition?: 'reconnect' | 'edit' | 'replace' | 'rotate' | 'turn'
+  transition?: 'reconnect' | 'edit' | 'replace' | 'rotate' | 'turn' | 'lost-ack'
 ) {
   const rotate = transition === 'rotate'
   const reconnect = transition === 'reconnect' || rotate
@@ -491,6 +553,7 @@ async function verifySshBotChat(
     const live = await launchBotDesktop(localEnv)
     app = live.app
     const { page } = live
+    if (transition === 'lost-ack') await installLegacyAcknowledgementFilter(page)
     const sockets = new Map<WireFrame, WireSocket>()
     const wire = observeWire(page, sockets)
     await expect(composer(page)).toBeVisible({ timeout: 45_000 })
@@ -505,6 +568,9 @@ async function verifySshBotChat(
       sdkRead = reads[0]!
       expect(sdkRead).toMatchObject({ profile, includeHidden: true, reply: {} })
       expect(sdkRead.port).not.toBe(localPort)
+    }
+    if (transition === 'lost-ack') {
+      await page.evaluate(port => { window.__E07_LOST_ACK__!.port = port }, sdkRead!.port)
     }
     await page
       .getByRole('button', { name: 'Bots', exact: true })
@@ -617,10 +683,11 @@ async function verifySshBotChat(
     }
     expect(initial()).toEqual(before)
     expect(provider.completions.length).toBe(0)
-    if (transition === 'turn') {
-      await verifyInterruptedTurn(page, row, remote, original, provider, wire, sockets, reads[0]!.port, {
-        connectionId, profile: routeProfile
-      })
+    if (transition === 'turn' || transition === 'lost-ack') {
+      await verifyInterruptedTurn(
+        page, row, remote, original, provider, wire, sockets, reads[0]!.port,
+        { connectionId, profile: routeProfile }, transition === 'lost-ack'
+      )
       expect(initial().slice(0, 3)).toEqual(before.slice(0, 3))
     }
     expect(original.acceptedKeys()).toBeGreaterThan(1)
@@ -689,4 +756,9 @@ test('Bot Mode refuses a changed OpenSSH host key before explicit trust update',
 test('Bot Mode reopens the canonical chat after SSH loss during a turn', async () => {
   test.setTimeout(180_000)
   await verifySshBotChat('default', 'turn')
+})
+
+test('Bot Mode recovers the committed SSH Bot turn after losing its acknowledgement', async () => {
+  test.setTimeout(180_000)
+  await verifySshBotChat('default', 'lost-ack')
 })
