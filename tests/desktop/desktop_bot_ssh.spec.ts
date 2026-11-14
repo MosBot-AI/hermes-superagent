@@ -466,6 +466,7 @@ async function verifyInterruptedTurn(
   restartDesktop?: () => Promise<Page>
 ) {
   const autoContinue = gatewayLoss && !disableContinuation
+  const reviewCrashDraft = restartDraft === 'abrupt' && process.env.HERMES_E2E_SSH_DRAFT_RECOVERY === '1'
   const input = 'U18-sshturn'
   const partial = 'Synthetic partial reply'
   const tail = 'Synthetic reply after release'
@@ -710,6 +711,38 @@ async function verifyInterruptedTurn(
     }
     if (restartDraft === 'abrupt') {
       await expect(composer(page)).toHaveText('')
+      const review = page.getByRole('button', { name: 'Review unconfirmed draft', exact: true })
+      if (reviewCrashDraft) {
+        await expect(review).toBeEnabled()
+        await review.click()
+        await expect(composer(page)).toHaveText(input)
+        expect(await sshDraftStorage(page, input)).toEqual({
+          draft: false,
+          retryId: undefined,
+          prepared: preparedBeforeExit
+        })
+        for (let press = 0; press < 2; press++) {
+          await composer(page).press('Enter')
+          await expect(page.getByText('This server could not confirm the earlier send of this message,', {
+            exact: false
+          }).first()).toBeVisible()
+          await expect(composer(page)).toHaveText(input)
+        }
+        await page.reload()
+        await page.getByRole('button', { name: 'Bots', exact: true })
+          .or(page.getByRole('tab', { name: 'Bots', exact: true })).first().click()
+        await row().click()
+        await expect.poll(() => focus(page)).toEqual({ id: canonical, owner })
+        await expect(review).toBeEnabled()
+        await expect(composer(page)).toHaveText('')
+        expect(await sshDraftStorage(page, input)).toEqual({
+          draft: false,
+          retryId: undefined,
+          prepared: preparedBeforeExit
+        })
+      } else {
+        await expect(review).toHaveCount(0)
+      }
     } else if (lostAck) {
       await expect(composer(page)).toContainText(input)
       await composer(page).press('Enter')

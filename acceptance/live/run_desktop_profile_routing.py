@@ -82,6 +82,8 @@ APPIMAGE_CASES = (
 )
 WEBAPP_SIGNOUT_CASE = "active-webapp-sign-out"
 PROPOSAL = ROOT / "experiments/bot-webapp-canonical"
+DRAFT_RECOVERY_PROPOSAL = ROOT / "experiments/ssh-draft-recovery"
+DRAFT_CRASH_CASES = (SSH_DRAFT_CRASH_CASE, SSH_DRAFT_CRASH_DISABLED_CASE)
 CASES = {
     "profile-routing": (
         "desktop_profile_route_ipc.spec.ts",
@@ -247,13 +249,16 @@ exit $?
 """
 
 
-def verify_proposal(host, base, env):
-    manifest = json.loads((PROPOSAL / "manifest.json").read_bytes())
-    patch = (PROPOSAL / "bot-webapp-canonical.patch").read_bytes()
+def verify_proposal(host, base, env, proposal):
+    manifest = json.loads((proposal / "manifest.json").read_bytes())
+    patch_file = (
+        "ssh-draft-recovery.patch"
+        if proposal == DRAFT_RECOVERY_PROPOSAL
+        else "bot-webapp-canonical.patch"
+    )
+    patch = (proposal / patch_file).read_bytes()
     if manifest["base"] != base or hashlib.sha256(patch).hexdigest() != manifest["patch_sha256"]:
-        raise ValueError(
-            "Saved-token proposal manifest does not match the compatibility pin and patch"
-        )
+        raise ValueError("Proposal manifest does not match the compatibility pin and patch")
 
     def git(*args):
         return subprocess.check_output(
@@ -290,11 +295,11 @@ def verify_proposal(host, base, env):
     return commit
 
 
-def verify_build(host, python, node, env, *, review_proposal=False, packaged=False):
+def verify_build(host, python, node, env, *, proposal=None, packaged=False):
     compatibility = json.loads((ROOT / "compatibility.json").read_text(encoding="utf-8"))
     expected_commit = compatibility["hermes_commit"]
-    if review_proposal:
-        expected_commit = verify_proposal(host, expected_commit, env)
+    if proposal is not None:
+        expected_commit = verify_proposal(host, expected_commit, env, proposal)
     else:
         verify_checkout(host)
     node_version = json.loads((host / "pm/lock.json").read_text(encoding="utf-8"))["packages"][
@@ -406,7 +411,7 @@ def run_probe(
     fixtures,
     *,
     title_filter=None,
-    review_proposal=False,
+    proposal=None,
     chromium=None,
     appimage=None,
 ):
@@ -421,9 +426,13 @@ def run_probe(
         (ssh_state / "empty").touch(mode=0o600)
         env["HERMES_E2E_SSH_STATE"] = str(ssh_state)
     if spec == CASES[SAVED_TOKEN_CASE][0]:
-        env["HERMES_E2E_BOT_WEBAPP_EXPECTATION"] = "proposal" if review_proposal else "baseline"
+        env["HERMES_E2E_BOT_WEBAPP_EXPECTATION"] = (
+            "proposal" if proposal == PROPOSAL else "baseline"
+        )
+    if proposal == DRAFT_RECOVERY_PROPOSAL:
+        env["HERMES_E2E_SSH_DRAFT_RECOVERY"] = "1"
     desktop, expected_commit = verify_build(
-        host, python, node, env, review_proposal=review_proposal, packaged=appimage is not None
+        host, python, node, env, proposal=proposal, packaged=appimage is not None
     )
     if appimage is not None:
         env["HERMES_E2E_APPIMAGE"] = str(appimage)
@@ -500,7 +509,7 @@ def main():
     parser.add_argument(
         "--review-proposal",
         action="store_true",
-        help="Verify a separately built saved-token proposal",
+        help="Verify the separately built proposal applicable to this case",
     )
     args = parser.parse_args()
     if sys.platform != "linux":
@@ -514,8 +523,14 @@ def main():
         # The account home is also used as a literal in the OpenSSH configuration.
         if not re.fullmatch(r"[a-zA-Z0-9_./-]+", str(args.scratch.resolve())):
             parser.error(f"--case {args.case} requires a simple absolute scratch path")
-    if args.review_proposal and args.case != SAVED_TOKEN_CASE:
-        parser.error(f"--review-proposal requires --case {SAVED_TOKEN_CASE}")
+    proposal = None
+    if args.review_proposal:
+        if args.case == SAVED_TOKEN_CASE:
+            proposal = PROPOSAL
+        elif args.case in DRAFT_CRASH_CASES:
+            proposal = DRAFT_RECOVERY_PROPOSAL
+        else:
+            parser.error("--review-proposal requires a saved-token or SSH draft abrupt-exit case")
     if (args.chromium is not None) != (args.case == WEBAPP_SIGNOUT_CASE):
         parser.error(f"--chromium is required only for --case {WEBAPP_SIGNOUT_CASE}")
     inputs = (args.hermes, args.hermes_python, args.node, args.scratch)
@@ -547,7 +562,7 @@ def main():
             spec,
             fixtures,
             title_filter=CASE_TITLE_FILTERS.get(args.case),
-            review_proposal=args.review_proposal,
+            proposal=proposal,
             chromium=args.chromium.absolute() if args.chromium is not None else None,
             appimage=args.appimage.resolve() if args.appimage is not None else None,
         )
