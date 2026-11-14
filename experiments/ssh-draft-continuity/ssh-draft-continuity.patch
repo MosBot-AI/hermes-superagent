@@ -1,0 +1,950 @@
+diff --git a/apps/desktop/src/app/chat/composer/hooks/use-composer-draft.ts b/apps/desktop/src/app/chat/composer/hooks/use-composer-draft.ts
+index 8529305a7773be25d40de1fae8affac9a81b343d..c6c4c4fc8ebd837694452b741ab5bc91f9a4c24a 100644
+--- a/apps/desktop/src/app/chat/composer/hooks/use-composer-draft.ts
++++ b/apps/desktop/src/app/chat/composer/hooks/use-composer-draft.ts
+@@ -373,7 +373,10 @@ export function useComposerDraft({
+   // window has not edited since it loaded or saved it is left to the stash,
+   // which may hold a newer value (or none, once sent) from another window.
+   const stashOwnEdits = (scope: string | null, text: string, attachments = attachmentScope.$attachments.get()) => {
+-    if (sameDraftScope(scope, draftScopeRef.current) && isSavedDraft(savedDraftRef.current, text, attachments)) {
++    if (sameDraftScope(scope, draftScopeRef.current) && (
++      isSavedDraft(savedDraftRef.current, text, attachments) ||
++      (draftRetryRef.current?.uncertainLegacy === true && draftRetryTextMatches(draftRetryRef.current, text))
++    )) {
+       return
+     }
+ 
+@@ -383,7 +386,11 @@ export function useComposerDraft({
+   // A rejected or unconfirmed send is restored with its identity, so Enter on that exact draft is
+   // the explicit retry. Recorded per draft scope (it survives a reload with the draft text).
+   const rememberDraftRetry = (scope: string | null, retry: ComposerDraftRetry) => {
+-    writeDraftRetry(scope, retry)
++    // A journal review remains scoped to its original connection. The ordinary
++    // stash is keyed by session id alone and cannot hold this restored copy.
++    if (!retry.uncertainLegacy) {
++      writeDraftRetry(scope, retry)
++    }
+ 
+     if (sameDraftScope(scope, draftScopeRef.current)) {
+       draftRetryRef.current = retry
+@@ -392,6 +399,9 @@ export function useComposerDraft({
+ 
+   // The identity a send of exactly this draft retries, if any. Spent by the send either way: a
+   // rejection restores it again, and an accepted send leaves nothing to retry.
++  const restoredLegacyDraft = (text: string, attachments: ComposerAttachment[]) =>
++    matchingDraftRetry(draftRetryRef.current, text, attachments)?.uncertainLegacy === true
++
+   const takeDraftRetry = (text: string, attachments: ComposerAttachment[]) => {
+     const retry = matchingDraftRetry(draftRetryRef.current, text, attachments)
+     draftRetryRef.current = undefined
+@@ -889,7 +899,8 @@ export function useComposerDraft({
+       // Only this window's own unsaved edits: an untouched editor may still
+       // show a draft another window has since sent, and must not restore it.
+       // Text alone: attachments are memory-only and close with the window.
+-      if (latestText === savedDraftRef.current.text) {
++      if (latestText === savedDraftRef.current.text ||
++        (draftRetryRef.current?.uncertainLegacy === true && draftRetryTextMatches(draftRetryRef.current, latestText))) {
+         return
+       }
+ 
+@@ -921,6 +932,7 @@ export function useComposerDraft({
+     isSteerableText,
+     loadIntoComposer,
+     rememberDraftRetry,
++    restoredLegacyDraft,
+     requestMainFocus,
+     sessionIdRef,
+     setComposerText,
+diff --git a/apps/desktop/src/app/chat/composer/hooks/use-composer-submit.ts b/apps/desktop/src/app/chat/composer/hooks/use-composer-submit.ts
+index c6551bc80cad95fffffcea9fed2f893e5e85cc65..fdb9c859c454cbb088832b78a90fd3511271b7ea 100644
+--- a/apps/desktop/src/app/chat/composer/hooks/use-composer-submit.ts
++++ b/apps/desktop/src/app/chat/composer/hooks/use-composer-submit.ts
+@@ -76,6 +76,7 @@ interface UseComposerSubmitArgs {
+   stashAt: (scope: string | null, text?: string, attachments?: ComposerAttachment[]) => void
+   /** Restored-send identity (see use-composer-draft); absent = every send is a new message. */
+   rememberDraftRetry?: (scope: string | null, retry: ComposerDraftRetry) => void
++  restoredLegacyDraft?: (text: string, attachments: ComposerAttachment[]) => boolean
+   takeDraftRetry?: (text: string, attachments: ComposerAttachment[]) => ComposerDraftRetry | undefined
+ }
+ 
+@@ -115,6 +116,7 @@ export function useComposerSubmit({
+   setComposerText,
+   stashAt,
+   rememberDraftRetry,
++  restoredLegacyDraft,
+   takeDraftRetry
+ }: UseComposerSubmitArgs) {
+   const paneVisible = usePaneVisible()
+@@ -472,6 +474,14 @@ export function useComposerSubmit({
+     return true
+   }
+ 
++  const refuseRestoredLegacyDraft = (text: string) => {
++    if (!restoredLegacyDraft?.(text, attachments)) { return false }
++    notify({ kind: 'warning', title: translateNow('composer.restoreUnconfirmedDraft'),
++      message: translateNow('promptNotices.legacySendUnconfirmed') })
++
++    return true
++  }
++
+   const submitDraft = () => {
+     if (disabled) {
+       return
+@@ -504,7 +514,7 @@ export function useComposerSubmit({
+     const text = pathifyRefs(draftRef.current)
+     const payloadPresent = text.trim().length > 0 || attachments.length > 0
+ 
+-    if (refusedDuringSetup(text)) {
++    if (refusedDuringSetup(text) || refuseRestoredLegacyDraft(text)) {
+       return
+     }
+ 
+@@ -554,6 +564,7 @@ export function useComposerSubmit({
+   // tool boundary. If the turn already ended, queue the words instead.
+   const steerDraft = (mode: 'interrupt' | 'steer' = 'interrupt') => {
+     const text = draftRef.current.trim()
++    if (refuseRestoredLegacyDraft(text)) { return }
+     // The Steer action on a restored send: queued under its id like a busy Enter (see queueRetry).
+     const retry = attachments.length ? undefined : takeDraftRetry?.(draftRef.current, [])
+ 
+@@ -629,7 +640,7 @@ export function useComposerSubmit({
+   }
+ 
+   const queueDraft = () => {
+-    if (disabled || !busy || refusedDuringSetup(draftRef.current)) {
++    if (disabled || !busy || refusedDuringSetup(draftRef.current) || refuseRestoredLegacyDraft(draftRef.current)) {
+       return
+     }
+ 
+diff --git a/apps/desktop/src/app/chat/composer/index.tsx b/apps/desktop/src/app/chat/composer/index.tsx
+index 9ef8daa80feb70dfb81076f420326c5971670f47..2bab905ecf5cbcdbbd3f367e8705e9fdb551df4b 100644
+--- a/apps/desktop/src/app/chat/composer/index.tsx
++++ b/apps/desktop/src/app/chat/composer/index.tsx
+@@ -304,6 +304,7 @@ export function ChatBar({
+     loadIntoComposer,
+     rememberDraftRetry,
+     requestMainFocus,
++    restoredLegacyDraft,
+     sessionIdRef,
+     setComposerText,
+     stashAt,
+@@ -455,6 +456,7 @@ export function ChatBar({
+     setComposerText,
+     stashAt,
+     rememberDraftRetry,
++    restoredLegacyDraft,
+     takeDraftRetry
+   })
+ 
+@@ -1306,12 +1308,23 @@ export function ChatBar({
+           <div className={cn(composerFloatingStrip, 'px-[5px] pb-1.5 empty:hidden')}>
+             <ActionBadges sessionId={statusSessionId} />
+             <PreparedImageRecovery
++              gateway={gateway}
+               occupied={hasText || attachments.length > 0 || busy || disabled}
+-              onRestore={(text, restored, id) => {
++              onRestore={(text, restored, id, uncertainLegacy) => {
++                if (uncertainLegacy && (
++                  activeQueueSessionKeyRef.current !== activeQueueSessionKey ||
++                  queueEditRef.current || syncDraftFromEditor().trim() || scope.attachments.$attachments.get().length
++                )) {
++                  return false
++                }
+                 loadIntoComposer(text, restored)
+-                rememberDraftRetry(activeQueueSessionKey, draftRetry(id, text, restored))
++                rememberDraftRetry(activeQueueSessionKey, {
++                  ...draftRetry(id, text, restored),
++                  ...(uncertainLegacy && { uncertainLegacy })
++                })
+               }}
+               request={requestBusyConfig}
++              runtimeId={statusSessionId}
+               sessionKey={activeQueueSessionKey}
+             />
+             <OnboardingSkip sessionId={statusSessionId} />
+diff --git a/apps/desktop/src/app/chat/composer/prepared-image-recovery.tsx b/apps/desktop/src/app/chat/composer/prepared-image-recovery.tsx
+index 8974be5cfc4c990c414a0b0e035d4dd25e5cdcc0..d45b8901a295bfe1d2975dcd081a2c853003d319 100644
+--- a/apps/desktop/src/app/chat/composer/prepared-image-recovery.tsx
++++ b/apps/desktop/src/app/chat/composer/prepared-image-recovery.tsx
+@@ -1,25 +1,60 @@
+-import { useEffect, useState } from 'react'
++import { useStore } from '@nanostores/react'
++import { useEffect, useRef, useState } from 'react'
+ 
+-import { listPreparedImageDrafts } from '@/app/session/hooks/use-prompt-actions/prepared-submissions'
++import type { HermesGateway } from '@/api/client'
++import {
++  legacyDraftRoute,
++  listPreparedImageDrafts,
++  listPreparedLegacyDrafts,
++  readDraftContinuity
++} from '@/app/session/hooks/use-prompt-actions/prepared-submissions'
+ import { captureSubmissionDestination } from '@/app/session/hooks/use-prompt-actions/submission-destination'
+ import type { GatewayRequest } from '@/app/session/hooks/use-prompt-actions/utils'
+ import { Button } from '@/components/ui/button'
+ import { useI18n } from '@/i18n'
+ import type { ComposerAttachment } from '@/store/composer'
++import { $connectionsRegistry } from '@/store/connection-registry-state'
++import { connectedDraftGateway } from '@/store/gateway'
+ import { notifyError } from '@/store/notifications'
++import { knownOwnerForSession } from '@/store/session-states'
+ 
+ interface Props {
+   sessionKey: string | null
++  runtimeId?: string | null
++  gateway?: HermesGateway | null
+   request: GatewayRequest
+   occupied: boolean
+   /** `id` is the retained send's identity: sending the restored draft unchanged retries it. */
+-  onRestore: (text: string, attachments: ComposerAttachment[], id: string) => void
++  onRestore: (text: string, attachments: ComposerAttachment[], id: string, uncertainLegacy?: true) => boolean | void
+ }
+ 
+-export function PreparedImageRecovery({ sessionKey, request, occupied, onRestore }: Props) {
++export function PreparedImageRecovery({ sessionKey, runtimeId, gateway, request, occupied, onRestore }: Props) {
+   const { t } = useI18n()
+   const [drafts, setDrafts] = useState<Awaited<ReturnType<typeof listPreparedImageDrafts>>>([])
+-  const scopeKey = captureSubmissionDestination(sessionKey, request).scopeKey
++  const registry = useStore($connectionsRegistry)
++  const { scopeKey } = captureSubmissionDestination(sessionKey, request)
++  const owner = knownOwnerForSession(sessionKey)
++  const route = legacyDraftRoute(owner, registry?.connections ?? [])
++  const legacyScope = owner && typeof owner === 'object' ? JSON.stringify([owner.connectionId, owner.profile]) : ''
++  const profile = owner && typeof owner === 'object' ? owner.targetProfile ?? owner.profile : undefined
++
++  const resolveGateway = (scope: typeof owner) => scope && typeof scope === 'object'
++    ? connectedDraftGateway(scope.connectionId, scope.profile)
++    : undefined
++
++  const draftGateway = resolveGateway(owner)
++  const [connectionVersion, setConnectionVersion] = useState(0)
++  const legacyLookup = useRef({ version: 0 })
++
++  const [legacy, setLegacy] = useState<{
++    route: string; sessionKey: string; runtimeId: string; gateway: HermesGateway; version: number
++    drafts: Awaited<ReturnType<typeof listPreparedLegacyDrafts>>
++  }>()
++
++  useEffect(() => (draftGateway ?? gateway)?.onState(() => {
++    legacyLookup.current.version++
++    setConnectionVersion(version => version + 1)
++  }), [draftGateway, gateway])
+ 
+   useEffect(() => {
+     let cancelled = false
+@@ -36,13 +71,82 @@ export function PreparedImageRecovery({ sessionKey, request, occupied, onRestore
+     return () => { cancelled = true }
+   }, [sessionKey, scopeKey, t.composer.restoreImageDraft])
+ 
+-  return drafts.map(draft => (
++  useEffect(() => {
++    const generation = legacyLookup.current
++    const lookup = generation.version
++    let cancelled = false
++    setLegacy(undefined)
++
++    if (sessionKey && runtimeId && route && profile && draftGateway) {
++      void listPreparedLegacyDrafts(sessionKey, legacyScope, route).then(async entries => {
++        if (!entries.length || cancelled || legacyLookup.current.version !== lookup) { return }
++        const continuity = await readDraftContinuity(draftGateway.request.bind(draftGateway), runtimeId, sessionKey, profile)
++
++        if (continuity && !cancelled && legacyLookup.current.version === lookup) {
++          setLegacy({ route, sessionKey, runtimeId, gateway: draftGateway, version: connectionVersion,
++            drafts: entries.filter(entry => entry.continuity === continuity) })
++        }
++      }).catch(error => {
++        if (!cancelled && legacyLookup.current.version === lookup) { notifyError(error, t.composer.restoreUnconfirmedDraft) }
++      })
++    }
++
++    return () => {
++      cancelled = true
++      generation.version++
++    }
++  }, [sessionKey, runtimeId, draftGateway, connectionVersion, legacyScope, route, profile, t.composer.restoreUnconfirmedDraft])
++
++  const legacyDrafts = legacy && legacy.route === route && legacy.sessionKey === sessionKey &&
++    legacy.runtimeId === runtimeId && legacy.gateway === draftGateway && legacy.version === connectionVersion
++    ? legacy.drafts : []
++
++  const visible = [...drafts.map(draft => ({ ...draft, uncertainLegacy: undefined })),
++    ...legacyDrafts.map(draft => ({ ...draft, uncertainLegacy: true as const }))]
++
++  return visible.map(draft => (
+     <div className="flex items-center gap-2 rounded-md border bg-background px-3 py-2 text-xs" key={draft.key}>
+-      <span className="min-w-0 flex-1 truncate">{draft.text || draft.attachments.map(attachment => attachment.label).join(', ')}</span>
+-      <Button disabled={occupied} onClick={() => {
+-        onRestore(draft.text, draft.attachments, draft.id)
+-        setDrafts(current => current.filter(entry => entry.key !== draft.key))
+-      }} size="sm" type="button" variant="outline">{t.composer.restoreImageDraft}</Button>
++      {!draft.uncertainLegacy && <span className="min-w-0 flex-1 truncate">{
++        draft.text || draft.attachments.map(attachment => attachment.label).join(', ')
++      }</span>}
++      <Button disabled={occupied} onClick={async () => {
++        if (draft.uncertainLegacy) {
++          if (!sessionKey || !runtimeId || !route || !profile || !draftGateway ||
++            resolveGateway(knownOwnerForSession(sessionKey)) !== draftGateway) { return }
++
++          try {
++            const lookup = legacyLookup.current.version
++            const entries = await listPreparedLegacyDrafts(sessionKey, legacyScope, route)
++            const current = entries.find(entry => entry.key === draft.key && entry.id === draft.id)
++
++            if (!current || legacyLookup.current.version !== lookup) { return }
++            const continuity = await readDraftContinuity(draftGateway.request.bind(draftGateway), runtimeId, sessionKey, profile)
++
++            if (legacyLookup.current.version !== lookup) { return }
++
++            if (!continuity || continuity !== current.continuity || resolveGateway(knownOwnerForSession(sessionKey)) !== draftGateway || legacyDraftRoute(
++              knownOwnerForSession(sessionKey), $connectionsRegistry.get()?.connections ?? []
++            ) !== route) {
++              setLegacy(undefined)
++
++              return
++            }
++
++            if (onRestore(current.text, [], current.id, true) === false) { return }
++          } catch (error) {
++            notifyError(error, t.composer.restoreUnconfirmedDraft)
++
++            return
++          }
++
++          setLegacy(state => state && { ...state, drafts: state.drafts.filter(entry => entry.key !== draft.key) })
++        } else {
++          onRestore(draft.text, draft.attachments, draft.id)
++          setDrafts(state => state.filter(entry => entry.key !== draft.key))
++        }
++      }} size="sm" type="button" variant="outline">{
++        draft.uncertainLegacy ? t.composer.restoreUnconfirmedDraft : t.composer.restoreImageDraft
++      }</Button>
+     </div>
+   ))
+ }
+diff --git a/apps/desktop/src/app/session/hooks/use-prompt-actions/prepared-submissions.test.ts b/apps/desktop/src/app/session/hooks/use-prompt-actions/prepared-submissions.test.ts
+index e781e9956c41f966ddf7cf471c47cc27f17ef03f..3cf54ba26579057bc6baf2e7d74167d33d805999 100644
+--- a/apps/desktop/src/app/session/hooks/use-prompt-actions/prepared-submissions.test.ts
++++ b/apps/desktop/src/app/session/hooks/use-prompt-actions/prepared-submissions.test.ts
+@@ -1,6 +1,6 @@
+ import { afterEach, expect, test, vi } from 'vitest'
+ 
+-import { listPreparedImageDrafts, type PreparedSubmission, preparedSubmissionKey, readPreparedSubmission, removePreparedSubmission, writePreparedSubmission } from './prepared-submissions'
++import { legacyDraftRoute, legacyDraftRouteDigest, listPreparedImageDrafts, listPreparedLegacyDrafts, type PreparedSubmission, preparedSubmissionKey, readPreparedSubmission, removePreparedSubmission, writePreparedSubmission } from './prepared-submissions'
+ import { storedJournal } from './prepared-submissions-test-utils'
+ import type { SubmissionDestination } from './submission-destination'
+ 
+@@ -99,3 +99,54 @@ test('tabs without Web Locks never share one slash command retry record', async
+     Reflect.deleteProperty(navigator, 'locks')
+   }
+ })
++
++test('native recovery only offers exact, text-only legacy entries for the stored SSH destination', async () => {
++  // jsdom supplies getRandomValues but no SubtleCrypto.
++  const { webcrypto } = await import('node:crypto')
++  vi.stubGlobal('crypto', webcrypto)
++  const owner = { connectionId: 'ssh', profile: 'default', targetProfile: 'scout' }
++
++  const connection = { id: 'ssh', kind: 'ssh' as const, label: 'Fixture', host: 'fixture.invalid',
++    user: 'synthetic', port: 22, tokenSet: false, tokenPreview: null }
++
++  const route = legacyDraftRoute(owner, [connection])!
++  expect(route).toBeDefined()
++  const legacyDraftRouteId = await legacyDraftRouteDigest(route)
++  const scopeKey = JSON.stringify(['ssh', 'default'])
++  const destination = { scopeKey } as SubmissionDestination
++  const continuity = 'a'.repeat(64)
++
++  const source = { id: 'input', text: 'retained wire text', attachments: [], params: {},
++    owner, legacyAttempted: true, legacyDraftRoute: legacyDraftRouteId, draftContinuity: continuity }
++
++  const key = preparedSubmissionKey('stored', destination, 'retained editor text', [], { submission_id: 'input' })
++
++  const native = { read: vi.fn(async () => JSON.stringify({
++    [key]: source,
++    [preparedSubmissionKey('decoy', destination, 'same profile', [], { submission_id: 'input' })]: source,
++    [preparedSubmissionKey('stored', destination, '/tool', [], { submission_id: 'input' })]: source,
++    [preparedSubmissionKey('stored', destination, 'queued', [], { submission_id: 'input', fromQueue: true })]: source,
++    [preparedSubmissionKey('stored', destination, 'wrong id', [], { submission_id: 'other' })]: source,
++    [preparedSubmissionKey('stored', destination, 'old journal', [], { submission_id: 'input' })]:
++      { ...source, legacyDraftRoute: undefined },
++    [preparedSubmissionKey('stored', destination, 'route-only journal', [], { submission_id: 'input' })]:
++      { ...source, draftContinuity: undefined },
++    [preparedSubmissionKey('stored', destination, 'not legacy', [], { submission_id: 'input' })]:
++      { ...source, legacyAttempted: false }
++  })), update: vi.fn() }
++
++  vi.stubGlobal('hermesDesktop', { preparedSubmissions: native })
++
++  expect(await listPreparedLegacyDrafts('stored', scopeKey, route)).toEqual([
++    { key, id: 'input', text: 'retained editor text', continuity, attachments: [] }
++  ])
++  expect(await listPreparedLegacyDrafts('stored', JSON.stringify(['peer', 'default']), route)).toEqual([])
++  const retargeted = legacyDraftRoute({ ...owner, targetProfile: 'harbor' }, [connection])!
++  expect(await listPreparedLegacyDrafts('stored', scopeKey, retargeted)).toEqual([])
++  const replaced = legacyDraftRoute(owner, [{ ...connection, port: 2233 }])!
++  expect(await listPreparedLegacyDrafts('stored', scopeKey, replaced)).toEqual([])
++  expect(legacyDraftRoute(owner, [{ ...connection, kind: 'local' }])).toBeUndefined()
++  expect(native.update).not.toHaveBeenCalled()
++  vi.stubGlobal('hermesDesktop', undefined)
++  expect(await listPreparedLegacyDrafts('stored', scopeKey, route)).toEqual([])
++})
+diff --git a/apps/desktop/src/app/session/hooks/use-prompt-actions/prepared-submissions.ts b/apps/desktop/src/app/session/hooks/use-prompt-actions/prepared-submissions.ts
+index dd190784d0b8b88903a2c9a426e55291fddba91f..3b5b4c2058a97f0814526bcdcfbde055c88ac6d7 100644
+--- a/apps/desktop/src/app/session/hooks/use-prompt-actions/prepared-submissions.ts
++++ b/apps/desktop/src/app/session/hooks/use-prompt-actions/prepared-submissions.ts
+@@ -1,10 +1,11 @@
+ import { randomUuid } from '@hermes/shared'
+ 
++import type { DesktopRegistryConnection } from '@/global'
+ import type { ComposerAttachment } from '@/store/composer'
+-import type { SessionOwnerScope } from '@/store/session-request-router'
++import { isSessionOwnerRoute, type SessionOwnerScope } from '@/store/session-request-router'
+ 
+ import type { SubmissionDestination } from './submission-destination'
+-import type { SubmitTextOptions } from './utils'
++import type { GatewayRequest, SubmitTextOptions } from './utils'
+ 
+ const STORAGE_KEY = 'hermes.desktop.preparedSubmissions.v1'
+ // One localStorage key per browser journal entry. Every tab of the origin shares this storage with
+@@ -27,6 +28,8 @@ export interface PreparedSubmission {
+   displayText?: string
+   params: Record<string, unknown>
+   legacyAttempted?: boolean
++  legacyDraftRoute?: string
++  draftContinuity?: string
+ }
+ 
+ // Admitted entries whose durable removal failed (ENOSPC/EIO): journal key -> spent submission id.
+@@ -211,6 +214,63 @@ export async function listPreparedImageDrafts(target: string, scopeKey: string)
+   })
+ }
+ 
++// An SSH connection's logical id survives edits. Bind recovery to the effective
++// target profile and the configured endpoint as well as the session key.
++export function legacyDraftRoute(owner: SessionOwnerScope, connections: DesktopRegistryConnection[]) {
++  if (!isSessionOwnerRoute(owner) || !owner.profile) { return undefined }
++  const source = connections.find(connection => connection.id === owner.connectionId)
++
++  return source?.kind === 'ssh' && source.host && source.user
++    ? JSON.stringify([
++      owner.connectionId, owner.profile, owner.targetProfile ?? owner.profile, source.host, source.user,
++      source.port ?? 22, source.keyPath ?? '', source.remoteHermesPath ?? '', source.remoteProfile ?? ''
++    ])
++    : undefined
++}
++
++export async function legacyDraftRouteDigest(route: string | undefined) {
++  if (!route) { return undefined }
++  const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(route))
++
++  return Array.from(new Uint8Array(bytes), byte => byte.toString(16).padStart(2, '0')).join('')
++}
++
++export async function readDraftContinuity(
++  request: GatewayRequest, runtimeId: string, storedId: string, profile?: string
++) {
++  const reply = await request<{ continuity?: unknown }>('session.draft_continuity', {
++    session_id: runtimeId, stored_session_id: storedId, ...(profile && { profile })
++  }, 5_000).catch(() => undefined)
++
++  const continuity = reply?.continuity
++
++  return typeof continuity === 'string' && /^[0-9a-f]{64}$/.test(continuity) ? continuity : undefined
++}
++
++export async function listPreparedLegacyDrafts(target: string, scopeKey: string, route: string) {
++  // Only Electron's acknowledged journal has process-crash durability.
++  if (!window.hermesDesktop?.preparedSubmissions) { return [] }
++  const digest = await legacyDraftRouteDigest(route)
++
++  if (!digest) { return [] }
++
++  return Object.entries(await readJournal()).flatMap(([key, entry]) => {
++    const intent: unknown = JSON.parse(key)
++
++    if (!Array.isArray(intent)) { return [] }
++    const [scope, session, text, attachmentIds, displayKind, fromQueue, submissionId] = intent
++
++    return scope === scopeKey && session === target && entry.legacyAttempted === true &&
++      entry.legacyDraftRoute === digest && typeof entry.draftContinuity === 'string' &&
++      /^[0-9a-f]{64}$/.test(entry.draftContinuity) && typeof text === 'string' && text.trim().length > 0 &&
++      !text.trimStart().startsWith('/') && Array.isArray(attachmentIds) && attachmentIds.length === 0 &&
++      !entry.attachments.length && displayKind === null && fromQueue === false &&
++      typeof submissionId === 'string' && submissionId && entry.id === submissionId
++      ? [{ key, id: entry.id, text, continuity: entry.draftContinuity, attachments: [] }]
++      : []
++  })
++}
++
+ export async function readPreparedSubmission(key: string): Promise<PreparedSubmission | undefined> {
+   return (await readJournal())[key]
+ }
+diff --git a/apps/desktop/src/app/session/hooks/use-prompt-actions/submit.ts b/apps/desktop/src/app/session/hooks/use-prompt-actions/submit.ts
+index 0c1c480d4868b7b0ba6086f6f8dd2c4a0df6b6b6..dda560537fa7509be90145033546108e6f327e34 100644
+--- a/apps/desktop/src/app/session/hooks/use-prompt-actions/submit.ts
++++ b/apps/desktop/src/app/session/hooks/use-prompt-actions/submit.ts
+@@ -23,6 +23,7 @@ import {
+   revokeDiscardedAttachmentPreviews
+ } from '@/store/composer'
+ import { serverOwnsComposerQueue } from '@/store/composer-queue'
++import { $connectionsRegistry } from '@/store/connection-registry-state'
+ import { noteMessageSent } from '@/store/desktop-metrics'
+ import { $hudMode } from '@/store/hud'
+ import { clearNotifications, notify, notifyError } from '@/store/notifications'
+@@ -39,6 +40,7 @@ import {
+   setMessages,
+   touchSessionActivity
+ } from '@/store/session'
++import { isSessionOwnerRoute } from '@/store/session-request-router'
+ import { profileScopeForSessionOwner } from '@/store/session-request-router'
+ import { $sessionStates, $sessionTiles } from '@/store/session-states'
+ import type { SessionInfo } from '@/types/hermes'
+@@ -51,9 +53,12 @@ import { resolveSessionOwner, resolveSessionProfile } from '../use-session-actio
+ 
+ import {
+   adoptPreparedSubmission,
++  legacyDraftRoute,
++  legacyDraftRouteDigest,
+   type PreparedSubmission,
+   preparedSubmissionKey,
+   preparedSubmissionSlot,
++  readDraftContinuity,
+   removePreparedSubmission,
+   writePreparedSubmission
+ } from './prepared-submissions'
+@@ -470,6 +475,8 @@ export function useSubmitPrompt(deps: SubmitPromptDeps) {
+       const captured =
+         options?.destination ?? captureSubmissionDestination(targetStoredSessionId ?? sessionId, ambientRequestGateway)
+ 
++      const recoveryRoute = legacyDraftRoute(captured.owner, $connectionsRegistry.get()?.connections ?? [])
++
+       const retryKeyForTarget = () =>
+         preparedSubmissionKey(
+           resolveComposerSessionKey(targetStoredSessionId ?? sessionId, $sessions.get()),
+@@ -1174,13 +1181,39 @@ export function useSubmitPrompt(deps: SubmitPromptDeps) {
+                     throw error
+                   }
+ 
++                  let continuity: string | undefined
++
++                  if (recoveryRoute && recoverStoredSessionId &&
++                    options?.composerScope === recoverStoredSessionId && !options?.retryText &&
++                    !options?.surface && !options?.fromQueue && !options?.displayKind && !prepared.attachments.length &&
++                    recoveryRoute === legacyDraftRoute(prepared.owner, $connectionsRegistry.get()?.connections ?? [])) {
++                    const digest = await legacyDraftRouteDigest(recoveryRoute).catch(() => undefined)
++
++                    if (digest) {
++                      const owner = prepared.owner
++
++                      if (isSessionOwnerRoute(owner)) {
++                        continuity = await readDraftContinuity(
++                          requestGateway, liveId, recoverStoredSessionId, owner.targetProfile ?? owner.profile
++                        )
++                      }
++
++                      if (continuity) {
++                        prepared.legacyDraftRoute = digest
++                        prepared.draftContinuity = continuity
++                      }
++                    }
++                  }
++
+                   prepared.legacyAttempted = true
+                   await writePreparedSubmission(retryKey, prepared)
+                   const { submission_id: _id, ...legacyParams } = params
+ 
+                   const result = await requestGateway<SubmitReceipt>(
+                     'prompt.submit',
+-                    legacyParams,
++                    { ...legacyParams, ...(continuity && isSessionOwnerRoute(prepared.owner) && {
++                      draft_continuity: continuity, profile: prepared.owner.targetProfile ?? prepared.owner.profile
++                    }) },
+                     PROMPT_SUBMIT_REQUEST_TIMEOUT_MS
+                   )
+ 
+diff --git a/apps/desktop/src/i18n/en.ts b/apps/desktop/src/i18n/en.ts
+index e00f9ff5b4e945a5abc74b581c514f4d0b0e02e5..06d45fd4e93681fb47f67c394961ff1516db9721 100644
+--- a/apps/desktop/src/i18n/en.ts
++++ b/apps/desktop/src/i18n/en.ts
+@@ -3488,6 +3488,7 @@ export const en: Translations = {
+     queueDelete: 'Delete',
+     queueLostNote: 'Turn lost during restart',
+     restoreImageDraft: 'Restore image draft',
++    restoreUnconfirmedDraft: 'Review unconfirmed draft',
+     queueCancelFailed: "Couldn't remove the queued turn",
+     queueLostDiscard: 'Discard',
+     queueLostDiscardTip:
+diff --git a/apps/desktop/src/i18n/types.ts b/apps/desktop/src/i18n/types.ts
+index c3e58cbd65dc21ae0776398edc5ca791e5a4a535..a88327649964dab14464c65298b7d3ca0b652c93 100644
+--- a/apps/desktop/src/i18n/types.ts
++++ b/apps/desktop/src/i18n/types.ts
+@@ -2997,6 +2997,7 @@ export interface Translations extends NoticeTranslations {
+     queueDelete: string
+     queueLostNote: string
+     restoreImageDraft: string
++    restoreUnconfirmedDraft: string
+     queueCancelFailed: string
+     queueLostDiscard: string
+     queueLostDiscardTip: string
+diff --git a/apps/desktop/src/i18n/zh.ts b/apps/desktop/src/i18n/zh.ts
+index 4c2f45b8b46d2049b8ee63118b9835a4e7da3d7d..bd0e8a61d98b189bdbf2335c666f71eb4e5b1b58 100644
+--- a/apps/desktop/src/i18n/zh.ts
++++ b/apps/desktop/src/i18n/zh.ts
+@@ -3385,6 +3385,7 @@ export const zhOverrides = {
+     queueDelete: '删除',
+     queueLostNote: '重启期间该轮次已丢失',
+     restoreImageDraft: '恢复图片草稿',
++    restoreUnconfirmedDraft: '查看未确认的草稿',
+     queueCancelFailed: '无法移除排队的轮次',
+     queueLostDiscard: '丢弃',
+     queueLostDiscardTip: '网关在该轮次进行中重启，无法完成。丢弃后其后的排队轮次将继续执行。',
+diff --git a/apps/desktop/src/store/composer-draft-retry.ts b/apps/desktop/src/store/composer-draft-retry.ts
+index c1402ce82587367bcb29b2c69fe4141b56328765..5f40c93d508dd8dc9db29cafc436972c0adea7fc 100644
+--- a/apps/desktop/src/store/composer-draft-retry.ts
++++ b/apps/desktop/src/store/composer-draft-retry.ts
+@@ -10,6 +10,8 @@ export interface ComposerDraftRetry {
+   id: string
+   text: string
+   attachmentIds: string[]
++  /** A reviewed legacy journal entry may have executed and must never be resent unchanged. */
++  uncertainLegacy?: true
+ }
+ 
+ // One localStorage key per draft scope: every window of the origin shares this
+diff --git a/apps/desktop/src/store/gateway.ts b/apps/desktop/src/store/gateway.ts
+index 8f82454abf677ef5e95f285f60f2dfa9e9f021a8..dcb16555045d90ea7251bb1ad6e5ba4567ef40eb 100644
+--- a/apps/desktop/src/store/gateway.ts
++++ b/apps/desktop/src/store/gateway.ts
+@@ -494,6 +494,16 @@ export function activeGatewayConnectionId(): null | string {
+   return g.secondaries.get(g.activeKey)?.connectionId ?? null
+ }
+ 
++// A draft review uses the exact bound socket and never dials or falls back to
++// the ambient backend to discover which stored session it is looking at.
++export function connectedDraftGateway(connectionId: string, profile: string): HermesGateway | undefined {
++  const gateway = isPrimaryRegistryRoute(connectionId, profile)
++    ? g.primaryGateway
++    : g.secondaries.get(registryBackendScopeKey(connectionId, profile))?.gateway
++
++  return gateway && isOpen(gateway) ? gateway : undefined
++}
++
+ function activeRouteProfile(): string {
+   return g.activeKey === g.primaryProfile
+     ? g.primaryProfile
+diff --git a/apps/shared/src/gateway-contract.generated.ts b/apps/shared/src/gateway-contract.generated.ts
+index 8a84977ce2bb7f72738492a3c91df63371249b18..7d657c576497b7ba5559c4c9dbfd3a1f461cce4b 100644
+--- a/apps/shared/src/gateway-contract.generated.ts
++++ b/apps/shared/src/gateway-contract.generated.ts
+@@ -2838,6 +2838,7 @@ export interface PromptSubmitParams {
+   display_kind?: string | null
+   interrupted?: boolean | null
+   queued?: boolean | null
++  draft_continuity?: string | null
+   surface?: string | null
+   voice_context?: string | null
+   voice_turn?: boolean | null
+@@ -3573,6 +3574,14 @@ export interface SessionHistoryResult {
+   count: number
+   messages: TranscriptMessage[]
+ }
++export interface SessionDraftContinuityParams {
++  session_id: string
++  profile?: string | null
++  stored_session_id: string
++}
++export interface SessionDraftContinuityResult {
++  continuity: string | null
++}
+ export interface SessionUsageParams {
+   session_id: string
+   profile?: string | null
+@@ -6649,6 +6658,8 @@ export interface RpcMethods {
+   'session.cwd.set': { params: SessionCwdSetParams; result: SessionCwdSetResult }
+   /** Delete a stored session + transcripts; refused while it is live here. */
+   'session.delete': { params: SessionDeleteParams; result: SessionDeleteResult }
++  /** Opaque continuity for the attached stored session's current database generation. */
++  'session.draft_continuity': { params: SessionDraftContinuityParams; result: SessionDraftContinuityResult }
+   /** Replay events after a seq watermark on WS reconnect; truncated means refetch state. */
+   'session.events.since': { params: SessionEventsSinceParams; result: SessionEventsSinceResult }
+   /** Replay-buffer occupancy telemetry (ops/debug). */
+@@ -6987,6 +6998,7 @@ export const RPC_METHODS = [
+   'session.create',
+   'session.cwd.set',
+   'session.delete',
++  'session.draft_continuity',
+   'session.events.since',
+   'session.events.stats',
+   'session.foreign.import',
+diff --git a/apps/shared/src/gateway-contract.openrpc.json b/apps/shared/src/gateway-contract.openrpc.json
+index fb0d36e11b4c4dcecf4c361bee9ca493968cf2dc..92038fb9279e93aeef37acff2aec8f53779f00c1 100644
+--- a/apps/shared/src/gateway-contract.openrpc.json
++++ b/apps/shared/src/gateway-contract.openrpc.json
+@@ -3408,6 +3408,24 @@
+         }
+       }
+     },
++    {
++      "name": "session.draft_continuity",
++      "summary": "Opaque continuity for the attached stored session's current database generation.",
++      "params": [
++        {
++          "name": "params",
++          "schema": {
++            "$ref": "#/components/schemas/SessionDraftContinuityParams"
++          }
++        }
++      ],
++      "result": {
++        "name": "result",
++        "schema": {
++          "$ref": "#/components/schemas/SessionDraftContinuityResult"
++        }
++      }
++    },
+     {
+       "name": "session.events.since",
+       "summary": "Replay events after a seq watermark on WS reconnect; truncated means refetch state.",
+@@ -33357,6 +33375,18 @@
+             "default": null,
+             "title": "Queued"
+           },
++          "draft_continuity": {
++            "anyOf": [
++              {
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "default": null,
++            "title": "Draft Continuity"
++          },
+           "surface": {
+             "anyOf": [
+               {
+@@ -38315,6 +38345,58 @@
+         "title": "SessionDetachResult",
+         "type": "object"
+       },
++      "SessionDraftContinuityParams": {
++        "additionalProperties": false,
++        "properties": {
++          "session_id": {
++            "title": "Session Id",
++            "type": "string"
++          },
++          "profile": {
++            "anyOf": [
++              {
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "default": null,
++            "title": "Profile"
++          },
++          "stored_session_id": {
++            "title": "Stored Session Id",
++            "type": "string"
++          }
++        },
++        "required": [
++          "session_id",
++          "stored_session_id"
++        ],
++        "title": "SessionDraftContinuityParams",
++        "type": "object"
++      },
++      "SessionDraftContinuityResult": {
++        "additionalProperties": false,
++        "properties": {
++          "continuity": {
++            "anyOf": [
++              {
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "title": "Continuity"
++          }
++        },
++        "required": [
++          "continuity"
++        ],
++        "title": "SessionDraftContinuityResult",
++        "type": "object"
++      },
+       "SessionEventsSinceParams": {
+         "additionalProperties": false,
+         "properties": {
+diff --git a/tests/tui_gateway/test_draft_continuity.py b/tests/tui_gateway/test_draft_continuity.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..6f608139e80312abe8ea5645b6d9b40cf4240899
+--- /dev/null
++++ b/tests/tui_gateway/test_draft_continuity.py
+@@ -0,0 +1,37 @@
++import sqlite3
++
++from hermes_state import SessionDB
++from hermes_state_errors import _STATE_DB_GENERATION_KEY
++from tui_gateway import draft_continuity, server
++
++
++def test_exact_store_survives_reopen_and_refuses_a_physical_copy(tmp_path, monkeypatch):
++    monkeypatch.setattr(draft_continuity, "current_instantiation_epoch", lambda: "boot:1")
++    original, copied = tmp_path / "original.db", tmp_path / "copied.db"
++    with SessionDB(original) as db:
++        db.create_session("stored", source="cli")
++        initial = draft_continuity.session_draft_continuity(db, "stored")
++        assert initial and len(initial) == 64
++        db.append_message("stored", "user", "fixture turn")
++        assert draft_continuity.session_draft_continuity(db, "stored") == initial
++        assert draft_continuity.session_draft_continuity(db, "missing") is None
++
++    with sqlite3.connect(original) as source, sqlite3.connect(copied) as target:
++        source.backup(target)
++    with SessionDB(original) as db, SessionDB(copied) as other:
++        assert db.get_meta(_STATE_DB_GENERATION_KEY) == other.get_meta(_STATE_DB_GENERATION_KEY)
++        assert draft_continuity.session_draft_continuity(db, "stored") == initial
++        assert draft_continuity.session_draft_continuity(other, "stored") not in (None, initial)
++        monkeypatch.setattr(draft_continuity, "current_instantiation_epoch", lambda: "")
++        assert draft_continuity.session_draft_continuity(db, "stored") is None
++
++
++def test_mismatch_stops_legacy_submit_before_side_effects(monkeypatch):
++    monkeypatch.setitem(server._sessions, "runtime", {"session_key": "stored"})
++    monkeypatch.setattr(server, "_active_draft_continuity", lambda *_: "a" * 64)
++    reply = server.handle_request({
++        "jsonrpc": "2.0", "id": 1, "method": "prompt.submit",
++        "params": {"session_id": "runtime", "profile": "scout", "text": "draft",
++                   "draft_continuity": "b" * 64},
++    })
++    assert reply["error"]["message"] == "draft session continuity changed"
+diff --git a/tui_gateway/contracts/prompt_voice.py b/tui_gateway/contracts/prompt_voice.py
+index 2f86d68dd346683daf2be261d7fa7a3d43ec3112..a27af77743abd90405cd4430e2f03680b4ab51c5 100644
+--- a/tui_gateway/contracts/prompt_voice.py
++++ b/tui_gateway/contracts/prompt_voice.py
+@@ -33,6 +33,7 @@ class PromptSubmitParams(SessionParams):
+     display_kind: str | None = None  # only "hidden" is honoured; anything else renders as a user row
+     interrupted: bool | None = None  # client-side barge-in: the turn's model message carries the note
+     queued: bool | None = None  # client queue drain — the busy path must hold it, never redirect/steer
++    draft_continuity: str | None = None  # fence a journaled legacy submission to the checked stored row
+     surface: str | None = None  # a ClientSurface value; unknown values clear the surface
+     voice_context: str | None = None  # recent spoken transcript, model input only (voice-live)
+     voice_turn: bool | None = None  # a spoken voice-conversation turn: runs on auxiliary.voice_chat
+diff --git a/tui_gateway/contracts/sessions.py b/tui_gateway/contracts/sessions.py
+index fe60cdf3151aa15229cf89b949eb5b1d2347cce8..a25b49bf63cc2f35112e37050dffb93950b9bc55 100644
+--- a/tui_gateway/contracts/sessions.py
++++ b/tui_gateway/contracts/sessions.py
+@@ -502,6 +502,18 @@ method("session.history", params=SessionHistoryParams, result=SessionHistoryResu
+        doc="The durable display transcript (ancestors included, row ids attached).")
+ 
+ 
++class SessionDraftContinuityParams(SessionParams):
++    stored_session_id: str
++
++
++class SessionDraftContinuityResult(Result):
++    continuity: str | None
++
++
++method("session.draft_continuity", params=SessionDraftContinuityParams, result=SessionDraftContinuityResult,
++       doc="Opaque continuity for the attached stored session's current database generation.")
++
++
+ class SessionUsageParams(SessionParams):
+     pass
+ 
+diff --git a/tui_gateway/draft_continuity.py b/tui_gateway/draft_continuity.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..8977ae064792dcfa945dbbee741d074656101c49
+--- /dev/null
++++ b/tui_gateway/draft_continuity.py
+@@ -0,0 +1,30 @@
++"""Read-only continuity evidence for recovering a local journal draft."""
++
++from hashlib import sha256
++import json
++import re
++import sqlite3
++
++from gateway.drain_control import current_instantiation_epoch
++from hermes_state_errors import _STATE_DB_GENERATION_KEY
++
++
++def session_draft_continuity(db, stored_session_id: str) -> str | None:
++    """Bind an exact stored row to this backend's current physical SQLite file."""
++    epoch = current_instantiation_epoch()
++    file_identity = db._db_file_identity
++    if not epoch or epoch.startswith(":") or not file_identity or db._db_file_was_replaced():
++        return None
++    try:
++        row = db._read_one(
++            "SELECT s.started_at, m.value FROM sessions s JOIN state_meta m ON m.key = ? WHERE s.id = ?",
++            (_STATE_DB_GENERATION_KEY, stored_session_id),
++        )
++    except sqlite3.Error:
++        return None
++    if not row or not isinstance(row[1], str) or not re.fullmatch(r"[0-9a-f]{32}", row[1]):
++        return None
++    if db._db_file_identity != file_identity or db._db_file_was_replaced():
++        return None
++    evidence = json.dumps(["ssh-draft-v1", epoch, *file_identity, row[1], stored_session_id, row[0]])
++    return sha256(evidence.encode()).hexdigest()
+diff --git a/tui_gateway/methods_prompt.py b/tui_gateway/methods_prompt.py
+index c7e939d3ab0683c37a764be3a8019e87f99b63be..09e1b545f4dd65942d6964e32e7dc0662f570d59 100644
+--- a/tui_gateway/methods_prompt.py
++++ b/tui_gateway/methods_prompt.py
+@@ -821,6 +821,14 @@ from gateway.session_surface import SURFACES as _CLIENT_SURFACES
+ def _(rid, params: dict) -> dict:
+     from hermes_cli.input_sanitize import sanitize_user_prompt_text
+     sid = params.get("session_id", "")
++    if "draft_continuity" in params:
++        bound_session, err = _sess_nowait(params, rid)
++        if err:
++            return err
++        expected = params["draft_continuity"]
++        if not isinstance(expected, str) or expected != _active_draft_continuity(
++                bound_session, params, _submit_row_target_key(bound_session)):
++            return _err(rid, 4090, "draft session continuity changed")
+     raw_text = params.get("text", "")
+     text = sanitize_user_prompt_text(raw_text) if isinstance(raw_text, str) else raw_text
+     # Off-screen sends (widget intents) type the row so no client renders a bubble;
+diff --git a/tui_gateway/methods_session.py b/tui_gateway/methods_session.py
+index 5b1ca479044dc3c34e562ede151a25e34b9b229b..4f8a42792b114741284e6cecc412cd6407afe003 100644
+--- a/tui_gateway/methods_session.py
++++ b/tui_gateway/methods_session.py
+@@ -1997,6 +1997,27 @@ def _(rid, params: dict, session: dict) -> dict:
+     return _ok(rid, {"count": len(history), "messages": _history_to_messages(history, profile_home=session.get("profile_home"))})
+ 
+ 
++def _active_draft_continuity(session, params, target):
++    from hermes_constants import profile_name_for_home
++    from tui_gateway.draft_continuity import session_draft_continuity
++
++    if not isinstance(target, str) or not target or target != _submit_row_target_key(session):
++        return None
++    profile = params.get("profile")
++    if not isinstance(profile, str) or not profile:
++        return None
++    home = session.get("profile_home") or _launch_home()
++    if profile_name_for_home(home) != profile:
++        return None
++    with _session_db(session) as db:
++        return session_draft_continuity(db, target) if db is not None else None
++
++
++@_session_method("session.draft_continuity")
++def _(rid, params: dict, session: dict) -> dict:
++    return _ok(rid, {"continuity": _active_draft_continuity(session, params, params.get("stored_session_id"))})
++
++
+ @_session_method("session.undo", live=True)
+ def _(rid, params: dict, session: dict) -> dict:
+     # Under a running turn the post-run write would clobber the undo — stop the reply first.

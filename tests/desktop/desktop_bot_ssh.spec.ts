@@ -526,7 +526,13 @@ async function visitReplacementChat(
   await expect(viewport.getByText(text, { exact: true })).toHaveCount(0)
   await expect(composer(page)).toHaveText('')
   const review = page.getByRole('button', { name: 'Review unconfirmed draft', exact: true })
-  if (switchUnchangedRoute && process.env.HERMES_E2E_SSH_DRAFT_RECOVERY === '1') {
+  if (switchUnchangedRoute && process.env.HERMES_E2E_SSH_DRAFT_CONTINUITY === '1') {
+    await expect.poll(() => wire.slice(from).some(frame =>
+      frame.method === 'session.draft_continuity' && frame.port === lookupOnReplacement?.port &&
+      frame.profile === profile && frame.reply !== undefined && frame.reply.code === undefined
+    )).toBe(true)
+    await expect(review).toHaveCount(0)
+  } else if (switchUnchangedRoute && process.env.HERMES_E2E_SSH_DRAFT_RECOVERY === '1') {
     // Record the current candidate's ambiguous offer. Never open it on this route.
     await expect(review).toBeEnabled()
   } else {

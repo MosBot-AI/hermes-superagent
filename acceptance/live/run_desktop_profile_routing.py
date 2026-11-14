@@ -87,6 +87,7 @@ APPIMAGE_CASES = (
 WEBAPP_SIGNOUT_CASE = "active-webapp-sign-out"
 PROPOSAL = ROOT / "experiments/bot-webapp-canonical"
 DRAFT_RECOVERY_PROPOSAL = ROOT / "experiments/ssh-draft-recovery"
+DRAFT_CONTINUITY_PROPOSAL = ROOT / "experiments/ssh-draft-continuity"
 DRAFT_CRASH_CASES = (
     SSH_DRAFT_CRASH_CASE,
     SSH_DRAFT_CRASH_DISABLED_CASE,
@@ -272,11 +273,7 @@ exit $?
 
 def verify_proposal(host, base, env, proposal):
     manifest = json.loads((proposal / "manifest.json").read_bytes())
-    patch_file = (
-        "ssh-draft-recovery.patch"
-        if proposal == DRAFT_RECOVERY_PROPOSAL
-        else "bot-webapp-canonical.patch"
-    )
+    patch_file = f"{proposal.name}.patch"
     patch = (proposal / patch_file).read_bytes()
     if manifest["base"] != base or hashlib.sha256(patch).hexdigest() != manifest["patch_sha256"]:
         raise ValueError("Proposal manifest does not match the compatibility pin and patch")
@@ -450,8 +447,10 @@ def run_probe(
         env["HERMES_E2E_BOT_WEBAPP_EXPECTATION"] = (
             "proposal" if proposal == PROPOSAL else "baseline"
         )
-    if proposal == DRAFT_RECOVERY_PROPOSAL:
+    if proposal in (DRAFT_RECOVERY_PROPOSAL, DRAFT_CONTINUITY_PROPOSAL):
         env["HERMES_E2E_SSH_DRAFT_RECOVERY"] = "1"
+    if proposal == DRAFT_CONTINUITY_PROPOSAL:
+        env["HERMES_E2E_SSH_DRAFT_CONTINUITY"] = "1"
     desktop, expected_commit = verify_build(
         host, python, node, env, proposal=proposal, packaged=appimage is not None
     )
@@ -532,6 +531,11 @@ def main():
         action="store_true",
         help="Verify the separately built proposal applicable to this case",
     )
+    parser.add_argument(
+        "--review-draft-continuity",
+        action="store_true",
+        help="Verify the separate SSH draft recovery candidate with a backend continuity check",
+    )
     args = parser.parse_args()
     if sys.platform != "linux":
         parser.error("This acceptance requires Linux namespaces and Xvfb")
@@ -545,7 +549,11 @@ def main():
         if not re.fullmatch(r"[a-zA-Z0-9_./-]+", str(args.scratch.resolve())):
             parser.error(f"--case {args.case} requires a simple absolute scratch path")
     proposal = None
-    if args.review_proposal:
+    if args.review_draft_continuity:
+        if args.review_proposal or args.case not in DRAFT_CRASH_CASES:
+            parser.error("--review-draft-continuity requires only an SSH draft abrupt-exit case")
+        proposal = DRAFT_CONTINUITY_PROPOSAL
+    elif args.review_proposal:
         if args.case == SAVED_TOKEN_CASE:
             proposal = PROPOSAL
         elif args.case in DRAFT_CRASH_CASES:
