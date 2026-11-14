@@ -211,6 +211,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 - Add a separate review-only guard that checks the original session store before offering SSH draft review and preserves the journal when continuity cannot be verified (#33).
 
+- Verify the review-only SSH draft continuity guard in an unsigned Linux x64 AppImage. The copied SQLite store offers no draft review, and the original store allows guarded review under both continuation settings (#33).
+
 - Add a review-only Hermes Desktop proposal to recover an uncertain SSH text draft from the scoped native journal after abrupt exit and block unchanged resubmission (#33).
 
 - Verify explicit SSH Bot Chat reopen after abrupt Desktop exit. The native prepared submission survives, while the restored draft and its retry identity are lost in the tested window (#33).

@@ -35,3 +35,33 @@ done
 The runner verifies the complete patch and source tree before launching an isolated Desktop and OpenSSH fixture. Use the clean pin without a review flag for the baseline. Use `--review-proposal` and the separate original proposal checkout for the historical negative comparison.
 
 Both native continuation settings passed after abrupt Electron and Gateway exit in the source build. The unchanged-route case preserves credentials, alias and install marker while replacing the backend data with a physical SQLite copy. The copy preserves its stored chat ID, timestamp and database generation. The new candidate keeps the replacement composer empty and hides review. The original journal entry survives. Switching back to the original state file restores review and guards two unchanged Enter presses. The backend tests also copy the actual database with its generation metadata intact and verify the copy has different continuity evidence.
+
+## Bundled Linux verification
+
+Build the bundled variant from the committed candidate checkout with Hermes' desktop provider. Use a fresh preparation directory, a local dependency cache and the Linux build prerequisites. Set `ICON_PRELOAD` to the absolute path of the [CommonJS icon-tool preload](../../docs/15-primary-bot-binding.md#current-pin-bot-mode-canonical-chat-refusal-and-retry). Calculate the completed image's SHA-256 before running the fixture from the Personal Agent repository root.
+
+```sh
+set -eu
+commit=$(git -C "$DISPOSABLE_HERMES" rev-parse HEAD)
+test "$(git -C "$DISPOSABLE_HERMES" rev-parse HEAD^{tree})" = d7c0cb003cfe40b8e7bf0b21603a8cdd55125d3c
+test -z "$(git -C "$DISPOSABLE_HERMES" status --porcelain)"
+CSC_IDENTITY_AUTO_DISCOVERY=false \
+HERMES_E07_ICON_TOOL_DIR="$DISPOSABLE_HERMES/apps/desktop/build/prepared-packaging-tools/icons" \
+NODE_OPTIONS="--import=$ICON_PRELOAD" \
+  "$PINNED_PYTHON" "$DISPOSABLE_HERMES/scripts/bundles/desktop.py" \
+    --repo "$DISPOSABLE_HERMES" --commit "$commit" --variant bundled \
+    --work "$BUILD_WORK" --cache "$BUILD_CACHE"
+appimage="$DISPOSABLE_HERMES/apps/desktop/release/HermesBundled-0.0.0-linux-x86_64.AppImage"
+sha256sum "$appimage"
+for case_name in bot-canonical-ssh-draft-crash bot-canonical-ssh-draft-crash-no-continue bot-canonical-ssh-draft-unchanged-route bot-canonical-ssh-draft-endpoint-replacement; do
+  python -m acceptance.live.run_desktop_profile_routing --case "$case_name" \
+    --review-draft-continuity --hermes "$DISPOSABLE_HERMES" \
+    --hermes-python "$PINNED_PYTHON" --node "$PINNED_NODE" --appimage "$appimage"
+done
+```
+
+The fixture verifies the image's clean commit stamp, bundled CLI, packaged Electron executable and ASAR. It runs the isolated OpenSSH Gateway from the verified source checkout. For a negative control, substitute a clean-pin image or an image from the earlier recovery proposal. The install-stamp assertion should fail before packaged Electron launches. On refusal, the runner prints a private diagnostics directory, and the exact `AppImage commit must match the verified checkout` assertion appears in its `playwright.json`.
+
+The [manifest](manifest.json) records the unsigned Linux x64 build's exact commit, tree, tool versions and image digest. This host supplied a CommonJS package boundary for the generated icon tool, X11 headers and libraries, and cached registry wheels from the earlier build with the same `uv.lock`. The provider rebuilt native dependencies and the payload from the candidate checkout.
+
+The packaged renderer passed on the original store with native continuation enabled and disabled. On the unchanged SSH route serving the copied SQLite store, it showed the replacement's transcript and an empty composer without offering review. The separate configured endpoint edit also kept the draft private. In both cases the original journal entry survived, and reopening the original store allowed explicit guarded review. Each unchanged Enter press left the submit, transcript and provider counts unchanged. Both mismatched images failed the install stamp before Electron launched. Signed distribution, other systems and authenticated personal owner continuity are still open.
