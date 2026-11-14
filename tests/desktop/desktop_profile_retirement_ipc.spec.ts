@@ -7,6 +7,7 @@ import { expect, type ElectronApplication, type Page, test } from '@playwright/t
 import { launchBotDesktop } from './desktop_bot_appimage'
 import { lookup, observeWire, storedChats, type WireFrame, type WireSocket } from './desktop_bot_canonical_observer'
 import {
+  configureSavedWebapp,
   type Gateway,
   privateEnv,
   readEndpoint,
@@ -410,6 +411,209 @@ test('saved Webapp Desktop refuses a parked named profile and reopens its chat a
         'both owned Gateways stop'
       ).toBe(true)
       expect(live.length, 'no fixture processes remain after teardown').toBe(0)
+    }
+  }
+})
+
+test('saved Webapp Desktop reopens the original chat after explicit token replacement', async () => {
+  test.setTimeout(180_000)
+  expect(process.platform).toBe('linux')
+  const provider = await startScriptedProvider()
+  const localBox = createCoreSandbox('a')
+  const remoteBox = createCoreSandbox('b')
+  const gateways: Gateway[] = []
+  let app: ElectronApplication | undefined
+  let completed = false
+  try {
+    const localEnv = privateEnv(localBox)
+    const remoteEnv = privateEnv(remoteBox)
+    const webappPort = await freePort()
+    seedInstall(localBox, localEnv, provider.url, profile, 'decoy', '6'.repeat(32))
+    seedInstall(remoteBox, remoteEnv, provider.url, profile, 'retirement', '7'.repeat(32), webappPort)
+    installObserver(localBox.hermesHome)
+    const local = startGateway(localBox, localEnv)
+    gateways.push(local)
+    const remote = startGateway(remoteBox, remoteEnv)
+    gateways.push(remote)
+    const [localEndpoint, remoteEndpoint] = await Promise.all([
+      waitForEndpoint(local, profile),
+      waitForEndpoint(remote, profile)
+    ])
+    expect(remoteEndpoint.origin).toBe(`http://127.0.0.1:${webappPort}`)
+    expect(localEndpoint.instanceId).not.toBe(remoteEndpoint.instanceId)
+    configureSavedWebapp(localBox, remoteBox, remoteEndpoint.origin, source, 'default')
+    const credentialFile = path.join(remoteBox.hermesHome, 'webapp', 'session-token')
+    const original = fs.readFileSync(credentialFile, 'utf8').trim()
+    const sessionStatus = async (token: string) => {
+      const url = new URL('/api/sessions', remoteEndpoint.origin)
+      url.searchParams.set('profile', profile)
+      const response = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` },
+        redirect: 'error',
+        signal: AbortSignal.timeout(5_000)
+      })
+      await response.body?.cancel()
+      return response.status
+    }
+    expect(await sessionStatus(original)).toBe(200)
+    const snapshot = () => [localBox, remoteBox].map(box => storedChats(box.hermesHome, profile))
+    const before = snapshot()
+
+    const sockets = new Map<WireFrame, WireSocket>()
+    const wire: WireFrame[] = []
+    const launch = async () => {
+      const live = await launchBotDesktop(localEnv)
+      app = live.app
+      const { page } = live
+      observeWire(page, sockets, wire)
+      await page.reload({ waitUntil: 'domcontentloaded' })
+      await expect(composer(page)).toBeVisible({ timeout: 45_000 })
+      await expect
+        .poll(() => page.evaluate(() => window.__E07_RETIREMENT_HOST__?.active()), { timeout: 45_000 })
+        .toEqual({ connectionId: source, profile: 'default', gateway: 'open' })
+      return live
+    }
+    const initial = await launch()
+    let { page } = initial
+    const target: Route = { connectionId: source, mode: 'remote', profile, targetProfile: profile }
+    const decoy: Route = { connectionId: 'local', mode: 'local', profile, targetProfile: profile }
+    const read = async (route: Route, limit: number, expected: string, expectedPort: string) => {
+      expect(await requestChat(page, route, limit)).toEqual({ ids: [[expected, expected]] })
+      const frames = wire.filter(frame => lookup(frame) && frame.limit === limit)
+      expect(frames).toHaveLength(1)
+      expect(frames[0]).toMatchObject({ port: expectedPort, profile, reply: {} })
+      const socket = sockets.get(frames[0]!)!
+      expect(socket).toBeDefined()
+      expect(socket.closed).toBe(false)
+      return socket
+    }
+    const retired = await read(target, 61, namedChat, String(webappPort))
+    expect(retired.savedToken).toBe(true)
+    const localPort = new URL(localEndpoint.origin).port
+    const sibling = await read(decoy, 62, decoyChat, localPort)
+    expect(sibling.savedToken).toBe(false)
+    const openChat = async () => {
+      await page
+        .getByRole('button', { name: 'Bots', exact: true })
+        .or(page.getByRole('tab', { name: 'Bots', exact: true }))
+        .first()
+        .click()
+      const row = page.locator(`[data-roster-key="${source}::${profile}"]`)
+      const viewport = page.locator('[data-slot="aui_thread-viewport"]').filter({ visible: true }).first()
+      await expect(row).toContainText(namedChat)
+      const beforeOpen = wire.length
+      await row.click()
+      await expect(viewport.getByText(namedChat, { exact: true })).toBeVisible({ timeout: 45_000 })
+      await expect(viewport.getByText(decoyChat, { exact: true })).toHaveCount(0)
+      await expect
+        .poll(() => page.evaluate(() => window.__E07_RETIREMENT_HOST__!.focus()))
+        .toEqual({
+          id: namedChat,
+          owner: { connectionId: source, profile }
+        })
+      return wire.slice(beforeOpen).filter(frame => openMethods.has(frame.method))
+    }
+    await openChat()
+
+    const from = wire.length
+    const signedOut = JSON.parse(
+      runPython(remoteEnv, `import json; from ${fixtureModule} import sign_out; print(json.dumps(sign_out()))`)
+    )
+    expect(signedOut).toMatchObject({ signed_out: true, serving: true, sign_in_gate: false })
+    expect(signedOut.connections_closed).toBeGreaterThan(0)
+    await expect.poll(() => retired.closed, { timeout: 20_000 }).toBe(true)
+    const replacement = fs.readFileSync(credentialFile, 'utf8').trim()
+    expect(
+      replacement !== original && /^[A-Za-z0-9_-]{43}$/.test(replacement),
+      'native sign-out rotated the fixture token'
+    ).toBe(true)
+    expect(await sessionStatus(original)).toBe(401)
+    expect(await sessionStatus(replacement)).toBe(200)
+    const stale = await page.evaluate(
+      async ({ route, profile }) => {
+        try {
+          await window.__E07_RETIREMENT_HOST__!.requestProfile(
+            route,
+            'session.list',
+            { profile, title: 'Bot Chat', include_hidden: true, limit: 63 },
+            6_000
+          )
+          return 'accepted'
+        } catch {
+          return 'refused'
+        }
+      },
+      { route: target, profile }
+    )
+    expect(stale).toBe('refused')
+    expect(
+      wire
+        .slice(from)
+        .filter(frame => lookup(frame) && frame.limit === 63 && frame.reply && frame.reply.code === undefined)
+    ).toEqual([])
+    const control = await read(decoy, 64, decoyChat, localPort)
+    expect(control.savedToken).toBe(false)
+    expect(snapshot()).toEqual(before)
+
+    // The private clipboard keeps the replacement out of Playwright arguments and output.
+    await initial.app.evaluate(async ({ clipboard }, filename) => {
+      const fs = process.getBuiltinModule('node:fs')!
+      clipboard.writeText(fs.readFileSync(filename, 'utf8').trim())
+    }, credentialFile)
+    try {
+      await page.evaluate(
+        async ({ id, origin }) => {
+          const result = await window.hermesDesktop!.connections!.save({
+            id,
+            kind: 'remote',
+            label: 'Spare',
+            url: origin,
+            authMode: 'token',
+            token: await window.hermesDesktop!.readClipboard(),
+            allowPlainTextToken: true
+          })
+          if (!result.ok) throw new Error('Fixture connection edit failed')
+        },
+        { id: source, origin: remoteEndpoint.origin }
+      )
+    } finally {
+      await initial.app.evaluate(({ clipboard }) => clipboard.clear())
+    }
+    const desktopProcess = initial.app.process()
+    await initial.app.close()
+    expect(desktopProcess.exitCode).toBe(0)
+    page = (await launch()).page
+    const reopened = await read(target, 65, namedChat, String(webappPort))
+    expect(reopened).not.toBe(retired)
+    expect(reopened.savedToken).toBe(true)
+    const opened = await openChat()
+    expect(opened.length).toBeGreaterThan(0)
+    expect(
+      opened.every(
+        frame =>
+          frame.port === String(webappPort) &&
+          frame.profile === profile &&
+          frame.sessionId === namedChat &&
+          sockets.get(frame) === reopened
+      )
+    ).toBe(true)
+    expect(wire.filter(frame => writeMethods.has(frame.method))).toEqual([])
+    expect((await read(decoy, 66, decoyChat, localPort)).savedToken).toBe(false)
+    expect(readEndpoint(remote, profile)).toEqual(remoteEndpoint)
+    expect(readEndpoint(local, profile)).toEqual(localEndpoint)
+    expect(snapshot()).toEqual(before)
+    expect(provider.completions.length).toBe(0)
+    completed = true
+  } finally {
+    await app?.close().catch(() => undefined)
+    const stopped = await Promise.allSettled(gateways.map(stopGateway))
+    await provider.close()
+    const live = [localBox, remoteBox].flatMap(sandboxProcesses)
+    localBox.cleanup()
+    remoteBox.cleanup()
+    if (completed) {
+      expect(stopped.every(result => result.status === 'fulfilled')).toBe(true)
+      expect(live).toHaveLength(0)
     }
   }
 })
