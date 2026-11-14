@@ -199,6 +199,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Verify combined SSH acknowledgement and Gateway loss. Desktop restores the draft and guards one explicit retry. Reopening starts one native continuation by default and none with native continuation disabled (#33).
+
 - Verify OpenSSH Bot Mode recovery after remote Gateway process loss. Explicit reopen triggers one native continuation by default. Disabling native continuation recovers the chat without another provider request (#33).
 
 - Verify that a lost legacy SSH prompt acknowledgement restores the draft and that Desktop warns on its explicit retry without resubmitting. The original reply remains available in the reopened chat (#33).

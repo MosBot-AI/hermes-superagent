@@ -44,7 +44,7 @@
 | Desktop 来源选择 | 在 Linux 上运行真实的 Electron 源码构建，通过私有本地票据和已保存的环回 Webapp token 连接，验证 `host.profileRoutes()` 与 `host.requestProfile()`。原生 profile 退役并同名热上线时，已保存的连接保持原路由作用域。[Electron 证据](#当前固定版本的-electron-profile-路由) · [Desktop 运行时转换](#当前固定版本的-desktop-profile-退役) | 分别验证 Desktop 安装包及任何启用的 SSH 或 OAuth 路由。 |
 | 安装复制观测 | 两个 Gateway 均可达时，Electron 将安装标记和 profile 相同的条目归并到主连接。显式注册路由仍返回各自的对话记录，停止状态 home 副本保留相同规范会话 ID 时也是如此。[安装复制证据](#当前固定版本的安装复制歧义) | 恢复或重新绑定前需要独立、经认证的安装和 owner 证据。清单无法消除复制标记的歧义。 |
 | Bot Mode 规范会话打开 | 源码构建的 Linux 名册在查询返回类型化错误时拒绝打开会话，在查询返回空结果但原生指针探测确认已有会话时也拒绝。重试时打开同一个本地未压缩会话。同一用例从本地构建的 Linux x64 AppImage 启动时也通过。[本地 Bot Mode 证据](#当前固定版本的-bot-mode-规范会话拒绝与重试) | 已签名的发行安装包、其他平台、OAuth 界面路由以及经认证的 owner 绑定需要独立证据。 |
-| 已保存 OpenSSH 的 Bot Mode | Linux x64 Desktop 的源码构建与安装包通过真实 SSH 密钥连接和转发的 Gateway 打开远端命名 Bot Chat，本地同时存在同名 profile。[OpenSSH 证据](#当前固定版本的-openssh-bot-mode-路由) · [Profile 别名](#当前固定版本的-openssh-profile-别名) · [重连](#当前固定版本的-openssh-重连) · [别名改绑](#当前固定版本的-openssh-别名改绑) · [端点更换](#当前固定版本的-openssh-端点更换) · [主机密钥轮换](#当前固定版本的-openssh-主机密钥轮换) · [在途回合](#当前固定版本中回合进行时的-openssh-中断) · [提交确认丢失](#当前固定版本的-openssh-提交确认丢失) · [Gateway 进程退出](#当前固定版本的-openssh-gateway-进程退出) | 修改别名后，缓存的描述符仍可读取此前仍在服务的 profile。更换端点后，同一描述符可解析到另一个安装。自动恢复、其他 SSH 凭据和 owner 绑定需要独立证据。 |
+| 已保存 OpenSSH 的 Bot Mode | Linux x64 Desktop 的源码构建与安装包通过真实 SSH 密钥连接和转发的 Gateway 打开远端命名 Bot Chat，本地同时存在同名 profile。[OpenSSH 证据](#当前固定版本的-openssh-bot-mode-路由) · [Profile 别名](#当前固定版本的-openssh-profile-别名) · [重连](#当前固定版本的-openssh-重连) · [别名改绑](#当前固定版本的-openssh-别名改绑) · [端点更换](#当前固定版本的-openssh-端点更换) · [主机密钥轮换](#当前固定版本的-openssh-主机密钥轮换) · [在途回合](#当前固定版本中回合进行时的-openssh-中断) · [提交确认丢失](#当前固定版本的-openssh-提交确认丢失) · [Gateway 进程退出](#当前固定版本的-openssh-gateway-进程退出) · [提交确认丢失与 Gateway 退出](#当前固定版本的-openssh-提交确认丢失与-gateway-退出) | 修改别名后，缓存的描述符仍可读取此前仍在服务的 profile。更换端点后，同一描述符可解析到另一个安装。自动恢复、其他 SSH 凭据和 owner 绑定需要独立证据。 |
 | 本地旧版压缩历史 | 命名 profile 的原生 CLI 检查并接管符合条件的 Gateway 前压缩末端。Linux 源码构建的 Bot Mode 在所选 profile 路由打开该末端，并显示已存储的祖先与末端消息。[压缩历史证据](#当前固定版本的压缩历史接管) | 经 owner 授权的跨安装接管、混合 owner 谱系、其他凭据模式和投递对账需要独立证据。 |
 | 已保存 Webapp 令牌的回退 | 干净 Linux Electron 构建在命名 profile 查询返回空结果时探测远程启动 authority，并在同一次点击中通过第二次查询打开原会话。单独构建的提案探测命名 authority，拒绝不确定的打开操作，并在明确重试后打开原会话。[已保存 Webapp 证据](#当前固定版本的已保存-webapp-bot-mode-路由) | 干净固定版本仍有回退作用域缺口。受支持的使用需要已修正的宿主修订及该模式的专项验收。 |
 | Profile 与安装连续性 | 停机状态下的原生 profile CLI 和备份导入路径覆盖重命名、克隆、删除、同名重建、拒绝向已占用的 profile 导入，以及恢复后目标的 epoch 下限。在同一运行中的安装实例内，保留原有 host 作用域 WebSocket，覆盖 profile 退役及同名热上线。[Profile 生命周期](#当前固定版本的原生-profile-生命周期) · [保留的路由](#当前固定版本保留的原生-profile-路由) · [备份与恢复](#当前固定版本的原生备份与恢复) | 其他运行时切换和经认证的安装连续性需要当前目标、登记、规范谱系与冲突证据。复制的标记和名称无法消除安装实例的歧义。 |
@@ -286,7 +286,15 @@ Bot Mode 的确切标题 `session.list` 查询携带所选后端 profile。列�
 
 在远端命名 profile 设置 `desktop.auto_continue.enabled: false` 后，同样的显式重开保留原用户消息，且不会再向 provider 发起请求。重新加载渲染进程并再次显式重开后，Desktop 仍可显示首段流式回复。夹具在中断前已在 Desktop 本地在途日志中观察到该片段。远端 SQLite 消息记录中没有该回合的助手回复。两种配置下，另外三份会话投影保持一致，未新建会话，旧协议回复和原生准入账本均无持久准入 ID。
 
-使用 `--case bot-canonical-ssh-gateway-loss` 验证默认配置，或使用 `--case bot-canonical-ssh-gateway-loss-no-continue` 验证禁用原生续跑的配置。两者使用同一运行器，均可添加 `--appimage`，且源码构建和本地构建的未签名 Linux x64 Desktop 均在干净固定版本上通过。确认丢失与进程退出同时发生、无需用户点击的自动重连，以及经 owner 授权的写入仍需单独取证。
+使用 `--case bot-canonical-ssh-gateway-loss` 验证默认配置，或使用 `--case bot-canonical-ssh-gateway-loss-no-continue` 验证禁用原生续跑的配置。两者使用同一运行器，均可添加 `--appimage`，且源码构建和本地构建的未签名 Linux x64 Desktop 均在干净固定版本上通过。[组合故障用例](#当前固定版本的-openssh-提交确认丢失与-gateway-退出)还屏蔽了旧协议确认。无需用户点击的自动重连及经 owner 授权的写入仍需单独取证。
+
+#### 当前固定版本的 OpenSSH 提交确认丢失与 Gateway 退出
+
+夹具向 Desktop 渲染进程屏蔽一条真实成功的旧协议 `prompt.submit` 确认，WebSocket 观测仍记录该回复。夹具终止持有暂停中 provider 响应流的临时远端进程，同一个 OpenSSH 监听器仍可连接。重开前，Desktop 提示 Gateway 连接已关闭并恢复原草稿。远端消息记录保留原用户消息，provider 有一个已中止的请求。
+
+先切到本地对照会话，再显式重开原命名会话时，Desktop 使用新转发恢复原会话。默认配置下，后继进程启动一次原生续跑，并将中断提示和完整回复写入原会话。在远端命名 profile 设置 `desktop.auto_continue.enabled: false` 后，原会话仅保留原用户消息，provider 不会收到第二个请求。两种配置下，重开后在恢复的草稿上按一次 Enter，都会出现服务器无法确认先前发送结果的警告。渲染进程没有再次提交，这次重试也未改变消息记录或 provider 请求次数。两种情况均无持久准入 ID，三份对照会话保持不变。
+
+使用 `--case bot-canonical-ssh-lost-ack-gateway-loss` 验证默认配置，或使用 `--case bot-canonical-ssh-lost-ack-gateway-loss-no-continue` 验证禁用续跑的对照配置。两者均在干净固定版本的源码构建和本地构建的未签名 Linux x64 Desktop 上通过。重试验证限于同一个 Desktop 渲染进程，在显式重开后按一次 Enter。新的提交、跨客户端对账和经 owner 授权的写入仍需单独取证。
 
 ### 当前固定版本的原生 Profile 生命周期
 
