@@ -199,6 +199,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Verify that a lost legacy SSH prompt acknowledgement restores the draft and that Desktop warns on its explicit retry without resubmitting. The original reply remains available in the reopened chat (#33).
+
 - Verify that a legacy SSH Bot Mode turn can finish while the transport is down and that an explicit reopen reads the committed reply without resubmitting. Record the missing durable admission receipt (#33).
 
 - Verify that Desktop refuses an SSH endpoint whose host key changed and resumes the original Bot Chat after an explicit trust update and retry (#33).

@@ -30,6 +30,7 @@ SSH_ALIAS_EDIT_CASE = "bot-canonical-ssh-alias-edit"
 SSH_ENDPOINT_CASE = "bot-canonical-ssh-endpoint-replacement"
 SSH_HOST_KEY_CASE = "bot-canonical-ssh-host-key-rotation"
 SSH_IN_FLIGHT_CASE = "bot-canonical-ssh-in-flight-turn"
+SSH_LOST_ACK_CASE = "bot-canonical-ssh-lost-ack"
 SSH_SPEC = "desktop_bot_ssh.spec.ts"
 SSH_FIXTURES = (GATEWAY_FIXTURE, CANONICAL_OBSERVER, APPIMAGE_FIXTURE)
 SAVED_TOKEN_CASE = "bot-canonical-saved-token"
@@ -52,6 +53,7 @@ APPIMAGE_CASES = (
     SSH_ENDPOINT_CASE,
     SSH_HOST_KEY_CASE,
     SSH_IN_FLIGHT_CASE,
+    SSH_LOST_ACK_CASE,
     SAVED_TOKEN_CASE,
     COMPRESSED_LOCAL_CASE,
     COMPRESSED_SAVED_CASE,
@@ -77,6 +79,7 @@ CASES = {
     SSH_ENDPOINT_CASE: (SSH_SPEC, SSH_FIXTURES, "OpenSSH Bot Mode endpoint replacement"),
     SSH_HOST_KEY_CASE: (SSH_SPEC, SSH_FIXTURES, "OpenSSH Bot Mode host key rotation"),
     SSH_IN_FLIGHT_CASE: (SSH_SPEC, SSH_FIXTURES, "OpenSSH Bot Mode in-flight turn"),
+    SSH_LOST_ACK_CASE: (SSH_SPEC, SSH_FIXTURES, "OpenSSH Bot Mode lost acknowledgement"),
     SAVED_TOKEN_CASE: (
         "desktop_bot_saved_token_refusal.spec.ts",
         CANONICAL_FIXTURES,
@@ -122,6 +125,7 @@ CASE_TITLE_FILTERS = {
     SSH_ENDPOINT_CASE: "opens the replacement OpenSSH installation after an endpoint edit$",
     SSH_HOST_KEY_CASE: "refuses a changed OpenSSH host key before explicit trust update$",
     SSH_IN_FLIGHT_CASE: "reopens the canonical chat after SSH loss during a turn$",
+    SSH_LOST_ACK_CASE: "recovers the committed SSH Bot turn after losing its acknowledgement$",
     COMPRESSED_LOCAL_CASE: "compressed Bot Chat over the local private ticket$",
     COMPRESSED_SAVED_CASE: "compressed Bot Chat over the saved Webapp token$",
     "install-marker-collision": (
