@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 from contextlib import asynccontextmanager, contextmanager, suppress
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -42,6 +43,7 @@ def activate_profile_cli(root, host):
     denied = root / "profile-cli-audit-denied"
     binaries = {name: (root / "bin" / name).resolve(strict=True) for name in ("git", "which")}
     self_check = False
+    fault = os.environ.get("HERMES_PROFILE_FIXTURE_RENAME_FAULT")
 
     def block(category):
         if not self_check and not denied.exists():
@@ -135,6 +137,9 @@ def activate_profile_cli(root, host):
             if writes and not isinstance(path, int) and not private_path(path, -1):
                 block("write")
 
+        if fault:
+            pause_interrupted_rename(root, fault, event, args)
+
     sys.addaudithook(inspect_operation)
     self_check = True
     try:
@@ -145,6 +150,48 @@ def activate_profile_cli(root, host):
         raise RuntimeError("Profile CLI fixture CLI guard did not activate")
     finally:
         self_check = False
+    if fault == "before-commit":
+        sys.setprofile(pause_before_receipt_commit(root))
+
+
+def pause_before_receipt_commit(root):
+    """Observe the real SQLite commit after the named-store rekey has run."""
+
+    def profile(frame, event, callee):
+        if event != "c_call" or frame.f_code.co_name != "_execute_write":
+            return
+        if getattr(callee, "__name__", None) != "commit":
+            return
+        write = frame.f_locals.get("fn")
+        if not getattr(write, "__qualname__", "").endswith("rekey_profile_state.<locals>._do"):
+            return
+        stop_rename_cli(root)
+
+    return profile
+
+
+def stop_rename_cli(root):
+    (root / "profile-cli-rename-paused").touch(mode=0o600, exist_ok=False)
+    time.sleep(30)
+
+
+def pause_interrupted_rename(root, fault, event, args):
+    """Stop at an observed syscall boundary until the test kills the owned CLI."""
+    home = root / "h"
+    old = home / "profiles/scout"
+    new = home / "profiles/renamed"
+    record = home / ".local-receipt-rename.json"
+    if fault == "before-move":
+        reached = event == "os.rename" and args[:2] == (old, new)
+    elif fault == "io-error":
+        reached = event == "sqlite3.connect" and args == ((new / "state.db").as_uri() + "?mode=ro",)
+    else:
+        reached = fault == "after-commit" and event == "os.remove" and args[0] == str(record)
+    if not reached:
+        return
+    if fault == "io-error":
+        raise OSError("synthetic profile store I/O error")
+    stop_rename_cli(root)
 
 
 def prepare_cli_source(host, pin, root, guard, env):
@@ -180,7 +227,7 @@ def prepare_cli_source(host, pin, root, guard, env):
     }
 
 
-def run_profile_cli(host, home, env, *command):
+def run_profile_cli(host, home, env, *command, rename_fault=None):
     for unit_name in ("hermes-gateway", "hermes-gateway-scout", "hermes-gateway-renamed"):
         unit = Path("/etc/systemd/system") / f"{unit_name}.service"
         assert not (unit.exists() or unit.is_symlink()), (
@@ -191,6 +238,12 @@ def run_profile_cli(host, home, env, *command):
     )
     root = home.parent
     before = set(root.glob("profile-cli-audit-ready-*"))
+    marker = root / "profile-cli-rename-paused"
+    if rename_fault is not None:
+        assert rename_fault in {"before-move", "before-commit", "after-commit", "io-error"}
+        assert (list(command), "renamed") == RENAME_COMMANDS[-1]
+        assert not marker.exists()
+        env = env | {"HERMES_PROFILE_FIXTURE_RENAME_FAULT": rename_fault}
     # The allowed native essential-skills process inherits this session. If a
     # subprocess timeout occurs, stop its entire owned group before removing home.
     with subprocess.Popen(
@@ -205,6 +258,15 @@ def run_profile_cli(host, home, env, *command):
         umask=0o077,
     ) as process:
         try:
+            if rename_fault is not None and rename_fault != "io-error":
+                deadline = time.monotonic() + 15
+                while (
+                    not marker.exists() and process.poll() is None and time.monotonic() < deadline
+                ):
+                    time.sleep(0.03)
+                assert marker.is_file() and process.poll() is None
+                process.kill()
+                marker.unlink()
             stdout, stderr = process.communicate(timeout=45)
         except BaseException:
             with suppress(ProcessLookupError):

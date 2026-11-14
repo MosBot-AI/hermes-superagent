@@ -1,3 +1,37 @@
+diff --git a/gateway/runtime_ownership.py b/gateway/runtime_ownership.py
+index 41a80f602134d660e693b24001cccf6ae2872378..eae73b60c6d27a6b887e60e20f1c1f155651187d 100644
+--- a/gateway/runtime_ownership.py
++++ b/gateway/runtime_ownership.py
+@@ -13,6 +13,7 @@ import logging
+ import os
+ from pathlib import Path
+ import stat
++import sys
+ import threading
+ import time
+ from hermes_dir_acl import make_user_dir
+@@ -167,6 +168,10 @@ class ProfileOwnership:
+                 for home in sorted({canonical_home(p) for p in homes}):
+                     if home in self._handles:
+                         continue
++                    if sys.platform == "linux" and purpose != "profile-rename":
++                        from hermes_cli.profile_rename_record import refuse_pending_rename
++                        # Refuse a stale profile path before reserve could recreate it.
++                        refuse_pending_rename(home)
+                     make_user_dir(home, mode=0o700, parents=True, exist_ok=True)
+                     path = home / 'gateway.lock'
+                     fd = _open_lock(path)
+@@ -174,6 +179,10 @@ class ProfileOwnership:
+                     try:
+                         if not _try_acquire_file_lock(handle) or not _still_names(path, handle.fileno()):
+                             raise OwnershipConflict(f'Gateway runtime already owns profile {home}')
++                        # Check under flock. An interrupted rename must settle before a
++                        # Gateway or other maintenance operation takes the affected stores.
++                        if sys.platform == "linux" and purpose != "profile-rename":
++                            refuse_pending_rename(home)
+                         record = {**_build_pid_record(), 'hermes_home': str(home)}
+                         if purpose:
+                             record['purpose'] = purpose
 diff --git a/hermes_cli/profile_cmd.py b/hermes_cli/profile_cmd.py
 index dfde72addfb4f9523d96e21ee060b8e31a5eb9d9..c2b4275248f123fc84a8893cdb9fbc6d6fde28c3 100644
 --- a/hermes_cli/profile_cmd.py
@@ -22,10 +56,10 @@ index dfde72addfb4f9523d96e21ee060b8e31a5eb9d9..c2b4275248f123fc84a8893cdb9fbc6d
  
  
 diff --git a/hermes_cli/profile_identity.py b/hermes_cli/profile_identity.py
-index 98ce4556ad03c64f8dfc143e4e0a4dc65115f9f2..038963adee843c768c1a0d49c9175a1073722402 100644
+index 98ce4556ad03c64f8dfc143e4e0a4dc65115f9f2..45c31ad66c16a0216148149be5a632ec7e76ff71 100644
 --- a/hermes_cli/profile_identity.py
 +++ b/hermes_cli/profile_identity.py
-@@ -22,10 +22,84 @@ Checkpoint project state has no live in-memory owner and is rekeyed locally afte
+@@ -22,10 +22,121 @@ Checkpoint project state has no live in-memory owner and is rekeyed locally afte
  from __future__ import annotations
  
  import contextlib
@@ -58,63 +92,218 @@ index 98ce4556ad03c64f8dfc143e4e0a4dc65115f9f2..038963adee843c768c1a0d49c9175a10
 +
 +
 +def rename_with_local_receipts(old: str, new: str) -> Path:
-+    """Run only as an explicit same-installation rename of the actual stopped home."""
++    """Rename or explicitly finish the exact offline operation already on disk."""
 +    from gateway.runtime_ownership import exclusive_maintenance
 +    from gateway.session_policy import restore_policy
-+    from hermes_cli.profiles import _rename_profile, get_profile_dir
++    from hermes_cli.profile_rename_record import (
++        clear, fsync_directory, identity, load_record, publish, verify,
++    )
++    from hermes_cli.profiles import (
++        _finish_profile_rename, _rename_profile, _s6_runtime_manager, get_profile_dir,
++    )
 +    from hermes_state_registry import acquire, release_or_close
 +    from hermes_state_runtime import RuntimeStoreError
 +
-+    root, source, destination = (get_profile_dir(name) for name in ("default", old, new))
-+    if source.is_symlink() or not source.is_dir() or source.parent.resolve() != root.resolve() / "profiles":
-+        raise ValueError("LOCAL receipt preservation requires the original profile directory")
-+    if destination.exists() or destination.is_symlink():
-+        raise FileExistsError("The destination profile already exists")
-+    identity = source.stat()
++    # Resolve the installation path without resolving through the profile directory.
++    root = get_profile_dir("default").resolve()
++    source, destination = root / "profiles" / old, root / "profiles" / new
++    if source.parent.resolve() != source.parent:
++        raise ValueError("LOCAL receipt preservation requires the original profiles directory")
++    if _s6_runtime_manager() is not None:
++        raise ValueError("LOCAL receipt preservation requires an unsupervised stopped profile")
 +
-+    def move(old_dir, new_dir):
-+        current = old_dir.lstat()
-+        if (current.st_dev, current.st_ino) != (identity.st_dev, identity.st_ino):
-+            raise ValueError("The profile directory changed during rename")
-+        db_path = old_dir / "state.db"
-+        info = db_path.lstat()
-+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
-+            raise ValueError("LOCAL receipt preservation requires a private state database")
-+        # The held lock inode travels with the directory. Publish the receipt and
-+        # its native routing changes before releasing that lock.
-+        _rename_noreplace(old_dir, new_dir)
++    def validate_policy(data):
++        policy = restore_policy(data)
++        if Path(policy.cwd).resolve().is_relative_to(source):
++            raise RuntimeStoreError("invalid_params", detail="LOCAL policy uses the moved profile as its workspace")
++
++    def settle(profile):
++        db = acquire(profile / "state.db")
 +        try:
-+            db = acquire(new_dir / "state.db")
-+            try:
-+                def validate_policy(data):
-+                    policy = restore_policy(data)
-+                    if Path(policy.cwd).resolve().is_relative_to(old_dir.resolve()):
-+                        raise RuntimeStoreError("invalid_params", detail="LOCAL policy uses the moved profile as its workspace")
-+                db.rekey_profile_state(old, new, local_receipt_policy=validate_policy)
-+            finally:
-+                release_or_close(db)
-+        except (RuntimeStoreError, sqlite3.IntegrityError) as exc:
-+            # A validation error rolls back the SQLite transaction. Restore the
-+            # prior namespace before any sidecar, alias or service is republished.
-+            _rename_noreplace(new_dir, old_dir)
-+            if isinstance(exc, RuntimeStoreError) and exc.detail:
-+                raise ValueError(f"{exc.reason}: {exc.detail}") from exc
-+            raise
-+        except (OSError, sqlite3.Error, ValueError) as exc:
-+            raise ValueError("LOCAL receipt migration could not confirm settlement after the move") from exc
++            db.rekey_profile_state(old, new, local_receipt_policy=validate_policy)
++        finally:
++            release_or_close(db)
 +
-+    with exclusive_maintenance([root, source], purpose="profile-rename"):
-+        return _rename_profile(old, new, move=move)
++    def finish(profile):
++        try:
++            settle(profile)
++        except (OSError, sqlite3.Error) as exc:
++            raise ValueError("LOCAL receipt rename is pending. Retry the same explicit command.") from exc
++        result = _finish_profile_rename(source, profile, preserve_local_sessions=True)
++        clear(root)
++        return result
++
++    with exclusive_maintenance([root], purpose="profile-rename"):
++        record = load_record(root)
++        if record is not None and (record["old"], record["new"]) != (old, new):
++            raise ValueError("Another LOCAL receipt rename is pending for this installation")
++        if source.is_symlink() or destination.is_symlink():
++            raise ValueError("LOCAL receipt preservation requires physical profile directories")
++        if destination.exists():
++            if source.exists() or record is None:
++                raise FileExistsError("The destination profile already exists")
++            verify(destination, record)
++            with exclusive_maintenance([destination], purpose="profile-rename"):
++                verify(destination, record)
++                return finish(destination)
++        if not source.is_dir():
++            raise FileNotFoundError("The original profile directory is unavailable")
++
++        with exclusive_maintenance([source], purpose="profile-rename"):
++            if record is None:
++                record = {"version": 1, "old": old, "new": new, "store": identity(source)}
++            else:
++                verify(source, record)
++
++            def move(old_dir, new_dir):
++                verify(old_dir, record)
++                publish(root, record)
++                _rename_noreplace(old_dir, new_dir)
++                fsync_directory(new_dir.parent)
++                try:
++                    verify(new_dir, record)
++                    settle(new_dir)
++                except (RuntimeStoreError, sqlite3.IntegrityError) as exc:
++                    _rename_noreplace(new_dir, old_dir)
++                    fsync_directory(old_dir.parent)
++                    clear(root)
++                    if isinstance(exc, RuntimeStoreError) and exc.detail:
++                        raise ValueError(f"{exc.reason}: {exc.detail}") from exc
++                    raise
++                except (OSError, sqlite3.Error) as exc:
++                    raise ValueError("LOCAL receipt rename is pending. Retry the same explicit command.") from exc
++
++            result = _rename_profile(old, new, move=move)
++            clear(root)
++            return result
 +
 +
  def migrate_profile_identity(old_name: str, new_name: str) -> bool:
      """Retry the durable identity migration of a rename that already completed.
  
+@@ -49,6 +160,12 @@ def migrate_profile_identity(old_name: str, new_name: str) -> bool:
+         raise ValueError("Identity migration applies to named profiles only.")
+     if not get_profile_dir(new_canon).is_dir():
+         raise _unknown_profile_error(new_canon)
++    from hermes_cli.profile_rename_record import refuse_pending_rename
++    from gateway.runtime_ownership import OwnershipConflict
++    try:
++        refuse_pending_rename(get_profile_dir(new_canon))
++    except OwnershipConflict as exc:
++        raise ValueError(str(exc)) from exc
+     return _migrate_profile_identity(old_canon, new_canon, _live_default_multiplexer())
+ 
+ 
+diff --git a/hermes_cli/profile_rename_record.py b/hermes_cli/profile_rename_record.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..e0c34fabb689291d95f39fd646ecc1eafd0b4608
+--- /dev/null
++++ b/hermes_cli/profile_rename_record.py
+@@ -0,0 +1,99 @@
++"""Durable intent for an explicit, local, receipt-preserving profile rename."""
++
++import json
++import os
++import re
++import sqlite3
++import stat
++from contextlib import closing
++from pathlib import Path
++
++from hermes_constants import PROFILE_ID_RE, get_default_hermes_root
++from hermes_state_errors import _STATE_DB_GENERATION_KEY
++from utils import atomic_json_write
++
++RECORD_NAME = ".local-receipt-rename.json"
++
++
++def fsync_directory(path):
++    """Persist the record or profile directory entry before proceeding."""
++    fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
++    try:
++        os.fsync(fd)
++    finally:
++        os.close(fd)
++
++
++def load_record(root):
++    path = root / RECORD_NAME
++    try:
++        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
++    except FileNotFoundError:
++        return None
++    try:
++        with os.fdopen(fd, "rb") as stream:
++            info = os.fstat(stream.fileno())
++            if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid()
++                    or info.st_nlink != 1 or stat.S_IMODE(info.st_mode) != 0o600
++                    or info.st_size > 4096):
++                raise ValueError("unsafe rename record")
++            record = json.loads(stream.read(4097))
++        old, new = record["old"], record["new"]
++        if (record["version"] != 1 or old == new
++                or any(name in {"default", "main"} or not PROFILE_ID_RE.fullmatch(name)
++                       for name in (old, new))
++                or not isinstance(record["store"], dict)):
++            raise ValueError("invalid rename record")
++    except (KeyError, TypeError, ValueError) as exc:
++        raise ValueError("LOCAL receipt rename record is invalid") from exc
++    return record
++
++
++def publish(root, record):
++    atomic_json_write(root / RECORD_NAME, record, mode=0o600)
++    fsync_directory(root)
++
++
++def clear(root):
++    (root / RECORD_NAME).unlink()
++    fsync_directory(root)
++
++
++def identity(home):
++    path = home / "state.db"
++    profile, db = home.lstat(), path.lstat()
++    if (not stat.S_ISDIR(profile.st_mode) or not stat.S_ISREG(db.st_mode)
++            or db.st_nlink != 1):
++        raise ValueError("LOCAL receipt preservation requires a physical profile and private database")
++    with closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True)) as conn:
++        header = conn.execute("SELECT value FROM state_meta WHERE key=?",
++                              (_STATE_DB_GENERATION_KEY,)).fetchone()
++    if not header or not isinstance(header[0], str) or not re.fullmatch(r"[0-9a-f]{32}", header[0]):
++        raise ValueError("LOCAL receipt recovery requires the database generation")
++    return {"profile": [profile.st_dev, profile.st_ino],
++            "database": [db.st_dev, db.st_ino], "generation": header[0]}
++
++
++def verify(home, record):
++    if identity(home) != record["store"]:
++        raise ValueError("The LOCAL receipt rename store was replaced")
++
++
++def refuse_pending_rename(home: Path):
++    from gateway.runtime_ownership import OwnershipConflict
++
++    if os.name != "posix":
++        return
++    home = home.resolve()
++    root = get_default_hermes_root(home=home).resolve()
++    if home != root and home.parent != root / "profiles":
++        return
++    try:
++        record = load_record(root)
++    except (OSError, ValueError) as exc:
++        raise OwnershipConflict("Cannot verify pending LOCAL receipt rename") from exc
++    if record is not None and (home == root or home.name in (record["old"], record["new"])):
++        raise OwnershipConflict(
++            f"LOCAL receipt rename is pending. Repeat: hermes profile rename "
++            f"{record['old']} {record['new']} --preserve-local-sessions"
++        )
 diff --git a/hermes_cli/profiles.py b/hermes_cli/profiles.py
-index 15a147c862ca6d60ab5175eb79efb569d5361772..a6b9cea3c3f7580d893423c1759cfb4838d88921 100644
+index 15a147c862ca6d60ab5175eb79efb569d5361772..acb18faddb1bb9361aa4e5350a473fccd9634ca5 100644
 --- a/hermes_cli/profiles.py
 +++ b/hermes_cli/profiles.py
-@@ -2210,11 +2210,22 @@ def _refuse_rename_without_file_tooling(old_canon: str) -> None:
+@@ -2210,11 +2210,28 @@ def _refuse_rename_without_file_tooling(old_canon: str) -> None:
              "backend under that name, and renaming it there is not supported. Nothing was changed.")
  
  
@@ -131,6 +320,12 @@ index 15a147c862ca6d60ab5175eb79efb569d5361772..a6b9cea3c3f7580d893423c1759cfb48
 +        from hermes_cli.profile_identity import rename_with_local_receipts
 +
 +        return rename_with_local_receipts(old_canon, new_canon)
++    from hermes_cli.profile_rename_record import refuse_pending_rename
++
++    if old_canon != "default":
++        refuse_pending_rename(get_profile_dir(old_canon))
++        if normalize_profile_name(new_name) != "default":
++            refuse_pending_rename(get_profile_dir(new_name))
 +    return _rename_profile(old_canon, new_name)
 +
 +
@@ -138,7 +333,7 @@ index 15a147c862ca6d60ab5175eb79efb569d5361772..a6b9cea3c3f7580d893423c1759cfb48
      if old_canon == "default":
          if not (new_name or "").strip():
              raise ValueError("Display name cannot be empty.")
-@@ -2266,7 +2277,10 @@ def rename_profile(old_name: str, new_name: str) -> Path:
+@@ -2266,7 +2283,10 @@ def rename_profile(old_name: str, new_name: str) -> Path:
      try:
          if live_mux and not wait_profile_unowned(old_dir):  # same owner wait as delete_profile
              raise RuntimeError("a running gateway still owns this profile; retry the rename once it settles")
@@ -150,6 +345,52 @@ index 15a147c862ca6d60ab5175eb79efb569d5361772..a6b9cea3c3f7580d893423c1759cfb48
      except Exception:
          if live_mux:
              clear_named_profile_deleted(old_dir)
+@@ -2275,7 +2295,14 @@ def rename_profile(old_name: str, new_name: str) -> Path:
+         if service_removed:
+             print(f"⚠ The gateway service was removed. Reinstall it with: hermes -p {old_canon} gateway install")
+         raise
+-    print(f"✓ Renamed {old_dir.name} → {new_dir.name}")
++    return _finish_profile_rename(old_dir, new_dir, live_mux=live_mux,
++                                  service_removed=service_removed, preserve_local_sessions=move is not None)
++
++
++def _finish_profile_rename(old_dir, new_dir, *, live_mux=False, service_removed=False,
++                           preserve_local_sessions=False):
++    old_canon, new_canon = old_dir.name, new_dir.name
++    print(f"✓ Renamed {old_canon} → {new_canon}")
+     clear_named_profile_deleted(old_dir)
+     clear_named_profile_deleted(new_dir)
+ 
+@@ -2290,7 +2317,10 @@ def rename_profile(old_name: str, new_name: str) -> Path:
+     migrate_honcho_profile_host(old_canon, new_canon, new_dir)
+     # 3b. Let the profile's memory provider re-key what it stores under the old name.
+     from hermes_cli.profile_memory_config import notify_memory_provider
+-    notify_memory_provider(new_dir, lambda p: p.on_profile_renamed(old_canon, new_canon, str(new_dir)))
++    # The recovery option can replay finalization. Provider callbacks may
++    # perform effects that cannot safely be repeated after an interrupted call.
++    if not preserve_local_sessions:
++        notify_memory_provider(new_dir, lambda p: p.on_profile_renamed(old_canon, new_canon, str(new_dir)))
+ 
+     # 4. Update wrapper script
+     remove_wrapper_script(old_canon)
+@@ -2308,12 +2338,15 @@ def rename_profile(old_name: str, new_name: str) -> Path:
+     # delivery + routing index) from the old name to the new one. A stale ``agent:<old>:*`` routing
+     # key otherwise resolves to a profile that no longer exists on every inbound event.
+     from hermes_cli.profile_identity import _migrate_profile_identity
+-    _migrate_profile_identity(old_canon, new_canon, live_mux)
++    migrated = _migrate_profile_identity(old_canon, new_canon, live_mux)
++    if preserve_local_sessions and not migrated:
++        raise ValueError("Profile identity finalization is pending. Repeat the receipt-preserving rename.")
+ 
+     # 7. Hot-serve the renamed profile now (mirrors create; a missed signal only delays it).
+     if live_mux:
+         _notify_multiplexer(new_canon)
+-    _maybe_register_gateway_service(new_canon)
++    if not preserve_local_sessions:
++        _maybe_register_gateway_service(new_canon)
+     if service_removed:
+         print(f"⚠ The gateway service was removed. Reinstall it with: hermes -p {new_canon} gateway install")
+     return new_dir
 diff --git a/hermes_cli/subcommands/profile.py b/hermes_cli/subcommands/profile.py
 index a67300f912262596d1a268ec9982c77b76939ab3..f84963a6ee56ff760fc6f5e68e6ba1331f5de112 100644
 --- a/hermes_cli/subcommands/profile.py
