@@ -46,6 +46,17 @@
       "native_continuation": false,
       "clean_passed": true,
       "proposal_passed": true
+    },
+    "unchanged_ssh_route": {
+      "case": "bot-canonical-ssh-draft-unchanged-route",
+      "native_continuation": false,
+      "matching_copied_install_marker": true,
+      "clean_offered_review_on_replacement": false,
+      "proposal_offered_review_on_replacement": true,
+      "source_clean_reproduced": true,
+      "source_proposal_reproduced": true,
+      "replacement_review_clicked": false,
+      "release_gate": "open"
     }
   }
 }

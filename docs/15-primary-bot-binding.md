@@ -326,6 +326,14 @@ The abrupt-exit replacement case disables native continuation and switches the s
 
 Run `--case bot-canonical-ssh-draft-endpoint-replacement`. The [proposal instructions](../experiments/ssh-draft-recovery/README.md#bundled-linux-verification) link the matching build digests and acceptance steps. An endpoint edit can be distinguished from an unchanged configured route. Matching route values alone cannot establish installation or owner continuity.
 
+#### Current-Pin OpenSSH Draft Review on an Unchanged Route
+
+With continuation disabled, the fixture retires the original synthetic Gateway after abrupt Desktop exit and serves a separate Hermes home through the same SSH listener configuration. The host key, client credential, Desktop registry bytes, profile alias, install marker and stored Bot Chat ID match. A strict SSH login reaches the new home, and the replacement-only transcript row identifies the newly opened chat.
+
+The clean AppImage keeps the composer empty and has no review action. The matching unsigned proposal AppImage also keeps the composer empty, but it offers **Review unconfirmed draft** on the replacement chat. The source-built clean and proposal clients reproduce their respective AppImage results. The fixture leaves the action unselected there. Both runs retain the original prepared ID without changing either transcript, creating a session or starting another submit or provider request. Returning to the original home reopens the original transcript and restores the proposal's guarded review behavior.
+
+Run `--case bot-canonical-ssh-draft-unchanged-route` using the [matching clean or proposal build](../experiments/ssh-draft-recovery/README.md#bundled-linux-verification). This records an open gate for the proposal. Safe review across a reconnect requires current evidence that the active backend owns the recorded chat. An unchanged SSH endpoint and a copied install marker do not provide that evidence. Keep this candidate review only pending a native continuity signal and separate owner verification.
+
 #### Current-Pin OpenSSH Read Before Resume
 
 After a named-profile SSH Gateway exits mid-turn, the fixture switches to the local control chat. The original OpenSSH listener remains reachable and the native default continuation setting stays enabled. The original remote transcript contains the submitted user message. The native interruption marker still records the terminated process as its writer.

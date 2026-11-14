@@ -207,6 +207,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 - Verify SSH draft isolation across an endpoint edit when two installations share the same profile and chat ID, with recovery available again on the original endpoint in the review build (#33).
 
+- Record the remaining review-only SSH draft continuity gap when the same endpoint and copied install marker lead to a different transcript with the same chat ID (#33).
+
 - Add a review-only Hermes Desktop proposal to recover an uncertain SSH text draft from the scoped native journal after abrupt exit and block unchanged resubmission (#33).
 
 - Verify explicit SSH Bot Chat reopen after abrupt Desktop exit. The native prepared submission survives, while the restored draft and its retry identity are lost in the tested window (#33).
