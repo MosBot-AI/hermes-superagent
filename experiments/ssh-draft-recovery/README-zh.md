@@ -52,3 +52,7 @@ NODE_OPTIONS="--import=$ABSOLUTE_PRELOAD_PATH" \
 ```
 
 给两个提案用例都加上 `--appimage /absolute/path/to/Hermes.AppImage`。两个干净对照使用干净固定版本及匹配镜像，去掉 `--review-proposal`。负向对照则将干净镜像传给提案用例。预期在启动打包 Electron 前报 `AppImage commit must match the verified checkout`。夹具启动打包渲染进程并验证安装标记、ASAR 及可执行的内置 CLI。夹具自有的 Gateway 从检出的测试源码运行。
+
+[清单](manifest.json)记录了候选和干净镜像的摘要。两种镜像在启用及禁用续跑时均通过。干净镜像重开原会话，输入框为空。候选镜像在显式查看时恢复文本，两次原样按 Enter 各产生一条新警告，且没有再次提交。重新加载渲染进程后，原日志记录再次可供查看，渲染进程草稿存储仍为空。启用续跑时恰好续跑一次，禁用时为零。干净镜像在提案用例中于启动前未通过安装标记检查。
+
+这些结果验证了本地构建的未签名 Linux x64 镜像及夹具自有 Gateway。签名发行包、其他系统、上游采用及安装替换仍需单独验收。

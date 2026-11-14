@@ -203,6 +203,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 - Verify owner-entry denials through the native Telegram command adapter and Gateway. Direct, forwarded and edited DMs can have the same public source fields, and Gateway still checks its current allowlist after adapter intake (#14).
 
+- Verify the review-only SSH draft recovery in locally built unsigned Linux x64 AppImages for both continuation modes and reject a mismatched build before launch (#33).
+
 - Add a review-only Hermes Desktop proposal to recover an uncertain SSH text draft from the scoped native journal after abrupt exit and block unchanged resubmission (#33).
 
 - Verify explicit SSH Bot Chat reopen after abrupt Desktop exit. The native prepared submission survives, while the restored draft and its retry identity are lost in the tested window (#33).

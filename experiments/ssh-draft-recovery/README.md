@@ -52,3 +52,7 @@ NODE_OPTIONS="--import=$ABSOLUTE_PRELOAD_PATH" \
 ```
 
 Add `--appimage /absolute/path/to/Hermes.AppImage` to both proposal cases. Run both clean controls with the clean pin and its matching image, omitting `--review-proposal`. For the negative control, supply the clean image to a proposal case. The expected failure is `AppImage commit must match the verified checkout`, before packaged Electron launches. The fixture launches the packaged renderer and verifies its install stamp, ASAR and executable bundled CLI. The fixture-owned Gateways run from the checked-out test source.
+
+The [manifest](manifest.json) records the candidate and clean image digests. Both images passed with continuation enabled and disabled. The clean image reopened the original chat and left the composer empty. The candidate restored the text on explicit review, issued a fresh warning for each of two unchanged Enter presses, and made no repeat submission. A renderer reload offered the original journal entry again and left renderer draft storage empty. The native continuation count stayed at one when enabled and zero when disabled. The clean image failed the proposal stamp check before launch.
+
+This verifies the locally built unsigned Linux x64 images against fixture-owned Gateways. Signed packages, other systems, upstream adoption and installation replacement remain separate gates.
