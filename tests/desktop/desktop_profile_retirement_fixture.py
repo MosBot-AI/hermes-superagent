@@ -86,3 +86,11 @@ def change_serving(serve):
         or response.get("pending") is True
         or response.get("error") == watcher_race
     ), "the native lifecycle transition was accepted or already reconciled"
+
+
+def sign_out():
+    from hermes_cli.webapp_launcher import _control
+
+    response = _control(_homes()["default"], "webapp-sign-out")
+    assert response.get("ok") is True
+    return response["result"]

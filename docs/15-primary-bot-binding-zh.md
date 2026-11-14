@@ -51,7 +51,7 @@
 | 原生 profile 重命名 | 运行中的 Gateway 为重命名后的 profile 提供服务并公布原规范会话指针。该已绑定 LOCAL 会话的精确查询与恢复均拒绝，原因为 `storage_unavailable`。[原生重命名证据](#当前固定版本的原生-profile-重命名) | 在受支持的迁移能同时保留规范指针和经授权的会话访问之前，保持该连续性模式不可用。 |
 | 原生 profile 重建 | 保留的 host 作用域原生套接字观测到旧路由消失，且全新 profile 在同一路径上线。旧规范会话不存在。显式创建建立新会话。[原生重建证据](#当前固定版本的原生-profile-重建) | 恢复旧绑定需要独立的 owner 和安装证据。 |
 | 恢复副本的 Webapp 凭据清理 | Linux 原生恢复夹具覆盖完整归档复制浏览器凭据，以及 Webapp 关闭时通过私有 Unix 控制套接字替换恢复目标上的凭据。[恢复后轮换证据](#当前固定版本的恢复副本-webapp-凭据轮换) | 经认证的安装连续性和经 owner 授权的恢复需要独立证据。 |
-| 运行中的 Webapp 登出 | Linux 本地操作者登出选定的运行中 Webapp，原生连接与另一安装的访问继续有效。Chromium 中的原版 Webapp 重新加载后返回 Basic 登录，登录后重新打开原会话。[运行中 Webapp 证据](#当前固定版本的运行中-webapp-登出) | Owner 身份、跨安装恢复、其他凭据模式和进行中操作的结果需要独立证据。 |
+| 运行中的 Webapp 登出 | Linux 本地操作者登出选定的运行中 Webapp，原生连接与另一安装的访问继续有效。Chromium 通过 Basic 登录重新打开原会话。使用已保存令牌的 Linux Desktop 在更新连接并重启后重新打开该会话。[运行中 Webapp 证据](#当前固定版本的运行中-webapp-登出) | Owner 身份、跨安装恢复、其他凭据模式和进行中操作的结果需要独立证据。 |
 | 本地调用方与接收 Bot | Linux 同 UID 控制票据证明本地操作者准入。干净宿主上的 owner 入口夹具在缺少受支持的接收侧适配器上下文时拒绝。[本地 Gateway](#当前固定版本的本地-bot-传输与重启) · [Owner 入口契约](../tests/contracts/test_owner_entry_contracts.py) | 受保护的原生命令和渠道入口需要宿主以受支持的方式证明原始调用方、接收方及会话，再校验当前 owner 和 grant。[命令上下文实验](23-host-command-context-experiment-zh.md)仍仅供评审。 |
 | 插件状态与子代理角色 | 公开 `ctx.subagent_lifecycle` 覆盖 `in_process` 和 `host` 两种隔离模式下的进程内父子关联。`ctx.state` 在两种模式下均经过验证，其中托管模式覆盖两个命名 profile。[子代理证据](#当前固定版本的子代理关联) | 可信调用方身份、绑定 owner 的 grant 和撤销需要独立检查。[E0.4](13-enforcement-contracts-zh.md)覆盖独立的配置冻结和故障排查安全模式 worker 路径。 |
 | 原生受管 WorkerChannel | 命名 profile 的普通 Gateway 路径关联原生子进程、其准入、有序回执及完成后的对话记录。在同一 Gateway 上，经 generation 检查的停止请求中断等待澄清的 worker，随后排队的输入完成。后继 Gateway 将丢失 worker 的准入保留为 `unknown`，直到显式处理。[受管 worker 证据](#当前固定版本的原生受管-workerchannel) · [停止](#当前固定版本的受管-worker-停止) · [重启对账](#当前固定版本的受管-worker-重启对账) | 人类 owner 授权、当前撤销状态、受管委派及 Kanban 接管需要独立证明。仅供评审的纯文本 worker 契约有独立门禁。 |
@@ -452,7 +452,9 @@ Linux 夹具通过原生 CLI 将停止状态的合成来源打包为完整 ZIP �
 
 显式重新加载后，所选浏览器显示 Basic 表单，消息输入区隐藏。通过该表单登录后，原 `scout` 会话经新套接字打开。两个 Gateway 端点的 PID 和实例 ID 均保持不变。四个 SQLite 存储中，所比较的会话、消息及准入字段保持一致。测试未观察到 `session.create`、`prompt.submit` 或模型补全。在[验收运行器命令](#当前固定版本的-electron-profile-路由)中添加 `--case active-webapp-sign-out --chromium /path/to/chromium` 即可复现。
 
-这些观测覆盖本地操作者登出、浏览器 Basic 重新认证，以及所测路径中对合成 Bot Chat 记录的持续访问。经验证的人类 owner 身份、经授权的跨安装恢复、其他凭据模式，以及已准入的操作是完成还是被取消，需要独立证据。
+[Desktop 已保存令牌用例](../tests/desktop/desktop_profile_retirement_ipc.spec.ts)使用另一个关闭登录关卡的环回 Webapp。原生登出关闭 Desktop 保留的套接字并轮换凭据。指定 profile 的会话 API 对旧令牌返回 `401`，对替换令牌返回 `200`。Desktop 公开 SDK 拒绝使用已保存的旧令牌发起的新查询。独立的原生票据路由仍可读取自己的 `scout` 会话。通过 Desktop 连接注册表显式保存替换令牌，并在同一用户数据目录重启 Electron 后，点击 Bot Mode 经新的令牌认证套接字打开远端原 `scout` 会话。两个 Gateway 端点的 PID 和实例 ID 保持不变。四个 SQLite 存储中，所比较的会话、消息和准入字段保持一致，未观察到 `session.create`、`prompt.submit` 或模型补全。
+
+在[验收运行器命令](#当前固定版本的-electron-profile-路由)中添加 `--case desktop-saved-token-sign-out` 即可复现。Linux Desktop 源码构建和本地打包的未签名 Linux x64 AppImage 都在同一固定版本上通过。AppImage 的 SHA-256 为 `758c07c5a86829bb70b8904b459329f73f000c3218e1829f32db8e67af08d887`。添加 `--appimage /path/to/HermesBundled-linux-x86_64.AppImage` 可测试打包版本。探索性测试中，保存替换令牌后仅重新加载窗口仍显示 Gateway 连接错误。回归用例执行完整的 Desktop 重启。经验证的人类 owner 身份、经授权的跨安装恢复、其他凭据模式以及已准入操作的完成或取消，需要独立证据。
 
 其他真实运行环境下的 Desktop 路由与 profile 生命周期转换、恢复前后经认证的连续性、受支持的调用方与 worker 来源证明及更广泛的投递回执对账，仍属 E0.7 的开放事项。可选 HTTP 入口仍依赖 E0.6。经 owner 授权的登记、激活绑定及对账仍是 E1.6 和 E3.6 的独立工作。[Issue #33](https://github.com/MosBot-AI/hermes-superagent/issues/33)
 

@@ -48,6 +48,14 @@ SSH_SPEC = "desktop_bot_ssh.spec.ts"
 SSH_FIXTURES = (GATEWAY_FIXTURE, CANONICAL_OBSERVER, APPIMAGE_FIXTURE)
 SAVED_TOKEN_CASE = "bot-canonical-saved-token"
 PROFILE_RETIREMENT_CASE = "profile-retirement"
+SAVED_TOKEN_SIGNOUT_CASE = "desktop-saved-token-sign-out"
+PROFILE_TRANSITION_SPEC = "desktop_profile_retirement_ipc.spec.ts"
+PROFILE_TRANSITION_FIXTURES = (
+    GATEWAY_FIXTURE,
+    "desktop_profile_retirement_fixture.py",
+    CANONICAL_OBSERVER,
+    APPIMAGE_FIXTURE,
+)
 COMPRESSED_LOCAL_CASE = "compressed-history-adoption"
 COMPRESSED_SAVED_CASE = "compressed-history-saved-token"
 COMPRESSED_SPEC = "desktop_compressed_adoption.spec.ts"
@@ -83,6 +91,7 @@ APPIMAGE_CASES = (
     SSH_COLD_READ_CASE,
     SAVED_TOKEN_CASE,
     PROFILE_RETIREMENT_CASE,
+    SAVED_TOKEN_SIGNOUT_CASE,
     COMPRESSED_LOCAL_CASE,
     COMPRESSED_SAVED_CASE,
 )
@@ -159,14 +168,14 @@ CASES = {
         "saved Webapp token Bot Mode",
     ),
     PROFILE_RETIREMENT_CASE: (
-        "desktop_profile_retirement_ipc.spec.ts",
-        (
-            GATEWAY_FIXTURE,
-            "desktop_profile_retirement_fixture.py",
-            CANONICAL_OBSERVER,
-            APPIMAGE_FIXTURE,
-        ),
+        PROFILE_TRANSITION_SPEC,
+        PROFILE_TRANSITION_FIXTURES,
         "saved Webapp profile retirement",
+    ),
+    SAVED_TOKEN_SIGNOUT_CASE: (
+        PROFILE_TRANSITION_SPEC,
+        PROFILE_TRANSITION_FIXTURES,
+        "saved Webapp token sign-out",
     ),
     COMPRESSED_LOCAL_CASE: (
         COMPRESSED_SPEC,
@@ -195,6 +204,8 @@ CASES = {
     ),
 }
 CASE_TITLE_FILTERS = {
+    PROFILE_RETIREMENT_CASE: "reopens its chat after hot serve$",
+    SAVED_TOKEN_SIGNOUT_CASE: "reopens the original chat after explicit token replacement$",
     SSH_CASE: "opens the named canonical chat over OpenSSH$",
     SSH_ALIAS_CASE: "opens the canonical chat behind an OpenSSH profile alias$",
     SSH_RECONNECT_CASE: "refuses an offline OpenSSH route and reopens the original chat$",
