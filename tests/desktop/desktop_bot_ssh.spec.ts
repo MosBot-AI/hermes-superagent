@@ -32,6 +32,7 @@ interface TurnInterruption {
   gatewayLoss?: boolean
   lostAck?: boolean
   disableContinuation?: boolean
+  reloadDraft?: boolean
 }
 
 function shellQuote(value: string) {
@@ -406,7 +407,7 @@ async function verifyInterruptedTurn(
   sockets: Map<WireFrame, WireSocket>,
   port: string,
   owner: { connectionId: string; profile: string },
-  { lostAck, gatewayLoss, disableContinuation }: TurnInterruption
+  { lostAck, gatewayLoss, disableContinuation, reloadDraft }: TurnInterruption
 ) {
   const autoContinue = gatewayLoss && !disableContinuation
   const input = 'U18-sshturn'
@@ -544,22 +545,49 @@ async function verifyInterruptedTurn(
       const lastUser = provider.completions[1]!.body.messages.findLast((message: { role: string }) => message.role === 'user')
       expect(JSON.stringify(lastUser.content)).toContain(continuationNote)
       expect(JSON.stringify(lastUser.content)).toContain(input)
-    } else if (gatewayLoss && !lostAck) {
-      // The same client can restore its journaled fragment even after renderer reload.
+    }
+    const recoverFragment = gatewayLoss && !autoContinue && !lostAck
+    if (recoverFragment || reloadDraft) {
+      if (reloadDraft) {
+        await expect(composer(page)).toContainText(input)
+        await localRow.click()
+        await expect.poll(() => focus(page)).toEqual({
+          id: 'fixture-local-default',
+          owner: { connectionId: 'local', profile: 'default' }
+        })
+      }
+      const reloadFrom = wire.length
       await page.reload()
+      if (reloadDraft) {
+        // The old renderer and its one-shot ACK filter are gone.
+        expect(await page.evaluate(() => window.__E07_LOST_ACK__)).toEqual({ port: '', withheld: 0 })
+      }
       await page.getByRole('button', { name: 'Bots', exact: true })
         .or(page.getByRole('tab', { name: 'Bots', exact: true })).first().click()
       await row.click()
       await expect.poll(() => focus(page)).toEqual({ id: canonical, owner })
       await expect(viewport.getByText(input, { exact: true })).toBeVisible()
-      await expect(viewport.getByText(partial, { exact: true }).first()).toBeVisible()
+      if (autoContinue) {
+        await expect(viewport.getByText(continuedReply, { exact: true })).toBeVisible()
+      }
+      if (recoverFragment) {
+        await expect(viewport.getByText(partial, { exact: true }).first()).toBeVisible()
+      }
       await expect(viewport.getByText(partial + tail, { exact: true })).toHaveCount(0)
+      if (reloadDraft) {
+        await expect.poll(() => wire.slice(reloadFrom).some(frame =>
+          frame.method === 'session.resume' && frame.port !== port && frame.profile === profile &&
+          frame.sessionId === canonical && frame.reply !== undefined && frame.reply.code === undefined
+        )).toBe(true)
+        expect(named()).toEqual(recovered)
+        expect(submissions()).toEqual(submitted)
+      }
     }
     if (lostAck) {
       await expect(composer(page)).toContainText(input)
       await composer(page).press('Enter')
       await expect(page.getByText('This server could not confirm the earlier send of this message,', { exact: false })).toBeVisible()
-      expect(await page.evaluate(() => window.__E07_LOST_ACK__?.withheld)).toBe(1)
+      expect(await page.evaluate(() => window.__E07_LOST_ACK__?.withheld)).toBe(reloadDraft ? 0 : 1)
     }
     expect(interrupted.sessions).toEqual(beforeLoss.sessions)
     expect(interrupted.messages.filter(message => message.role === 'user' && message.content === input)).toHaveLength(1)
@@ -896,4 +924,19 @@ test('Bot Mode recovers from lost acknowledgement and Gateway exit', async () =>
 test('Bot Mode guards a lost acknowledgement with continuation disabled', async () => {
   test.setTimeout(180_000)
   await verifySshBotChat('default', { gatewayLoss: true, lostAck: true, disableContinuation: true })
+})
+
+test('Bot Mode guards the restored SSH draft after renderer reload', async () => {
+  test.setTimeout(180_000)
+  await verifySshBotChat('default', { gatewayLoss: true, lostAck: true, reloadDraft: true })
+})
+
+test('Bot Mode guards the reloaded SSH draft with continuation disabled', async () => {
+  test.setTimeout(180_000)
+  await verifySshBotChat('default', {
+    gatewayLoss: true,
+    lostAck: true,
+    disableContinuation: true,
+    reloadDraft: true
+  })
 })

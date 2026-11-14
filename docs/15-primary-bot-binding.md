@@ -294,7 +294,15 @@ The fixture withholds one real successful legacy `prompt.submit` acknowledgement
 
 An explicit reopen after switching to the local control chat uses a new forward and resumes the original named chat. The default successor starts one native continuation and persists its interruption note and full reply in that chat. Setting `desktop.auto_continue.enabled: false` on the remote named profile leaves the transcript at the original user message and causes no second provider request. In both modes, pressing Enter once on the restored draft after reopening shows the warning that the server could not confirm the earlier send. The renderer issues no additional submit and the retry changes neither the transcript nor the provider request count. There is no durable admission ID in either case, and the three control chats stay unchanged.
 
-Run `--case bot-canonical-ssh-lost-ack-gateway-loss` for the default or `--case bot-canonical-ssh-lost-ack-gateway-loss-no-continue` for the disabled control. Both passed in source-built and locally built unsigned Linux x64 Desktop at the clean pin. The retry observation is scoped to a single press in the same Desktop renderer after an explicit reopen. New submissions, cross-client reconciliation and authenticated owner writes require separate evidence.
+Run `--case bot-canonical-ssh-lost-ack-gateway-loss` for the default or `--case bot-canonical-ssh-lost-ack-gateway-loss-no-continue` for the disabled control. Both passed in source-built and locally built unsigned Linux x64 Desktop at the clean pin. These cases check one Enter in the original Desktop renderer. The following cases check the same draft after a renderer reload.
+
+#### Current-Pin OpenSSH Draft Recovery After Renderer Reload
+
+Both combined acknowledgement and Gateway loss cases also have a renderer-reload variant. After the first explicit reopen, the fixture waits for the default continuation to settle or verifies the disabled control. It leaves the original chat for the local control before reloading the Electron page. The new renderer begins with an unarmed acknowledgement filter. A second explicit Bot Mode click successfully resumes the original SSH chat. The stored user message and, in the default case, the completed continuation reply are visible. The draft is restored before the fixture presses Enter once without editing its text.
+
+In both variants the new renderer warns that the earlier send could not be confirmed and issues no additional `prompt.submit`. The transcript, provider request count and three control chats remain unchanged after the first reopen settles. With continuation disabled, the original provider request remains the only attempt. There is still no durable admission ID.
+
+Run `--case bot-canonical-ssh-draft-reload` or `--case bot-canonical-ssh-draft-reload-no-continue` with the same runner and optional `--appimage`. This covers a reload in the same Desktop user-data directory. A full app restart, another client, a new submission and authenticated owner writes require separate evidence.
 
 ### Current-Pin Native Profile Lifecycle
 

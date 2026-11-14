@@ -294,7 +294,15 @@ Bot Mode 的确切标题 `session.list` 查询携带所选后端 profile。列�
 
 先切到本地对照会话，再显式重开原命名会话时，Desktop 使用新转发恢复原会话。默认配置下，后继进程启动一次原生续跑，并将中断提示和完整回复写入原会话。在远端命名 profile 设置 `desktop.auto_continue.enabled: false` 后，原会话仅保留原用户消息，provider 不会收到第二个请求。两种配置下，重开后在恢复的草稿上按一次 Enter，都会出现服务器无法确认先前发送结果的警告。渲染进程没有再次提交，这次重试也未改变消息记录或 provider 请求次数。两种情况均无持久准入 ID，三份对照会话保持不变。
 
-使用 `--case bot-canonical-ssh-lost-ack-gateway-loss` 验证默认配置，或使用 `--case bot-canonical-ssh-lost-ack-gateway-loss-no-continue` 验证禁用续跑的对照配置。两者均在干净固定版本的源码构建和本地构建的未签名 Linux x64 Desktop 上通过。重试验证限于同一个 Desktop 渲染进程，在显式重开后按一次 Enter。新的提交、跨客户端对账和经 owner 授权的写入仍需单独取证。
+使用 `--case bot-canonical-ssh-lost-ack-gateway-loss` 验证默认配置，或使用 `--case bot-canonical-ssh-lost-ack-gateway-loss-no-continue` 验证禁用续跑的对照配置。两者均在干净固定版本的源码构建和本地构建的未签名 Linux x64 Desktop 上通过。这些用例在原 Desktop 渲染进程中验证一次 Enter。下面的用例验证重新加载渲染进程后的同一草稿。
+
+#### 当前固定版本的 OpenSSH 渲染进程重载后草稿恢复
+
+提交确认丢失与 Gateway 退出同时发生的两个用例，各有一个重载渲染进程的变体。第一次显式重开后，夹具等待默认配置下的续跑完成，或核对禁用续跑的对照结果。夹具切到本地对照会话，再重新加载 Electron 页面。新渲染进程的确认过滤器尚未启用。再次显式点击 Bot Mode 会成功恢复原 SSH 会话。界面显示已保存的用户消息，默认配置下还会显示已完成的续跑回复。草稿恢复后，夹具保留其原文并按一次 Enter。
+
+两个变体的新渲染进程均提示无法确认先前的发送结果，且未再发送 `prompt.submit`。第一次重开的结果确定后，消息记录、provider 请求次数和三份对照会话保持一致。禁用续跑时，原 provider 请求仍是唯一一次执行尝试。两种配置仍无持久准入 ID。
+
+使用同一运行器的 `--case bot-canonical-ssh-draft-reload` 或 `--case bot-canonical-ssh-draft-reload-no-continue`，并可添加 `--appimage`。本用例覆盖在同一个 Desktop 用户数据目录中重新加载页面。完整退出并重启应用、使用另一个客户端、新的提交及经 owner 授权的写入仍需单独取证。
 
 ### 当前固定版本的原生 Profile 生命周期
 
