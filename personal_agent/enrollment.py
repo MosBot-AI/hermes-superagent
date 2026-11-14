@@ -21,7 +21,7 @@ from typing import Any
 from .authorization import ReadRequest, _identifier, _scope
 
 _APPLICATION_ID = 0x5041454E
-_SCHEMA_VERSION = 2
+_SCHEMA_VERSION = 3
 MAX_READ_AUDITS = 10000
 _MAX = 2**63 - 1
 _COLUMNS = (
@@ -66,7 +66,27 @@ _READ_AUDIT_SQL = """CREATE TABLE read_admissions (
         epoch INTEGER NOT NULL, prepared_at TEXT NOT NULL,
         resource_count INTEGER NOT NULL CHECK(resource_count BETWEEN 1 AND 32),
         outcome TEXT NOT NULL CHECK(outcome = 'snapshot_prepared'))"""
-_SCHEMA = {**_SCHEMA_V1, "read_admissions": _READ_AUDIT_SQL}
+_SCHEMA_V2 = {**_SCHEMA_V1, "read_admissions": _READ_AUDIT_SQL}
+_SCHEMA = {
+    **_SCHEMA_V2,
+    "enrollments": _SCHEMA_V1["enrollments"].replace(
+        "'pending','revoked'", "'pending','paused','revoked'"
+    ),
+    "events": _SCHEMA_V1["events"].replace(
+        "'set_policy','revoke'", "'set_policy','pause','resume','revoke'"
+    ),
+}
+_STATE_AFTER_EVENT = {
+    "create": "pending",
+    "set_policy": "pending",
+    "pause": "paused",
+    "resume": "pending",
+    "revoke": "revoked",
+}
+_ALLOWED_TRANSITIONS = {
+    "pending": {"set_policy", "pause", "revoke"},
+    "paused": {"resume", "revoke"},
+}
 _READ_AUDIT_COLUMNS = (
     "sequence",
     "owner_id",
@@ -114,6 +134,8 @@ def _request(operation: str, payload: dict) -> dict:
         "create": _KEYS | _IDENTITY | {"scope"},
         "get": _KEYS,
         "set_policy": _KEYS | _CAS | {"scope"},
+        "pause": _KEYS | _CAS,
+        "resume": _KEYS | _CAS,
         "revoke": _KEYS | _CAS,
     }
     if (
@@ -171,14 +193,26 @@ class EnrollmentStore:
             conn.execute(f"PRAGMA user_version = {_SCHEMA_VERSION}")
         elif app != _APPLICATION_ID:
             raise EnrollmentError("foreign_database")
-        elif create and version == 1 and len(rows) == len(_SCHEMA_V1) and dict(rows) == _SCHEMA_V1:
-            # Upgrade only the exact owned predecessor, atomically with initialize.
-            # Administrative rows remain byte-for-byte unchanged; no historical
-            # read events are fabricated and no pending identity is activated.
-            conn.execute(_READ_AUDIT_SQL)
+        elif create and version in (1, 2):
+            legacy = _SCHEMA_V1 if version == 1 else _SCHEMA_V2
+            if len(rows) != len(legacy) or dict(rows) != legacy:
+                raise EnrollmentError("unsupported_schema")
+            self._upgrade(version)
             conn.execute(f"PRAGMA user_version = {_SCHEMA_VERSION}")
         elif version != _SCHEMA_VERSION or len(rows) != len(_SCHEMA) or dict(rows) != _SCHEMA:
             raise EnrollmentError("unsupported_schema")
+
+    def _upgrade(self, version: int) -> None:
+        # Rebuild only the tables whose CHECK constraints change. Keep exact
+        # identifiers, revisions, history and the existing prepared-read audit.
+        conn = self._connection
+        for table in ("enrollments", "events"):
+            conn.execute(f"ALTER TABLE main.{table} RENAME TO {table}_legacy")
+            conn.execute(_SCHEMA[table])
+            conn.execute(f"INSERT INTO main.{table} SELECT * FROM main.{table}_legacy")
+            conn.execute(f"DROP TABLE main.{table}_legacy")
+        if version == 1:
+            conn.execute(_READ_AUDIT_SQL)
 
     def _transaction(self, action: Any) -> Any:
         conn = self._connection
@@ -205,7 +239,7 @@ class EnrollmentStore:
             raise
 
     def initialize(self) -> None:
-        """Create/validate v2 or atomically upgrade the exact owned v1 schema."""
+        """Create/validate v3 or atomically upgrade an exact owned v1/v2 schema."""
         self._initialized = False
         self._transaction(lambda: self._schema(create=True))
         self._initialized = True
@@ -229,7 +263,7 @@ class EnrollmentStore:
                 raise ValueError
             if not all(_identifier(result[key]) for key in _KEYS | _IDENTITY):
                 raise ValueError
-            if result["state"] not in ("pending", "revoked"):
+            if result["state"] not in ("pending", "paused", "revoked"):
                 raise ValueError
             if not all(
                 _revision(result[key]) for key in ("enrollment_revision", "policy_revision")
@@ -288,8 +322,8 @@ class EnrollmentStore:
                 or record["epoch"] != expected_epoch
             ):
                 raise EnrollmentError("revision_conflict")
-            if record["state"] == "revoked":
-                raise EnrollmentError("revoked")
+            if record["state"] != "pending":
+                raise EnrollmentError(record["state"])
             return operation(record)
 
         return self._transaction(apply)
@@ -399,29 +433,35 @@ class EnrollmentStore:
             columns = "epoch,operation,enrollment_revision,policy_revision"
             where = "owner_id=? AND profile_id=? AND enrollment_id=?"
 
-            def validate(row: tuple, expected_epoch: int) -> None:
-                expected_operation = (
-                    "create"
-                    if expected_epoch == 0
-                    else "revoke"
-                    if revoked and expected_epoch == epoch
-                    else "set_policy"
-                )
-                terminal = expected_operation == "revoke"
-                if any(type(row[index]) is not int for index in (0, 2, 3)) or row != (
-                    expected_epoch,
-                    expected_operation,
-                    2 if terminal else 1,
-                    expected_epoch if terminal else expected_epoch + 1,
+            def validate(row: tuple, expected_epoch: int) -> str:
+                operation = row[1]
+                terminal = operation == "revoke"
+                if (
+                    operation not in _STATE_AFTER_EVENT
+                    or (operation == "create") != (expected_epoch == 0)
+                    or terminal != (revoked and expected_epoch == epoch)
+                    or any(type(row[index]) is not int for index in (0, 2, 3))
+                    or row
+                    != (
+                        expected_epoch,
+                        operation,
+                        2 if terminal else 1,
+                        expected_epoch if terminal else expected_epoch + 1,
+                    )
                 ):
                     raise EnrollmentError("invalid_policy_audit")
+                return _STATE_AFTER_EVENT[operation]
 
             tail = self._connection.execute(
-                f"SELECT {columns} FROM main.events WHERE {where} AND epoch=?", scope + (epoch,)
-            ).fetchone()
-            if tail is None:
+                f"SELECT {columns} FROM main.events WHERE {where} ORDER BY epoch DESC LIMIT 2",
+                scope,
+            ).fetchall()
+            if len(tail) != min(epoch + 1, 2) or validate(tail[0], epoch) != record["state"]:
                 raise EnrollmentError("invalid_policy_audit")
-            validate(tail, epoch)
+            if epoch and tail[0][1] not in _ALLOWED_TRANSITIONS.get(
+                validate(tail[1], epoch - 1), ()
+            ):
+                raise EnrollmentError("invalid_policy_audit")
             rows = self._connection.execute(
                 f"SELECT {columns} FROM main.events WHERE {where} AND epoch>? "
                 "ORDER BY epoch LIMIT ?",
@@ -429,8 +469,21 @@ class EnrollmentStore:
             ).fetchall()
             if len(rows) != min(epoch - after_epoch, limit + 1):
                 raise EnrollmentError("invalid_policy_audit")
+            previous_state = None
+            if rows and after_epoch >= 0:
+                cursor = self._connection.execute(
+                    f"SELECT {columns} FROM main.events WHERE {where} AND epoch=?",
+                    scope + (after_epoch,),
+                ).fetchone()
+                if cursor is None:
+                    raise EnrollmentError("invalid_policy_audit")
+                previous_state = validate(cursor, after_epoch)
             for offset, row in enumerate(rows, start=1):
-                validate(row, after_epoch + offset)
+                if previous_state is not None and row[1] not in _ALLOWED_TRANSITIONS.get(
+                    previous_state, ()
+                ):
+                    raise EnrollmentError("invalid_policy_audit")
+                previous_state = validate(row, after_epoch + offset)
             items = [dict(zip(columns.split(","), row, strict=True)) for row in rows[:limit]]
             return {
                 "items": items,
@@ -551,7 +604,9 @@ class EnrollmentStore:
                     raise EnrollmentError("revision_conflict")
                 if record["state"] == "revoked":
                     raise EnrollmentError("revoked")
-                revision = "policy_revision" if operation == "set_policy" else "enrollment_revision"
+                if operation not in _ALLOWED_TRANSITIONS[record["state"]]:
+                    raise EnrollmentError("invalid_transition")
+                revision = "enrollment_revision" if operation == "revoke" else "policy_revision"
                 if record[revision] == _MAX or record["epoch"] == _MAX:
                     raise EnrollmentError("revision_exhausted")
                 if operation == "set_policy":
@@ -568,12 +623,18 @@ class EnrollmentStore:
                         )
                         + key,
                     )
-                else:
+                elif operation == "revoke":
                     self._connection.execute(
                         "UPDATE main.enrollments SET state='revoked',"
                         "enrollment_revision=enrollment_revision+1,epoch=epoch+1 "
                         "WHERE owner_id=? AND profile_id=? AND enrollment_id=?",
                         key,
+                    )
+                else:
+                    self._connection.execute(
+                        "UPDATE main.enrollments SET state=?,policy_revision=policy_revision+1,"
+                        "epoch=epoch+1 WHERE owner_id=? AND profile_id=? AND enrollment_id=?",
+                        (_STATE_AFTER_EVENT[operation], *key),
                     )
             record = self._get(request)
             self._audit(record, operation)

@@ -26,9 +26,7 @@ There is a hard limit of **10,000 events per database**. Capacity or sequence ex
 
 ## Schema compatibility
 
-Explicit internal store initialization atomically upgrades **only the exact owned v1 schema** to v2 by adding the audit table. Existing enrollment rows, administrative events, revisions and terminal revoked state are preserved without reinterpreting them as active authority. No historical read events are fabricated. Fresh v2 and upgraded v2 have identical checked DDL. Unknown versions, extra objects, changed DDL and temporary shadow objects are refused. Failure during table creation, version change or COMMIT leaves v1 intact and the store uninitialized.
-
-The plugin does not initialize this store on normal load/status. Calling the already explicit internal opener now performs the v2 upgrade. Old code that only understands v1 will refuse v2; there is no automatic downgrade. Schema checks occur before each operation, and snapshot data from another database is not adopted.
+The audit table was introduced in v2. The [current v3 migration](26-pending-enrollment-policy.md#3-internal-contract) accepts only exact owned v1 or v2 schemas. It creates the audit table for v1 and preserves all existing prepared-read rows for v2. The migration and version update commit together. Plugins load and report status without opening this store. Explicit internal initialization checks schema ownership and refuses unknown schemas and temporary shadow objects.
 
 ## Verification
 

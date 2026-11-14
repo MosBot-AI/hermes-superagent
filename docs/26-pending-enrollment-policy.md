@@ -4,7 +4,7 @@ English | [简体中文](26-pending-enrollment-policy-zh.md)
 
 ## 1. Delivered scope
 
-This slice implements an **unwired administrative persistence core**, not an owner-enrollment product. It stores prospective actor/receiver mappings and exact proposed read scopes, with transactional versions, terminal revocation and minimal audit records. Its only states are `pending` and `revoked`. It has no activation, challenge, session binding, `VerifiedReadContext` issuer, `ReadGrant` issuer or protected-data reader.
+This slice implements an **unwired administrative persistence core**, not an owner-enrollment product. It stores prospective actor/receiver mappings and exact proposed read scopes, with transactional versions, pause/resume, terminal revocation and minimal audit records. The administrative states are `pending`, `paused` and `revoked`. Live context and grant issuance require independent trusted adapters.
 
 `open_enrollment_store(bound_home, enabled=False)` rejects by default before host imports or filesystem work. The exact boolean `enabled=True` permits internal storage access only. No manifest setting, native CLI, slash command, model tool, HTTP route or callback invokes it. Loading the plugin, using `local_tasks`, or enabling the planning blueprint does not enable this store. Existing `/personal-access` diagnostics still deny access even when prospective records exist.
 
@@ -27,14 +27,16 @@ The file is not encrypted or tamper-evident. Record IDs are not secrets or beare
 
 ## 3. Internal contract
 
-`EnrollmentStore(connection)` requires a dedicated standard SQLite connection. The caller owns the connection and access controls. `initialize()` creates only an empty database or verifies the exact owned schema. `run(operation, payload)` accepts only these operations and exact fields:
+`EnrollmentStore(connection)` requires a dedicated standard SQLite connection. The caller owns the connection and access controls. `initialize()` creates the schema in an empty database, verifies v3, or atomically upgrades an exact owned v1 or v2 database. Existing records, administrative events and any prepared-read audit rows retain their values. Earlier implementations that support schemas through v1 or v2 refuse v3. `run(operation, payload)` accepts only these operations and exact fields:
 
 | Operation | Required fields | Result |
 |---|---|---|
 | `create` | Scoped record IDs, immutable intended identity fields, `scope` | New `pending` snapshot with enrollment/policy revisions `1` and epoch `0` |
 | `get` | Scoped record IDs | Current administrative snapshot, including revoked state |
 | `set_policy` | Scoped record IDs, `expected_revision`, `expected_enrollment_revision`, `scope` | Replace the proposed scope; increment policy revision and epoch |
-| `revoke` | Scoped record IDs, both expected revisions | Terminal `revoked`; increment enrollment revision and epoch |
+| `pause` | Scoped record IDs, both expected revisions | Move `pending` to `paused` and increment policy revision and epoch |
+| `resume` | Scoped record IDs, both expected revisions | Move `paused` to `pending` and increment policy revision and epoch |
+| `revoke` | Scoped record IDs, both expected revisions | Move `pending` or `paused` to terminal `revoked` and increment enrollment revision and epoch |
 
 `expected_revision` means the **policy revision**, not the enrollment revision. Both must match. Even a successful no-op scope replacement increments the policy revision and epoch. Identity fields cannot be supplied to an update. Missing/unknown fields, booleans as revisions, unsupported scopes and integer overflow are refused. All IDs use the bounded opaque ASCII syntax of the internal authorization evaluator.
 
@@ -46,11 +48,13 @@ A scope has exactly `operation`, `target`, `resource_ids` and `data_scope`. Supp
 
 These are **proposed scopes**, not grants. An `exact_tasks` proposal does not establish ownership of its task IDs; an `own_inbox` proposal does not adopt local tasks. No conversion to a live grant exists. The future admission service must independently establish all identity, resource-ownership, session and freshness facts.
 
-## 4. Transactions, retries and revocation
+## 4. Transactions, pause and revocation
 
 Every operation, including `get`, uses `BEGIN IMMEDIATE`, revalidates exact main/temp schema ownership, and commits a consistent result. A mutation and its audit event commit together. An audit insertion failure, interruption or rejected update rolls back the whole transaction. Independent connections serialize competing changes. Sharing one connection concurrently is unsupported; caller-owned transactions are refused without rolling them back.
 
 The commit is the linearization point for **this administrative state change**, not authorization admission. With the secured persistent opener, a successful revoke commits before the method returns, subject to SQLite/filesystem durability guarantees; a caller-supplied in-memory connection is not durable storage. Another policy mutation with old revisions conflicts; using current revisions on a revoked record is also refused. There is no undo, deletion or reactivation API. A replacement proposal uses a new ID and remains pending.
+
+A committed pause prevents the fenced coordinator from entering the resource callback even when a supplied confirmation matches the paused record's versions. An already admitted bounded read can finish before a waiting pause commits, and its prepared-snapshot audit remains historical. Paused proposals remain inspectable and revocable. Editing the scope requires a pending record. Explicit resume needs both current versions and restores the pending proposal. Both transitions advance the policy revision and epoch, so earlier confirmations remain stale after resume. Repeated pause or resume with current versions returns `invalid_transition` when the record is already in the requested state.
 
 Retries are CAS-only, with no replay receipts. The caller selects a stable enrollment ID before creation. If the outcome is uncertain, use the same owner/profile/ID to read current state and reconcile; do not blindly create a new ID or replay a stale edit. Duplicate creation returns `already_exists`, never the appearance of a new authority. A returned snapshot can become stale immediately after commit and is not reusable authorization.
 
@@ -70,7 +74,7 @@ Unit coverage exercises strict field/scope/type validation, persistence, owner/p
 
 Pinned Hermes contracts load the actual directory plugin and use its actual public profile/storage APIs in temporary synthetic homes. They verify persistence/reopen, separate profiles with equal prospective IDs, rejected stale profile paths, unsafe files/sidecars/directories, unchanged foreign task databases, closed connections and denial diagnostics after metadata is stored. This is native storage integration evidence, **not a real Bot identity or owner enrollment test**.
 
-The slice passed 654 unit tests and 301 pinned-host contracts (955 total), including 81 new unit cases and 37 new host cases. Ruff, type checks and the bilingual documentation checker passed. This does not test crash/power-loss recovery or production enrollment.
+The slice passed 654 unit tests and 301 pinned-host contracts (955 total), including 81 new unit cases and 37 new host cases. Ruff, type checks and the bilingual documentation checker passed. Those counts describe the original persistence slice. The v3 tests exercise exact v1/v2 migration, pause versus read commit order, stale confirmations after resume, and fresh-process recovery before and after pause COMMIT. They also reopen the store through the pinned native profile helper. Power-loss behavior and production enrollment require separate evidence.
 
 Run the repository's aggregate `scripts/check.py` with the compatibility-pinned Hermes checkout and its PM-built interpreter. Tests use no real identities or keys. Historical blocked identity socket tests remain unresolved and are not retried by this slice. No upstream patch is applied.
 
@@ -93,6 +97,6 @@ This foundation intentionally stops before those gates. The production status co
 
 The initial cursor `-1` includes the epoch-zero creation event. Pages accept 1–100 items, return `next_after_epoch` and `has_more`, and remain readable after terminal revocation. A cursor beyond the current epoch is rejected. One transaction provides a coherent page and current watermark; separate calls are not a frozen snapshot and may observe later policy changes or revocation. A returned watermark is historical inspection, not an authorization fence or evidence that an external operation stopped.
 
-The reader validates the exact schema, current record/counter relationship, current tail event and selected contiguous range including one lookahead item. Missing or inconsistent selected events fail closed, including failures during SELECT or COMMIT. It does not scan or certify all earlier history outside that page. Indexed scope/epoch queries fetch at most `limit + 1` page rows and one tail row; the API performs no mutation, retention cleanup or schema migration. The local database remains neither tamper-evident nor a restore/clone freshness authority. A caller transaction is rejected without being rolled back.
+The reader validates the exact schema, current record/counter relationship, current tail and its predecessor, the cursor when it seeds the page, and the selected contiguous transitions including one lookahead item. Missing or inconsistent selected events fail closed, including failures during SELECT or COMMIT. It does not scan or certify all earlier history outside that page. Indexed scope/epoch queries fetch at most `limit + 1` page rows, two tail rows and one cursor row; the API performs no mutation, retention cleanup or schema migration. The local database remains neither tamper-evident nor a restore/clone freshness authority. A caller transaction is rejected without being rolled back.
 
 See [78. Fenced enrollment ceremony evidence](78-enrollment-ceremony.md) for the unwired one-shot confirmation foundation and current-pin identity boundary; production owner authority remains unavailable.
