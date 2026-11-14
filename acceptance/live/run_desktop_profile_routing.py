@@ -35,6 +35,8 @@ SSH_GATEWAY_LOSS_CASE = "bot-canonical-ssh-gateway-loss"
 SSH_NO_CONTINUE_CASE = "bot-canonical-ssh-gateway-loss-no-continue"
 SSH_ACK_CRASH_CASE = "bot-canonical-ssh-lost-ack-gateway-loss"
 SSH_ACK_CRASH_DISABLED_CASE = "bot-canonical-ssh-lost-ack-gateway-loss-no-continue"
+SSH_DRAFT_RELOAD_CASE = "bot-canonical-ssh-draft-reload"
+SSH_DRAFT_RELOAD_DISABLED_CASE = "bot-canonical-ssh-draft-reload-no-continue"
 SSH_SPEC = "desktop_bot_ssh.spec.ts"
 SSH_FIXTURES = (GATEWAY_FIXTURE, CANONICAL_OBSERVER, APPIMAGE_FIXTURE)
 SAVED_TOKEN_CASE = "bot-canonical-saved-token"
@@ -62,6 +64,8 @@ APPIMAGE_CASES = (
     SSH_NO_CONTINUE_CASE,
     SSH_ACK_CRASH_CASE,
     SSH_ACK_CRASH_DISABLED_CASE,
+    SSH_DRAFT_RELOAD_CASE,
+    SSH_DRAFT_RELOAD_DISABLED_CASE,
     SAVED_TOKEN_CASE,
     COMPRESSED_LOCAL_CASE,
     COMPRESSED_SAVED_CASE,
@@ -95,6 +99,12 @@ CASES = {
         SSH_SPEC,
         SSH_FIXTURES,
         "OpenSSH Bot Mode lost acknowledgement with continuation disabled",
+    ),
+    SSH_DRAFT_RELOAD_CASE: (SSH_SPEC, SSH_FIXTURES, "OpenSSH Bot Mode draft after reload"),
+    SSH_DRAFT_RELOAD_DISABLED_CASE: (
+        SSH_SPEC,
+        SSH_FIXTURES,
+        "OpenSSH Bot Mode draft after reload with continuation disabled",
     ),
     SAVED_TOKEN_CASE: (
         "desktop_bot_saved_token_refusal.spec.ts",
@@ -146,6 +156,8 @@ CASE_TITLE_FILTERS = {
     SSH_NO_CONTINUE_CASE: "reopens the canonical SSH chat with native continuation disabled$",
     SSH_ACK_CRASH_CASE: "recovers from lost acknowledgement and Gateway exit$",
     SSH_ACK_CRASH_DISABLED_CASE: "guards a lost acknowledgement with continuation disabled$",
+    SSH_DRAFT_RELOAD_CASE: "guards the restored SSH draft after renderer reload$",
+    SSH_DRAFT_RELOAD_DISABLED_CASE: "guards the reloaded SSH draft with continuation disabled$",
     COMPRESSED_LOCAL_CASE: "compressed Bot Chat over the local private ticket$",
     COMPRESSED_SAVED_CASE: "compressed Bot Chat over the saved Webapp token$",
     "install-marker-collision": (
