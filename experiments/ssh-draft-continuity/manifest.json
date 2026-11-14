@@ -28,5 +28,11 @@
     "tui_gateway/draft_continuity.py",
     "tui_gateway/methods_prompt.py",
     "tui_gateway/methods_session.py"
-  ]
+  ],
+  "source_built_acceptance": {
+    "original_with_continuation": "passed",
+    "original_without_continuation": "passed",
+    "unchanged_route_with_copied_sqlite_generation": "passed",
+    "packaged_clean_and_prior_proposal_controls": "passed"
+  }
 }

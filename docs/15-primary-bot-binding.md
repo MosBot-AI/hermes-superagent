@@ -334,7 +334,7 @@ The clean AppImage keeps the composer empty and has no review action. The matchi
 
 Run `--case bot-canonical-ssh-draft-unchanged-route` using the [matching clean or proposal build](../experiments/ssh-draft-recovery/README.md#bundled-linux-verification). This records an open gate for the proposal. Safe review across a reconnect requires current evidence that the active backend owns the recorded chat. An unchanged SSH endpoint and a copied install marker do not provide that evidence. Keep this candidate review only pending a native continuity signal and separate owner verification.
 
-The [separate review-only continuity proposal](../experiments/ssh-draft-continuity/README.md) checks the physical database generation and exact stored row through the currently attached SSH backend. The Linux source-built case shows no review action on the replacement. The journal stays intact, and the original home again permits guarded review when explicitly reopened. A matching SSH configuration, install marker and chat ID cannot satisfy this gate on their own.
+The [separate review-only continuity proposal](../experiments/ssh-draft-continuity/README.md) checks the physical database generation and exact stored row through the currently attached SSH backend. The Linux source-built case shows no review action on the replacement, including a physical SQLite copy with the same generation metadata. The journal stays intact, and the original home again permits guarded review when explicitly reopened. A matching SSH configuration, install marker and chat ID cannot satisfy this gate on their own.
 
 #### Current-Pin OpenSSH Read Before Resume
 
