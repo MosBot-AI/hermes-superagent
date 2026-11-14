@@ -44,7 +44,7 @@
 | Desktop 来源选择 | 在 Linux 上运行真实的 Electron 源码构建，通过私有本地票据和已保存的环回 Webapp token 连接，验证 `host.profileRoutes()` 与 `host.requestProfile()`。原生 profile 退役并同名热上线时，已保存的连接保持原路由作用域。[Electron 证据](#当前固定版本的-electron-profile-路由) · [Desktop 运行时转换](#当前固定版本的-desktop-profile-退役) | 分别验证 Desktop 安装包及任何启用的 SSH 或 OAuth 路由。 |
 | 安装复制观测 | 两个 Gateway 均可达时，Electron 将安装标记和 profile 相同的条目归并到主连接。显式注册路由仍返回各自的对话记录，停止状态 home 副本保留相同规范会话 ID 时也是如此。[安装复制证据](#当前固定版本的安装复制歧义) | 恢复或重新绑定前需要独立、经认证的安装和 owner 证据。清单无法消除复制标记的歧义。 |
 | Bot Mode 规范会话打开 | 源码构建的 Linux 名册在查询返回类型化错误时拒绝打开会话，在查询返回空结果但原生指针探测确认已有会话时也拒绝。重试时打开同一个本地未压缩会话。同一用例从本地构建的 Linux x64 AppImage 启动时也通过。[本地 Bot Mode 证据](#当前固定版本的-bot-mode-规范会话拒绝与重试) | 已签名的发行安装包、其他平台、OAuth 界面路由以及经认证的 owner 绑定需要独立证据。 |
-| 已保存 OpenSSH 的 Bot Mode | Linux x64 Desktop 的源码构建与安装包通过真实 SSH 密钥连接和转发的 Gateway 打开远端命名 Bot Chat，本地同时存在同名 profile。[OpenSSH 证据](#当前固定版本的-openssh-bot-mode-路由) · [Profile 别名](#当前固定版本的-openssh-profile-别名) · [重连](#当前固定版本的-openssh-重连) · [别名改绑](#当前固定版本的-openssh-别名改绑) · [端点更换](#当前固定版本的-openssh-端点更换) · [主机密钥轮换](#当前固定版本的-openssh-主机密钥轮换) · [在途回合](#当前固定版本中回合进行时的-openssh-中断) · [提交确认丢失](#当前固定版本的-openssh-提交确认丢失) · [Gateway 进程退出](#当前固定版本的-openssh-gateway-进程退出) · [提交确认丢失与 Gateway 退出](#当前固定版本的-openssh-提交确认丢失与-gateway-退出) | 修改别名后，缓存的描述符仍可读取此前仍在服务的 profile。更换端点后，同一描述符可解析到另一个安装。自动恢复、其他 SSH 凭据和 owner 绑定需要独立证据。 |
+| 已保存 OpenSSH 的 Bot Mode | Linux x64 Desktop 的源码构建与安装包通过真实 SSH 密钥连接和转发的 Gateway 打开远端命名 Bot Chat，本地同时存在同名 profile。[OpenSSH 证据](#当前固定版本的-openssh-bot-mode-路由) · [Profile 别名](#当前固定版本的-openssh-profile-别名) · [重连](#当前固定版本的-openssh-重连) · [别名改绑](#当前固定版本的-openssh-别名改绑) · [端点更换](#当前固定版本的-openssh-端点更换) · [主机密钥轮换](#当前固定版本的-openssh-主机密钥轮换) · [在途回合](#当前固定版本中回合进行时的-openssh-中断) · [提交确认丢失](#当前固定版本的-openssh-提交确认丢失) · [Gateway 进程退出](#当前固定版本的-openssh-gateway-进程退出) · [提交确认丢失与 Gateway 退出](#当前固定版本的-openssh-提交确认丢失与-gateway-退出) · [恢复前读取](#当前固定版本的-openssh-恢复前读取) | 修改别名后，缓存的描述符仍可读取此前仍在服务的 profile。更换端点后，同一描述符可解析到另一个安装。自动恢复、其他 SSH 凭据和 owner 绑定需要独立证据。 |
 | 本地旧版压缩历史 | 命名 profile 的原生 CLI 检查并接管符合条件的 Gateway 前压缩末端。Linux 源码构建的 Bot Mode 在所选 profile 路由打开该末端，并显示已存储的祖先与末端消息。[压缩历史证据](#当前固定版本的压缩历史接管) | 经 owner 授权的跨安装接管、混合 owner 谱系、其他凭据模式和投递对账需要独立证据。 |
 | 已保存 Webapp 令牌的回退 | 干净 Linux Electron 构建在命名 profile 查询返回空结果时探测远程启动 authority，并在同一次点击中通过第二次查询打开原会话。单独构建的提案探测命名 authority，拒绝不确定的打开操作，并在明确重试后打开原会话。[已保存 Webapp 证据](#当前固定版本的已保存-webapp-bot-mode-路由) | 干净固定版本仍有回退作用域缺口。受支持的使用需要已修正的宿主修订及该模式的专项验收。 |
 | Profile 与安装连续性 | 停机状态下的原生 profile CLI 和备份导入路径覆盖重命名、克隆、删除、同名重建、拒绝向已占用的 profile 导入，以及恢复后目标的 epoch 下限。在同一运行中的安装实例内，保留原有 host 作用域 WebSocket，覆盖 profile 退役及同名热上线。[Profile 生命周期](#当前固定版本的原生-profile-生命周期) · [保留的路由](#当前固定版本保留的原生-profile-路由) · [备份与恢复](#当前固定版本的原生备份与恢复) | 其他运行时切换和经认证的安装连续性需要当前目标、登记、规范谱系与冲突证据。复制的标记和名称无法消除安装实例的歧义。 |
@@ -311,6 +311,16 @@ Bot Mode 的确切标题 `session.list` 查询携带所选后端 profile。列�
 显式点击后，Desktop 通过新的转发恢复原命名会话。重启后可能有多个夹具拥有的命名 profile 后端。通过检查对应作用域的消息记录和 provider 请求次数，可以区分回合续跑与后端启动。原生默认配置启动一次续跑，并写入中断提示和回复。在命名 profile 中设置 `desktop.auto_continue.enabled: false` 后，原用户消息仍在，provider 不会收到第二次请求。两种配置下，完整重启应用后仍可恢复草稿。保留原文按一次 Enter 会显示结果不确定的警告，且不会再次提交、调用 provider 或改变消息记录。未观察到新建会话或持久准入 ID，三份对照会话保持不变。
 
 使用同一运行器的 `--case bot-canonical-ssh-draft-restart` 或 `--case bot-canonical-ssh-draft-restart-no-continue`，并可添加 `--appimage`。本用例覆盖在同一个用户数据目录中正常退出并重启 Desktop。Desktop 异常退出后的恢复、使用另一个客户端、自动重连及经 owner 授权的写入仍需单独取证。
+
+#### 当前固定版本的 OpenSSH 恢复前读取
+
+命名 profile 的 SSH Gateway 在回合中退出后，夹具切到本地对照会话。原 OpenSSH 监听器仍可连接，并保留默认启用的原生续跑配置。远端原会话包含已提交的用户消息，原生中断标记仍记录已终止的进程为写入者。
+
+在新的 SSH 转发上，SDK 精确标题查询 `session.list` 返回原有隐藏 `scout` 会话的根 ID 和解析后的 ID。会话尚未附着时，使用存储 ID 的旧协议 `session.history` 返回 `4001`。独立的 Desktop 桥接 GET 请求 `/api/sessions/{id}/messages` 显式选定已保存的连接与 `profile: scout`。其有界分页返回原会话 ID、profile 和完全匹配的已存储消息行，其中包含中断回合的用户消息。焦点留在本地对照会话。观测到的读取未对远端会话发送 resume 或 activate，也未新建会话或提交提示。远端消息记录、中断标记及 provider 请求次数均保持不变。
+
+显式点击 Bot Mode 后，Desktop 恢复同一会话，原生续跑执行一次并清除中断标记，续跑回复保存到原消息记录中。读取路径可用于有界检查，恢复路径可能触发模型执行。读取结果和中断标记均不构成持久准入回执，也不构成经验证的 owner 绑定证据。
+
+使用同一运行器的 `--case bot-canonical-ssh-cold-chat-read`，并可添加 `--appimage`。用例覆盖固定版本上 Desktop 已有的认证 SSH 转发和内部 REST 桥接。直接暴露 HTTP、其他凭据模式和生产环境中经 owner 授权的读取均需单独验收。
 
 ### 当前固定版本的原生 Profile 生命周期
 
