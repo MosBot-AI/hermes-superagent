@@ -26,6 +26,7 @@ from test_native_profile_retirement import (
 REPO = Path(__file__).resolve().parents[2]
 SIBLINGS = ("default", "watch")
 CREATE = ["profile", "create", "scout", "--no-alias", "--no-skills"]
+RENAME_COMMANDS = (["rename", "scout", "renamed"], ["rename", "renamed", "scout"])
 SEED_ESSENTIAL_SKILLS = (
     "import json; from tools.skills_sync import sync_skills; "
     "r = sync_skills(quiet=True); print(json.dumps(r))"
@@ -80,7 +81,8 @@ def activate_profile_cli(root, host):
             # Native startup provenance and alias collision probes are read-only.
             if not (
                 binary == "which"
-                and command == ["which", "renamed"]
+                and sys.orig_argv[-3:] in RENAME_COMMANDS
+                and command == ["which", sys.orig_argv[-1]]
                 and directory == host
                 and child_env is None
                 or binary == "git"
@@ -287,7 +289,7 @@ async def create_canonical(client, profile, workspace, request_id):
 
 
 @contextmanager
-def profile_cli_gateway(tmp_path_factory, monkeypatch, label):
+def profile_cli_installation(tmp_path_factory, monkeypatch):
     assert sys.platform == "linux", "Profile CLI fixture requires the Linux private control socket"
     host = Path(os.environ["HERMES_TEST_ROOT"]).resolve(strict=True)
     pin = json.loads((REPO / "compatibility.json").read_bytes())["hermes_commit"]
@@ -378,13 +380,33 @@ def profile_cli_gateway(tmp_path_factory, monkeypatch, label):
             (scout / "models_dev_cache.json").write_bytes(
                 (home / "models_dev_cache.json").read_bytes()
             )
-            with gateway_daemon(host, home, env, label) as endpoint:
-                port = urlsplit(endpoint.api_origin).port
-                restrict = activate(root, dial_ports=(port,), dial_host="127.0.0.1")
-                try:
-                    yield cli_source, cli_env, homes, workspace, endpoint
-                finally:
-                    restrict()
-            assert all(not lock_held(profile) for profile in homes.values())
+
+            @contextmanager
+            def serve(label):
+                with gateway_daemon(host, home, env, label) as endpoint:
+                    port = urlsplit(endpoint.api_origin).port
+                    restrict = activate(root, dial_ports=(port,), dial_host="127.0.0.1")
+                    try:
+                        yield endpoint
+                    finally:
+                        restrict()
+                assert all(not lock_held(profile) for profile in homes.values())
+
+            yield cli_source, cli_env, homes, workspace, serve
         finally:
             deactivate()
+
+
+@contextmanager
+def profile_cli_gateway(tmp_path_factory, monkeypatch, label):
+    with (
+        profile_cli_installation(tmp_path_factory, monkeypatch) as (
+            cli_source,
+            cli_env,
+            homes,
+            workspace,
+            serve,
+        ),
+        serve(label) as endpoint,
+    ):
+        yield cli_source, cli_env, homes, workspace, endpoint

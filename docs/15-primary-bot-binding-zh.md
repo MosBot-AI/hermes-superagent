@@ -396,7 +396,9 @@ Bot Mode 的确切标题 `session.list` 查询携带所选后端 profile。列�
 
 固定版本的重命名按新名称迁移会话及路由行，并请多路复用器为新名称提供服务。该迁移保留已绑定 LOCAL 策略回执中的旧路由。新 authority 根据重命名后的命名空间计算路由，`_checked_entry` 拒绝不匹配的结果，恢复路径将其报告为 `storage_unavailable`。夹具通过固定的私有诊断确认触发了这项检查。名册直接读取已存的规范会话行，因此即使规范会话访问不可用，原指针也可以继续显示。[原生重命名顺序](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_cli/profiles.py#L2246-L2316) · [运行时身份迁移](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/gateway/run_profile_reconcile.py#L695-L734) · [持久化迁移](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/hermes_state_gateway.py#L712-L779) · [LOCAL 路由校验](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/gateway/session_local_recovery.py#L93-L126) · [恢复拒绝](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/gateway/session_local_recovery.py#L173-L196) · [规范名册读取](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/gateway/session_group_controls.py#L399-L428)
 
-在此固定版本上，应将重命名后的规范路由视为不可用。Profile 注册表迁移成功、会话记录得到保留以及 `previous_names` 都未能验证经授权的会话续接。受支持的 LOCAL 回执迁移、经认证的 owner 恢复及其他凭据或客户端模式的验收，仍是独立门禁。
+同一夹具正常停止 Gateway，在 profile 锁已释放时两次运行 `hermes profile migrate-identity scout renamed`。两次重试均报告成功。只读 SQLite 检查显示，存储的会话键仍在新命名空间中，原 LOCAL 策略回执逐字节保持一致。后继 Gateway 获取 profile 锁、推进 epoch，并公布相同的规范会话根和末端。使用新的 host 作用域票据访问时，旧路由仍返回 `profile_mismatch`，重命名后路由的确切查询、恢复和详情仍返回 `storage_unavailable`。其私有日志记录同样的路由不匹配检查。
+
+后继 Gateway 保持运行，夹具通过显式反向重命名把同一个 home 移回 `scout`。存储路由再次与原始、未修改的回执一致。此时旧的 `renamed` 选择器返回 `profile_mismatch`，在 `scout` 下进行确切查询和恢复均返回原 Bot Chat。在重试、重启及反向重命名过程中，比较的会话、消息及准入行均保持一致。这验证了同一安装恢复原路由的行为。重命名后的路由仍缺少受支持的 LOCAL 回执迁移。经认证的 owner 恢复和其他凭据或客户端模式仍是独立门禁。
 
 #### 当前固定版本的原生 profile 重建
 
