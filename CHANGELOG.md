@@ -203,6 +203,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 - Verify owner-entry denials through the native Telegram command adapter and Gateway. Direct, forwarded and edited DMs can have the same public source fields, and Gateway still checks its current allowlist after adapter intake (#14).
 
+- Verify explicit SSH Bot Chat reopen after abrupt Desktop exit. The native prepared submission survives, while the restored draft and its retry identity are lost in the tested window (#33).
+
 - Verify scoped stored-message inspection before SSH Bot Chat resume after Gateway loss. The read preserves the interrupted turn and starts no inference. Explicit resume can start native continuation (#33).
 
 - Verify that the restored SSH draft retains its retry guard after fully exiting and relaunching Desktop before reopening the interrupted Bot Chat, with native continuation enabled or disabled (#33).
