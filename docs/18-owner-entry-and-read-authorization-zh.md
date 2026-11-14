@@ -95,6 +95,14 @@ Context 缺失或不受支持时，插件必须 fail closed。私有 adapter 导
 
 请在待验证 commit 上运行[全仓检查器](../README-zh.md#开发验证)。E0.7 仍是部分进展，E1 owner 登记/当前经过认证的 policy 准入仍未实现，主 Bot、私人读写发布门禁继续关闭。未来连接配置及任何持久访问应使用获准的原生安全流程，不应要求用户在聊天中粘贴秘密。
 
+### 当前固定版本的 Telegram 命令入口
+
+[离线入口夹具](../tests/contracts/test_owner_telegram_ingress.py)在 Hermes `2281116525106e3c109993ccb5dc74d02bfc1427` 上将合成 Telegram 更新交给原生命令适配器。适配器入口、Gateway 路由与授权、已注册的 `personal-access` 回调均在无网络 I/O 的情况下运行。夹具在适配器发送边界记录回复。同一独立运行时使用两个接收适配器实例，每次只使用一个。
+
+经任一接收端收到的直接人类私聊、转发私聊和编辑过的私聊，其 `SessionSource` 声明字段及会话键均相同。原始事件仍携带 Telegram 转发元数据或原生编辑修订标识。进程内私有路由身份可区分接收端，而托管宿主的编解码器仅保留已声明的来源字段。四个诊断均识别出发送者的字段形态，并以 `receiving_transport_unverified` 拒绝授权。夹具直接验证编解码器。托管命令执行和真实 Telegram 认证需单独验收。
+
+由合成允许名单放行的群组命令和机器人命令收到相应的诊断拒绝。命令文本中的 owner 声明无效。适配器入口会拦截不在允许名单内的发送者。另一个用例修改 Gateway 允许名单，同时保持适配器允许该发送者。命令到达 Gateway 后在插件回调前被拦截。所有测试路径均未进入模型回合，也未打开插件的个人数据存储。宿主允许名单及诊断结果均无法建立 owner 或设备权限。
+
 ## 7. 固定源码证据
 
 - I1：[公开 slash context 与授权注意事项](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/website/docs/developer-guide/plugins/index.md#L1796-L1816)。
