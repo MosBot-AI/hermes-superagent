@@ -33,3 +33,22 @@ done
 ```
 
 运行器要求清单摘要、干净父提交和源码树、跟踪文件、精确补丁及构建产物均匹配。测试在只含环回网络的 Linux 命名空间内运行，使用合成 SSH 凭据、消息和 provider。[基线](../../docs/15-primary-bot-binding-zh.md#当前固定版本的-openssh-desktop-异常退出)使用干净固定版本，去掉 `--review-proposal`。提案尚未提交上游或启用。支持基线和分发运行时仍使用干净 Hermes 版本。
+
+## Linux 打包验收
+
+从干净的提案提交构建未签名的 Linux x64 AppImage，使用 Hermes 构建器及[固定版本的图标工具预加载脚本](../../docs/15-primary-bot-binding-zh.md#当前固定版本的-bot-mode-规范会话拒绝与重试)。以下命令调用 `scripts/build-bundle.sh` 背后的上游驱动，允许操作者指定独立的工作目录和缓存目录。从 Personal Agent 仓库根目录运行。所有路径均使用 `/tmp` 之外的绝对路径，并在复制验收夹具前完成构建。
+
+```sh
+set -eu
+commit=$(git -C "$DISPOSABLE_HERMES" rev-parse HEAD)
+test "$(git -C "$DISPOSABLE_HERMES" rev-parse HEAD^{tree})" = 94260c86f63b93084d97acd2df76a2aa838bf608
+test -z "$(git -C "$DISPOSABLE_HERMES" status --porcelain)"
+CSC_IDENTITY_AUTO_DISCOVERY=false \
+HERMES_E07_ICON_TOOL_DIR="$DISPOSABLE_HERMES/apps/desktop/build/prepared-packaging-tools/icons" \
+NODE_OPTIONS="--import=$ABSOLUTE_PRELOAD_PATH" \
+  "$PINNED_PYTHON" "$DISPOSABLE_HERMES/scripts/bundles/desktop.py" \
+  --repo "$DISPOSABLE_HERMES" --commit "$commit" --variant bundled \
+  --work "$BUNDLE_WORK" --cache "$BUNDLE_CACHE"
+```
+
+给两个提案用例都加上 `--appimage /absolute/path/to/Hermes.AppImage`。两个干净对照使用干净固定版本及匹配镜像，去掉 `--review-proposal`。负向对照则将干净镜像传给提案用例。预期在启动打包 Electron 前报 `AppImage commit must match the verified checkout`。夹具启动打包渲染进程并验证安装标记、ASAR 及可执行的内置 CLI。夹具自有的 Gateway 从检出的测试源码运行。
