@@ -18,5 +18,26 @@
     "apps/desktop/src/i18n/types.ts",
     "apps/desktop/src/i18n/zh.ts",
     "apps/desktop/src/store/composer-draft-retry.ts"
-  ]
+  ],
+  "bundled_linux_x64_acceptance": {
+    "image_kind": "locally built unsigned AppImage",
+    "electron": "44.9.3",
+    "node": "26.12.1",
+    "pnpm": "12.15.0",
+    "python": "3.14.9",
+    "gcc": "14.2.0",
+    "glibc": "2.41",
+    "clean": {
+      "commit": "2281116525106e3c109993ccb5dc74d02bfc1427",
+      "sha256": "758c07c5a86829bb70b8904b459329f73f000c3218e1829f32db8e67af08d887",
+      "cases_passed": 2
+    },
+    "proposal": {
+      "commit": "c57a69bce1369bc1f1e3c5a44e1733ace1fdc201",
+      "tree": "94260c86f63b93084d97acd2df76a2aa838bf608",
+      "sha256": "99e6085ab612cc2676eb582c6124f6ca5635c80118996d5f428f757301223d6b",
+      "cases_passed": 2
+    },
+    "clean_image_refused_before_candidate_launch": true
+  }
 }
