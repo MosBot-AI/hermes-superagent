@@ -15,8 +15,8 @@ export async function launchBotDesktop(env: Record<string, string>) {
   const expectedCommit = process.env.HERMES_E2E_PACKAGED_COMMIT
   expect(expectedCommit).toMatch(/^[0-9a-f]{40}$/)
   const stamp = JSON.parse(fs.readFileSync(path.join(resources, 'install-stamp.json'), 'utf8'))
+  expect(stamp.commit, 'AppImage commit must match the verified checkout').toBe(expectedCommit)
   expect(stamp).toMatchObject({
-    commit: expectedCommit,
     dirty: false,
     source: 'commit-build',
     payload: 'bundled',

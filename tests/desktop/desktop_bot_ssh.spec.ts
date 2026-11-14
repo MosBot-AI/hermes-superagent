@@ -721,12 +721,16 @@ async function verifyInterruptedTurn(
           retryId: undefined,
           prepared: preparedBeforeExit
         })
+        const warning = page.getByRole('status').filter({
+          hasText: 'This server could not confirm the earlier send of this message,'
+        })
         for (let press = 0; press < 2; press++) {
+          await expect(warning).toHaveCount(0)
           await composer(page).press('Enter')
-          await expect(page.getByText('This server could not confirm the earlier send of this message,', {
-            exact: false
-          }).first()).toBeVisible()
+          await expect(warning).toBeVisible()
           await expect(composer(page)).toHaveText(input)
+          expect(submissions()).toEqual(submitted)
+          await warning.getByRole('button', { name: 'Dismiss notification', exact: true }).click()
         }
         await page.reload()
         await page.getByRole('button', { name: 'Bots', exact: true })

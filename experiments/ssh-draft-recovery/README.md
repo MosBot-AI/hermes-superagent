@@ -33,3 +33,22 @@ done
 ```
 
 The runner requires the manifest digest, clean parent/tree, tracked files, exact patch identity and fresh build products. It uses a loopback-only Linux namespace and synthetic SSH credentials, transcript, and provider. Use the clean pin without `--review-proposal` for the [baseline](../../docs/15-primary-bot-binding.md#current-pin-openssh-abrupt-desktop-exit). The proposal remains unsubmitted and inactive. The supported pin and its distributed runtime use the clean Hermes revision.
+
+## Bundled Linux verification
+
+Build an unsigned Linux x64 AppImage from the clean proposal commit using the Hermes builder and the [pinned icon-tool preload](../../docs/15-primary-bot-binding.md#current-pin-bot-mode-canonical-chat-refusal-and-retry). The build below uses the upstream driver behind `scripts/build-bundle.sh` and lets the operator select separate work and cache directories. Run from the Personal Agent repository root. Use absolute paths outside `/tmp` and complete the build before staging the acceptance fixture.
+
+```sh
+set -eu
+commit=$(git -C "$DISPOSABLE_HERMES" rev-parse HEAD)
+test "$(git -C "$DISPOSABLE_HERMES" rev-parse HEAD^{tree})" = 94260c86f63b93084d97acd2df76a2aa838bf608
+test -z "$(git -C "$DISPOSABLE_HERMES" status --porcelain)"
+CSC_IDENTITY_AUTO_DISCOVERY=false \
+HERMES_E07_ICON_TOOL_DIR="$DISPOSABLE_HERMES/apps/desktop/build/prepared-packaging-tools/icons" \
+NODE_OPTIONS="--import=$ABSOLUTE_PRELOAD_PATH" \
+  "$PINNED_PYTHON" "$DISPOSABLE_HERMES/scripts/bundles/desktop.py" \
+  --repo "$DISPOSABLE_HERMES" --commit "$commit" --variant bundled \
+  --work "$BUNDLE_WORK" --cache "$BUNDLE_CACHE"
+```
+
+Add `--appimage /absolute/path/to/Hermes.AppImage` to both proposal cases. Run both clean controls with the clean pin and its matching image, omitting `--review-proposal`. For the negative control, supply the clean image to a proposal case. The expected failure is `AppImage commit must match the verified checkout`, before packaged Electron launches. The fixture launches the packaged renderer and verifies its install stamp, ASAR and executable bundled CLI. The fixture-owned Gateways run from the checked-out test source.
