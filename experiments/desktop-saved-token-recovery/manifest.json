@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "status": "Review-only, unsubmitted and not activated",
+  "source_repository": "https://github.com/NousResearch/hermes-agent",
+  "base": "2281116525106e3c109993ccb5dc74d02bfc1427",
+  "proposal_commit_observed": "a2f9c951bddfa31e275ca0508cddb8d53ed93320",
+  "proposal_tree": "b9c556f7f33fcf5e777eaff57ff4a6d85773f8cf",
+  "patch_file": "desktop-saved-token-recovery.patch",
+  "patch_sha256": "cbeb4455ae2dbe2ea17afead6b8b63fb6e5d717dc110ebba2f64ff87fe9151f8",
+  "patch_files": [
+    "apps/desktop/electron/desktop-remote-route.test.ts",
+    "apps/desktop/electron/desktop-remote-route.ts",
+    "apps/desktop/electron/main.ts"
+  ],
+  "artifact_files": [
+    "LICENSE.hermes-agent",
+    "README-zh.md",
+    "README.md",
+    "desktop-saved-token-recovery.patch",
+    "manifest.json"
+  ],
+  "submitted_upstream": false,
+  "production_activated": false,
+  "verification": {
+    "platform": "linux-x64",
+    "electron": "44.9.3",
+    "node": "26.12.1",
+    "python": "3.14.9",
+    "proposal_electron_type_check": "passed",
+    "proposal_vitest_cases_passed": 138,
+    "patch_apply_check": "passed",
+    "source_clean_cases_passed": 1,
+    "source_proposal_cases_passed": 1,
+    "clean_post_save_lookup": "refused_until_restart",
+    "proposal_post_save_lookup": "same_process_and_renderer",
+    "scoped_native_peer_available": true,
+    "sqlite_projections_unchanged": 4,
+    "model_completions": 0,
+    "bundled_unsigned_appimage": {
+      "clean_commit": "2281116525106e3c109993ccb5dc74d02bfc1427",
+      "clean_sha256": "758c07c5a86829bb70b8904b459329f73f000c3218e1829f32db8e67af08d887",
+      "proposal_commit": "a2f9c951bddfa31e275ca0508cddb8d53ed93320",
+      "proposal_sha256": "a4fa2154b79fb95cebb5960d6e3371594addbdab8b4453957b7822b6f01d8e16",
+      "clean_cases_passed": 1,
+      "proposal_cases_passed": 1,
+      "clean_image_refused_in_proposal_mode": true,
+      "compiler": "Debian Clang 19.1.7",
+      "optional_x11_modifier_monitor": "not_built_missing_xinput2_headers"
+    }
+  }
+}
