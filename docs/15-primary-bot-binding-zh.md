@@ -334,7 +334,7 @@ Bot Mode 的确切标题 `session.list` 查询携带所选后端 profile。列�
 
 使用[匹配的干净或提案构建](../experiments/ssh-draft-recovery/README-zh.md#linux-打包验收)运行 `--case bot-canonical-ssh-draft-unchanged-route`。这是提案仍待满足的条件。重连后要安全提供草稿查看，必须有当前后端确实拥有原会话的证据。未变更的 SSH 端点及复制的安装标记无法提供该证据。在具备原生连续性信号并单独验证 owner 之前，此候选方案仅供审阅。
 
-[单独的仅供审阅连续性提案](../experiments/ssh-draft-continuity/README-zh.md)通过当前附着的 SSH 后端检查实际数据库世代和精确的存储记录。Linux 源码版用例在替换端隐藏查看操作，保留原日志，即使替换端使用保留了相同世代元数据的实际 SQLite 副本。显式重开原目录的会话后，再次允许带保护的查看。仅凭相同的 SSH 配置、安装标记和会话 ID 无法通过这项检查。
+[单独的仅供审阅连续性提案](../experiments/ssh-draft-continuity/README-zh.md#linux-打包验收)通过当前附着的 SSH 后端检查实际数据库世代和精确的存储记录。Linux 源码版和对应的未签名 Linux x64 AppImage 均在替换端隐藏查看操作并保留原日志，即使替换端使用保留了相同世代元数据的实际 SQLite 副本。显式重开原目录的会话后，再次允许带保护的查看。候选 AppImage 在两种原生续跑设置下均通过。夹具检查提交标记和打包的 Electron 身份，并从已验证的候选检出运行 Gateway。经认证的个人 owner 连续性、签名分发和上游采纳仍待验证。
 
 #### 当前固定版本的 OpenSSH 恢复前读取
 
