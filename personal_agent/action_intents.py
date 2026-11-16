@@ -1,4 +1,4 @@
-"""Internal durable intent drafts, never approvals or executable authority.
+"""Internal durable intent drafts and historical approval evidence.
 
 Caller owns the private connection, truthful scope and trusted clock. Labels and
 hashes do not authenticate a person. No plugin entry point, storage opener,
@@ -11,6 +11,7 @@ import json
 import re
 import sqlite3
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
@@ -21,7 +22,7 @@ MAX_PAYLOAD_BYTES = 65536
 MAX_TARGET_BYTES = 4096
 MAX_LIFETIME = timedelta(hours=24)
 _APPLICATION_ID = 0x5041494E
-_VERSION = 2
+_VERSION = 3
 _MAX_REVISION = 2**63 - 1
 _KEYS = ("owner_id", "profile_id", "request_id")
 _FIELDS = _KEYS + (
@@ -60,6 +61,21 @@ _SCHEMA["replacements"] = """CREATE TABLE replacements (
     recorded_at TEXT NOT NULL,
     PRIMARY KEY(owner_id, profile_id, old_request_id),
     UNIQUE(owner_id, profile_id, new_request_id))"""
+_V2_SCHEMA = dict(_SCHEMA)
+_APPROVAL_FIELDS = (
+    "approval_ref_digest",
+    "binding_digest",
+    "intent_revision",
+    "approved_at",
+    "expires_at",
+    "recorded_at",
+)
+_SCHEMA["approval_evidence"] = """CREATE TABLE approval_evidence (
+    owner_id TEXT NOT NULL, profile_id TEXT NOT NULL, request_id TEXT NOT NULL,
+    approval_ref_digest TEXT NOT NULL UNIQUE, binding_digest TEXT NOT NULL,
+    intent_revision INTEGER NOT NULL CHECK(intent_revision=1),
+    approved_at TEXT NOT NULL, expires_at TEXT NOT NULL, recorded_at TEXT NOT NULL,
+    PRIMARY KEY(owner_id, profile_id, request_id))"""
 _SPEC_FIELDS = set(_KEYS) | {
     "operation",
     "policy_revision",
@@ -77,6 +93,17 @@ class IntentError(Exception):
     def __init__(self, code: str):
         self.code = code
         super().__init__(f"Action intent operation failed ({code}).")
+
+
+@dataclass(frozen=True, slots=True)
+class VerifiedIntentApproval:
+    """Evidence returned by a trusted local verifier, with no executable grant."""
+
+    receipt_ref: str
+    binding_digest: str
+    intent_revision: int
+    approved_at: datetime
+    expires_at: datetime
 
 
 def _revision(value: object, *, zero: bool = False) -> bool:
@@ -159,17 +186,22 @@ class ActionIntentStore:
     """Bounded metadata-only draft ledger on a dedicated, caller-secured connection.
 
     Every operation takes BEGIN IMMEDIATE and checks exact schema. Scope labels
-    are selectors, not authentication. Prepared drafts cannot be approved or run.
+    are selectors, not authentication. Approval evidence is historical metadata.
     Clock is trusted local code and sampled after lock acquisition. The caller
     must supply an independently current clock, not an untrusted request field.
     No pruning, adoption, policy mutation, restore or clone-freshness guarantee.
     """
 
     def __init__(
-        self, connection: sqlite3.Connection, *, clock: Callable[[], datetime] | None = None
+        self,
+        connection: sqlite3.Connection,
+        *,
+        clock: Callable[[], datetime] | None = None,
+        approval_verifier: Callable[[str], VerifiedIntentApproval | None] | None = None,
     ):
         self._connection = connection
         self._clock = clock if clock is not None else lambda: datetime.now(UTC)
+        self._approval_verifier = approval_verifier
         self._initialized = False
 
     def _schema(self, *, create: bool = False) -> None:
@@ -186,8 +218,17 @@ class ActionIntentStore:
                 conn.execute(sql)
             conn.execute(f"PRAGMA application_id={_APPLICATION_ID}")
             conn.execute(f"PRAGMA user_version={_VERSION}")
-        elif create and app == _APPLICATION_ID and version == 1 and dict(rows) == _V1_SCHEMA:
-            conn.execute(_SCHEMA["replacements"])
+        elif (
+            create
+            and app == _APPLICATION_ID
+            and (
+                (version == 1 and dict(rows) == _V1_SCHEMA)
+                or (version == 2 and dict(rows) == _V2_SCHEMA)
+            )
+        ):
+            if version == 1:
+                conn.execute(_SCHEMA["replacements"])
+            conn.execute(_SCHEMA["approval_evidence"])
             conn.execute(f"PRAGMA user_version={_VERSION}")
         elif app != _APPLICATION_ID:
             raise IntentError("foreign_database")
@@ -345,6 +386,134 @@ class ActionIntentStore:
             return self._expire(record, now)
 
         return self._transaction(apply)
+
+    def _approval_evidence(self, record: dict) -> dict | None:
+        row = self._connection.execute(
+            f"SELECT {','.join(_APPROVAL_FIELDS)} FROM main.approval_evidence "
+            "WHERE owner_id=? AND profile_id=? AND request_id=?",
+            tuple(record[name] for name in _KEYS),
+        ).fetchone()
+        if row is None:
+            return None
+        evidence = dict(zip(_APPROVAL_FIELDS, row, strict=True))
+        ref = evidence["approval_ref_digest"]
+        if (
+            type(ref) is not str
+            or re.fullmatch(r"[0-9a-f]{64}", ref) is None
+            or evidence["binding_digest"] != record["binding_digest"]
+            or type(evidence["intent_revision"]) is not int
+            or evidence["intent_revision"] != 1
+            or not _parse_stamp(record["created_at"])
+            <= _parse_stamp(evidence["approved_at"])
+            <= _parse_stamp(evidence["recorded_at"])
+            < _parse_stamp(evidence["expires_at"])
+            <= _parse_stamp(record["expires_at"])
+        ):
+            raise IntentError("invalid_record")
+        return evidence
+
+    def inspect_approval(self, key: dict) -> dict | None:
+        """Recover the immutable receipt metadata for an existing intent."""
+        key = _key(key)
+
+        def apply():
+            record = self._record(key)
+            if record is None:
+                raise IntentError("not_found")
+            return self._approval_evidence(record)
+
+        return self._transaction(apply)
+
+    def record_approval(
+        self,
+        key: dict,
+        *,
+        expected_binding_digest: str,
+        expected_revision: int,
+        receipt_ref: str,
+    ) -> dict:
+        """Record exact evidence from an injected, bounded local verifier.
+
+        The callback reads trusted evidence by reference. It must perform no
+        network I/O, effects or reentrant store calls while the write lock is held.
+        A receipt is bound once and neither changes the draft nor issues authority.
+        """
+        key = _key(key)
+        if (
+            type(expected_binding_digest) is not str
+            or re.fullmatch(r"[0-9a-f]{64}", expected_binding_digest) is None
+            or not _identifier(receipt_ref)
+        ):
+            raise IntentError("invalid_request")
+        if type(expected_revision) is not int or expected_revision != 1:
+            raise IntentError("revision_conflict")
+        ref_digest = _digest(b"personal.action-approval-reference.v1", receipt_ref.encode("ascii"))
+
+        def apply():
+            record = self._record(key)
+            if record is None:
+                raise IntentError("not_found")
+            if record["binding_digest"] != expected_binding_digest:
+                raise IntentError("request_conflict")
+            existing = self._approval_evidence(record)
+            if existing is not None:
+                if existing["approval_ref_digest"] != ref_digest:
+                    raise IntentError("approval_conflict")
+                return existing
+            if record["state"] != "draft":
+                raise IntentError("not_pending")
+            if self._connection.execute(
+                "SELECT 1 FROM main.approval_evidence WHERE approval_ref_digest=?",
+                (ref_digest,),
+            ).fetchone():
+                raise IntentError("approval_conflict")
+            evidence = self._verify_approval(record, receipt_ref, ref_digest)
+            self._connection.execute(
+                "INSERT INTO main.approval_evidence VALUES (?,?,?,?,?,?,?,?,?)",
+                tuple(record[name] for name in _KEYS)
+                + tuple(evidence[name] for name in _APPROVAL_FIELDS),
+            )
+            return evidence
+
+        return self._transaction(apply)
+
+    def _verify_approval(self, record: dict, receipt_ref: str, ref_digest: str) -> dict:
+        if self._approval_verifier is None:
+            raise IntentError("approval_unavailable")
+        try:
+            verified = self._approval_verifier(receipt_ref)
+        except Exception:
+            raise IntentError("approval_unavailable") from None
+        if verified is None:
+            raise IntentError("approval_unavailable")
+        if (
+            type(verified) is not VerifiedIntentApproval
+            or type(verified.receipt_ref) is not str
+            or verified.receipt_ref != receipt_ref
+            or type(verified.binding_digest) is not str
+            or verified.binding_digest != record["binding_digest"]
+            or type(verified.intent_revision) is not int
+            or verified.intent_revision != 1
+            or not _time(verified.approved_at)
+            or not _time(verified.expires_at)
+        ):
+            raise IntentError("approval_mismatch")
+        now = self._now()
+        created, expires = _parse_stamp(record["created_at"]), _parse_stamp(record["expires_at"])
+        if now < created:
+            raise IntentError("clock_regressed")
+        if now >= expires:
+            raise IntentError("not_pending")
+        if not created <= verified.approved_at <= now < verified.expires_at <= expires:
+            raise IntentError("approval_mismatch")
+        return {
+            "approval_ref_digest": ref_digest,
+            "binding_digest": record["binding_digest"],
+            "intent_revision": verified.intent_revision,
+            "approved_at": _stamp(verified.approved_at),
+            "expires_at": _stamp(verified.expires_at),
+            "recorded_at": _stamp(now),
+        }
 
     def review_pending(self, scope: dict, *, limit: int = 100) -> dict:
         """Return a bounded, coherent internal draft snapshot, never approval.

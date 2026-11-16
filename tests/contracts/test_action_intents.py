@@ -50,7 +50,20 @@ def test_internal_metadata_survives_reload_without_activating_host(native, tmp_p
     connection = sqlite3.connect(path, isolation_level=None)
     store = module.ActionIntentStore(connection, clock=lambda: now)
     store.initialize()
-    store.prepare(spec)
+    draft = store.prepare(spec)
+    review = {"expected_binding_digest": draft["binding_digest"], "expected_revision": 1}
+    receipt = "synthetic-private-approval-ref"
+    with pytest.raises(module.IntentError, match="approval_unavailable"):
+        store.record_approval(key, **review, receipt_ref=receipt)
+    verified = module.VerifiedIntentApproval(
+        receipt, draft["binding_digest"], 1, now, now + timedelta(minutes=2)
+    )
+    store = module.ActionIntentStore(
+        connection, clock=lambda: now, approval_verifier={receipt: verified}.get
+    )
+    store.initialize()
+    evidence = store.record_approval(key, **review, receipt_ref=receipt)
+    assert store.inspect(key) == draft
     cancelled = store.cancel(key, expected_revision=1)
     connection.close()
     connection = sqlite3.connect(path, isolation_level=None)
@@ -59,10 +72,13 @@ def test_internal_metadata_survives_reload_without_activating_host(native, tmp_p
         restarted.initialize()
         assert restarted.prepare(spec) == cancelled
         assert restarted.inspect(key)["state"] == "cancelled"
+        assert restarted.inspect_approval(key) == evidence
+        assert restarted.record_approval(key, **review, receipt_ref=receipt) == evidence
     finally:
         connection.close()
     assert b"synthetic-private-payload" not in path.read_bytes()
     assert b"synthetic-destination" not in path.read_bytes()
+    assert receipt.encode() not in path.read_bytes()
     _, status = invoke(command, capsys, "status")
     assert status["enrollment_policy"]["activation_supported"] is False
     _, diagnostic = invoke(command, capsys, "access")

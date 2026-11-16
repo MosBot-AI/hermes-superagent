@@ -207,6 +207,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Bind [internal ActionIntent approval evidence](docs/64-action-intent-drafts.md#bind-exact-approval-evidence) to the exact draft and validity window. Schema 3 preserves receipt lookup after cancellation or restart. Execution requires separate admission (#15).
+
 - Persist a scoped emergency stop in the internal enrollment store. Schema v4 preserves existing records and audits and blocks new read and ceremony admissions for the stopped owner/profile, including after reopen (#16).
 
 - Verify installed Kanban handoff recovery after abrupt Gateway exit at the claim and native commit boundaries. Exact retries preserve the original record and reconciliation reports the observed outcome (#18).
