@@ -291,7 +291,7 @@ def run_retained_repack_acceptance(workdir):
         "passed": True,
         "profiles": 2,
         "decisions_per_profile": 8,
-        "schema_migration": "12_to_13_before_repack",
+        "schema_migration": "12_to_14_before_repack",
         "fresh_process_reopens": 2,
         "interrupted_cutovers": 1,
         "checks": [
