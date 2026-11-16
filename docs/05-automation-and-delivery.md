@@ -51,6 +51,8 @@ The plugin outbox handles only domain side effects it owns; it must not duplicat
 
 Hermes already has reliability mechanisms for cron execution, occurrences, and delivery. Test and reuse them first rather than reimplementing its tick lock, worker reclaim, or next_run_at algorithms.
 
+The [native receipt write-back candidate](../experiments/cron-delivery-writeback/README.md) exercises the window after the native queue commits a terminal receipt and before it updates the execution ledger. Two clean controls show how write-back can be lost and an unknown send can be reported as failed. The candidate reconciles the original execution during the next native drain and shows unknown delivery explicitly in CLI history.
+
 ## 6. Reminder Deduplication and Interruption Budgets
 
 Before notifying, check the latest source data, whether the task is complete, the most recent equivalent notification, user quiet hours, destination permissions, and information validity. Default priority: urgent with clear impact > deadline-bound blockers > scheduled briefings > suggestions. Frequency and quotas are configurable product rules, not hidden magic values.
