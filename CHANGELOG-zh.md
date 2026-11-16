@@ -209,6 +209,8 @@
 
 ### 新增
 
+- 使用 `hermes personal-agent routing inventory` 检查带版本的本地 profile 路由能力登记表。精确查询报告各项能力的证据时效，并对私有路由绑定脱敏（#23）。
+
 - 增加[仅供评审的固定版本 Telegram 命令观察](experiments/telegram-command-observation/README-zh.md)，包含干净版本和候选版本的 SDK 对照。原生探针可识别原始发送者与接收 Bot 账号，并拒绝转发、编辑、私聊话题、带 Business 连接标记及已失效的事件（#14）。
 
 - 将[内部 ActionIntent 审批证据](docs/64-action-intent-drafts-zh.md#绑定精确审批证据)绑定到具体草稿和有效期。Schema 3 支持在取消或重启后查回回执。执行需要单独准入（#15）。

@@ -2,9 +2,11 @@
 
 import argparse
 import json
+from collections.abc import Callable
 from pathlib import Path
 
 from .routing_inspection import inspect_saved_routing, inspection_failure
+from .routing_inventory import inspect_saved_inventory, inventory_failure
 from .task_cli import current_profile_home
 
 
@@ -16,6 +18,10 @@ def setup_routing_cli(subparsers: argparse._SubParsersAction) -> None:
     commands.add_parser(
         "inspect", help="Read saved local delegation settings; does not resolve or enable routing"
     )
+    inventory = commands.add_parser(
+        "inventory", help="Validate the saved route capability registry"
+    )
+    inventory.add_argument("--route", metavar="ID", help="Inspect one exact saved route ID")
 
 
 class RoutingInspector:
@@ -29,8 +35,14 @@ class RoutingInspector:
         self.closed = True
 
     def inspect(self) -> dict:
+        return self._read(inspect_saved_routing, inspection_failure)
+
+    def inventory(self, route_id: str | None) -> dict:
+        return self._read(lambda raw: inspect_saved_inventory(raw, route_id), inventory_failure)
+
+    def _read(self, evaluate: Callable[[object], dict], failure: Callable[[str], dict]) -> dict:
         if self.closed:
-            return inspection_failure("inspector_closed")
+            return failure("inspector_closed")
         try:
             from agent.safe_worker_policy import (  # ty: ignore[unresolved-import]
                 worker_config_snapshot,
@@ -41,33 +53,36 @@ class RoutingInspector:
             )
 
             if worker_config_snapshot() is not None:
-                return inspection_failure("unsupported_runtime")
+                return failure("unsupported_runtime")
             if not self.bound_home.is_dir() or current_profile_home() != self.bound_home:
-                return inspection_failure("profile_context_changed")
+                return failure("profile_context_changed")
             # Select through the host's supported backend API. Do not bypass a
             # remote backend by opening its local config.yaml shadow directly.
             backend = get_config_backend()
             if type(backend) is not FileBackend:
-                return inspection_failure("unsupported_config_backend")
+                return failure("unsupported_config_backend")
             try:
                 raw = backend.read_user_doc(self.bound_home)
             except FileNotFoundError:
                 raw = {}
             if self.closed:
-                return inspection_failure("inspector_closed")
+                return failure("inspector_closed")
             if current_profile_home() != self.bound_home:
-                return inspection_failure("profile_context_changed")
-            return inspect_saved_routing({} if raw is None else raw)
+                return failure("profile_context_changed")
+            return evaluate({} if raw is None else raw)
         except SystemExit:
-            return inspection_failure("unsupported_config_backend")
+            return failure("unsupported_config_backend")
         except ImportError:
-            return inspection_failure("host_inspection_unavailable")
+            return failure("host_inspection_unavailable")
         except Exception:
-            return inspection_failure("saved_configuration_unreadable")
+            return failure("saved_configuration_unreadable")
 
     def run(self, args: argparse.Namespace) -> int:
-        if args.routing_command != "inspect":
+        if args.routing_command == "inspect":
+            result = self.inspect()
+        elif args.routing_command == "inventory":
+            result = self.inventory(args.route)
+        else:
             raise ValueError("unsupported routing diagnostic")
-        result = self.inspect()
         print(json.dumps(result, ensure_ascii=False, sort_keys=True))
         return 0 if result["status"] == "ok" else 1
