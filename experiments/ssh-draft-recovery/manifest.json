@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "status": "Review-only, unsubmitted and inactive",
+  "base": "2281116525106e3c109993ccb5dc74d02bfc1427",
+  "proposal_commit_observed": "c57a69bce1369bc1f1e3c5a44e1733ace1fdc201",
+  "proposal_tree": "94260c86f63b93084d97acd2df76a2aa838bf608",
+  "patch_file": "ssh-draft-recovery.patch",
+  "patch_sha256": "ce9f9cca3fc3e47050d075b7e198d7748a4d70efbbfa4bd9a6355ae8ff208f73",
+  "patch_files": [
+    "apps/desktop/src/app/chat/composer/hooks/use-composer-draft.ts",
+    "apps/desktop/src/app/chat/composer/hooks/use-composer-submit.ts",
+    "apps/desktop/src/app/chat/composer/index.tsx",
+    "apps/desktop/src/app/chat/composer/prepared-image-recovery.tsx",
+    "apps/desktop/src/app/session/hooks/use-prompt-actions/prepared-submissions.test.ts",
+    "apps/desktop/src/app/session/hooks/use-prompt-actions/prepared-submissions.ts",
+    "apps/desktop/src/app/session/hooks/use-prompt-actions/submit.ts",
+    "apps/desktop/src/i18n/en.ts",
+    "apps/desktop/src/i18n/types.ts",
+    "apps/desktop/src/i18n/zh.ts",
+    "apps/desktop/src/store/composer-draft-retry.ts"
+  ],
+  "bundled_linux_x64_acceptance": {
+    "image_kind": "locally built unsigned AppImage",
+    "electron": "44.9.3",
+    "node": "26.12.1",
+    "pnpm": "12.15.0",
+    "python": "3.14.9",
+    "gcc": "14.2.0",
+    "glibc": "2.41",
+    "clean": {
+      "commit": "2281116525106e3c109993ccb5dc74d02bfc1427",
+      "sha256": "758c07c5a86829bb70b8904b459329f73f000c3218e1829f32db8e67af08d887",
+      "cases_passed": 2
+    },
+    "proposal": {
+      "commit": "c57a69bce1369bc1f1e3c5a44e1733ace1fdc201",
+      "tree": "94260c86f63b93084d97acd2df76a2aa838bf608",
+      "sha256": "99e6085ab612cc2676eb582c6124f6ca5635c80118996d5f428f757301223d6b",
+      "cases_passed": 2
+    },
+    "clean_image_refused_before_candidate_launch": true,
+    "endpoint_replacement": {
+      "case": "bot-canonical-ssh-draft-endpoint-replacement",
+      "source_clean_passed": true,
+      "source_proposal_passed": true,
+      "native_continuation": false,
+      "clean_passed": true,
+      "proposal_passed": true
+    },
+    "unchanged_ssh_route": {
+      "case": "bot-canonical-ssh-draft-unchanged-route",
+      "native_continuation": false,
+      "matching_copied_install_marker": true,
+      "clean_offered_review_on_replacement": false,
+      "proposal_offered_review_on_replacement": true,
+      "source_clean_reproduced": true,
+      "source_proposal_reproduced": true,
+      "replacement_review_clicked": false,
+      "release_gate": "open"
+    }
+  }
+}

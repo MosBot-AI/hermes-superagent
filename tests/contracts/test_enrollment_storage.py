@@ -72,11 +72,23 @@ def test_internal_store_persists_in_native_profile_without_task_data(native, api
     home, _ = native
     with api.open_enrollment_store(home, enabled=True) as store:
         result = store.run("create", create_payload())
+        cas = {**lookup(), "expected_revision": 1, "expected_enrollment_revision": 1}
+        store.run("pause", cas)
     path = location(home)
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
     assert not path.with_name("tasks.sqlite3").exists()
     with api.open_enrollment_store(home, enabled=True) as restarted:
-        assert restarted.run("get", lookup()) == result
+        paused = restarted.run("get", lookup())
+        assert (paused["state"], paused["policy_revision"], paused["epoch"]) == ("paused", 2, 1)
+        assert paused["scope"] == result["scope"]
+        assert restarted.policy_history(lookup())["current_state"] == "paused"
+        resumed = restarted.run("resume", {**cas, "expected_revision": 2})
+        assert (resumed["state"], resumed["policy_revision"], resumed["epoch"]) == ("pending", 3, 2)
+        assert [event["operation"] for event in restarted.policy_history(lookup())["items"]] == [
+            "create",
+            "pause",
+            "resume",
+        ]
     with sqlite3.connect(path) as connection:
         assert connection.execute("PRAGMA journal_mode").fetchone()[0] == "delete"
 

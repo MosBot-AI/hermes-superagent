@@ -32,6 +32,7 @@ Extend Hermes into a long-lived personal agent for one user: one main agent unde
 18. [Owner entry and read authorization](18-owner-entry-and-read-authorization.md): internal evaluator, native identity gaps and non-personal diagnostics.
 19. [Unified voice session and provider contracts](19-unified-voice-provider-contracts.md): replaceable local/online speech interfaces, capabilities, interruption/recovery and safety gates.
 20. [Offline voice contract simulator](20-voice-contract-simulator.md): synthetic frame/queue/recovery self-test and verified native provider limitations.
+    [Current-pin E0.8 compatibility inventory](voice-compatibility-inventory.md) and [dated online protocol comparison](voice-provider-protocol-comparison.md) record the offline acceptance and mode-specific release gates.
 21. [Native voice IPC experiment](21-native-voice-ipc-experiment.md): reviewable host patch, actual consumer evidence and unintegrated release limits.
 22. [Local task search](22-local-task-search.md): literal title/details matching, bounded pages and unchanged local-only gates.
 23. [Host command-context experiment](23-host-command-context-experiment.md): review-only command-specific identity-observation patch, guarded evidence and the minimum owner-summary integration path.

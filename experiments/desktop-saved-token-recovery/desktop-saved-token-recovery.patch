@@ -1,0 +1,170 @@
+diff --git a/apps/desktop/electron/desktop-remote-route.test.ts b/apps/desktop/electron/desktop-remote-route.test.ts
+index 2d687133f5507381d79df9cd0fa12fda5fd20eca..1cfe7027636f62d15864fa2f4c4c7b239759347f 100644
+--- a/apps/desktop/electron/desktop-remote-route.test.ts
++++ b/apps/desktop/electron/desktop-remote-route.test.ts
+@@ -4,7 +4,12 @@ import { test } from 'vitest'
+ 
+ import { normalizeRegistry, REGISTRY_VERSION } from './connection-registry'
+ import { backendScopeKey } from './connection-registry'
+-import { registryPrimaryBootRoute, resolveDesktopRemoteRoute, v1SshTerminalPoolKey } from './desktop-remote-route'
++import {
++  registryPrimaryBootRoute,
++  registryPrimaryTokenChanged,
++  resolveDesktopRemoteRoute,
++  v1SshTerminalPoolKey
++} from './desktop-remote-route'
+ 
+ const tokenA = { encoding: 'plain', value: 'token-a' }
+ const tokenB = { encoding: 'plain', value: 'token-b' }
+@@ -461,3 +466,37 @@ test('launchMode=last-used does not force the registry primary before a local sp
+ 
+   assert.equal(route, null)
+ })
++
++test('only an explicit token replacement at the same registry primary URL recycles the primary', () => {
++  const sources = registry('primary', [
++    { id: 'primary', kind: 'remote', label: 'Primary', url: 'https://gateway.test', token: tokenA },
++    { id: 'peer', kind: 'remote', label: 'Peer', url: 'https://peer.test', token: tokenA }
++  ])
++  const primary = sources.connections.find(c => c.id === 'primary')!
++  const peer = sources.connections.find(c => c.id === 'peer')!
++  const input = { registry: sources, config: { mode: 'local' }, profile: 'worker' }
++  const replacement = { ...primary, token: tokenB }
++
++  assert.equal(registryPrimaryTokenChanged(input, primary, replacement), true)
++  assert.equal(registryPrimaryTokenChanged(input, primary, { ...primary, label: 'Renamed' }), false)
++  assert.equal(registryPrimaryTokenChanged(input, peer, { ...peer, token: tokenB }), false)
++  assert.equal(registryPrimaryTokenChanged(input, primary, { ...replacement, url: 'https://new.test' }), false)
++  assert.equal(registryPrimaryTokenChanged(input, primary, { ...replacement, authMode: 'oauth' }), false)
++  assert.equal(
++    registryPrimaryTokenChanged({ ...input, env: { url: 'https://gateway.test' } }, primary, replacement),
++    false
++  )
++  const override = { mode: 'remote', url: primary.url, authMode: 'token', token: tokenA }
++  assert.equal(
++    registryPrimaryTokenChanged({ ...input, config: { mode: 'remote', remote: override } }, primary, replacement),
++    false
++  )
++  assert.equal(
++    registryPrimaryTokenChanged(
++      { ...input, config: { mode: 'local', profiles: { worker: override } } },
++      primary,
++      replacement
++    ),
++    false
++  )
++})
+diff --git a/apps/desktop/electron/desktop-remote-route.ts b/apps/desktop/electron/desktop-remote-route.ts
+index f54299c6d1fca62ff01b4db055960af58a931e68..4e8faaf6b36bee9d6676d24dd5b50026abfd4c06 100644
+--- a/apps/desktop/electron/desktop-remote-route.ts
++++ b/apps/desktop/electron/desktop-remote-route.ts
+@@ -6,7 +6,7 @@ import {
+   profileRemoteOverride,
+   profileSshOverride
+ } from './connection-config'
+-import type { ConnectionRegistry } from './connection-registry'
++import type { ConnectionRegistry, RegistryConnection } from './connection-registry'
+ import { matchingConnectionId, type StoredRoute } from './connection-route-identity'
+ 
+ type RouteSource = 'env' | 'profile' | 'registry' | 'settings'
+@@ -227,6 +227,30 @@ function resolveRegistryPrimaryRoute(registry: ConnectionRegistry): DesktopRemot
+   }
+ }
+ 
++/** Only edits of the token used by a registry-owned URL primary retire its cached descriptor. */
++export function registryPrimaryTokenChanged(
++  input: DesktopRemoteRouteInput,
++  before: RegistryConnection,
++  after: RegistryConnection
++): boolean {
++  if (
++    before.kind !== 'remote' ||
++    after.kind !== 'remote' ||
++    normAuthMode(before.authMode) !== 'token' ||
++    normAuthMode(after.authMode) !== 'token' ||
++    before.url !== after.url ||
++    JSON.stringify(before.token ?? null) === JSON.stringify(after.token ?? null) ||
++    input.registry.primary !== before.id ||
++    String(input.env?.url || '').trim()
++  ) {
++    return false
++  }
++
++  const route = resolveDesktopRemoteRoute(input)
++
++  return route?.source === 'registry' && route.connectionId === before.id
++}
++
+ /**
+  * Boot target when the user asked to launch the registry primary. Returns null
+  * for last-used mode and for a local primary — those keep the local spawn.
+diff --git a/apps/desktop/electron/main.ts b/apps/desktop/electron/main.ts
+index e1d672321efa5bb527638235c1fea1184c18576d..5644fcf10a36a360d2a242b9b9c39ccd19bb1b54 100644
+--- a/apps/desktop/electron/main.ts
++++ b/apps/desktop/electron/main.ts
+@@ -228,7 +228,12 @@ import {
+   resolveDesktopConnectionRequest,
+   resolveDesktopWindowLaunch
+ } from './desktop-profile'
+-import { registryPrimaryBootRoute, resolveDesktopRemoteRoute, v1SshTerminalPoolKey } from './desktop-remote-route'
++import {
++  registryPrimaryBootRoute,
++  registryPrimaryTokenChanged,
++  resolveDesktopRemoteRoute,
++  v1SshTerminalPoolKey
++} from './desktop-remote-route'
+ import { type DesktopSharedMetrics, registerDesktopSharedMetrics } from './desktop-shared-metrics'
+ import {
+   buildPosixCleanupScript,
+@@ -8563,23 +8568,49 @@ async function saveRegistryConnection(input: any = {}) {
+     throw new Error('Remote gateway session token is required.')
+   }
+ 
+-  if (existing && connectionDialFieldsChanged(existing, entry)) {
++  const dialChanged = existing && connectionDialFieldsChanged(existing, entry)
++  if (dialChanged) {
+     managedConnectionUpdateGate.assertCanMutate(entry.id)
+   }
+ 
++  const refreshPrimaryToken =
++    dialChanged &&
++    !backendConnectionState.getProcess() &&
++    registryPrimaryTokenChanged(
++      {
++        config: readDesktopConnectionConfig(),
++        env: { url: process.env.HERMES_DESKTOP_REMOTE_URL },
++        profile: primaryProfileKey(),
++        registry
++      },
++      existing,
++      entry
++    )
++
+   writeDesktopConnectionsRegistry(upsertConnection(registry, entry))
++  if (refreshPrimaryToken) {
++    // Existing renderer reconnects must resolve a fresh descriptor. A pooled
++    // backend drain does not retire the primary's process-wide promise.
++    resetHermesConnectionState({ soft: true })
++  }
+ 
+   // A dial-material edit (endpoint/auth/ssh routing — NOT a label rename)
+   // leaves pooled backends under `conn:<id>::*` and renderer sockets pointing
+   // at the OLD target while the UI shows the new one. Recycle them: stop this
+   // connection's pooled backends/tunnels and tell renderers to dispose+redial
+   // their secondaries for this connection id.
+-  if (existing && connectionDialFieldsChanged(existing, entry)) {
++  if (dialChanged) {
+     await stopRegistryConnectionBackends(entry.id)
+     // The id now names a different machine: its cached roster/identity describe the old one,
+     // and a cached ssh inventory is never retried (`shouldRetrySshInventory`).
+     evictConnectionCaches(entry.id)
+     broadcastConnectionsChanged({ connectionId: entry.id, reason: 'updated' })
++    if (refreshPrimaryToken) {
++      const foreground = mainWindow && windowConnectionRoutes.get(mainWindow.webContents.id)
++      if (!foreground?.connectionId || foreground.connectionId === entry.id) {
++        sendConnectionApplied()
++      }
++    }
+   } else {
+     // Every OTHER successful save (a brand-new connection, a label rename)
+     // must still republish the registry snapshot, or windows that didn't

@@ -95,6 +95,14 @@ Pinned-host contracts exercise real plugin registration/dispatch/reload/unload a
 
 Run the [full repository checker](../README.md#development-checks) at the tested commit. E0.7 remains partial, E1 owner enrollment/current authenticated-policy admission remains unimplemented, and Primary Bot/read/write release gates stay closed. Future connection setup and any persistent access must use the authorized native secure flow; do not ask the user to paste secrets into chat.
 
+### Current-pin Telegram command ingress
+
+The [offline ingress fixture](../tests/contracts/test_owner_telegram_ingress.py) feeds synthetic Telegram updates into the stock command adapter on Hermes `2281116525106e3c109993ccb5dc74d02bfc1427`. Native adapter intake, Gateway routing and authorization, and the registered `personal-access` callback run without network I/O. The fixture records replies at the adapter send boundary. It uses two receiving adapter instances on the same standalone runtime, one at a time.
+
+A direct human DM on either receiver, a forwarded DM, and an edited DM produce equal declared `SessionSource` fields and the same session key. The original event still contains Telegram forward metadata or the native edit revision. The private in-process routing identity distinguishes the receiver, while the hosted wire codec retains only the declared source projection. All four diagnostics recognize the actor shape and deny with `receiving_transport_unverified`. The same six cases run in-process and with `plugins.isolation: host`. The hosted fixture loads the plugin in a real child process and observes the command RPC while it runs. The source crosses the wire as a Record with the declared fields, including a string platform value. The private receiver reference, forward metadata and edit revision are absent from that payload. The child returns the diagnostic through IPC to the same reply boundary.
+
+Group and bot-authored commands admitted by the synthetic allowlists receive the corresponding diagnostic denials. Owner claims in command text are invalid. A disallowed sender is stopped by adapter intake. A separate case changes the Gateway allowlist while the adapter still permits the sender. The command reaches the Gateway and stops before the plugin callback. Neither allowlist refusal makes a hosted command invocation. All cases fence Gateway model dispatch and personal plugin storage. The child launcher also restricts the test environment and checks for attempted socket and private storage operations. Live Telegram authentication and verified receiver, owner and device authority remain release gates.
+
 ## 7. Pinned Evidence
 
 - I1: [Public slash context and authorization caveat](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/website/docs/developer-guide/plugins/index.md#L1796-L1816).

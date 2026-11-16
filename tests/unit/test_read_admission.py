@@ -257,7 +257,7 @@ def test_opaque_handle_not_claims(setup, handle):
     assert setup[-1] == []
 
 
-@pytest.mark.parametrize("action", ["set_policy", "revoke"])
+@pytest.mark.parametrize("action", ["set_policy", "pause", "revoke"])
 def test_stale_or_revoked_persisted_policy(setup, action):
     payload = {**KEY, "expected_revision": 1, "expected_enrollment_revision": 1}
     if action == "set_policy":
@@ -265,6 +265,41 @@ def test_stale_or_revoked_persisted_policy(setup, action):
     setup[0].run(action, payload)
     assert denied(setup) == "policy_denied"
     assert "ownership" not in setup[-1]
+
+
+def test_pause_and_resume_fence_old_and_current_confirmations(setup):
+    store, host, source, _, _ = setup
+    cas = {**KEY, "expected_revision": 1, "expected_enrollment_revision": 1}
+    store.run("pause", cas)
+    host.confirmation = replace(
+        CONFIRMATION,
+        context=replace(CONTEXT, policy_revision=2, epoch=1),
+        grant=replace(GRANT, policy_revision=2, epoch=1),
+    )
+    assert denied(setup) == "policy_denied"
+    assert "ownership" not in setup[-1]
+    assert store.read_admission_history(KEY)["items"] == []
+
+    resumed = store.run("resume", {**cas, "expected_revision": 2})
+    assert resumed["state"] == "pending"
+    assert (resumed["policy_revision"], resumed["epoch"]) == (3, 2)
+    old = SyntheticHost([])
+    service = ReadAdmissionService(store, host_authority=old, resource_source=source, enabled=True)
+    with pytest.raises(ReadAdmissionError, match="policy_denied"):
+        service.read(KEY, REQUEST, live_handle=old.handle)
+    assert "ownership" not in setup[-1]
+
+    fresh = SyntheticHost([])
+    fresh.confirmation = replace(
+        CONFIRMATION,
+        context=replace(CONTEXT, policy_revision=3, epoch=2),
+        grant=replace(GRANT, policy_revision=3, epoch=2),
+    )
+    service = ReadAdmissionService(
+        store, host_authority=fresh, resource_source=source, enabled=True
+    )
+    assert service.read(KEY, REQUEST, live_handle=fresh.handle) == (SUMMARY,)
+    assert [item["epoch"] for item in store.read_admission_history(KEY)["items"]] == [2]
 
 
 def test_independent_confirmed_identity_must_match_candidate(setup):

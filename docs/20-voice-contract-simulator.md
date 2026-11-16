@@ -57,10 +57,86 @@ Pinned host: `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`. New contract fixtures l
 
 These results do not prove that native Desktop built-ins cannot stream, or that every possible hosted streaming transport is impossible. They identify the tested plugin return-object boundary. Implement a supported streaming bridge or another verified native path before enabling that mode; do not turn off isolation or use a parallel privileged gateway as a workaround.
 
+### Current-Pin File Voice Dispatch
+
+The [file-dispatch contracts](../tests/contracts/test_voice_provider_contracts.py) exercise the clean Hermes pin `2281116525106e3c109993ccb5dc74d02bfc1427` under Python 3.14.9. They call the native file entry points with synthetic providers registered through real `PluginManager` discovery in both `in_process` and `host` modes. Built-in TTS readiness and synthesis are substituted at their engine boundaries for the fallback cases. Tests use generated media and temporary profiles. Exact run results are tracked on [Issue #36](https://github.com/MosBot-AI/hermes-superagent/issues/36).
+
+| Native path | Behavior covered |
+| --- | --- |
+| `tools.transcription_tools.transcribe_audio` | Explicit selection reaches the registered fixture when its availability probe returns true. The fixture receives the per-call model and configured language and prompt. An unavailable fixture, disabled STT or an explicitly selected unregistered provider returns a failure without switching to an automatically detected backend. |
+| `tools.tts_tool.text_to_speech_tool` | The configured provider controls dispatch when a call supplies a different `provider` argument. Explicit selection reaches the registered fixture even when its availability probe returns false. The fixture receives the configured voice, model, speed and normalized output format. If the provider writes partial output before raising, the dispatcher returns an error, removes the staged partial file and preserves the existing destination. |
+| `tools.tts_tool.check_tts_requirements` | Listing readiness returns false for the unavailable fixture and for an unregistered name. Direct file synthesis can still run in both cases, so the listing result is insufficient to establish direct-call behavior. |
+| Built-in file TTS fallback | An unregistered configured name can select Edge synthesis while the success response still reports the configured name. If Edge is unavailable, the dispatcher can select local NeuTTS and report `neutts`. If neither is available, it returns an error. |
+
+A file TTS caller needs to validate the configured route before dispatch when changing the engine or sending text to an online service requires consent. The reported provider can differ from the engine that ran. The tests call the native dispatchers directly and qualify the file paths in the table.
+
+### Current-Pin Streaming Consumers
+
+The [streaming contracts](../tests/contracts/test_voice_provider_contracts.py) use the same clean Hermes pin and temporary profile setup as the file contracts. Native consumers call synthetic providers registered by the real plugin manager in `in_process` and `host` modes. The fixtures use generated PCM and text.
+
+| Native path | Behavior covered |
+| --- | --- |
+| `tools.transcription_streaming.streaming_available` and `open_streaming_session` | A selected plugin with `streaming_capable` can pass the probe and open a session even when its availability check returns false. Disabled streaming, disabled STT, a file-only provider and a missing provider return no stream. In process, the fixture returns partial and final transcripts for 16 kHz mono s16le input. The worker also converts 32 kHz input to 16 kHz, and the fixture receives the expected pairwise-averaged samples. In `host` mode, the consumer can open its wrapper and then return an empty-transcript failure when it accesses the projected session object. |
+| ASR session cancellation | In process, cancelling while the synthetic provider is blocked in `finalize` makes the wrapper report cancellation. The provider can still finish after it is released. Its late result is suppressed by the wrapper in this tested sequence. |
+| `tools.tts_streaming.resolve_streaming_provider` | A ready fixture resolves at its declared 22,050 Hz mono s16le rate. Its configured voice, model and speed reach the provider with the PCM format. In process the consumer reads the expected chunks. In `host` mode the call reaches the provider subprocess, then the first pull raises because the projected generator cannot be iterated. An explicitly selected unavailable, invalid-rate, file-only or missing streamer returns no streamer and does not substitute the configured ready provider. |
+
+The ASR wrapper and TTS resolver are native consumer entry points for these tests. The plugin registration methods remain the public provider extension surface. A streaming capability, successful open or successful resolution alone gives insufficient evidence of usable audio in `host` mode.
+
+### Current-Pin Playback and Interruption
+
+The [speaker contracts](../tests/contracts/test_voice_provider_contracts.py) and [voice control contracts](../tests/contracts/test_native_voice_control.py) exercise the clean Hermes pin `2281116525106e3c109993ccb5dc74d02bfc1427` with synthetic PCM, a fake player and fake agents. The speaker contracts route through the native temporary WAV path and read the submitted file in the fake player.
+
+| Native path | Behavior covered |
+| --- | --- |
+| `tools.tts_tool_speaker.stream_tts_to_speaker` | In process, the fake player receives the three expected 22,050 Hz mono 16-bit PCM frames. In `host` mode, iteration fails after the registered provider receives the call, yet the fake player receives a valid WAV header with zero frames. Both paths remove the temporary WAV and set the pipeline completion event. The failure stays on the streaming path, with no file-synthesis call in this test. |
+| Local speaker stop during synthesis | The stop flag does not release the blocked synthetic provider. After the test releases it, the player receives no late PCM. A second WAV whose drain had already started reaches the fake player with zero frames. |
+| TUI sidecar full-duplex interruption | Playback-phase interruption stops streaming and fallback media, then emits the interruption event. Generation-phase interruption also asks both running agents in the sidecar process to interrupt after stopping media. The idle agent receives no request. |
+| TUI LOCAL typed-stop helper | The helper changes the target LOCAL session's voice mode. Stopping another session leaves the active capture callback usable. Stopping the capture's own session fences later callbacks. Both stops request TTS stop through the shared sidecar function. The test invokes the helper directly. Wire authorization and admission require separate evidence. |
+
+The pipeline completion event and player invocation can both occur without any PCM reaching the player. Device playback acknowledgement, provider-side cancellation and confirmed native-turn cancellation remain open.
+
+### Current-Pin Native Audio WebSocket Admission
+
+The [audio ASGI contracts](../tests/contracts/test_native_voice_audio_asgi.py) send synthetic frames to the native dashboard app through `GatewayRuntimeAPI` on clean Hermes `2281116525106e3c109993ccb5dc74d02bfc1427`. The harness uses the actual native ticket store and two temporary profiles. It mints synthetic local interactive tickets through the store and supplies a ready runner fixture.
+
+| Native path | Behavior covered |
+| --- | --- |
+| Local WebSocket admission | A fresh interactive ticket opens the stream and negotiates `hermes-gateway-v1`. Missing and already-consumed tickets receive close code `4401` before any new provider call. The STT route also refuses a ticket with the wrong purpose, a selector for a different profile and an Origin-bearing local handshake. Synthetic provider markers identify the ticket's profile and its scoped configuration. |
+| `/api/audio/transcribe-stream` | The registered in-process STT fixture receives the submitted 16 kHz PCM and configured hints. The route sends the final transcript envelope and closes. |
+| `/api/audio/speak-stream` | The registered in-process TTS fixture receives the text and configured settings. The route declares 22,050 Hz mono output and sends the expected PCM chunks and end message. In `host` mode the provider receives the call, then stream projection fails at the first pull. The route sends a `fallback` message and closes. File synthesis and PCM output are absent in that exchange. |
+
+The tests exercise the app boundary with in-memory ASGI messages. Ticket issuance by a trusted remote authority, a real listener, device playback and live provider or device acceptance require separate evidence.
+
+### Current-Pin Native HTTP Voice Configuration and SDP
+
+The [voice configuration contracts](../tests/contracts/test_native_voice_http_asgi.py) and [GPT-Live contracts](../tests/contracts/test_native_voice_live_asgi.py) use native HTTP ticket admission and the app in memory on clean Hermes `2281116525106e3c109993ccb5dc74d02bfc1427`. Fabricated credential values distinguish the launch and ticket profiles. A recorder replaces the GPT-Live vendor request.
+
+| Native path | Behavior covered |
+| --- | --- |
+| `GET /api/audio/voice-config` | With direct voice enabled, the `gateway`, `dashboard` and `serve` surface fixtures return the ticket profile's STT and TTS direct configuration with its synthetic keys. The `webapp` surface and a profile with `voice.client_direct` disabled return relay configuration without keys in the response. Missing, consumed and wrong-purpose tickets receive `401`. A request selecting a different existing profile receives `403`. All four denials precede the voice configuration resolver. |
+| `GET /api/audio/voice-live/status` | The response reports configured mode, model, voice and whether the profile credential resolves. The tested status response contains no key and initiates no vendor request. |
+| `POST /api/audio/voice-live/session` | Both tested modes, `gpt-live` and `chained`, can reach the mocked exchange with an admitted request and a resolvable key. The outbound request carries the ticket profile's fabricated bearer, exact SDP including CRLF, synthetic history and client delegation. A blank offer returns `400`. A missing ticket-profile key returns `503` even when the launch profile has a key. Those two refusals send no request to the recorder. A synthetic upstream `429` becomes a `502` response carrying the fixture error detail. |
+
+The surface tests use local fixture tickets to exercise response policy. Browser sign-in, deployment-specific credential delivery, trusted remote identity, real network and WebRTC transport, and live device/provider acceptance remain open.
+
+### Current-Pin Native Capture, Transcription Handoff and Voice Admission
+
+The [capture](../tests/contracts/test_native_voice_capture.py), [transcription handoff](../tests/contracts/test_native_voice_transcription_handoff.py) and [voice admission](../tests/contracts/test_native_voice_admission.py) contracts exercise clean Hermes `2281116525106e3c109993ccb5dc74d02bfc1427` in temporary profiles. The recorder tests supply an input stream, clock and minimal numeric fixture for synthetic PCM while retaining the native RMS calculation, recorder callbacks and WAV writer. The authority test uses a fixture connection identity derived from a redeemed local ticket and fences turn scheduling.
+
+| Native path | Behavior covered |
+| --- | --- |
+| `tools.voice_mode.AudioRecorder` and playback barge detector | Sustained synthetic PCM followed by silence triggers the recorder's stop notification. Calling stop writes the expected mono 16-bit WAV at the fixture's 24 kHz device rate. A short take is discarded and native cleanup removes the aged fixture WAV. A separate detector test supplies synthetic RMS values to verify onset grace, playback bleed rejection and a sustained playback trip. |
+| `tools.voice_mode.transcribe_recording` and push-to-talk cleanup | The recorder parks a synthetic terminal stream object for the recorded WAV. A nonempty successful stream result is returned directly. Empty and failed stream envelopes fall through to the registered synthetic file ASR. The `pre_transcription` hook receives `source="voice_mode"`, and the selected language reaches the provider. The direct helper leaves the WAV for its caller. The native push-to-talk wrapper removes that recording on either file success or failure and preserves an unrelated WAV. |
+| Native `voice-live` prompt admission and receipt | The attached fixture session queues one durable admission with its voice context. The same submission ID and content replay the queued receipt through a second attached connection, and `prompt.receipt` returns the same record. A changed voice context under the same ID conflicts. The authority refuses a submission from an unattached connection, a receipt read by another subject in the same profile, a voice hint on the wrong surface and an absent staged attachment. No transcript or turn execution occurs in this fixture. |
+
+The native backend receipt covers admission for the caller's submission ID. Desktop provider-event deduplication, real audio device behavior, delegated execution and downstream effect receipts require separate evidence.
+
 ## 5. Tests and Remaining Gates
 
 The repository checker runs offline unit tests, Ruff, ty, bilingual checks, native provider contracts and the actual top-level CLI in a guarded subprocess. Test inputs are generated fixtures. No socket listener, microphone permission, real audio, model weights, account or paid API is required for this slice.
 
 The separate local identity prototype is not bundled or imported. Its unverified socket-dependent tests remain blocked and were not retried by this work. The production [owner boundary](18-owner-entry-and-read-authorization.md), Primary Bot binding and private reads remain disabled.
 
-Before real voice: implement and verify the selected ASR/TTS or realtime bridge, identity/session binding, recipient and budget admission, controllable input/output leases, trustworthy playback accounting, native-turn cancellation and recovery. Then obtain any needed provider-specific credential through a secure handoff and run authorized device/live-provider tests. E0.8/E7.5 are partial work, E7.6/E7.7 remain Backlog, and no voice release gate is complete.
+The [E0.8 compatibility inventory](voice-compatibility-inventory.md) consolidates the exact-pin offline results and the [provider protocol comparison](voice-provider-protocol-comparison.md). E7.5 remains at the synthetic precursor stage. E7.6/E7.7 remain Backlog.
+
+Before enabling a real voice mode, implement and verify its selected ASR/TTS or realtime bridge, identity/session binding, recipient and budget admission, controllable input/output leases, trustworthy playback accounting, native-turn cancellation and recovery. Obtain any needed provider credential through a secure handoff and run authorized device and live-provider tests.

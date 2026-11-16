@@ -162,8 +162,9 @@ def test_lookahead_validation_and_documented_range_limit():
         conn.execute("UPDATE events SET policy_revision=99 WHERE epoch=1")
         conn.commit()
         fails(store, "invalid_policy_audit", limit=1)
-        # A later page validates its selected range and tail, not all old rows.
-        assert store.policy_history(KEY, after_epoch=1)["current_epoch"] == 3
+        # Also validate the cursor's predecessor state when it seeds a page.
+        fails(store, "invalid_policy_audit", after_epoch=1)
+        assert store.policy_history(KEY, after_epoch=2)["current_epoch"] == 3
 
 
 def test_not_initialized_and_caller_transaction_preserved():
@@ -227,3 +228,26 @@ def test_direct_revoke_and_corrupt_terminal_audit():
         conn.execute("UPDATE events SET operation='set_policy' WHERE epoch=1")
         conn.commit()
         fails(store, "invalid_policy_audit", after_epoch=1)
+
+
+def test_pause_and_resume_history_on_both_sides_of_cursor():
+    with sqlite3.connect(":memory:") as conn:
+        store = initialized(conn)
+        populate(store)
+        versions = {**KEY, "expected_revision": 4, "expected_enrollment_revision": 1}
+        store.run("pause", versions)
+        paused = store.policy_history(KEY, after_epoch=3)
+        assert paused["current_state"] == "paused"
+        assert paused["items"] == [
+            {"epoch": 4, "operation": "pause", "enrollment_revision": 1, "policy_revision": 5}
+        ]
+        store.run("resume", {**versions, "expected_revision": 5})
+        page = store.policy_history(KEY, after_epoch=4, limit=1)
+        assert page["current_state"] == "pending"
+        assert page["items"] == [
+            {"epoch": 5, "operation": "resume", "enrollment_revision": 1, "policy_revision": 6}
+        ]
+        assert "secret" not in json.dumps(page)
+        conn.execute("UPDATE events SET operation='set_policy' WHERE epoch=4")
+        conn.commit()
+        fails(store, "invalid_policy_audit", after_epoch=5)

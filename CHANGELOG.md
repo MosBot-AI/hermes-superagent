@@ -83,6 +83,96 @@ This file distinguishes design work, development changes, and released capabilit
 - Run runtime artifact acceptance on exact pull-request heads with read-only credentials; keep downloadable artifact publication push-only.
 ### Changed
 
+- Verify native Bot sender recovery with the officially installed recipient across abrupt Gateway loss and planned restart. The review candidates preserve the original task, delivery and sender completion identity on both tested Hermes bases (#33).
+
+- Port the review-only Bot sender recovery patch to a separate upstream Hermes snapshot. Verify local recovery without an unattended Bot inference and preserve hosted sandbox isolation and ordinary process wakes (#33).
+
+- Verify one native reply push and follow-up to a viewed local sender when the receiving profile has the officially installed runtime package. The case checks canonical Bot Chat, task replay and same-input sender retry (#33).
+
+- Retry temporarily unavailable receipts for terminated Bot waiters in the review-only candidate. The isolated cases verify exit-only fallback after the retry window and recovery from simultaneous result and checkpoint write failures when the previous checkpoint and output survive (#33).
+
+- Add review-only read-only receipt recovery for a terminated Bot waiter. The original sender completion can include the verified reply or shutdown failure, with an exit-only fallback when target evidence mismatches (#33).
+
+- Verify planned restart with an active native Bot waiter. The review-only candidate collects a drained reply and preserves a killed waiter's process-exit notice in the sender profile. Exact retry continues to reconcile the original recipient receipt (#33).
+
+- Keep the original local Bot handoff in the review-only Hermes checkpoint after a scoped result-write failure. The successor rebuilds the result and preserves pending, consumed and already-admitted behavior without resending (#33).
+
+- Compare native planned Bot reply restart on the clean pin and reviewed Hermes candidate. The candidate restores one saved pending completion, and a scoped result write failure reproduced a recovery gap in the prior candidate while the original recipient receipt stays available (#33).
+
+- Extend the review-only Hermes sender recovery patch to finished waiters. An outstanding completion can replay after owner loss, with durable consumption and native admission deduplication (#33).
+
+- Add a review-only Hermes patch that restores one native sender completion after each of two abrupt Gateway loss scenarios. The clean compatibility pin remains in use (#33).
+
+- Verify a settled Bot reply remains available under its original delivery ID after abrupt Gateway loss before the waiter reads it. Exact receipt replay starts no new inference. The isolated case observes no recovered sender completion (#33).
+
+- Verify in-flight Bot delivery reconciliation after abrupt Gateway loss. The successor marks the original recipient admission interrupted, preserves the ambiguous receipt and does not resend on an exact retry. Automatic sender completion was absent in the isolated case (#33).
+
+- Verify a local Bot reply persists after its only viewer disconnects. Reopening the original chat returns one completion note, and retrying the original input does not resend the Bot request (#33).
+
+- Verify a native Bot reply reaches a viewed local sender once. The recipient receipt, sender event and stored completion correlate to one delivery, which starts one follow-up turn in isolated Linux acceptance (#33).
+
+- Verify same-install Bot reply persistence in an isolated Linux operator case. One native target receipt and one unconsumed sender completion record carry the same delivery ID and synthetic reply (#33).
+
+- Verify that an ordered native process wait returns the complete Bot reply and suppresses the additional sender transcript row once the fallback sees the result was consumed (#33).
+
+- Verify native non-push reply persistence with the officially installed plugin in the receiving profile. The isolated Linux operator case also checks installed task replay after sender completion (#33).
+
+- Verify one native notify-only Bot delivery and its exact settled replay across a Gateway restart with the officially installed plugin in the receiving profile (#33).
+
+- Verify the officially installed plugin can capture and reopen a task in the same hidden canonical Bot Chat across a local Gateway restart (#33).
+
+- Verify a deferred native cron result transfers to the original named Bot Chat after a local Gateway restart. The source spool, one receiver admission and the completed receipt retain the same delivery ID (#33).
+
+- Verify generation-fenced Stop for a named managed worker waiting on a native clarification. The manual case checks the interrupted receipt and the queued successor's independent completion (#33).
+
+- Verify live deletion and same-name recreation of a named profile. The retained Gateway connection refuses the old canonical chat and resolves a distinct chat created explicitly on the fresh profile (#33).
+
+- Record the pinned Hermes behavior after a live named-profile rename. The roster retains the original canonical Bot Chat, and the native Gateway refuses to reopen it when the stored local receipt still references the old route (#33).
+
+- Verify named-profile managed worker recovery after a Gateway crash. The manual case checks that the original admission stays unknown on retry and that explicit resolution lets the queued successor finish once with its own receipt (#33).
+
+- Verify ordinary named-profile prompt execution in a real native managed worker with a synthetic loopback model. The manual Gateway case correlates the worker, admission and terminal receipt and checks that a same-ID retry does not start another execution (#33).
+
+- Verify that signing out of one serving Webapp closes its browser connection while the installation's native client and a second installation's clients keep their existing sessions (#33).
+
+- Verify saved Webapp token revocation in Linux Desktop and reopening the original Bot Chat after explicitly saving a replacement token and restarting Desktop (#33).
+
+- Add a review-only Hermes patch that reconnects the Desktop primary after an explicit saved-token replacement and verifies reopening the original Bot Chat without restarting Desktop (#33).
+
+- Verify native adoption of existing compressed history in a named profile and its subsequent opening in Linux Desktop Bot Mode. The acceptance checks that Desktop shows the named history when the default profile contains a different chat with the same session ID (#33).
+
+- Verify native backup and restore of a synthetic Webapp credential, followed by target-only rotation with Webapp disabled. The manual Gateway acceptance checks that the stopped source and archive remain unchanged (#33).
+
+- Add real Linux Electron acceptance for copied installation markers and stopped synthetic home copies. When Desktop discovery shows only the primary route, explicitly scoped reads still reach each Gateway's own transcript, including copies with equal session IDs (#33).
+
+- Verify live retirement and same-name hot serve over retained native Gateway and Linux Electron WebSockets. The Desktop Bot Mode click shows retry while the named profile is absent and opens its original chat after hot serve (#33).
+
+- Verify saved Webapp token profile retirement and same-name hot serve in a matching unsigned Linux x64 Desktop AppImage, with the original scoped socket and transcript preserved (#33).
+
+- Verify the saved Webapp token Bot Mode lookup on the clean Hermes pin and a separate proposed build. The proposal scopes the existing chat probe to the selected backend profile and restores the retry prompt after an uncertain empty lookup (#33).
+
+- Add real Linux Electron acceptance for Bot Mode canonical chat refusal and retry. The fixture checks that permission refusal and an uncertain empty lookup leave the current view intact before an ordinary retry opens the existing chat (#33).
+
+- Add exact-pin contracts for profile-scoped plugin state and parent-bound subagent handles through native in-process and hosted dispatch. Document the remaining Primary Bot adapter gates (#33).
+
+- Verify same-name profile routing in the pinned Linux Electron source build through real Desktop SDK, IPC and WebSocket calls. A removed route is refused while its backend and the surviving route remain reachable (#33).
+
+- Add manual acceptance for native Bot delivery over the pinned Gateway's Unix control socket and loopback WebSocket. Verify terminal receipt repair and same-ID replay after restart using a synthetic loopback model (#33).
+
+- Verify native backup and import at the pinned Hermes revision. Import refuses an owned destination before publication. Stopped restore preserves the destination runtime epoch floor and carries the installation marker and Bot Chat lineage from the archive (#33).
+
+- Verify same-install `message_agent` admission at the pinned Hermes revision. The receiving authority records the Bot author and the local ticket principal separately, and an ordinary session is refused before handoff (#33).
+
+- Verify deferred cron Bot Chat recovery at the pinned Hermes revision. After a successful native admission reply is lost, a same-ID retry recovers the queued receipt and leaves one durable admission (#33).
+
+- Verify the pinned native profile lifecycle and distinguish native profile cloning from a stopped installation copy with matching Bot Chat markers (#33).
+
+- Verify pinned Desktop profile route composition for same-name profiles, connection aliases, stale inventory and failed scoped requests. Run the dependency-free Node fixture in foundation CI (#33).
+
+- Verify the native Bot Chat roster on the pinned Hermes host using synthetic local tickets, including canonical root and compression tip, profile scope, and unavailable targets (#33).
+
+- Document exact-pin offline voice compatibility and dated GPT-Live, OpenAI Realtime and Gemini Live protocol differences, with separate readiness states and release gates for each mode (#36).
+
 - Recognize bounded Chinese possessive naming questions with literal subject/attribute slots; fail closed for marker-only slots while preserving one-read budgets and explicit retrieval (#151).
 
 - Reconcile original E2.7 local-memory acceptance with independent review and exact-main CI; broader memory adapters, lifecycle, migration and deployment remain open.
@@ -114,6 +204,64 @@ This file distinguishes design work, development changes, and released capabilit
 - Added default-off [parked native Kanban handoff](docs/52-parked-kanban-handoff.md): explicit board, preview/digest commit, durable single-use claim and bounded read-only reconciliation. No worker dispatch, storage initialization or live acceptance.
 
 ### Added
+
+- Add internal pause and explicit resume for pending enrollment policy. Schema v3 preserves existing administrative and read audit history and invalidates pre-pause confirmations across resume (#16).
+
+- Verify Telegram command denials through the real plugin host child. The command RPC omits receiver and message provenance, and native allowlist refusals stop before IPC (#14).
+
+- Verify owner-entry denials through the native Telegram command adapter and Gateway. Direct, forwarded and edited DMs can have the same public source fields, and Gateway still checks its current allowlist after adapter intake (#14).
+
+- Verify the review-only SSH draft recovery in locally built unsigned Linux x64 AppImages for both continuation modes and reject a mismatched build before launch (#33).
+
+- Verify SSH draft isolation across an endpoint edit when two installations share the same profile and chat ID, with recovery available again on the original endpoint in the review build (#33).
+
+- Record the remaining review-only SSH draft continuity gap when the same endpoint and copied install marker lead to a different transcript with the same chat ID (#33).
+
+- Add a separate review-only guard that checks the original session store before offering SSH draft review and preserves the journal when continuity cannot be verified (#33).
+
+- Verify the review-only SSH draft continuity guard in an unsigned Linux x64 AppImage. The copied SQLite store offers no draft review, and the original store allows guarded review under both continuation settings (#33).
+
+- Verify that a renamed profile's original LOCAL Bot Chat remains unavailable after native identity retries and a clean Gateway restart. An explicit inverse rename recovers the same chat on its original route (#33).
+
+- Add a review-only Linux profile rename candidate that preserves the original LOCAL receipt, compressed Bot Chat and settled admission when the original store is moved offline (#33).
+
+- Verify that the review-only offline rename recovers the same LOCAL receipt after process interruption and a simulated store-open I/O error. A copied store cannot settle the pending rename (#33).
+
+- Add a review-only Hermes Desktop proposal to recover an uncertain SSH text draft from the scoped native journal after abrupt exit and block unchanged resubmission (#33).
+
+- Verify explicit SSH Bot Chat reopen after abrupt Desktop exit. The native prepared submission survives, while the restored draft and its retry identity are lost in the tested window (#33).
+
+- Verify scoped stored-message inspection before SSH Bot Chat resume after Gateway loss. The read preserves the interrupted turn and starts no inference. Explicit resume can start native continuation (#33).
+
+- Verify that the restored SSH draft retains its retry guard after fully exiting and relaunching Desktop before reopening the interrupted Bot Chat, with native continuation enabled or disabled (#33).
+
+- Verify that the restored draft retains its retry guard after reloading the Desktop renderer following SSH acknowledgement and Gateway loss, with native continuation enabled and disabled (#33).
+
+- Verify combined SSH acknowledgement and Gateway loss. Desktop restores the draft and guards one explicit retry. Reopening starts one native continuation by default and none with native continuation disabled (#33).
+
+- Verify OpenSSH Bot Mode recovery after remote Gateway process loss. Explicit reopen triggers one native continuation by default. Disabling native continuation recovers the chat without another provider request (#33).
+
+- Verify that a lost legacy SSH prompt acknowledgement restores the draft and that Desktop warns on its explicit retry without resubmitting. The original reply remains available in the reopened chat (#33).
+
+- Verify that a legacy SSH Bot Mode turn can finish while the transport is down and that an explicit reopen reads the committed reply without resubmitting. Record the missing durable admission receipt (#33).
+
+- Verify that Desktop refuses an SSH endpoint whose host key changed and resumes the original Bot Chat after an explicit trust update and retry (#33).
+
+- Verify live SSH endpoint replacement across separate installations. Desktop closes the original socket and opens the replacement chat, while a captured route descriptor can resolve to the replacement under the same connection ID (#33).
+
+- Verify that a saved SSH alias survives explicit retry after a connection loss. Record that a live alias edit switches Bot Mode to the new target while a stale SDK descriptor can still read the previous served profile (#33).
+
+- Verify Bot Mode refuses to open a cached SSH row during a real OpenSSH interruption and reopens the original remote chat on explicit retry after reconnection (#33).
+
+- Verify a saved OpenSSH profile alias from the Desktop SDK through Bot Mode. The source-built and bundled Linux x64 clients keep the connection-local route while opening the remote named chat (#33).
+
+- Verify Bot Mode opens the existing remote named chat over a saved OpenSSH key connection in source-built and bundled Linux x64 Desktop, with a same-name local profile and unchanged chat stores (#33).
+
+- Verify compressed Bot Chat hydration over the saved Webapp token in source-built and bundled Linux x64 Desktop. Same-ID decoys in three other profile stores remain outside the selected transcript (#33).
+
+- Reproduce the saved Webapp Bot Chat fallback in a bundled Linux x64 AppImage and verify named-profile scoping and explicit retry in the matching review image (#33).
+
+- Verify local Bot Mode refusal and retry from a bundled Linux x64 AppImage built at the pinned Hermes revision. The acceptance checks the running packaged executable and opens the original canonical chat on explicit retry (#33).
 
 - Add explicit LOCAL `origin RECORD_ID` and optional SDK `record_origin` inspection, separating historical acceptance, current state and latest editing route through bounded readonly metadata without reconstructing forgotten payload or claiming authorship/authority (#157).
 

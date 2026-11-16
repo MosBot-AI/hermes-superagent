@@ -32,6 +32,44 @@ jobs:
           cd "$upstream"
           python -m pm.build_env --source . --out "$RUNNER_TEMP/hermes-test-venv" \
             --group dev --group test --python "$(command -v python)"
+      - name: Verify native Bot, Webapp, managed worker and cron cases
+        timeout-minutes: 8
+        shell: bash
+        run: |
+          set -euo pipefail
+          upstream="$RUNNER_TEMP/hermes"
+          test_python="$RUNNER_TEMP/hermes-test-venv/bin/python"
+          pin="$(python -c 'import json; print(json.load(open("compatibility.json"))["hermes_commit"])')"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git -C "$upstream" rev-parse HEAD)" = "$pin"
+          mkdir -p "$RUNNER_TEMP/native-gateway-evidence"
+          for fixture in bot_receipt profile_retirement profile_rename profile_recreate webapp_restore_rotation history_adoption webapp_signout managed_worker managed_worker_restart managed_worker_stop cron_bot_deferred; do
+            sandbox="$(mktemp -d "$RUNNER_TEMP/native-bot.XXXXXX")"
+            mkdir -p "$sandbox/home" "$sandbox/tmp"
+            receipt="${fixture//_/-}.xml"
+            result="$sandbox/$receipt"
+            env -i PATH="$PATH" LANG=C.UTF-8 HOME="$sandbox/home" TMPDIR="$sandbox/tmp" \
+              XDG_CONFIG_HOME="$sandbox/config" XDG_CACHE_HOME="$sandbox/cache" \
+              HERMES_HOME="$sandbox/hermes" HERMES_RUNTIME_DIR="$sandbox/runtime" \
+              HERMES_TEST_ROOT="$upstream" PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
+              "$test_python" -m pytest -q -p no:cacheprovider --show-capture=no \
+              -o junit_logging=no --basetemp="$sandbox/pytest" --junitxml="$result" \
+              "acceptance/live/test_native_$fixture.py"
+
+            # Stage evidence only after pytest records a passing case without captured output.
+            "$test_python" - "$result" <<'PY'
+          import sys
+          from xml.etree import ElementTree
+
+          result = ElementTree.parse(sys.argv[1])
+          excluded = ("error", "failure", "skipped", "system-out", "system-err")
+          if len(result.findall(".//testcase")) != 1 or any(
+              result.findall(f".//{tag}") for tag in excluded
+          ):
+              raise SystemExit("Expected one clean passing native Gateway case")
+          PY
+            install -m 600 "$result" "$RUNNER_TEMP/native-gateway-evidence/$receipt"
+          done
       - name: Verify pinned native Gateway lifecycle without provider credentials
         timeout-minutes: 8
         shell: bash
@@ -69,6 +107,38 @@ jobs:
             acceptance/live/test_packaged_gateway_memory.py \
             acceptance/live/test_packaged_gateway_handoff.py \
             --junitxml="$RUNNER_TEMP/native-gateway-evidence/packaged-results.xml"
+      - name: Verify installed package in the canonical Bot Chat and native delivery
+        timeout-minutes: 9
+        shell: bash
+        run: |
+          set -euo pipefail
+          export HERMES_TEST_ROOT="$RUNNER_TEMP/hermes"
+          export HERMES_RUNTIME_PACKAGE="$RUNNER_TEMP/live-runtime"
+          export HERMES_SOURCE_COMMIT="$GITHUB_SHA"
+          export PYTEST_DISABLE_PLUGIN_AUTOLOAD=1
+          test_python="$RUNNER_TEMP/hermes-test-venv/bin/python"
+          result="$RUNNER_TEMP/packaged-bot.xml"
+          "$test_python" -m pytest -q -p no:cacheprovider --show-capture=no \
+            -o junit_logging=no --junitxml="$result" acceptance/live/test_packaged_gateway_bot.py
+          "$test_python" - "$result" <<'PY'
+          import sys
+          from xml.etree import ElementTree
+
+          result = ElementTree.parse(sys.argv[1])
+          cases = [case.get("name") for case in result.findall(".//testcase")]
+          expected = {
+              "test_installed_task_commands_reopen_original_canonical_bot_chat",
+              "test_installed_recipient_keeps_native_bot_delivery_and_task_after_restart",
+          }
+          excluded = ("error", "failure", "skipped", "system-out", "system-err")
+          if (
+              len(cases) != len(expected)
+              or set(cases) != expected
+              or any(result.findall(f".//{tag}") for tag in excluded)
+          ):
+              raise SystemExit("Expected both installed Bot Chat cases to pass cleanly")
+          PY
+          install -m 600 "$result" "$RUNNER_TEMP/native-gateway-evidence/packaged-bot.xml"
       - name: Upload synthetic native Gateway test receipt
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

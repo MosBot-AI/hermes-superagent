@@ -88,6 +88,31 @@ def test_pending_policy_revoke_and_terminal(store):
     assert not any(value in repr(events) for value in ("actor", "bot", "task-one"))
 
 
+def test_pause_is_scoped_and_revoke_is_terminal_even_when_paused(store):
+    store.run("create", CREATE)
+    other = {**KEY, "enrollment_id": "other"}
+    store.run("create", {**CREATE, **other})
+    fails("invalid_transition", lambda: store.run("resume", CAS))
+
+    paused = store.run("pause", CAS)
+    assert paused["state"] == "paused"
+    assert (paused["enrollment_revision"], paused["policy_revision"], paused["epoch"]) == (1, 2, 1)
+    assert paused["scope"] == SCOPE
+    assert store.run("get", other)["state"] == "pending"
+    paused_cas = {**CAS, "expected_revision": 2}
+    fails("revision_conflict", lambda: store.run("resume", CAS))
+    fails("invalid_transition", lambda: store.run("pause", paused_cas))
+    fails("invalid_transition", lambda: store.run("set_policy", {**paused_cas, "scope": SCOPE}))
+
+    assert store.run("revoke", paused_cas)["state"] == "revoked"
+    revoked_cas = {**paused_cas, "expected_enrollment_revision": 2}
+    fails("revoked", lambda: store.run("pause", revoked_cas))
+    fails("revoked", lambda: store.run("resume", revoked_cas))
+    page = store.policy_history(KEY)
+    assert [item["operation"] for item in page["items"]] == ["create", "pause", "revoke"]
+    assert page["current_epoch"] == 2
+
+
 @pytest.mark.parametrize("field", ["owner_id", "profile_id", "enrollment_id"])
 @pytest.mark.parametrize("operation", ["get", "set_policy", "revoke"])
 def test_scoped_not_found(store, field, operation):
@@ -245,7 +270,7 @@ def test_foreign_database(sql, code):
         "CREATE TABLE other (id INTEGER)",
         "CREATE TEMP TABLE enrollments (id INTEGER)",
         "CREATE INDEX unknown_index ON enrollments(principal_id)",
-        "PRAGMA user_version=3",
+        "PRAGMA user_version=4",
         "CREATE TRIGGER surprise AFTER INSERT ON enrollments BEGIN SELECT 1; END",
     ],
 )

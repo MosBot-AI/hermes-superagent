@@ -51,7 +51,10 @@ def test_status_distinguishes_storage_core_from_live_authority(mode):
         "production_adapter_enabled": False,
         "activation_supported": False,
         "grant_issuance_supported": False,
-        "scope": "Unwired pending/revoked metadata only; profiles are not authenticated owners.",
+        "scope": (
+            "Internal pending, paused and revoked policy metadata. "
+            "Profiles do not establish owner identity."
+        ),
     }
     assert result["read_authorization"]["protected_reads_enabled"] is False
     assert result["capabilities"]["identity_binding"] is False

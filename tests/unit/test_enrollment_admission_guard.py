@@ -2,12 +2,13 @@
 
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime
 from threading import Barrier, Event
 
 import pytest
 from test_enrollment import CAS, CREATE, KEY, SCOPE
 
-from personal_agent.enrollment import EnrollmentError, EnrollmentStore
+from personal_agent.enrollment import EnrollmentError, EnrollmentStore, PreparedRead
 
 
 @pytest.fixture
@@ -131,7 +132,10 @@ def test_commit_failure_prevents_summary_return(store):
     assert not store._connection.in_transaction
 
 
-def test_independent_revoke_waits_for_admitted_operation_to_finish(tmp_path):
+@pytest.mark.parametrize(("operation", "state"), [("revoke", "revoked"), ("pause", "paused")])
+def test_independent_policy_change_waits_for_admitted_operation_to_finish(
+    tmp_path, operation, state
+):
     path = tmp_path / "admission.sqlite3"
     with sqlite3.connect(path) as connection:
         instance = EnrollmentStore(connection)
@@ -151,9 +155,15 @@ def test_independent_revoke_waits_for_admitted_operation_to_finish(tmp_path):
                 callback_entered.set()
                 assert revoke_attempted.wait(5)
                 assert not revoke_finished.is_set()
-                return ("synthetic summary",)
+                return PreparedRead(("synthetic summary",), datetime(2026, 1, 1, tzinfo=UTC), 1)
 
-            return guarded(instance, snapshot)
+            return instance.with_audited_read(
+                KEY,
+                expected_revision=1,
+                expected_enrollment_revision=1,
+                expected_epoch=0,
+                operation=snapshot,
+            )
         finally:
             connection.close()
 
@@ -167,7 +177,11 @@ def test_independent_revoke_waits_for_admitted_operation_to_finish(tmp_path):
             connection.set_trace_callback(
                 lambda statement: revoke_attempted.set() if statement == "BEGIN IMMEDIATE" else None
             )
-            result = instance.run("revoke", CAS)
+            result = instance.run(operation, CAS)
+            audit = instance.read_admission_history(KEY)["items"]
+            assert [(item["epoch"], item["outcome"]) for item in audit] == [
+                (0, "snapshot_prepared")
+            ]
             revoke_finished.set()
             return result
         finally:
@@ -177,14 +191,17 @@ def test_independent_revoke_waits_for_admitted_operation_to_finish(tmp_path):
         read_result = pool.submit(reader)
         revoke_result = pool.submit(revoker)
         assert read_result.result(timeout=10) == ("synthetic summary",)
-        assert revoke_result.result(timeout=10)["state"] == "revoked"
+        assert revoke_result.result(timeout=10)["state"] == state
     assert revoke_finished.is_set()
     with sqlite3.connect(path) as connection:
         instance = EnrollmentStore(connection)
         instance.initialize()
         with pytest.raises(EnrollmentError, match="revision_conflict"):
             guarded(instance, forbidden)
+        if operation == "pause":
+            with pytest.raises(EnrollmentError, match="paused"):
+                guarded(instance, forbidden, expected_revision=2, expected_epoch=1)
         assert connection.execute("SELECT operation FROM events ORDER BY epoch").fetchall() == [
             ("create",),
-            ("revoke",),
+            (operation,),
         ]

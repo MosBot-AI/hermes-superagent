@@ -120,6 +120,8 @@ cd ../hermes-superagent
 
 只运行 `python scripts/check.py` 会做本仓库单元测试、Ruff、ty 和双语文档结构/链接及 JSON 示例语法检查，并明确打印 Hermes compatibility **NOT RUN**。测试工具版本随固定 Hermes dev group，不是插件运行依赖。
 
+在固定宿主检查命令中追加 `--hermes-node /absolute/path/to/node` 可运行 Desktop 路由组合测试。检查器要求 Node 版本与固定 Hermes 的 `pm/lock.json` 一致，并将夹具的文件读取范围限定在两个源码检出目录，同时禁用网络访问。GitHub CI 包含此检查。本地未传入 `--hermes-node` 时会报告跳过 Desktop 路由检查。这套测试使用 Node 内置 runner，无需 Desktop 工作区依赖或 Electron。见 [Desktop 路由证据](docs/15-primary-bot-binding-zh.md#当前固定版本的-desktop-profile-路由)。
+
 成功的推送构建现附带[经过校验的离线运行包](docs/runtime-distribution-zh.md#下载推送构建的运行包)：确定性归档、完整官方静态扫描发现，以及冷进程实际运行包的 CLI/重载验收。这是可下载的开发产物，不是正式发行或重试安装的许可。
 
 ## 在隔离 Hermes 中试用

@@ -1,0 +1,485 @@
+diff --git a/apps/desktop/src/app/chat/composer/hooks/use-composer-draft.ts b/apps/desktop/src/app/chat/composer/hooks/use-composer-draft.ts
+index 8529305a7773be25d40de1fae8affac9a81b343d..c6c4c4fc8ebd837694452b741ab5bc91f9a4c24a 100644
+--- a/apps/desktop/src/app/chat/composer/hooks/use-composer-draft.ts
++++ b/apps/desktop/src/app/chat/composer/hooks/use-composer-draft.ts
+@@ -373,7 +373,10 @@ export function useComposerDraft({
+   // window has not edited since it loaded or saved it is left to the stash,
+   // which may hold a newer value (or none, once sent) from another window.
+   const stashOwnEdits = (scope: string | null, text: string, attachments = attachmentScope.$attachments.get()) => {
+-    if (sameDraftScope(scope, draftScopeRef.current) && isSavedDraft(savedDraftRef.current, text, attachments)) {
++    if (sameDraftScope(scope, draftScopeRef.current) && (
++      isSavedDraft(savedDraftRef.current, text, attachments) ||
++      (draftRetryRef.current?.uncertainLegacy === true && draftRetryTextMatches(draftRetryRef.current, text))
++    )) {
+       return
+     }
+ 
+@@ -383,7 +386,11 @@ export function useComposerDraft({
+   // A rejected or unconfirmed send is restored with its identity, so Enter on that exact draft is
+   // the explicit retry. Recorded per draft scope (it survives a reload with the draft text).
+   const rememberDraftRetry = (scope: string | null, retry: ComposerDraftRetry) => {
+-    writeDraftRetry(scope, retry)
++    // A journal review remains scoped to its original connection. The ordinary
++    // stash is keyed by session id alone and cannot hold this restored copy.
++    if (!retry.uncertainLegacy) {
++      writeDraftRetry(scope, retry)
++    }
+ 
+     if (sameDraftScope(scope, draftScopeRef.current)) {
+       draftRetryRef.current = retry
+@@ -392,6 +399,9 @@ export function useComposerDraft({
+ 
+   // The identity a send of exactly this draft retries, if any. Spent by the send either way: a
+   // rejection restores it again, and an accepted send leaves nothing to retry.
++  const restoredLegacyDraft = (text: string, attachments: ComposerAttachment[]) =>
++    matchingDraftRetry(draftRetryRef.current, text, attachments)?.uncertainLegacy === true
++
+   const takeDraftRetry = (text: string, attachments: ComposerAttachment[]) => {
+     const retry = matchingDraftRetry(draftRetryRef.current, text, attachments)
+     draftRetryRef.current = undefined
+@@ -889,7 +899,8 @@ export function useComposerDraft({
+       // Only this window's own unsaved edits: an untouched editor may still
+       // show a draft another window has since sent, and must not restore it.
+       // Text alone: attachments are memory-only and close with the window.
+-      if (latestText === savedDraftRef.current.text) {
++      if (latestText === savedDraftRef.current.text ||
++        (draftRetryRef.current?.uncertainLegacy === true && draftRetryTextMatches(draftRetryRef.current, latestText))) {
+         return
+       }
+ 
+@@ -921,6 +932,7 @@ export function useComposerDraft({
+     isSteerableText,
+     loadIntoComposer,
+     rememberDraftRetry,
++    restoredLegacyDraft,
+     requestMainFocus,
+     sessionIdRef,
+     setComposerText,
+diff --git a/apps/desktop/src/app/chat/composer/hooks/use-composer-submit.ts b/apps/desktop/src/app/chat/composer/hooks/use-composer-submit.ts
+index c6551bc80cad95fffffcea9fed2f893e5e85cc65..fdb9c859c454cbb088832b78a90fd3511271b7ea 100644
+--- a/apps/desktop/src/app/chat/composer/hooks/use-composer-submit.ts
++++ b/apps/desktop/src/app/chat/composer/hooks/use-composer-submit.ts
+@@ -76,6 +76,7 @@ interface UseComposerSubmitArgs {
+   stashAt: (scope: string | null, text?: string, attachments?: ComposerAttachment[]) => void
+   /** Restored-send identity (see use-composer-draft); absent = every send is a new message. */
+   rememberDraftRetry?: (scope: string | null, retry: ComposerDraftRetry) => void
++  restoredLegacyDraft?: (text: string, attachments: ComposerAttachment[]) => boolean
+   takeDraftRetry?: (text: string, attachments: ComposerAttachment[]) => ComposerDraftRetry | undefined
+ }
+ 
+@@ -115,6 +116,7 @@ export function useComposerSubmit({
+   setComposerText,
+   stashAt,
+   rememberDraftRetry,
++  restoredLegacyDraft,
+   takeDraftRetry
+ }: UseComposerSubmitArgs) {
+   const paneVisible = usePaneVisible()
+@@ -472,6 +474,14 @@ export function useComposerSubmit({
+     return true
+   }
+ 
++  const refuseRestoredLegacyDraft = (text: string) => {
++    if (!restoredLegacyDraft?.(text, attachments)) { return false }
++    notify({ kind: 'warning', title: translateNow('composer.restoreUnconfirmedDraft'),
++      message: translateNow('promptNotices.legacySendUnconfirmed') })
++
++    return true
++  }
++
+   const submitDraft = () => {
+     if (disabled) {
+       return
+@@ -504,7 +514,7 @@ export function useComposerSubmit({
+     const text = pathifyRefs(draftRef.current)
+     const payloadPresent = text.trim().length > 0 || attachments.length > 0
+ 
+-    if (refusedDuringSetup(text)) {
++    if (refusedDuringSetup(text) || refuseRestoredLegacyDraft(text)) {
+       return
+     }
+ 
+@@ -554,6 +564,7 @@ export function useComposerSubmit({
+   // tool boundary. If the turn already ended, queue the words instead.
+   const steerDraft = (mode: 'interrupt' | 'steer' = 'interrupt') => {
+     const text = draftRef.current.trim()
++    if (refuseRestoredLegacyDraft(text)) { return }
+     // The Steer action on a restored send: queued under its id like a busy Enter (see queueRetry).
+     const retry = attachments.length ? undefined : takeDraftRetry?.(draftRef.current, [])
+ 
+@@ -629,7 +640,7 @@ export function useComposerSubmit({
+   }
+ 
+   const queueDraft = () => {
+-    if (disabled || !busy || refusedDuringSetup(draftRef.current)) {
++    if (disabled || !busy || refusedDuringSetup(draftRef.current) || refuseRestoredLegacyDraft(draftRef.current)) {
+       return
+     }
+ 
+diff --git a/apps/desktop/src/app/chat/composer/index.tsx b/apps/desktop/src/app/chat/composer/index.tsx
+index 9ef8daa80feb70dfb81076f420326c5971670f47..456c69839d875d0da582adb0ecd7d68080c6b3ec 100644
+--- a/apps/desktop/src/app/chat/composer/index.tsx
++++ b/apps/desktop/src/app/chat/composer/index.tsx
+@@ -304,6 +304,7 @@ export function ChatBar({
+     loadIntoComposer,
+     rememberDraftRetry,
+     requestMainFocus,
++    restoredLegacyDraft,
+     sessionIdRef,
+     setComposerText,
+     stashAt,
+@@ -455,6 +456,7 @@ export function ChatBar({
+     setComposerText,
+     stashAt,
+     rememberDraftRetry,
++    restoredLegacyDraft,
+     takeDraftRetry
+   })
+ 
+@@ -1307,9 +1309,18 @@ export function ChatBar({
+             <ActionBadges sessionId={statusSessionId} />
+             <PreparedImageRecovery
+               occupied={hasText || attachments.length > 0 || busy || disabled}
+-              onRestore={(text, restored, id) => {
++              onRestore={(text, restored, id, uncertainLegacy) => {
++                if (uncertainLegacy && (
++                  activeQueueSessionKeyRef.current !== activeQueueSessionKey ||
++                  queueEditRef.current || syncDraftFromEditor().trim() || scope.attachments.$attachments.get().length
++                )) {
++                  return false
++                }
+                 loadIntoComposer(text, restored)
+-                rememberDraftRetry(activeQueueSessionKey, draftRetry(id, text, restored))
++                rememberDraftRetry(activeQueueSessionKey, {
++                  ...draftRetry(id, text, restored),
++                  ...(uncertainLegacy && { uncertainLegacy })
++                })
+               }}
+               request={requestBusyConfig}
+               sessionKey={activeQueueSessionKey}
+diff --git a/apps/desktop/src/app/chat/composer/prepared-image-recovery.tsx b/apps/desktop/src/app/chat/composer/prepared-image-recovery.tsx
+index 8974be5cfc4c990c414a0b0e035d4dd25e5cdcc0..d6cd70bf4e584d3e7f19f90e52e9d8d20d4170a5 100644
+--- a/apps/desktop/src/app/chat/composer/prepared-image-recovery.tsx
++++ b/apps/desktop/src/app/chat/composer/prepared-image-recovery.tsx
+@@ -1,25 +1,38 @@
+-import { useEffect, useState } from 'react'
++import { useStore } from '@nanostores/react'
++import { useEffect, useRef, useState } from 'react'
+ 
+-import { listPreparedImageDrafts } from '@/app/session/hooks/use-prompt-actions/prepared-submissions'
++import {
++  legacyDraftRoute,
++  listPreparedImageDrafts,
++  listPreparedLegacyDrafts
++} from '@/app/session/hooks/use-prompt-actions/prepared-submissions'
+ import { captureSubmissionDestination } from '@/app/session/hooks/use-prompt-actions/submission-destination'
+ import type { GatewayRequest } from '@/app/session/hooks/use-prompt-actions/utils'
+ import { Button } from '@/components/ui/button'
+ import { useI18n } from '@/i18n'
++import { $connectionsRegistry } from '@/store/connection-registry-state'
+ import type { ComposerAttachment } from '@/store/composer'
+ import { notifyError } from '@/store/notifications'
++import { knownOwnerForSession } from '@/store/session-states'
+ 
+ interface Props {
+   sessionKey: string | null
+   request: GatewayRequest
+   occupied: boolean
+   /** `id` is the retained send's identity: sending the restored draft unchanged retries it. */
+-  onRestore: (text: string, attachments: ComposerAttachment[], id: string) => void
++  onRestore: (text: string, attachments: ComposerAttachment[], id: string, uncertainLegacy?: true) => boolean | void
+ }
+ 
+ export function PreparedImageRecovery({ sessionKey, request, occupied, onRestore }: Props) {
+   const { t } = useI18n()
+   const [drafts, setDrafts] = useState<Awaited<ReturnType<typeof listPreparedImageDrafts>>>([])
+-  const scopeKey = captureSubmissionDestination(sessionKey, request).scopeKey
++  const registry = useStore($connectionsRegistry)
++  const { scopeKey } = captureSubmissionDestination(sessionKey, request)
++  const owner = knownOwnerForSession(sessionKey)
++  const route = legacyDraftRoute(owner, registry?.connections ?? [])
++  const legacyScope = owner && typeof owner === 'object' ? JSON.stringify([owner.connectionId, owner.profile]) : ''
++  const legacyLookup = useRef<object | undefined>(undefined)
++  const [legacy, setLegacy] = useState<{ route: string; sessionKey: string; drafts: typeof drafts }>()
+ 
+   useEffect(() => {
+     let cancelled = false
+@@ -36,13 +49,53 @@ export function PreparedImageRecovery({ sessionKey, request, occupied, onRestore
+     return () => { cancelled = true }
+   }, [sessionKey, scopeKey, t.composer.restoreImageDraft])
+ 
+-  return drafts.map(draft => (
++  useEffect(() => {
++    const lookup = {}
++    legacyLookup.current = lookup
++    setLegacy(undefined)
++
++    if (sessionKey && route) {
++      void listPreparedLegacyDrafts(sessionKey, legacyScope, route).then(entries => {
++        if (legacyLookup.current === lookup) { setLegacy({ route, sessionKey, drafts: entries }) }
++      }).catch(error => {
++        if (legacyLookup.current === lookup) { notifyError(error, t.composer.restoreUnconfirmedDraft) }
++      })
++    }
++
++    return () => { legacyLookup.current = undefined }
++  }, [sessionKey, legacyScope, route, t.composer.restoreUnconfirmedDraft])
++
++  const legacyDrafts = legacy?.route === route && legacy?.sessionKey === sessionKey ? legacy?.drafts ?? [] : []
++  const visible = [...drafts.map(draft => ({ ...draft, uncertainLegacy: undefined })),
++    ...legacyDrafts.map(draft => ({ ...draft, uncertainLegacy: true as const }))]
++
++  return visible.map(draft => (
+     <div className="flex items-center gap-2 rounded-md border bg-background px-3 py-2 text-xs" key={draft.key}>
+-      <span className="min-w-0 flex-1 truncate">{draft.text || draft.attachments.map(attachment => attachment.label).join(', ')}</span>
+-      <Button disabled={occupied} onClick={() => {
+-        onRestore(draft.text, draft.attachments, draft.id)
+-        setDrafts(current => current.filter(entry => entry.key !== draft.key))
+-      }} size="sm" type="button" variant="outline">{t.composer.restoreImageDraft}</Button>
++      {!draft.uncertainLegacy && <span className="min-w-0 flex-1 truncate">{
++        draft.text || draft.attachments.map(attachment => attachment.label).join(', ')
++      }</span>}
++      <Button disabled={occupied} onClick={async () => {
++        if (draft.uncertainLegacy) {
++          if (!sessionKey || !route) { return }
++          try {
++            const lookup = legacyLookup.current
++            const entries = await listPreparedLegacyDrafts(sessionKey, legacyScope, route)
++            const current = entries.find(entry => entry.key === draft.key && entry.id === draft.id)
++            if (!current || legacyLookup.current !== lookup || legacyDraftRoute(
++              knownOwnerForSession(sessionKey), $connectionsRegistry.get()?.connections ?? []
++            ) !== route || onRestore(current.text, [], current.id, true) === false) { return }
++          } catch (error) {
++            notifyError(error, t.composer.restoreUnconfirmedDraft)
++            return
++          }
++          setLegacy(state => state && { ...state, drafts: state.drafts.filter(entry => entry.key !== draft.key) })
++        } else {
++          onRestore(draft.text, draft.attachments, draft.id)
++          setDrafts(state => state.filter(entry => entry.key !== draft.key))
++        }
++      }} size="sm" type="button" variant="outline">{
++        draft.uncertainLegacy ? t.composer.restoreUnconfirmedDraft : t.composer.restoreImageDraft
++      }</Button>
+     </div>
+   ))
+ }
+diff --git a/apps/desktop/src/app/session/hooks/use-prompt-actions/prepared-submissions.test.ts b/apps/desktop/src/app/session/hooks/use-prompt-actions/prepared-submissions.test.ts
+index e781e9956c41f966ddf7cf471c47cc27f17ef03f..6dcb29a6ecaac82efc42b43980a0365327947a9a 100644
+--- a/apps/desktop/src/app/session/hooks/use-prompt-actions/prepared-submissions.test.ts
++++ b/apps/desktop/src/app/session/hooks/use-prompt-actions/prepared-submissions.test.ts
+@@ -1,6 +1,6 @@
+ import { afterEach, expect, test, vi } from 'vitest'
+ 
+-import { listPreparedImageDrafts, type PreparedSubmission, preparedSubmissionKey, readPreparedSubmission, removePreparedSubmission, writePreparedSubmission } from './prepared-submissions'
++import { legacyDraftRoute, legacyDraftRouteDigest, listPreparedImageDrafts, listPreparedLegacyDrafts, type PreparedSubmission, preparedSubmissionKey, readPreparedSubmission, removePreparedSubmission, writePreparedSubmission } from './prepared-submissions'
+ import { storedJournal } from './prepared-submissions-test-utils'
+ import type { SubmissionDestination } from './submission-destination'
+ 
+@@ -99,3 +99,45 @@ test('tabs without Web Locks never share one slash command retry record', async
+     Reflect.deleteProperty(navigator, 'locks')
+   }
+ })
++
++test('native recovery only offers exact, text-only legacy entries for the stored SSH destination', async () => {
++  // jsdom supplies getRandomValues but no SubtleCrypto.
++  const { webcrypto } = await import('node:crypto')
++  vi.stubGlobal('crypto', webcrypto)
++  const owner = { connectionId: 'ssh', profile: 'default', targetProfile: 'scout' }
++  const connection = { id: 'ssh', kind: 'ssh' as const, label: 'Fixture', host: 'fixture.invalid',
++    user: 'synthetic', port: 22, tokenSet: false, tokenPreview: null }
++  const route = legacyDraftRoute(owner, [connection])!
++  expect(route).toBeDefined()
++  const legacyDraftRouteId = await legacyDraftRouteDigest(route)
++  const scopeKey = JSON.stringify(['ssh', 'default'])
++  const destination = { scopeKey } as SubmissionDestination
++  const source = { id: 'input', text: 'retained wire text', attachments: [], params: {},
++    owner, legacyAttempted: true, legacyDraftRoute: legacyDraftRouteId }
++  const key = preparedSubmissionKey('stored', destination, 'retained editor text', [], { submission_id: 'input' })
++  const native = { read: vi.fn(async () => JSON.stringify({
++    [key]: source,
++    [preparedSubmissionKey('decoy', destination, 'same profile', [], { submission_id: 'input' })]: source,
++    [preparedSubmissionKey('stored', destination, '/tool', [], { submission_id: 'input' })]: source,
++    [preparedSubmissionKey('stored', destination, 'queued', [], { submission_id: 'input', fromQueue: true })]: source,
++    [preparedSubmissionKey('stored', destination, 'wrong id', [], { submission_id: 'other' })]: source,
++    [preparedSubmissionKey('stored', destination, 'old journal', [], { submission_id: 'input' })]:
++      { ...source, legacyDraftRoute: undefined },
++    [preparedSubmissionKey('stored', destination, 'not legacy', [], { submission_id: 'input' })]:
++      { ...source, legacyAttempted: false }
++  })), update: vi.fn() }
++  vi.stubGlobal('hermesDesktop', { preparedSubmissions: native })
++
++  expect(await listPreparedLegacyDrafts('stored', scopeKey, route)).toEqual([
++    { key, id: 'input', text: 'retained editor text', attachments: [] }
++  ])
++  expect(await listPreparedLegacyDrafts('stored', JSON.stringify(['peer', 'default']), route)).toEqual([])
++  const retargeted = legacyDraftRoute({ ...owner, targetProfile: 'harbor' }, [connection])!
++  expect(await listPreparedLegacyDrafts('stored', scopeKey, retargeted)).toEqual([])
++  const replaced = legacyDraftRoute(owner, [{ ...connection, port: 2233 }])!
++  expect(await listPreparedLegacyDrafts('stored', scopeKey, replaced)).toEqual([])
++  expect(legacyDraftRoute(owner, [{ ...connection, kind: 'local' }])).toBeUndefined()
++  expect(native.update).not.toHaveBeenCalled()
++  vi.stubGlobal('hermesDesktop', undefined)
++  expect(await listPreparedLegacyDrafts('stored', scopeKey, route)).toEqual([])
++})
+diff --git a/apps/desktop/src/app/session/hooks/use-prompt-actions/prepared-submissions.ts b/apps/desktop/src/app/session/hooks/use-prompt-actions/prepared-submissions.ts
+index dd190784d0b8b88903a2c9a426e55291fddba91f..f11929b48152e1e04af23d5d1b7de75b5b19cee5 100644
+--- a/apps/desktop/src/app/session/hooks/use-prompt-actions/prepared-submissions.ts
++++ b/apps/desktop/src/app/session/hooks/use-prompt-actions/prepared-submissions.ts
+@@ -1,7 +1,8 @@
+ import { randomUuid } from '@hermes/shared'
+ 
++import type { DesktopRegistryConnection } from '@/global'
+ import type { ComposerAttachment } from '@/store/composer'
+-import type { SessionOwnerScope } from '@/store/session-request-router'
++import { isSessionOwnerRoute, type SessionOwnerScope } from '@/store/session-request-router'
+ 
+ import type { SubmissionDestination } from './submission-destination'
+ import type { SubmitTextOptions } from './utils'
+@@ -27,6 +28,7 @@ export interface PreparedSubmission {
+   displayText?: string
+   params: Record<string, unknown>
+   legacyAttempted?: boolean
++  legacyDraftRoute?: string
+ }
+ 
+ // Admitted entries whose durable removal failed (ENOSPC/EIO): journal key -> spent submission id.
+@@ -211,6 +213,48 @@ export async function listPreparedImageDrafts(target: string, scopeKey: string)
+   })
+ }
+ 
++// An SSH connection's logical id survives edits. Bind recovery to the effective
++// target profile and the configured endpoint as well as the session key.
++export function legacyDraftRoute(owner: SessionOwnerScope, connections: DesktopRegistryConnection[]) {
++  if (!isSessionOwnerRoute(owner) || !owner.profile) { return undefined }
++  const source = connections.find(connection => connection.id === owner.connectionId)
++
++  return source?.kind === 'ssh' && source.host && source.user
++    ? JSON.stringify([
++      owner.connectionId, owner.profile, owner.targetProfile ?? owner.profile, source.host, source.user,
++      source.port ?? 22, source.keyPath ?? '', source.remoteHermesPath ?? '', source.remoteProfile ?? ''
++    ])
++    : undefined
++}
++
++export async function legacyDraftRouteDigest(route: string | undefined) {
++  if (!route) { return undefined }
++  const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(route))
++
++  return Array.from(new Uint8Array(bytes), byte => byte.toString(16).padStart(2, '0')).join('')
++}
++
++export async function listPreparedLegacyDrafts(target: string, scopeKey: string, route: string) {
++  // Only Electron's acknowledged journal has process-crash durability.
++  if (!window.hermesDesktop?.preparedSubmissions) { return [] }
++  const digest = await legacyDraftRouteDigest(route)
++  if (!digest) { return [] }
++
++  return Object.entries(await readJournal()).flatMap(([key, entry]) => {
++    const intent: unknown = JSON.parse(key)
++    if (!Array.isArray(intent)) { return [] }
++    const [scope, session, text, attachmentIds, displayKind, fromQueue, submissionId] = intent
++
++    return scope === scopeKey && session === target && entry.legacyAttempted === true &&
++      entry.legacyDraftRoute === digest && typeof text === 'string' && text.trim().length > 0 &&
++      !text.trimStart().startsWith('/') && Array.isArray(attachmentIds) && attachmentIds.length === 0 &&
++      !entry.attachments.length && displayKind === null && fromQueue === false &&
++      typeof submissionId === 'string' && submissionId && entry.id === submissionId
++      ? [{ key, id: entry.id, text, attachments: [] }]
++      : []
++  })
++}
++
+ export async function readPreparedSubmission(key: string): Promise<PreparedSubmission | undefined> {
+   return (await readJournal())[key]
+ }
+diff --git a/apps/desktop/src/app/session/hooks/use-prompt-actions/submit.ts b/apps/desktop/src/app/session/hooks/use-prompt-actions/submit.ts
+index 0c1c480d4868b7b0ba6086f6f8dd2c4a0df6b6b6..eb5ac1edc5596931d0bf1ebe5353262b0cc5b102 100644
+--- a/apps/desktop/src/app/session/hooks/use-prompt-actions/submit.ts
++++ b/apps/desktop/src/app/session/hooks/use-prompt-actions/submit.ts
+@@ -7,6 +7,7 @@ import { type ChatMessage, finalizeInterruptedMessages, textPart } from '@/lib/c
+ import { optimisticAttachmentRef } from '@/lib/chat-runtime'
+ import { sanitizeComposerInput } from '@/lib/composer-input-sanitize'
+ import { setMutableRef } from '@/lib/mutable-ref'
++import { $connectionsRegistry } from '@/store/connection-registry-state'
+ import {
+   isVoicePlaybackActive,
+   markVoicePlaybackInterrupted,
+@@ -51,6 +52,8 @@ import { resolveSessionOwner, resolveSessionProfile } from '../use-session-actio
+ 
+ import {
+   adoptPreparedSubmission,
++  legacyDraftRoute,
++  legacyDraftRouteDigest,
+   type PreparedSubmission,
+   preparedSubmissionKey,
+   preparedSubmissionSlot,
+@@ -469,6 +472,7 @@ export function useSubmitPrompt(deps: SubmitPromptDeps) {
+ 
+       const captured =
+         options?.destination ?? captureSubmissionDestination(targetStoredSessionId ?? sessionId, ambientRequestGateway)
++      const recoveryRoute = legacyDraftRoute(captured.owner, $connectionsRegistry.get()?.connections ?? [])
+ 
+       const retryKeyForTarget = () =>
+         preparedSubmissionKey(
+@@ -1174,6 +1178,11 @@ export function useSubmitPrompt(deps: SubmitPromptDeps) {
+                     throw error
+                   }
+ 
++                  if (options?.composerScope === recoverStoredSessionId && !options?.retryText &&
++                    !options?.surface && !options?.fromQueue && !options?.displayKind && !prepared.attachments.length &&
++                    recoveryRoute === legacyDraftRoute(prepared.owner, $connectionsRegistry.get()?.connections ?? [])) {
++                    prepared.legacyDraftRoute = await legacyDraftRouteDigest(recoveryRoute).catch(() => undefined)
++                  }
+                   prepared.legacyAttempted = true
+                   await writePreparedSubmission(retryKey, prepared)
+                   const { submission_id: _id, ...legacyParams } = params
+diff --git a/apps/desktop/src/i18n/en.ts b/apps/desktop/src/i18n/en.ts
+index e00f9ff5b4e945a5abc74b581c514f4d0b0e02e5..06d45fd4e93681fb47f67c394961ff1516db9721 100644
+--- a/apps/desktop/src/i18n/en.ts
++++ b/apps/desktop/src/i18n/en.ts
+@@ -3488,6 +3488,7 @@ export const en: Translations = {
+     queueDelete: 'Delete',
+     queueLostNote: 'Turn lost during restart',
+     restoreImageDraft: 'Restore image draft',
++    restoreUnconfirmedDraft: 'Review unconfirmed draft',
+     queueCancelFailed: "Couldn't remove the queued turn",
+     queueLostDiscard: 'Discard',
+     queueLostDiscardTip:
+diff --git a/apps/desktop/src/i18n/types.ts b/apps/desktop/src/i18n/types.ts
+index c3e58cbd65dc21ae0776398edc5ca791e5a4a535..a88327649964dab14464c65298b7d3ca0b652c93 100644
+--- a/apps/desktop/src/i18n/types.ts
++++ b/apps/desktop/src/i18n/types.ts
+@@ -2997,6 +2997,7 @@ export interface Translations extends NoticeTranslations {
+     queueDelete: string
+     queueLostNote: string
+     restoreImageDraft: string
++    restoreUnconfirmedDraft: string
+     queueCancelFailed: string
+     queueLostDiscard: string
+     queueLostDiscardTip: string
+diff --git a/apps/desktop/src/i18n/zh.ts b/apps/desktop/src/i18n/zh.ts
+index 4c2f45b8b46d2049b8ee63118b9835a4e7da3d7d..bd0e8a61d98b189bdbf2335c666f71eb4e5b1b58 100644
+--- a/apps/desktop/src/i18n/zh.ts
++++ b/apps/desktop/src/i18n/zh.ts
+@@ -3385,6 +3385,7 @@ export const zhOverrides = {
+     queueDelete: '删除',
+     queueLostNote: '重启期间该轮次已丢失',
+     restoreImageDraft: '恢复图片草稿',
++    restoreUnconfirmedDraft: '查看未确认的草稿',
+     queueCancelFailed: '无法移除排队的轮次',
+     queueLostDiscard: '丢弃',
+     queueLostDiscardTip: '网关在该轮次进行中重启，无法完成。丢弃后其后的排队轮次将继续执行。',
+diff --git a/apps/desktop/src/store/composer-draft-retry.ts b/apps/desktop/src/store/composer-draft-retry.ts
+index c1402ce82587367bcb29b2c69fe4141b56328765..5f40c93d508dd8dc9db29cafc436972c0adea7fc 100644
+--- a/apps/desktop/src/store/composer-draft-retry.ts
++++ b/apps/desktop/src/store/composer-draft-retry.ts
+@@ -10,6 +10,8 @@ export interface ComposerDraftRetry {
+   id: string
+   text: string
+   attachmentIds: string[]
++  /** A reviewed legacy journal entry may have executed and must never be resent unchanged. */
++  uncertainLegacy?: true
+ }
+ 
+ // One localStorage key per draft scope: every window of the origin shares this
