@@ -207,6 +207,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Verify installed Kanban handoff recovery after abrupt Gateway exit at the claim and native commit boundaries. Exact retries preserve the original record and reconciliation reports the observed outcome (#18).
+
 - Verify installed-package Gateway recovery immediately before and after committing a local multi-task dependency plan. The manual suite checks one successful application or exact receipt replay after restart (#21).
 
 - Add manual native Gateway acceptance for the optional memory-provider wheel with a loopback model. Verify correction, forgetting, disabled recall and retained transcript context, and record the pinned host's conflicting authority label (#45).

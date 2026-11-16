@@ -7,8 +7,8 @@ import sys
 from pathlib import Path
 
 
-def activate(root, *, dial_ports=None, dial_host=None):
-    root = root.resolve()
+def activate(root, *, dial_ports=None, dial_host=None, extra_unix_roots=()):
+    unix_roots = (root.resolve(), *(path.resolve() for path in extra_unix_roots))
     active = True
 
     def local_only(event, args):
@@ -25,7 +25,9 @@ def activate(root, *, dial_ports=None, dial_host=None):
                 if dial_host is not None and event != "socket.bind" and host != dial_host:
                     raise PermissionError("Native Bot fixture dial host is not permitted")
             elif peer.family == socket.AF_UNIX:
-                if not isinstance(address, str) or not Path(address).resolve().is_relative_to(root):
+                if not isinstance(address, str) or not any(
+                    Path(address).resolve().is_relative_to(root) for root in unix_roots
+                ):
                     raise PermissionError("Native Bot fixture Unix paths must be private")
             else:
                 raise PermissionError("Native Bot fixture does not use this socket family")
@@ -42,7 +44,7 @@ def activate(root, *, dial_ports=None, dial_host=None):
     return deactivate
 
 
-def activate_child():
+def activate_child(*, extra_unix_roots=()):
     root = Path(os.environ["HERMES_BOT_ACCEPTANCE_ROOT"])
     model_port = os.environ.get("HERMES_BOT_ACCEPTANCE_MODEL_PORT")
     gateway_port = os.environ.get("HERMES_NATIVE_ACCEPTANCE_DIAL_PORT")
@@ -57,6 +59,7 @@ def activate_child():
         root,
         dial_ports=dial_ports,
         dial_host="127.0.0.1" if gateway_port is not None else None,
+        extra_unix_roots=extra_unix_roots,
     )
     try:
         sys.audit("socket.getaddrinfo", "blocked.invalid")

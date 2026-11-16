@@ -6,7 +6,7 @@
   "patch_sha256": "8bd0504d946aec0cb31aad4668c4cf35190168bd81098d0c944f99877423a0e5",
   "source_hashes": {
     "run_tests.py": "84360c57acde1e61ed348c1153e7b7277d2f47e46c935ee109dd304a9f4cf12e",
-    "../../acceptance/live/native_bot_socket_guard.py": "a59c353b1607d7c146feffbf44cf466a59f7c62a491c4720c432e6a2f6c0bc79"
+    "../../acceptance/live/native_bot_socket_guard.py": "a395c9d30fb277711b4903cd1a06164fa62e39a4b9183339dbab57c4a6276092"
   },
   "native_test_files": [
     "tests/agent/test_api_content_sidecar.py",
