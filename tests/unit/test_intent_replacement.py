@@ -152,15 +152,17 @@ def test_failure_rolls_back(point):
 
 def test_exact_v1_migration(tmp_path):
     conn, store, selected = setup(tmp_path / "old.db")
+    conn.execute("DROP TABLE approval_evidence")
     conn.execute("DROP TABLE replacements")
     conn.execute("PRAGMA user_version=1")
     store.initialize()
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 2
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 3
     assert store.replace(selected, NEW)["replacement"]["state"] == "draft"
 
 
 def test_v1_unknown_schema_refused():
     conn, store, _ = setup()
+    conn.execute("DROP TABLE approval_evidence")
     conn.execute("DROP TABLE replacements")
     conn.execute("PRAGMA user_version=1")
     conn.execute("CREATE TABLE surprise(x)")
@@ -258,12 +260,17 @@ def test_migration_commit_failure_is_atomic():
             return super().execute(sql, *args)
 
     conn, store, _ = setup(connection=Failing)
+    conn.execute("DROP TABLE approval_evidence")
     conn.execute("DROP TABLE replacements")
     conn.execute("PRAGMA user_version=1")
     conn.armed = True
     fail("storage_error", store.initialize)
     assert conn.execute("PRAGMA user_version").fetchone()[0] == 1
     assert conn.execute("SELECT name FROM sqlite_master WHERE name='replacements'").fetchall() == []
+    assert (
+        conn.execute("SELECT name FROM sqlite_master WHERE name='approval_evidence'").fetchall()
+        == []
+    )
 
 
 def test_replacement_races_cancellation(tmp_path):
