@@ -209,6 +209,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Inspect a versioned, profile-local route capability registry with `hermes personal-agent routing inventory`. Exact route lookup reports the freshness of individual capabilities and redacts private route bindings (#23).
+
 - Add a [review-only current-pin Telegram command observation](experiments/telegram-command-observation/README.md) with clean and candidate SDK controls. The native probe distinguishes the original sender and receiving Bot account from forwarded, edited, private-topic, marked Business and stale events (#14).
 
 - Bind [internal ActionIntent approval evidence](docs/64-action-intent-drafts.md#bind-exact-approval-evidence) to the exact draft and validity window. Schema 3 preserves receipt lookup after cancellation or restart. Execution requires separate admission (#15).

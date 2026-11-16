@@ -92,7 +92,10 @@ def test_bad_raw_config_never_falls_back_to_a_claimed_good_baseline(native, caps
     assert "private" not in json.dumps(report)
 
 
-def test_retained_cli_is_blocked_after_unload_without_config_read(native, capsys, monkeypatch):
+@pytest.mark.parametrize("diagnostic", ["inspect", "inventory"])
+def test_retained_cli_is_blocked_after_unload_without_config_read(
+    native, capsys, monkeypatch, diagnostic
+):
     from hermes_cli.config_backend import FileBackend
 
     _, manager = native
@@ -100,7 +103,7 @@ def test_retained_cli_is_blocked_after_unload_without_config_read(native, capsys
     manager.unload()
     read = Mock(side_effect=AssertionError("Unloaded inspection read config"))
     monkeypatch.setattr(FileBackend, "read_user_doc", read)
-    code, report = invoke(command, capsys, "routing", "inspect")
+    code, report = invoke(command, capsys, "routing", diagnostic)
     assert code == 1 and report["reason"] == "inspector_closed"
     read.assert_not_called()
 
@@ -120,7 +123,8 @@ def test_profile_change_is_blocked_before_read(native, tmp_path, capsys, monkeyp
     read.assert_not_called()
 
 
-def test_non_file_backend_is_not_read_or_bypassed(native, capsys, monkeypatch):
+@pytest.mark.parametrize("diagnostic", ["inspect", "inventory"])
+def test_non_file_backend_is_not_read_or_bypassed(native, capsys, monkeypatch, diagnostic):
     from hermes_cli import config_backend
 
     _, manager = native
@@ -129,7 +133,7 @@ def test_non_file_backend_is_not_read_or_bypassed(native, capsys, monkeypatch):
     backend = SimpleNamespace(name="remote", read_user_doc=read)
     monkeypatch.setattr(config_backend, "get_config_backend", lambda: backend)
     monkeypatch.setattr(config_backend.FileBackend, "read_user_doc", read)
-    code, report = invoke(command, capsys, "routing", "inspect")
+    code, report = invoke(command, capsys, "routing", diagnostic)
     assert code == 1 and report["reason"] == "unsupported_config_backend"
     read.assert_not_called()
 
@@ -203,6 +207,79 @@ main()
     assert "default_backend_ignores_delegation_service_tier" in report["notes"]
     assert "private-provider" not in result.stdout and "private-model" not in result.stdout
     assert (home / "config.yaml").read_bytes() == before
+
+
+def test_real_top_level_inventory_reads_saved_registry_without_a_provider(native, tmp_path):
+    from hermes_cli import main
+
+    home, _ = native
+    config = home / "config.yaml"
+    raw = json.loads(config.read_text())
+    settings = raw["plugins"]["entries"]["hermes-personal-agent"]["settings"]
+    settings["routing_inventory"] = {
+        "schema_version": "personal.routing.registry.v1",
+        "routes": {
+            "private-route": {
+                "binding": {
+                    "provider": "private-provider",
+                    "model": "private-model",
+                    "account_ref": "private-account",
+                    "api_mode": "private-mode",
+                    "transport": "https",
+                    "endpoint_ref": "private-endpoint",
+                    "recipient_scope_ref": "private-recipient",
+                    "data_scope_ref": "private-scope",
+                },
+                "evidence": {
+                    "private-evidence": {
+                        "source": "native_contract_test",
+                        "observed_at": "2020-01-01T00:00:00Z",
+                        "valid_until": "2100-01-01T00:00:00Z",
+                    },
+                },
+                "capabilities": {
+                    "text": {"state": "supported", "evidence": "private-evidence"},
+                },
+            },
+        },
+    }
+    config.write_text(json.dumps(raw))
+    before = config.read_bytes()
+    bootstrap = (
+        GUARD
+        + """
+import sys
+from agent import delegation_registry
+from hermes_cli import runtime_provider
+from hermes_cli.main import main
+delegation_registry.get_active_provider = deny
+runtime_provider.resolve_runtime_provider = deny
+sys.argv = ["hermes", "personal-agent", "routing", "inventory", "--route", "private-route"]
+main()
+"""
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", bootstrap],
+        cwd=Path(main.__file__).resolve().parents[1],
+        env=environment(home, tmp_path),
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stderr
+    report = json.loads(result.stdout)
+    assert report["registry_status"] == "declared"
+    assert report["route_count"] == 1
+    assert report["selected_capabilities"]["text"] == {
+        "state": "supported",
+        "freshness": "current",
+        "source": "native_contract_test",
+    }
+    assert report["selected_capabilities"]["tool_calling"]["state"] == "unknown"
+    assert report["execution_authorized"] is False
+    assert "private" not in result.stdout
+    assert config.read_bytes() == before
+    assert not (home / "plugin-data").exists()
 
 
 @pytest.mark.parametrize("safe", [False, True])
