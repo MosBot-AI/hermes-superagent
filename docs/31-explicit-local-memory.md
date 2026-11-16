@@ -99,4 +99,6 @@ Readable record views display the label. JSON clients opt in with `--record-form
 
 Managed Markdown views include the label as metadata. Edit previews report the current and resulting label. Drafts can change text and topic, using the same label reset rule for changed text. To explicitly classify a draft's committed record, use a separate revision-checked operator correction.
 
+Existing session model tools keep their v1 record shape and refuse explicit label writes. The separately enabled automatic recall context uses the typed format.
+
 Writable open migrates SQLite to schema 14 in one transaction and preserves existing receipts and request digests. Exact schema 13 stores remain readable through the existing read-only opener, and supported historical snapshots at schema 10–13 display `unspecified` for active records and null for tombstones. These reads leave store bytes intact. Snapshots retain the label as of their own watermark. Repack preserves the source schema and canonical record state, including the label and terminal tombstones, through its existing recovery protocol. See [consistent snapshots](79-local-memory-snapshots.md).
