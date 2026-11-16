@@ -207,6 +207,8 @@
 
 ### 新增
 
+- 增加[仅供评审的固定版本 Telegram 命令观察](experiments/telegram-command-observation/README-zh.md)，包含干净版本和候选版本的 SDK 对照。原生探针可识别原始发送者与接收 Bot 账号，并拒绝转发、编辑及已失效事件（#14）。
+
 - 将[内部 ActionIntent 审批证据](docs/64-action-intent-drafts-zh.md#绑定精确审批证据)绑定到具体草稿和有效期。Schema 3 支持在取消或重启后查回回执。执行需要单独准入（#15）。
 
 - 在内部登记存储中持久化作用域紧急停止标记。Schema v4 保留现有记录和审计，并拒绝已停止的 owner/profile 的新读取及登记仪式准入，重新打开存储后也会拒绝（#16）。

@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "status": "Review-only, unsubmitted and outside runtime distribution",
+  "source_repository": "https://github.com/NousResearch/hermes-agent",
+  "base": "2281116525106e3c109993ccb5dc74d02bfc1427",
+  "staged_tree": "97146739f6d9a6ba44b68338215490011ed38f5d",
+  "patch_file": "telegram-command-observation.patch",
+  "patch_files": [
+    "gateway/run_inbound_hooks.py",
+    "gateway/run_telegram_command_observation.py",
+    "plugins/platforms/telegram/adapter.py"
+  ],
+  "source_hashes": {
+    "test_observation.py": "c11e1057a1ad30ce8cdd4396016cf2a961cbb6da222ec0616e9a400d774ed84a",
+    "telegram-command-observation.patch": "d1eb37a9d1346915393186547a5a5bd66bc726f30937475c77921aeeca679723",
+    "LICENSE.hermes-agent": "821556e6336796450ab852d375117b48a4887e71d255794fd6318d99982a5ab6",
+    "../../tests/contracts/test_owner_telegram_ingress.py": "1f524f89b94444e0c939e37033428d51f89378a919991d22f3b3f14d1ce40a97",
+    "../../tests/contracts/test_local_task_cli.py": "15caedc9dec53e20b8788db73612a4e4d343e6f087e4022517621345bc34b820"
+  },
+  "telegram_sdk": {
+    "version": "22.8",
+    "wheel_url": "https://files.pythonhosted.org/packages/60/7c/ed7d4dd94280bd434173cae9f7a7aedaaab9af128ae4f494423a5687c820/python_telegram_bot-22.8-py3-none-any.whl",
+    "wheel_sha256": "42373918097f1b837cc4e717d588c19ea79651497ec712bb5b0c76e5e63c50e1"
+  },
+  "verification": {
+    "python": "3.14.9",
+    "clean_control_passed": 1,
+    "candidate_passed": 17,
+    "candidate_existing_regressions_passed": 36,
+    "upstream_static_checks_passed": 15,
+    "upstream_import_boundary_passed": true,
+    "historical_socket_tests_rerun": false,
+    "full_upstream_suite_run": false,
+    "live_telegram_credentials_used": false,
+    "production_authority_enabled": false
+  }
+}
