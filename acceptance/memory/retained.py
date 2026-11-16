@@ -151,6 +151,7 @@ def _legacy_layout(connection):
         "state,record_id,receipt,suppressed FROM new_decisions"
     )
     connection.execute("DROP TABLE new_decisions")
+    connection.execute("ALTER TABLE records DROP COLUMN assertion_kind")
     connection.execute("PRAGMA user_version=12")
 
 
@@ -166,7 +167,7 @@ def _prepare(home):
         ).fetchall()
     _path(home).chmod(0o600)
     with _opened(home) as (sdk, connection):
-        _require(connection.execute("PRAGMA user_version").fetchone() == (13,), "migration missing")
+        _require(connection.execute("PRAGMA user_version").fetchone() == (14,), "migration missing")
         _require(
             connection.execute(
                 "SELECT request_digest,source_receipt,receipt FROM retained_source_decisions "

@@ -6,6 +6,11 @@ from datetime import datetime
 from typing import Protocol, runtime_checkable
 from uuid import UUID
 
+ASSERTION_KINDS = ("unspecified", "claim", "inference")
+EPISTEMIC_RECORD_FORMAT = "epistemic_v1"
+EPISTEMIC_PAGE_SCHEMA = "personal.memory.epistemic_record_page.v1"
+EPISTEMIC_RECALL_SCHEMA = "personal.memory.epistemic_recall.v1"
+
 
 class MemoryError(Exception):
     """Redacted, stable boundary error; never includes stored content."""
@@ -119,11 +124,13 @@ def validate_request(operation: str, payload: dict) -> dict:
         raise MemoryError("invalid_request")
     result = dict(payload)
     if "assertion_kind" in result and (
-        type(result["assertion_kind"]) is not str
-        or result["assertion_kind"] not in {"unspecified", "claim", "inference"}
+        type(result["assertion_kind"]) is not str or result["assertion_kind"] not in ASSERTION_KINDS
     ):
         raise MemoryError("invalid_request")
-    if "record_format" in result and result["record_format"] != "epistemic_v1":
+    if "record_format" in result and (
+        type(result["record_format"]) is not str
+        or result["record_format"] != EPISTEMIC_RECORD_FORMAT
+    ):
         raise MemoryError("invalid_request")
     if operation == "remember":
         result.setdefault("topic", "")

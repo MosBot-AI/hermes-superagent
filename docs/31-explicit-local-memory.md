@@ -81,3 +81,22 @@ Next: complete the versioned SDK and conformance gates, bounded retrieval/contex
 See [79. Explicit consistent local memory snapshots](79-local-memory-snapshots.md) for private snapshot creation/inspection. Snapshots retain historical plaintext; there is no restore/import.
 
 See [exact source suppression](80-exact-memory-source-suppression.md) for schema-11 operator suppression and correction/forgetting of newly linked accepted sources; historical receipts are not current state.
+
+## 6. Record a Claim or Inference
+
+An operator can classify a record as `claim`, `inference`, or `unspecified`. The label describes how to read the recorded text and carries no verification, attribution, or permission. Record origin and the latest editing route are available separately.
+
+```text
+/personal-memory remember "The example job ended at noon" --assertion-kind claim --request-id job-1
+/personal-memory correct RECORD_ID --assertion-kind inference --expected-revision 1 --request-id job-2
+/personal-memory show RECORD_ID
+/personal-memory --json recall "example job" --record-format epistemic_v1
+```
+
+A new record without a label is `unspecified`, including writes by activated model tools and accepted candidates or retained sources. Changing content without explicitly supplying a label sets it to `unspecified`. Resubmitting identical text or editing only topic/expiry preserves the current label unless the request supplies a new one. A label-only correction uses the same revision, event and durable receipt rules as a text correction. Forget clears the label with the payload. An exact retry returns the original operation receipt, and changing the supplied label under the same request ID conflicts.
+
+Readable record views display the label. JSON clients opt in with `--record-format epistemic_v1` for show, list, search, search-terms, recall, export, snapshot-list and snapshot-show. The local SDK advertises `epistemic_labels` and accepts `record_format: epistemic_v1` for get, list, search, search_terms, bounded recall and export. Opted-in records carry a `record_format` marker and `assertion_kind`, which is null for forgotten records. Recall and export use `personal.memory.epistemic_recall.v1` and `personal.memory.epistemic_record_page.v1` respectively. SDK callers that omit the format continue to receive existing API-v1 record shapes, including when talking to adapters without the capability. A typed request to an adapter without the capability returns `capability_unavailable`. Typed recall counts the label within its character budget and uses the existing selection and sort order.
+
+Managed Markdown views include the label as metadata. Edit previews report the current and resulting label. Drafts can change text and topic, using the same label reset rule for changed text. To explicitly classify a draft's committed record, use a separate revision-checked operator correction.
+
+Writable open migrates SQLite to schema 14 in one transaction and preserves existing receipts and request digests. Exact schema 13 stores remain readable through the existing read-only opener, and supported historical snapshots at schema 10–13 display `unspecified` for active records and null for tombstones. These reads leave store bytes intact. Snapshots retain the label as of their own watermark. Repack preserves the source schema and canonical record state, including the label and terminal tombstones, through its existing recovery protocol. See [consistent snapshots](79-local-memory-snapshots.md).

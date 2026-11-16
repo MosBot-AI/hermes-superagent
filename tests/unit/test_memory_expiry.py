@@ -219,7 +219,7 @@ def test_all_migrations_identical_and_atomic(version):
         == local_memory._SCHEMA
     )
     assert b.execute("get", {"record_id": rid})["expires_at"] is None
-    assert c.execute("PRAGMA user_version").fetchone() == (13,)
+    assert c.execute("PRAGMA user_version").fetchone() == (14,)
     b.close()
     c.close()
 
@@ -357,7 +357,11 @@ def test_v4_receipts_progress_and_checkpoints_survive_expiry_migration(monkeypat
     b.open(c, namespace_id="expiry", session_ref="new")
     for name, rows in before.items():
         actual = c.execute(f"SELECT * FROM {name}").fetchall()
-        assert actual == ([(*row, None) for row in rows] if name == "records" else rows)
+        assert actual == (
+            [(*row, None, "unspecified" if row[3] == "active" else None) for row in rows]
+            if name == "records"
+            else rows
+        )
     assert b.execute("remember", {"content": "legacy plan", "request_id": "old"}) == {
         "data": old_receipt,
         "replayed": True,
@@ -449,7 +453,7 @@ def test_v1_expiry_step_failure_rolls_back_prior_rebuild_and_tables():
     assert list(c.iterdump()) == before
     assert list(c.execute("SELECT name,sql FROM sqlite_master ORDER BY name")) == before_schema
     b.open(c, namespace_id="expiry", session_ref="new")
-    assert c.execute("PRAGMA user_version").fetchone() == (13,)
+    assert c.execute("PRAGMA user_version").fetchone() == (14,)
     assert b.execute("get", {"record_id": rid})["expires_at"] is None
     assert c.execute("SELECT seq FROM sqlite_sequence WHERE name='records'").fetchone() == (20,)
     b.close()

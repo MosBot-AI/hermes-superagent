@@ -93,7 +93,11 @@ def check_receipt(request, receipt):
 
 def check_preview(preview, oracle, selected):
     runner.require(
-        preview["items"] == [oracle[rid] for rid in selected],
+        preview["items"]
+        == [
+            {k: v for k, v in oracle[rid].items() if k not in {"assertion_kind", "record_format"}}
+            for rid in selected
+        ],
         "cleanup preview differs from complete canonical SQL oracle",
     )
     runner.require(
@@ -133,7 +137,11 @@ def canonical(home, clock):
     for row in rows:
         row.pop("sequence")
     return {
-        row["record_id"]: {**row, "expired": bool(row["expires_at"] and row["expires_at"] <= clock)}
+        row["record_id"]: {
+            **row,
+            "expired": bool(row["expires_at"] and row["expires_at"] <= clock),
+            "record_format": "epistemic_v1",
+        }
         for row in rows
     }
 
@@ -340,7 +348,7 @@ def _evaluate(hermes, fixture_path):
             check_receipt(request, receipt)
         with sqlite3.connect(retained._path(home)) as connection:
             runner.require(
-                connection.execute("PRAGMA user_version").fetchone() == (13,), "migration missing"
+                connection.execute("PRAGMA user_version").fetchone() == (14,), "migration missing"
             )
             migrated = connection.execute(
                 "SELECT request_id,consumer_id,source_sequence,request_digest,source_identity,"
@@ -367,6 +375,7 @@ def _evaluate(hermes, fixture_path):
                     "expires_at": None if forgotten else fixture["deadline"],
                     "revision": 2 if forgotten else 1,
                     "status": "forgotten" if forgotten else "active",
+                    "assertion_kind": None if forgotten else "unspecified",
                 }
                 runner.require(
                     all(record[k] == v for k, v in expected_fields.items()),
@@ -506,7 +515,7 @@ def _evaluate(hermes, fixture_path):
         "passed": True,
         "scope": fixture["scope"],
         "stages": stages,
-        "schema_migration": "12_to_13_supported_writable_opener",
+        "schema_migration": "12_to_14_supported_writable_opener",
         "original_source_receipts": receipts,
         "reviewed_cleanup_receipt": cleanup_receipt,
         "checks": [

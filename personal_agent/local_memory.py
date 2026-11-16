@@ -21,7 +21,16 @@ from . import (
     memory_sources,
     retained_sources,
 )
-from .memory_backend import MemoryError, _text, validate_expiry, validate_request
+from .memory_backend import (
+    ASSERTION_KINDS,
+    EPISTEMIC_PAGE_SCHEMA,
+    EPISTEMIC_RECALL_SCHEMA,
+    EPISTEMIC_RECORD_FORMAT,
+    MemoryError,
+    _text,
+    validate_expiry,
+    validate_request,
+)
 from .memory_candidate_store import SCHEMA as CANDIDATE_SCHEMA
 from .memory_candidate_store import execute as execute_candidate
 from .memory_checkpoints import CHECKPOINT_SCHEMA, checkpoint_status, create_checkpoint
@@ -99,6 +108,7 @@ _COLUMNS = (
     "expires_at",
     "assertion_kind",
 )
+_LEGACY_ASSERTION = "CASE WHEN status='active' THEN 'unspecified' END"
 
 
 def _storage_error(error: sqlite3.Error) -> MemoryError:
@@ -119,6 +129,7 @@ class LocalMemoryBackend:
         self._session = None
         self._source_kind = None
         self._read_only = False
+        self._has_assertions = True
         self._projection = None
         self._edits = None
 
@@ -126,7 +137,7 @@ class LocalMemoryBackend:
         result = {
             "adapter_id": "local_sqlite",
             "api_version": 1,
-            "schema_version": _SCHEMA_VERSION,
+            "schema_version": _SCHEMA_VERSION if self._has_assertions else 13,
             "adapter_version": "0.1.0",
             "deployment": "trusted_profile_local",
             "capabilities": [
@@ -332,6 +343,7 @@ class LocalMemoryBackend:
                 raise _storage_error(error) from None
             raise
         self._connection, self._namespace, self._session = connection, namespace_id, session_ref
+        self._has_assertions = True
         self._source_kind = source_kind
         self._projection = projection
         self._edits = edits
@@ -392,7 +404,7 @@ class LocalMemoryBackend:
         try:
             connection.execute("PRAGMA query_only=ON")
             connection.execute("BEGIN")
-            self._validate_readonly(connection, namespace_id)
+            version = self._validate_readonly(connection, namespace_id)
             connection.execute("COMMIT")
         except BaseException as error:
             self._rollback(connection)
@@ -401,6 +413,7 @@ class LocalMemoryBackend:
             raise
         self._connection, self._namespace, self._session = connection, namespace_id, session_ref
         self._read_only = True
+        self._has_assertions = version == _SCHEMA_VERSION
 
     @staticmethod
     def _validate_readonly(connection, namespace_id, *, historical_snapshot=False):
@@ -413,7 +426,9 @@ class LocalMemoryBackend:
         rows = connection.execute(
             "SELECT name, sql FROM sqlite_master WHERE name NOT GLOB 'sqlite_*'"
         ).fetchall()
-        allowed = (10, 11, 12, 13, 14) if historical_snapshot else (_SCHEMA_VERSION,)
+        allowed = (
+            (10, 11, 12, 13, _SCHEMA_VERSION) if historical_snapshot else (13, _SCHEMA_VERSION)
+        )
         if version not in allowed or not LocalMemoryBackend._valid_schema(version, rows):
             raise MemoryError("readonly_schema_unavailable")
         if connection.execute("SELECT id FROM namespace").fetchall() != [(namespace_id,)]:
@@ -421,6 +436,9 @@ class LocalMemoryBackend:
         memory_fts.validate_index_config(connection)
         if connection.execute("SELECT count(*) FROM records").fetchone()[0] > 1000:
             raise MemoryError("record_limit")
+        if version == _SCHEMA_VERSION:
+            LocalMemoryBackend._validate_assertions(connection)
+        return version
 
     def close(self) -> None:
         """Detach, without closing the host-owned connection."""
@@ -496,7 +514,11 @@ class LocalMemoryBackend:
             )
             began = True
             if self._read_only:
-                self._validate_readonly(conn, self._namespace)
+                self._has_assertions = (
+                    self._validate_readonly(conn, self._namespace) == _SCHEMA_VERSION
+                )
+            else:
+                self._validate_assertions(conn)
             # BEGIN is deferred for reads. Establish the SQLite snapshot before
             # sampling time so lock waits cannot admit an already expired row.
             conn.execute("SELECT id FROM namespace").fetchone()
@@ -509,7 +531,6 @@ class LocalMemoryBackend:
                 "source_discover",
             }:
                 memory_sources.validate(conn)
-            self._validate_assertions(conn)
             now = datetime.fromisoformat(memory_expiry.utc_now())
             if operation == "record_origin":
                 result = memory_record_origin.inspect_origin(self, conn, request, now)
@@ -551,7 +572,7 @@ class LocalMemoryBackend:
                 result = self._recall(conn, request, now)
             elif operation == "export":
                 result = {
-                    "schema_version": "personal.memory.epistemic_record_page.v1"
+                    "schema_version": EPISTEMIC_PAGE_SCHEMA
                     if "record_format" in request
                     else "personal.memory.record_page.v1",
                     "namespace_id": self._namespace,
@@ -581,11 +602,11 @@ class LocalMemoryBackend:
             raise MemoryError("storage_corrupt")
         kind = record["assertion_kind"]
         if (record["status"] == "forgotten" and kind is not None) or (
-            record["status"] != "forgotten" and kind not in {"unspecified", "claim", "inference"}
+            record["status"] != "forgotten" and kind not in ASSERTION_KINDS
         ):
             raise MemoryError("storage_corrupt")
         if typed:
-            record["record_format"] = "epistemic_v1"
+            record["record_format"] = EPISTEMIC_RECORD_FORMAT
         else:
             record.pop("assertion_kind")
         record["expired"] = expiry is not None and datetime.fromisoformat(expiry) <= now
@@ -614,11 +635,14 @@ class LocalMemoryBackend:
 
     def _get(self, conn, record_id, now, *, typed=False):
         row = conn.execute(
-            f"SELECT {','.join(_COLUMNS)} FROM records WHERE record_id=?", (record_id,)
+            f"SELECT {self._record_columns()} FROM records WHERE record_id=?", (record_id,)
         ).fetchone()
         if row is None:
             raise MemoryError("not_found")
         return self._record(row, now, typed=typed)
+
+    def _record_columns(self):
+        return ",".join(_COLUMNS if self._has_assertions else (*_COLUMNS[:-1], _LEGACY_ASSERTION))
 
     def _recall(self, conn, request, now):
         """Rank current whole records inside this call's existing read transaction.
@@ -632,7 +656,7 @@ class LocalMemoryBackend:
         matching = " OR ".join("instr(content, ?) > 0 OR instr(topic, ?) > 0" for _ in queries)
         args = [value for query in queries for value in (query, query)]
         rows = conn.execute(
-            f"SELECT sequence,{','.join(_COLUMNS)} FROM records"
+            f"SELECT sequence,{self._record_columns()} FROM records"
             f" WHERE status='active' AND ({matching}) ORDER BY sequence DESC LIMIT 1001",
             args,
         ).fetchall()
@@ -668,7 +692,7 @@ class LocalMemoryBackend:
             items.append(record)
             used_chars = size
         return {
-            "schema_version": "personal.memory.epistemic_recall.v1"
+            "schema_version": EPISTEMIC_RECALL_SCHEMA
             if "record_format" in request
             else "personal.memory.recall.v1",
             "evaluated_at": now.isoformat().replace("+00:00", "Z"),
@@ -714,7 +738,7 @@ class LocalMemoryBackend:
             args.extend(term_args)
         args.append(request["limit"] + 1)
         rows = conn.execute(
-            f"SELECT {','.join(_COLUMNS)} FROM records WHERE {' AND '.join(clauses)}"
+            f"SELECT {self._record_columns()} FROM records WHERE {' AND '.join(clauses)}"
             " ORDER BY sequence DESC LIMIT ?",
             args,
         ).fetchall()
@@ -815,7 +839,9 @@ class LocalMemoryBackend:
                     if operation == "forget"
                     else request.get(
                         "assertion_kind",
-                        "unspecified" if "content" in request else current["assertion_kind"],
+                        "unspecified"
+                        if content != current["content"]
+                        else current["assertion_kind"],
                     ),
                     record_id,
                     request["expected_revision"],

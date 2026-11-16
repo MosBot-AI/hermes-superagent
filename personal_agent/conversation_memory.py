@@ -16,7 +16,13 @@ from pathlib import Path
 from uuid import uuid4
 
 from .conversation_tasks import _supported_origin
-from .memory_backend import MemoryError, MemoryService, validate_request
+from .memory_backend import (
+    ASSERTION_KINDS,
+    EPISTEMIC_RECORD_FORMAT,
+    MemoryError,
+    MemoryService,
+    validate_request,
+)
 from .memory_index import maintain
 from .memory_maintenance import maintain as maintain_store
 from .memory_maintenance import validate as validate_maintenance
@@ -31,6 +37,17 @@ from .observed_source_retention import OPERATIONS as SOURCE_RETENTION_OPERATIONS
 from .observed_source_retention import run as retain_native_source
 from .observed_source_retention import validate as validate_source_retention
 from .task_cli import current_profile_home
+
+_FORMATTED_RECORD_READS = {
+    "get",
+    "list",
+    "search",
+    "search_terms",
+    "recall",
+    "export",
+    "snapshot_list",
+    "snapshot_show",
+}
 
 HELP = (
     "source-list [--limit N] [--after UID --expected-snapshot SHA256]; "
@@ -56,7 +73,8 @@ HELP = (
     "or migrate memory. "
     "After any uncertain write, inspect the saved exact key/digest before doing anything else. "
     "Discard terminally suppresses the exact pending source; it does not forget accepted records. "
-    'remember "Text" [--topic LABEL] [--expires-at UTC] [--request-id KEY]; '
+    'remember "Text" [--topic LABEL] [--expires-at UTC] [--assertion-kind KIND] '
+    "[--request-id KEY]; "
     "list [--include-expired --limit N --after ID]; "
     'search "Text" [--include-expired --limit N --after ID]; show ID; '
     'search-terms "Term" ["Other term" ...] [--include-expired --limit N --after ID]; '
@@ -67,9 +85,10 @@ HELP = (
     "changes [--after-sequence N --through-sequence N --limit N]; "
     "checkpoint --expected-watermark N [--request-id KEY]; checkpoint-status ID; "
     'correct ID [--text "Replacement"] [--topic LABEL] [--expires-at UTC | --clear-expiry] '
-    "--expected-revision N "
+    "[--assertion-kind KIND] --expected-revision N "
     "[--request-id KEY]; forget ID --expected-revision N [--request-id KEY]; "
-    "export [--limit N --after ID]. Use POSIX quotes. "
+    "export [--limit N --after ID]. Assertion kinds: unspecified, claim, inference. "
+    "JSON reads opt in with --record-format epistemic_v1. Use POSIX quotes. "
     "maintenance-preview; maintenance-prepare NAME --expected-watermark N; "
     "maintenance-commit NAME; maintenance-status NAME; maintenance-recover NAME. "
     "Current-store repack only, never historical restore. Stop old runtimes before upgrading "
@@ -165,6 +184,7 @@ def parse_command(raw_args: str) -> tuple[str, dict]:
     remember.add_argument("--topic", default="")
     remember.add_argument("--expires-at", default=argparse.SUPPRESS)
     remember.add_argument("--request-id")
+    remember.add_argument("--assertion-kind", choices=ASSERTION_KINDS, default=argparse.SUPPRESS)
     source_list = commands.add_parser("source-list")
     source_list.add_argument("--limit", type=int, default=10)
     source_list.add_argument("--after", default=None)
@@ -208,6 +228,9 @@ def parse_command(raw_args: str) -> tuple[str, dict]:
     cursor.add_argument("--consumer-id", required=True)
     show = commands.add_parser("show")
     show.add_argument("record_id")
+    show.add_argument(
+        "--record-format", choices=[EPISTEMIC_RECORD_FORMAT], default=argparse.SUPPRESS
+    )
     origin = commands.add_parser("origin")
     origin.add_argument("record_id")
     commands.add_parser("maintenance-preview")
@@ -226,6 +249,9 @@ def parse_command(raw_args: str) -> tuple[str, dict]:
         command.add_argument("name")
         if operation in {"snapshot-list", "snapshot-show"}:
             command.add_argument("--sha256", required=True)
+            command.add_argument(
+                "--record-format", choices=[EPISTEMIC_RECORD_FORMAT], default=argparse.SUPPRESS
+            )
         if operation == "snapshot-list":
             command.add_argument("--limit", type=int, default=10)
             command.add_argument("--after", default=None)
@@ -241,10 +267,16 @@ def parse_command(raw_args: str) -> tuple[str, dict]:
             reader.add_argument("--include-expired", action="store_true", default=argparse.SUPPRESS)
         reader.add_argument("--limit", type=int, default=20)
         reader.add_argument("--after", default=None)
+        reader.add_argument(
+            "--record-format", choices=[EPISTEMIC_RECORD_FORMAT], default=argparse.SUPPRESS
+        )
     recall = commands.add_parser("recall")
     recall.add_argument("queries", nargs="+")
     recall.add_argument("--limit", type=int, default=6)
     recall.add_argument("--max-chars", type=int, default=6000)
+    recall.add_argument(
+        "--record-format", choices=[EPISTEMIC_RECORD_FORMAT], default=argparse.SUPPRESS
+    )
     changes = commands.add_parser("changes")
     changes.add_argument("--after-sequence", type=int, default=0)
     changes.add_argument("--through-sequence", type=int, default=None)
@@ -304,6 +336,9 @@ def parse_command(raw_args: str) -> tuple[str, dict]:
         writer.add_argument("--request-id")
         if operation == "correct":
             writer.add_argument("--text", dest="content", default=argparse.SUPPRESS)
+            writer.add_argument(
+                "--assertion-kind", choices=ASSERTION_KINDS, default=argparse.SUPPRESS
+            )
             writer.add_argument("--topic", default=argparse.SUPPRESS)
             expiry = writer.add_mutually_exclusive_group()
             expiry.add_argument("--expires-at", default=argparse.SUPPRESS)
@@ -462,6 +497,8 @@ class LocalMemoryCommands:
                     raise MemoryError("invalid_request")
                 command_args = raw_args.lstrip(" \t")[6:] if machine else raw_args
                 operation, payload = parse_command(command_args)
+                if output_format == "text" and operation in _FORMATTED_RECORD_READS:
+                    payload.setdefault("record_format", EPISTEMIC_RECORD_FORMAT)
                 request_id = payload.get("request_id")
                 if operation == "help":
                     result = {"data": {"help": HELP}, "replayed": False}

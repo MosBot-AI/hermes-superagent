@@ -15,7 +15,14 @@ from pathlib import Path
 
 from . import PLUGIN_ID
 from .local_memory import LocalMemoryBackend
-from .memory_backend import MemoryError, _identifier, _text, validate_expiry
+from .memory_backend import (
+    ASSERTION_KINDS,
+    EPISTEMIC_RECORD_FORMAT,
+    MemoryError,
+    _identifier,
+    _text,
+    validate_expiry,
+)
 from .memory_coordination import memory_lock
 from .memory_storage import existing_memory_path
 from .task_cli import _private_database_file, _private_storage_directory, current_profile_home
@@ -41,8 +48,8 @@ def validate(operation, payload):
     fields = {
         "snapshot_create": ({"name"}, set()),
         "snapshot_inspect": ({"name"}, set()),
-        "snapshot_list": ({"name", "sha256"}, {"limit", "after"}),
-        "snapshot_show": ({"name", "sha256", "record_id"}, set()),
+        "snapshot_list": ({"name", "sha256"}, {"limit", "after", "record_format"}),
+        "snapshot_show": ({"name", "sha256", "record_id"}, {"record_format"}),
     }
     if type(operation) is not str or operation not in fields or type(payload) is not dict:
         raise MemoryError("invalid_request")
@@ -52,6 +59,11 @@ def validate(operation, payload):
     if type(payload["name"]) is not str or _NAME.fullmatch(payload["name"]) is None:
         raise MemoryError("invalid_request")
     request = dict(payload)
+    if "record_format" in request and (
+        type(request["record_format"]) is not str
+        or request["record_format"] != EPISTEMIC_RECORD_FORMAT
+    ):
+        raise MemoryError("invalid_request")
     if "sha256" in request and (
         type(request["sha256"]) is not str
         or re.fullmatch(r"[0-9a-f]{64}", request["sha256"]) is None
@@ -71,6 +83,9 @@ def validate(operation, payload):
 def _read_records(conn, operation, request):
     # Only canonical fields. No candidate quotes, receipts, lineage or sessions.
     fields = ("record_id", "revision", "status", "topic", "created_at", "updated_at", "expires_at")
+    typed = "record_format" in request
+    if typed:
+        fields += ("assertion_kind",)
     if operation == "snapshot_show":
         fields += ("content",)
         clause, args, limit = " WHERE record_id=?", [request["record_id"]], 1
@@ -83,7 +98,9 @@ def _read_records(conn, operation, request):
             if cursor is None:
                 raise MemoryError("invalid_cursor")
             clause, args = " WHERE sequence<?", [cursor[0]]
-    sizes = "+".join(f"coalesce(length(CAST({field} AS BLOB)),0)" for field in fields)
+    legacy = typed and conn.execute("PRAGMA user_version").fetchone()[0] < 14
+    columns = tuple(field for field in fields if not (legacy and field == "assertion_kind"))
+    sizes = "+".join(f"coalesce(length(CAST({field} AS BLOB)),0)" for field in columns)
     rows = conn.execute(
         f"SELECT sequence,({sizes}) FROM records{clause} ORDER BY sequence DESC LIMIT ?",
         [*args, limit + (operation == "snapshot_list")],
@@ -100,15 +117,25 @@ def _read_records(conn, operation, request):
     items = []
     for sequence, _ in selected:
         row = conn.execute(
-            f"SELECT {','.join(fields)} FROM records WHERE sequence=?", (sequence,)
+            f"SELECT {','.join(columns)} FROM records WHERE sequence=?", (sequence,)
         ).fetchone()
-        record = dict(zip(fields, row, strict=True))
+        record = dict(zip(columns, row, strict=True))
         try:
             _identifier(record["record_id"])
             if type(record["revision"]) is not int or not 1 <= record["revision"] < 2**63 - 1:
                 raise ValueError()
             if record["status"] not in {"active", "forgotten"}:
                 raise ValueError()
+            if typed:
+                if legacy:
+                    record["assertion_kind"] = (
+                        "unspecified" if record["status"] == "active" else None
+                    )
+                kind = record["assertion_kind"]
+                accepted = (None,) if record["status"] == "forgotten" else ASSERTION_KINDS
+                if kind not in accepted:
+                    raise ValueError()
+                record["record_format"] = EPISTEMIC_RECORD_FORMAT
             for field in ("created_at", "updated_at"):
                 value = record[field]
                 if (

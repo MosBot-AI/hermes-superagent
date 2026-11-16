@@ -205,6 +205,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Let local operators [label memory records](docs/31-explicit-local-memory.md#6-record-a-claim-or-inference) as claims, inferences or unspecified. Schema 14 carries labels through recall, projection, snapshots and repack. SDK and command JSON clients opt in to the new record format (#159).
+
 - Add internal pause and explicit resume for pending enrollment policy. Schema v3 preserves existing administrative and read audit history and invalidates pre-pause confirmations across resume (#16).
 
 - Verify Telegram command denials through the real plugin host child. The command RPC omits receiver and message provenance, and native allowlist refusals stop before IPC (#14).

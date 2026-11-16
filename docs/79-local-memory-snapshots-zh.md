@@ -18,7 +18,7 @@ Create 返回 schema version、namespace、事件水位、record/active/tombston
 
 ## 一致性与隐私
 
-支持的记忆存储使用当前精确 schema 和 DELETE journal。创建在 SQLite 读事务内验证，然后从同一快照使用 SQLite backup API。并发纠正或遗忘可以随后完成；副本保留较早一致的 record/tombstone/receipt/event 状态，而不是多个独立实时页混合。源读锁可能推迟并发 writer。原有 `export` 命令仍是有界实时页面，不是此一致性产物。
+支持的记忆存储使用精确匹配的 schema 13 或 14 和 DELETE journal。创建在 SQLite 读事务内验证，然后从同一快照使用 SQLite backup API。并发纠正或遗忘可以随后完成；副本保留较早一致的 record/tombstone/receipt/event 状态，而不是多个独立实时页混合。源读锁可能推迟并发 writer。原有 `export` 命令仍是有界实时页面，不是此一致性产物。
 
 **快照是明文，并保留私密历史内容。** 它包括 canonical records、待审核模型候选、source/session 元数据、receipts 和维护元数据。后续纠正、遗忘或过期记录清理不会擦除此副本、以前的导出、已打开描述符或文件系统备份。显式命令只授权此本地副本，不授权分享。它不改变到期时间，也不安装/选择 memory.provider。
 
@@ -44,7 +44,7 @@ Create 返回 schema version、namespace、事件水位、record/active/tombston
 
 合成双检查回归在摘要完成时保持首个读取，拒绝受截止时间约束的第二个读取，并通过真实独立进程写者验证：首个读取结束前提交仍被阻止。这覆盖普通重叠插件检查，而非协调同进程中在快照文件上任意打开的非托管 SQLite 连接，也不防御恶意同 UID 访问。不改变恢复、权限、schema 或发布门禁。
 
-schema 11 来源抑制仍允许检查精确已知 schema 10 和 11 历史快照，不迁移或改变其字节。namespace、DELETE 日志、完整性及严格 schema 门禁继续适用；普通只读召回仍仅接受当前 schema。参见[来源抑制](80-exact-memory-source-suppression-zh.md)。
+历史快照检查支持精确匹配的 schema 10 至 14，不迁移或改变其字节。Namespace、DELETE 日志、完整性及严格 schema 门禁继续适用。普通只读召回支持精确匹配的 schema 13 和 14。参见[显式记录标签](31-explicit-local-memory-zh.md#6-记录主张或推断)。
 
 ## 绑定摘要的历史记录浏览
 
@@ -55,7 +55,7 @@ schema 11 来源抑制仍允许检查精确已知 schema 10 和 11 历史快照�
 
 使用 create/inspect 返回的精确 SHA256。这些操作人员专用命令在同一串行化 SQLite 读事务及描述符生命周期内，**先验证摘要，再读取记录字段**。文件变化返回 `snapshot_changed`；应先有意检查文件，再选择新摘要。即使实时记忆数据库不存在，仍要求当前 profile/config 准入。不创建目录、不迁移快照、不查询实时记录、不选择 provider。
 
-`list` 按创建顺序从新到旧返回 canonical 记录摘要：ID、revision、已存状态、topic、创建/更新时间及已存过期时间。使用返回的 `next_cursor` 作为 `--after RECORD_ID`；默认 limit 为 10，最大为 20。`show` 另外返回所选记录正文。两者都不返回 source/session 标识、候选引用、回执或来源关联/抑制表。缺失记录返回 `snapshot_record_not_found`；缺失游标返回 `invalid_cursor`。不根据历史数据计算当前 `expired` 标志。快照中的已遗忘墓碑返回 null content/topic/expiry。精确已知 schema 10 和 11 均可读取而不改变字节。
+`list` 按创建顺序从新到旧返回 canonical 记录摘要：ID、revision、已存状态、topic、创建/更新时间及已存过期时间。使用返回的 `next_cursor` 作为 `--after RECORD_ID`；默认 limit 为 10，最大为 20。`show` 另外返回所选记录正文。两者都不返回 source/session 标识、候选引用、回执或来源关联/抑制表。缺失记录返回 `snapshot_record_not_found`；缺失游标返回 `invalid_cursor`。不根据历史数据计算当前 `expired` 标志。快照中的已遗忘墓碑返回 null content/topic/expiry。可读视图包含历史记录标签。JSON 使用 `--record-format epistemic_v1` 增加格式标记和标签，其中墓碑标签为 null，schema 10 至 13 的活跃记录标签为 `unspecified`。
 
 **历史输出可能含后来更正、遗忘或抑制的文本，并可进入普通宿主对话历史。** 它是不可信历史数据，不是当前状态、当前有效性、已验证作者身份或权限。当前 canonical 召回和来源抑制保持不变。不提供模型工具或自动召回动作、恢复、复制回写或效果重放。topic 摘要本身也可能含私有文本。
 

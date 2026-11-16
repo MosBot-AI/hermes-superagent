@@ -418,6 +418,7 @@ def test_v9_database_is_not_migrated_by_maintenance(store):
     c.execute(SCHEMA_V9["memory_edits"])
     c.execute(f"INSERT INTO memory_edits SELECT {','.join(COLUMNS[:-2])} FROM new_edits")
     c.execute("DROP TABLE new_edits")
+    c.execute("ALTER TABLE records DROP COLUMN assertion_kind")
     c.execute("PRAGMA user_version=9")
     error("unsupported_schema", lambda: check(home))
     error("unsupported_schema", lambda: rebuild(home, 0))

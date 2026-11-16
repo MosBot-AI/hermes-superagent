@@ -115,6 +115,8 @@ Hermes 基线为 `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`；DSH 参考版本�
 
 ## 6. 可插拔后端契约
 
+已实现的本地 SDK 通过 `epistemic_labels` 能力和每次读取的 `record_format` 协商[显式记录标签](31-explicit-local-memory-zh.md#6-记录主张或推断)。提供该能力的适配器可在空白、隔离的合成数据存储上运行 `run_epistemic_label_conformance`，检查带标签格式、受 revision 约束的更正以及终态重放。
+
 以下方法和描述符是本项目的提议。它们不是 Hermes 原生 API、HTTP 规范或第三方 Python 的沙箱。
 
 | 方法 | 必需契约 |

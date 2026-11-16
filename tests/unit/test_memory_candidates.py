@@ -178,11 +178,11 @@ def test_migration_preserves_all_existing_tables_and_receipts(version):
     original = {name: conn.execute(f"SELECT * FROM {name}").fetchall() for name in schema}
     backend = local_memory.create_backend()
     backend.open(conn, namespace_id="profile:test", session_ref="test")
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 13
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 14
     for name, rows in original.items():
         actual = conn.execute(f"SELECT * FROM {name}").fetchall()
-        if name == "records" and version < 5:
-            actual = [row[:-1] for row in actual]
+        if name == "records":
+            actual = [row[: -(2 if version < 5 else 1)] for row in actual]
         assert actual == rows
 
 
@@ -242,7 +242,7 @@ def test_readonly_v5_refuses_without_migration_then_writer_upgrades(tmp_path):
     conn.execute("PRAGMA query_only=OFF")
     writer = local_memory.create_backend()
     writer.open(conn, namespace_id="profile:test", session_ref="test")
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 13
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 14
 
 
 def test_candidate_capacity_includes_terminal_and_pagination():

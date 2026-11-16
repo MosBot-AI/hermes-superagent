@@ -26,7 +26,10 @@ def browse(home, digest, operation="list", **fields):
 
 def test_list_show_after_forget_are_historical_not_current(store):
     service, conn, path, home = store
-    rid = remember(service)
+    rid = service.execute(
+        "remember",
+        {"content": "私密 historical memory", "assertion_kind": "claim", "request_id": "seed"},
+    )["data"]["record_id"]
     digest = run(home)["sha256"]
     service.execute("forget", {"record_id": rid, "expected_revision": 1, "request_id": "forget"})
     before = list(conn.iterdump())
@@ -34,6 +37,9 @@ def test_list_show_after_forget_are_historical_not_current(store):
     assert "content" not in listing["historical_records"]["items"][0]
     shown = browse(home, digest, "show", record_id=rid)
     assert shown["historical_records"]["record"]["content"] == "私密 historical memory"
+    assert "assertion_kind" not in shown["historical_records"]["record"]
+    typed = browse(home, digest, "show", record_id=rid, record_format="epistemic_v1")
+    assert typed["historical_records"]["record"]["assertion_kind"] == "claim"
     assert "later-forgotten" in shown["notice"] and "host history" in shown["notice"]
     assert "expired" not in shown["historical_records"]["record"]
     assert service.execute("list", {})["data"]["items"] == []
@@ -189,10 +195,18 @@ def test_v10_historical_browse_does_not_migrate(store):
         db.execute("DROP TABLE retained_source_decisions")
         db.execute("DROP TABLE memory_source_lineage")
         db.execute("DROP TABLE memory_source_suppressions")
+        db.execute("ALTER TABLE records DROP COLUMN assertion_kind")
         db.execute("PRAGMA user_version=10")
     before = target.read_bytes()
-    result = browse(home, hashlib.sha256(before).hexdigest(), "show", record_id=rid)
+    result = browse(
+        home,
+        hashlib.sha256(before).hexdigest(),
+        "show",
+        record_id=rid,
+        record_format="epistemic_v1",
+    )
     assert result["schema_version"] == 10
+    assert result["historical_records"]["record"]["assertion_kind"] == "unspecified"
     assert target.read_bytes() == before
     assert "source_digest" not in json.dumps(result)
 

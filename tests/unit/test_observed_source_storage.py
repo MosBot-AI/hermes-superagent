@@ -36,6 +36,7 @@ def downgrade(conn):
         "state,record_id,receipt,suppressed FROM new_decisions"
     )
     conn.execute("DROP TABLE new_decisions")
+    conn.execute("ALTER TABLE records DROP COLUMN assertion_kind")
     conn.execute("PRAGMA user_version=12")
 
 
@@ -64,7 +65,7 @@ def test_schema12_migration_preserves_exact_legacy_digest_and_replay(tmp_path, t
         assert list(conn.iterdump()) == dump
         assert conn.execute("PRAGMA user_version").fetchone() == (12,)
     with opened(path) as (sdk, _, conn):
-        assert conn.execute("PRAGMA user_version").fetchone() == (13,)
+        assert conn.execute("PRAGMA user_version").fetchone() == (14,)
         assert (
             conn.execute(
                 "SELECT request_digest,source_receipt,receipt FROM retained_source_decisions"
@@ -93,7 +94,7 @@ def test_schema12_migration_failure_rolls_back_every_byte_of_evidence(tmp_path):
     class Failure(sqlite3.Connection):
         def execute(self, sql, *args):
             result = super().execute(sql, *args)
-            if sql == "PRAGMA user_version=13":
+            if sql == "PRAGMA user_version=14":
                 raise sqlite3.OperationalError("synthetic migration failure")
             return result
 
