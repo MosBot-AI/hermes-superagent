@@ -1,0 +1,248 @@
+diff --git a/gateway/run_inbound_hooks.py b/gateway/run_inbound_hooks.py
+index c403aae6..12d78a80 100644
+--- a/gateway/run_inbound_hooks.py
++++ b/gateway/run_inbound_hooks.py
+@@ -252,15 +252,19 @@ class GatewayInboundHooksMixin:
+         if command:
+             try:
+                 from hermes_cli.plugins import get_plugin_command_handler
+-                plugin_handler = get_plugin_command_handler(command.replace("_", "-"))
++                registered_name = command.replace("_", "-")
++                plugin_handler = get_plugin_command_handler(registered_name)
+                 if plugin_handler:
+-                    return True, await self._hm_run_plugin_handler(plugin_handler, event, source), command
++                    result = await self._hm_run_plugin_handler(
++                        plugin_handler, event, source, registered_name=registered_name)
++                    return True, result, command
+             except Exception as e:
+                 logger.warning("Plugin command dispatch failed: %s", e, exc_info=True)
+         return False, None, command
+ 
+     async def _hm_run_plugin_handler(
+-        self, plugin_handler, event: MessageEvent, source: SessionSource, session_entry=None, args=None
++        self, plugin_handler, event: MessageEvent, source: SessionSource, session_entry=None, args=None,
++        *, registered_name=None,
+     ) -> Optional[str]:
+         """Run a resolved plugin command handler for *source* → its reply text or None; raises what
+         the handler raises (``gateway/session_commands.py`` resolves the exact registered name).
+@@ -285,18 +289,25 @@ class GatewayInboundHooksMixin:
+         from hermes_cli.plugin_command_dispatch import invoke_plugin_command
+         from gateway.plugin_messages import bind_live_source
+         from gateway.plugin_command_choice import chat_choices
++        from gateway.run_telegram_command_observation import open_observation
++        observation = open_observation(self, plugin_handler, event, source, registered_name)
++        observation_context = {"telegram_observation": observation} if observation is not None else {}
+         call = functools.partial(
+             invoke_plugin_command, plugin_handler, user_args, source=source,
+             session_id=_plugin_context.session_id or "", session_key=_plugin_context.session_key or "",
+-            platform=source.platform.value)
++            platform=source.platform.value, **observation_context)
+         # ctx.post_message from the handler reaches this chat even before its session is stored;
+         # ctx.ask_choice asks it with the clarify prompt.
+-        with (self._session_env_scope(_plugin_context), bind_live_source(source),
+-              chat_choices(self, source, self._session_key_for_source(source))):
+-            if inspect.iscoroutinefunction(plugin_handler):
+-                result = await call()
+-            else:
+-                result = await self._run_in_executor_with_context(call)
+-                if inspect.isawaitable(result):
+-                    result = await result
++        try:
++            with (self._session_env_scope(_plugin_context), bind_live_source(source),
++                  chat_choices(self, source, self._session_key_for_source(source))):
++                if inspect.iscoroutinefunction(plugin_handler):
++                    result = await call()
++                else:
++                    result = await self._run_in_executor_with_context(call)
++                    if inspect.isawaitable(result):
++                        result = await result
++        finally:
++            if observation is not None:
++                observation.close()
+         return str(result) if result else None
+diff --git a/gateway/run_telegram_command_observation.py b/gateway/run_telegram_command_observation.py
+new file mode 100644
+index 00000000..e19dc171
+--- /dev/null
++++ b/gateway/run_telegram_command_observation.py
+@@ -0,0 +1,114 @@
++"""Command-local Telegram transport observations for in-process callbacks."""
++
++from __future__ import annotations
++
++import inspect
++from dataclasses import dataclass
++from threading import Lock
++from time import monotonic
++
++from gateway.config import Platform
++from gateway.session_identity import identity_of
++
++_MAX_AGE_SECONDS = 5.0
++
++
++@dataclass(frozen=True)
++class TelegramCommandObservation:
++    actor_id: int
++    receiver_id: int
++    profile: str
++    command: str
++
++
++class _ObservationHandle:
++    """One read while the registered callback is running."""
++
++    def __init__(self, read):
++        self._read = read
++        self._lock = Lock()
++
++    def __call__(self):
++        with self._lock:
++            read, self._read = self._read, None
++            return read() if read is not None else None
++
++    def close(self):
++        with self._lock:
++            self._read = None
++
++
++def _declares_observation(handler) -> bool:
++    if getattr(handler, "__hermes_plugin_host_ref__", None) is not None:
++        return False
++    try:
++        parameters = list(inspect.signature(handler, follow_wrapped=False).parameters.values())
++    except (ValueError, TypeError):
++        return False
++    # The first positional slot belongs to raw_args, including when it uses this name.
++    return any(
++        parameter.name == "telegram_observation"
++        and (
++            parameter.kind is inspect.Parameter.KEYWORD_ONLY
++            or (index > 0 and parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD)
++        )
++        for index, parameter in enumerate(parameters)
++    )
++
++
++def open_observation(runner, handler, event, source, registered_name):
++    """Bind the adapter's original event to one explicitly named command input."""
++    if registered_name is None or source.platform is not Platform.TELEGRAM:
++        return None
++    stamp = vars(event).pop("_telegram_direct_command", None)
++    if stamp is None or not _declares_observation(handler):
++        return None
++    event_ref, adapter_ref, original, text, actor, receiver, captured = stamp
++    command = event.get_command()
++    if event_ref() is not event or command is None or command.replace("_", "-") != registered_name:
++        return None
++    identity = identity_of(source)
++    if identity is None or identity.runtime_profile != identity.transport_profile:
++        return None
++    registered = runner._transport_owner(source)
++    if registered is None or registered[0] is not adapter_ref():
++        return None
++
++    def read():
++        adapter = adapter_ref()
++        if any(
++            (
++                not 0 <= monotonic() - captured < _MAX_AGE_SECONDS,
++                runner._draining,
++                identity_of(source) is not identity,
++                source is not event.source,
++                event.raw_message is not original,
++                event.text != text,
++                event.edit_revision is not None,
++                event.internal,
++                source.chat_type != "dm",
++                source.thread_id is not None,
++                source.is_bot,
++                not source.user_id == source.chat_id == str(actor),
++                getattr(source, "delivered_via_upstream_relay", False),
++                getattr(source, "profile_route_rejected", False),
++            )
++        ):
++            return None
++        if adapter is None or adapter.gateway_runner is not runner or identity.adapter() is not adapter:
++            return None
++        if runner._transport_owner(source) != registered:
++            return None
++        bot = adapter._bot
++        if bot is None:
++            return None
++        try:
++            if original.get_bot() is not bot or bot.id != receiver:
++                return None
++        except RuntimeError:
++            return None
++        if not runner._is_user_authorized_for_source(source):
++            return None
++        return TelegramCommandObservation(actor, receiver, identity.transport_profile, registered_name)
++
++    return _ObservationHandle(read)
+diff --git a/plugins/platforms/telegram/adapter.py b/plugins/platforms/telegram/adapter.py
+index 94e19720..b93b9282 100644
+--- a/plugins/platforms/telegram/adapter.py
++++ b/plugins/platforms/telegram/adapter.py
+@@ -12,6 +12,7 @@ import os
+ import html as _html
+ import re
+ import time
++import weakref
+ from contextvars import ContextVar
+ from datetime import datetime, timezone, UTC
+ from typing import Any, Awaitable, Callable, Dict, Iterator, List, Optional, Set
+@@ -6526,8 +6527,53 @@ class TelegramAdapter(TelegramHeldInboundMixin, TelegramTopicRoutingMixin, BaseP
+         if len(event.text or "") >= self._SPLIT_THRESHOLD:
+             self._enqueue_text_event(event)
+             return
++        self._stamp_direct_command(update, event)
+         await self.handle_message(event)
+ 
++    def _stamp_direct_command(self, update: Update, event: MessageEvent) -> None:
++        """Keep original SDK provenance on the immediate event only."""
++        if not TELEGRAM_AVAILABLE or type(update) is not Update:
++            return
++        message = event.raw_message
++        if type(message) is not Message or update.message is not message:
++            return
++        user = message.from_user
++        if user is None or any(
++            (
++                message.chat.type != "private",
++                user.is_bot is not False,
++                type(user.id) is not int,
++                type(message.chat.id) is not int,
++                message.chat.id != user.id,
++                message.edit_date is not None,
++                message.forward_origin is not None,
++                message.is_automatic_forward,
++                message.sender_chat is not None,
++                message.via_bot is not None,
++                message.business_connection_id is not None,
++                message.sender_business_bot is not None,
++                message.is_from_offline,
++                message.is_topic_message,
++                message.message_thread_id is not None,
++            )
++        ):
++            return
++        bot = self._bot
++        if not isinstance(bot, Bot):
++            return
++        try:
++            if update.get_bot() is not bot or message.get_bot() is not bot:
++                return
++            receiver = bot.id
++        except RuntimeError:
++            return  # No initialized SDK receiving account.
++        if type(receiver) is not int or min(receiver, user.id) <= 0:
++            return
++        event._telegram_direct_command = (
++            weakref.ref(event), weakref.ref(self), message, event.text,
++            user.id, receiver, time.monotonic(),
++        )
++
+     async def _handle_location_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+         """Handle incoming location/venue pin messages."""
+         msg = self._effective_update_message(update)

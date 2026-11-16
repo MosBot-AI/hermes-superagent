@@ -207,6 +207,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Add a [review-only current-pin Telegram command observation](experiments/telegram-command-observation/README.md) with clean and candidate SDK controls. The native probe distinguishes the original sender and receiving Bot account from forwarded, edited and stale events (#14).
+
 - Bind [internal ActionIntent approval evidence](docs/64-action-intent-drafts.md#bind-exact-approval-evidence) to the exact draft and validity window. Schema 3 preserves receipt lookup after cancellation or restart. Execution requires separate admission (#15).
 
 - Persist a scoped emergency stop in the internal enrollment store. Schema v4 preserves existing records and audits and blocks new read and ceremony admissions for the stopped owner/profile, including after reopen (#16).
