@@ -119,23 +119,18 @@ def test_unobserved_crash_helper_never_consumes_rpc_reply_and_waits_for_receipt(
 
     source = (ROOT / "acceptance/live/test_packaged_gateway_tasks.py").read_text()
     tree = ast.parse(source)
-    helper = next(
-        node
-        for node in tree.body
-        if isinstance(node, ast.AsyncFunctionDef) and node.name == "submit_unobserved_then_crash"
+    functions = {node.name: node for node in tree.body if isinstance(node, ast.AsyncFunctionDef)}
+    code = ast.get_source_segment(source, functions["submit_unobserved_then_crash"])
+    sender = ast.get_source_segment(source, functions["send_task_command"])
+    assert code.index("await send_task_command(") < code.index(
+        "await wait_for_committed_task_receipt("
     )
-    code = ast.get_source_segment(source, helper)
-    assert code.index("await ws.send(") < code.index("await wait_for_committed_task_receipt(")
     assert code.index("await wait_for_committed_task_receipt(") < code.index("live.hard_kill(proc)")
     assert "signal.SIGKILL" in code
-    assert "ws.recv" not in code and "live.ok" not in code and "live.rpc" not in code
-    assert "slash.exec" in code and "jsonrpc" in code
-    assert "prompt.submit" not in code
-    observer = next(
-        node
-        for node in tree.body
-        if isinstance(node, ast.AsyncFunctionDef) and node.name == "wait_for_committed_task_receipt"
-    )
+    assert "await ws.send(" in sender and "slash.exec" in sender and "jsonrpc" in sender
+    for forbidden in ("ws.recv", "live.ok", "live.rpc", "prompt.submit"):
+        assert forbidden not in code and forbidden not in sender
+    observer = functions["wait_for_committed_task_receipt"]
     observer_code = ast.get_source_segment(source, observer)
     assert "?mode=ro" in observer_code and "asyncio.sleep" in observer_code
     assert "deadline" in observer_code and "request_id=?" in observer_code
