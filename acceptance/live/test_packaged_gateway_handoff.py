@@ -1,7 +1,7 @@
 """Manual installed-package acceptance, real Gateway and native Kanban storage.
 
 Native results below are manually authored synthetic operator fixtures, NOT
-worker execution or provider evidence. No model turns or SQL mutations occur.
+worker execution or provider evidence. No model turns or direct SQL row writes occur.
 """
 
 # ruff: noqa: F811
@@ -13,8 +13,10 @@ import sqlite3
 import sys
 from contextlib import closing
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import pytest
+from native_handoff_crash_daemon import CRASH_EXIT
 from test_packaged_gateway_memory import Gateway
 from test_packaged_gateway_tasks import checked, installed  # noqa: F401
 
@@ -23,7 +25,7 @@ RESULT = "Manually authored synthetic native result 中文. NOT worker execution
 CHANGED_RESULT = RESULT + " Operator amended the editable result."
 
 
-def configure(home, *, enabled=True, board=BOARD):
+def configure(home, *, enabled=True, board=BOARD, pause_background=False):
     from ruamel.yaml import YAML
 
     yaml = YAML()
@@ -31,6 +33,8 @@ def configure(home, *, enabled=True, board=BOARD):
     config = yaml.load(path)
     settings = config["plugins"]["entries"]["hermes-personal-agent"]["settings"]
     settings.update(kanban_handoff=enabled, kanban_handoff_board=board)
+    if pause_background:
+        config.setdefault("kanban", {}).update(dispatch_in_gateway=False, notify_in_gateway=False)
     yaml.dump(config, path)
 
 
@@ -344,3 +348,168 @@ def test_installed_handoff_review_accept_and_restart(installed_handoff):
         ).fetchone() == (1,)
         dump = "\n".join(db.iterdump())
         assert RESULT not in dump and CHANGED_RESULT not in dump
+
+
+@pytest.fixture
+def handoff_runtime():
+    # Long pytest paths can require the native private fallback socket.
+    with TemporaryDirectory(prefix="hc-", dir="/tmp") as directory:
+        yield directory
+
+
+@pytest.mark.parametrize(
+    ("stage", "delete_mode"),
+    [
+        pytest.param("after_claim", False, id="after_claim"),
+        pytest.param("before_native_commit", False, id="before_native_commit"),
+        pytest.param("before_native_commit", True, id="before_native_commit_delete"),
+        pytest.param("after_native_commit", False, id="after_native_commit"),
+    ],
+)
+def test_installed_handoff_reconciles_abrupt_gateway_exit(
+    installed_handoff, handoff_runtime, stage, delete_mode
+):
+    from websockets.exceptions import ConnectionClosed
+
+    gateway = HandoffGateway(installed_handoff)
+    gateway.env["XDG_RUNTIME_DIR"] = handoff_runtime
+    configure(gateway.home, pause_background=True)
+    native_db = Path(gateway.env["HERMES_KANBAN_HOME"]) / "kanban/boards" / BOARD / "kanban.db"
+    if delete_mode:
+        # Select the supported safe rollback mode on the isolated, stopped board.
+        with closing(sqlite3.connect(native_db)) as db:
+            assert db.execute("PRAGMA journal_mode=DELETE").fetchone() == ("delete",)
+    sid = gateway.create()
+
+    async def prepare(call):
+        task = (
+            await call('personal-tasks --json add "Synthetic crash handoff" --request-id crash-add')
+        )["data"]
+        command = (
+            f"personal-handoff --json prepare {task['id']} --expected-revision 1 "
+            "--request-id crash-prepare"
+        )
+        return task, command, (await call(command))["data"]
+
+    task, prepare_command, preview = gateway.phase(sid, prepare)
+    assert preview["state"] == "prepared"
+    oracle(gateway)
+    handoff_id = preview["id"]
+    commit = (
+        f"personal-handoff --json commit {handoff_id} --expected-digest {preview['intent_digest']}"
+    )
+    reconcile = f"personal-handoff --json reconcile {handoff_id}"
+    show = f"personal-handoff --json show {handoff_id}"
+    home = gateway.home
+    assert native_db == Path(preview["destination"]["path"])
+    ledger = home / "plugin-data/hermes-personal-agent/kanban-handoff/receipts.sqlite3"
+    driver = Path(__file__).with_name("native_handoff_crash_daemon.py")
+    env = {
+        **gateway.env,
+        "HERMES_BOT_ACCEPTANCE_ROOT": str(home.parent),
+        "HERMES_HANDOFF_ACCEPTANCE_CRASH": json.dumps(
+            {"stage": stage, "native_path": str(native_db), "id": handoff_id, "key": preview["key"]}
+        ),
+    }
+
+    async def interrupt(desc):
+        async with gateway.live.websocket(home, desc) as ws:
+            resumed = await gateway.live.ok(ws, "session.resume", session_id=sid)
+            assert resumed["session_id"] == sid
+            await ws.send(
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": "handoff-crash-commit",
+                        "method": "slash.exec",
+                        "params": {"session_id": sid, "command": commit},
+                    }
+                )
+            )
+            with pytest.raises(ConnectionClosed):
+                async with asyncio.timeout(30):
+                    while True:
+                        reply = json.loads(await ws.recv())
+                        assert reply.get("id") != "handoff-crash-commit"
+
+    with gateway.live.daemon(home, env, "handoff-crash.log", fixture=driver) as (proc, lost, _):
+        assert (home.parent / f"socket-guard-{proc.pid}").is_file()
+        assert lost["pid"] == proc.pid and proc.pid not in gateway.pids
+        assert lost["instance_id"] not in gateway.instances
+        gateway.instances.add(lost["instance_id"])
+        gateway.pids.add(proc.pid)
+        asyncio.run(interrupt(lost))
+        assert proc.wait(timeout=15) == CRASH_EXIT
+    assert not gateway.live.port_open(gateway.live.api_port(lost))
+
+    marker = json.loads((home.parent / "handoff-crash.json").read_text())
+    assert marker["stage"] == stage
+    assert marker["in_transaction"] is (stage == "before_native_commit")
+    assert marker["journal_mode"] in {"wal", "delete"}
+    if delete_mode:
+        assert marker["journal_mode"] == "delete"
+    with closing(sqlite3.connect(ledger.as_uri() + "?mode=ro", uri=True)) as db:
+        assert db.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+        [(saved_id, state, payload, outcome, anchor, identity_state)] = db.execute(
+            "SELECT id,state,payload,observation,native_identity,identity_state FROM handoffs"
+        ).fetchall()
+        assert (saved_id, state, payload, outcome) == (handoff_id, "claimed", None, None)
+    if stage == "after_claim":
+        assert identity_state == "unbound" and anchor is None
+        identity = None
+    else:
+        assert identity_state == "available"
+        identity = json.loads(anchor)
+
+    committed = stage == "after_native_commit"
+    card_id = identity["card_id"] if committed else None
+    journal = native_db.with_name(native_db.name + "-journal")
+    journal_present = stage == "before_native_commit" and marker["journal_mode"] == "delete"
+
+    def board_state():
+        if journal_present:
+            assert journal.is_file(), "Test must preserve the native rollback journal"
+            return None
+        card = oracle(gateway, card_id=card_id, status="blocked" if committed else None)
+        with closing(sqlite3.connect(native_db.as_uri() + "?mode=ro", uri=True)) as db:
+            events = db.execute("SELECT id,task_id,kind FROM task_events ORDER BY id").fetchall()
+        if committed:
+            assert card["idempotency_key"] == preview["key"]
+            assert card["created_at"] == identity["created_at"]
+            assert events[0] == (identity["created_event_id"], card_id, "created")
+            assert [(event_card, kind) for _, event_card, kind in events] == [
+                (card_id, "created"),
+                (card_id, "blocked"),
+            ]
+        else:
+            assert events == []
+        return card, events
+
+    expected_board = board_state()
+
+    async def recover(call):
+        held = (await call(show))["data"]
+        assert held["state"] == "claimed" and held["native_identity"] == identity
+        assert held["payload"] is None and held["observation"] is None
+        assert (await call(commit))["data"] == held
+        if journal_present:
+            await call(reconcile, error="native_unsafe_storage")
+            assert (await call(show))["data"] == held
+            await call(
+                prepare_command.replace("crash-prepare", "fresh-prepare"),
+                error="native_unsafe_storage",
+            )
+        else:
+            settled = (await call(reconcile))["data"]
+            assert settled["state"] == ("confirmed" if committed else "unknown")
+            assert settled["native_identity"] == identity
+            assert settled["observation"]["outcome"] == ("parked" if committed else "missing")
+            assert (await call(commit))["data"] == settled
+            await call(
+                prepare_command.replace("crash-prepare", "fresh-prepare"),
+                error="source_already_prepared",
+            )
+        assert (await call(f"personal-tasks --json show {task['id']}"))["data"] == task
+
+    gateway.phase(sid, recover)
+    assert board_state() == expected_board

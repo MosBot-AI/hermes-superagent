@@ -72,6 +72,19 @@ Readable output keeps quoted data separate from command guidance and never trunc
 
 The manual-only native Gateway workflow includes `acceptance/live/test_packaged_gateway_handoff.py`. It installs the exact byte-verified production package through the unchanged official scanner and uses real admitted LOCAL commands, an isolated synthetic native board and fresh Gateway processes. Result setup uses native operator APIs and is explicitly operator-authored, not fabricated worker evidence. The lane must link its exact source revision and executed result; test presence alone proves no live acceptance.
 
+### Recovery after abrupt Gateway exit
+
+The installed-package cases for Issue #18 submit an approved preview over the native ticket-authenticated WebSocket. A test entrypoint terminates its own Gateway at three transaction boundaries for that exact handoff. The client checks that the connection closes before the approval RPC returns. Recovery opens the original session through a fresh Gateway and uses the original handoff ID and digest.
+
+| Interruption | Verified recovery |
+|---|---|
+| After the private claim commits | The ledger keeps one claim, clears the preview payload and has no native anchor. Reconciliation observes `missing` and records `unknown`. |
+| After the anchor persists, before the native card commits | The ledger keeps the anchor. In WAL mode, the board has zero cards and no creation event. Reconciliation records `unknown` with a `missing` observation. |
+| Before native commit in DELETE mode | An existing rollback journal makes the adapter return `native_unsafe_storage`. The claimed record, anchor and journal are preserved for native recovery. |
+| After the native card commits, before the ledger records the outcome | The original native card and creation event match the durable anchor. Reconciliation confirms the single parked card. |
+
+Exact `commit` retries return the existing record. A new prepare key for the same source revision and destination is refused. The original local task retains its revision and state. The read-only board checks verify card and event counts and zero worker runs where the board can be inspected. The crash fixtures disable background dispatch and notifications so explicit reconciliation observes the interruption state. The DELETE case selects the supported rollback mode in its isolated board. This evidence covers process exit on the pinned Hermes build. Power-loss durability and worker execution or cancellation require separate evidence.
+
 Unit and pinned-host contracts cover presentation, command parsing, source/destination/identity changes, exact receipts, disabled/unloaded states and negative cases. The complete repository checker, runtime verification, independent review and exact commit CI remain required. Local native socket restrictions are not bypassed; a local blocked stage is distinct from a successful GitHub-hosted run.
 
 This package does not complete full E3 worker orchestration, E4 reminders, remote-owner authority or production rollout. The clean host still lacks the gated `hermes.text-worker.v1` interface, and generic delegation is not an equivalent contained fallback.
