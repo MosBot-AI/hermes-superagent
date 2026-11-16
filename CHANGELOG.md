@@ -207,6 +207,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Verify installed-package Gateway recovery immediately before and after committing a local multi-task dependency plan. The manual suite checks one successful application or exact receipt replay after restart (#21).
+
 - Add manual native Gateway acceptance for the optional memory-provider wheel with a loopback model. Verify correction, forgetting, disabled recall and retained transcript context, and record the pinned host's conflicting authority label (#45).
 
 - Add internal pause and explicit resume for pending enrollment policy. Schema v3 preserves existing administrative and read audit history and invalidates pre-pause confirmations across resume (#16).
