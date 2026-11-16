@@ -270,7 +270,7 @@ def test_foreign_database(sql, code):
         "CREATE TABLE other (id INTEGER)",
         "CREATE TEMP TABLE enrollments (id INTEGER)",
         "CREATE INDEX unknown_index ON enrollments(principal_id)",
-        "PRAGMA user_version=4",
+        "PRAGMA user_version=999",
         "CREATE TRIGGER surprise AFTER INSERT ON enrollments BEGIN SELECT 1; END",
     ],
 )

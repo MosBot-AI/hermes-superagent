@@ -6,7 +6,7 @@ English | [简体中文](27-fenced-read-admission-zh.md)
 
 This slice implements a default-denied **internal read coordinator** and a real SQLite policy/revocation transaction guard. Offline fixtures supply independent confirmations and resource snapshots to test that coordination. The repository does **not** supply a production identity authority, confirmation issuer, resource reader or enrollment activation flow. It does not authenticate the fixtures as real users.
 
-No production command, tool, HTTP route, manifest setting or plugin callback constructs this service. Even an internal `enabled=True` is insufficient without both trusted adapters. Production status and `/personal-access` remain blocked. Explicit initialization upgrades exact v1 or v2 enrollment stores to v3 with [pause and resume support](26-pending-enrollment-policy.md#4-transactions-pause-and-revocation). Task storage remains outside this coordinator.
+No production command, tool, HTTP route, manifest setting or plugin callback constructs this service. Even an internal `enabled=True` is insufficient without both trusted adapters. Production status and `/personal-access` remain blocked. Explicit enrollment initialization upgrades exact v1–v3 stores to v4 with a [scoped emergency stop](26-pending-enrollment-policy.md#ownerprofile-emergency-stop). Task storage remains outside this coordinator.
 
 This advances the E1.3/E1.4 read-admission foundation, not the whole E1 or M1 gate. [26](26-pending-enrollment-policy.md) describes the prospective policy store; [23](23-host-command-context-experiment.md) records the still-unresolved host identity path. Python objects and types are not authentication or isolation against malicious code in the same interpreter.
 
@@ -58,13 +58,13 @@ No resource adapter is shipped. In particular, `TaskStore.run("list", ...)` is n
 Every participant must use the same lock order:
 
 1. Hold the current host authority/invalidation guard and consume the confirmation.
-2. Begin the enrollment SQLite transaction and verify exact current versions, pending state, identity and proposed scope.
+2. Begin the enrollment SQLite transaction and check the scope stop, exact current versions, pending state, identity and proposed scope.
 3. Acquire the owner-scoped resource snapshot without reading private fields.
 4. Revalidate authority and trusted time after all waits. This successful check is the **read-admission point** while every fence is held.
 5. Materialize only the bounded summary projection. Recheck authority/time and validate the entire result; a failure discards it.
 6. Close the resource snapshot, revalidate authority/time, persist a minimal prepared-snapshot audit, commit the SQLite transaction, exit the host guard, then return the detached summary.
 
-The policy lock excludes pause, revocation and policy edits throughout the read and until commit. A pause or revoke committed first denies before resource access. An admitted read can finish before the waiting change commits. A revoke may commit after that read's transaction, even before the caller receives the detached result: this is already-admitted data, not a promise to retract it. The same applies to a host invalidation after the guard is released. No transport reply is sent here.
+The policy lock serializes pause, revocation, policy edits and the scoped stop against read transactions. Any pause, revoke or stop that commits first denies before resource access. An admitted read can finish and commit its prepared-read audit before a waiting change commits. A stop or revoke may then commit before the caller receives the detached result. The result was already admitted, and subsequent admissions read current policy. No transport reply is sent here.
 
 A no-op policy replacement still changes its revision/epoch and invalidates an older confirmation. Trusted time is resampled after actual lock waits; an expired confirmation cannot read merely because it was valid when waiting began. The post-read check is an additional conservative discard rule, not a guarantee of continuous future validity.
 

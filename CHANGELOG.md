@@ -207,6 +207,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Persist a scoped emergency stop in the internal enrollment store. Schema v4 preserves existing records and audits and blocks new read and ceremony admissions for the stopped owner/profile, including after reopen (#16).
+
 - Verify installed Kanban handoff recovery after abrupt Gateway exit at the claim and native commit boundaries. Exact retries preserve the original record and reconciliation reports the observed outcome (#18).
 
 - Verify installed-package Gateway recovery immediately before and after committing a local multi-task dependency plan. The manual suite checks one successful application or exact receipt replay after restart (#21).

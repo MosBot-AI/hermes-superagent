@@ -26,7 +26,7 @@ There is a hard limit of **10,000 events per database**. Capacity or sequence ex
 
 ## Schema compatibility
 
-The audit table was introduced in v2. The [current v3 migration](26-pending-enrollment-policy.md#3-internal-contract) accepts only exact owned v1 or v2 schemas. It creates the audit table for v1 and preserves all existing prepared-read rows for v2. The migration and version update commit together. Plugins load and report status without opening this store. Explicit internal initialization checks schema ownership and refuses unknown schemas and temporary shadow objects.
+The audit table was introduced in v2. The [current v4 migration](26-pending-enrollment-policy.md#3-internal-contract) accepts exact owned v1–v3 schemas. It creates the audit table for v1 and preserves all existing prepared-read rows for v2 and v3. The migration and version update commit together. Plugins load and report status without opening this store. Explicit internal initialization checks schema ownership and refuses unknown schemas and temporary shadow objects.
 
 ## Verification
 

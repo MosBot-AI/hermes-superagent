@@ -267,6 +267,14 @@ def test_stale_or_revoked_persisted_policy(setup, action):
     assert "ownership" not in setup[-1]
 
 
+def test_stopped_scope_refuses_prepared_read_before_opening_a_snapshot(setup):
+    store, _, _, _, events = setup
+    assert store.stop_admissions({"owner_id": "owner", "profile_id": "profile"})
+    assert denied(setup) == "policy_denied"
+    assert "ownership" not in events
+    assert store.read_admission_history(KEY)["items"] == []
+
+
 def test_pause_and_resume_fence_old_and_current_confirmations(setup):
     store, host, source, _, _ = setup
     cas = {**KEY, "expected_revision": 1, "expected_enrollment_revision": 1}

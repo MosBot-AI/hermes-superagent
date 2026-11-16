@@ -5,10 +5,11 @@ facts. This module cannot activate a record, issue a context/grant, adopt tasks,
 or authorize reads. Use a dedicated connection from a separately secured opener.
 A database restored from backup is not an external freshness authority.
 
-CAS-only retries: create uses a caller-selected stable enrollment_id. After an
+Enrollment mutation retries use CAS. Create uses a caller-selected stable enrollment_id. After an
 uncertain outcome, get that exact owner/profile/id before retrying. Duplicate
 create conflicts; updates using an old revision conflict, including no-op edits.
-There are no replay receipts or cached authorization responses.
+A scoped emergency stop is terminal and idempotent within this store.
+There are no bearer receipts or cached authorization responses.
 """
 
 import json
@@ -21,7 +22,7 @@ from typing import Any
 from .authorization import ReadRequest, _identifier, _scope
 
 _APPLICATION_ID = 0x5041454E
-_SCHEMA_VERSION = 3
+_SCHEMA_VERSION = 4
 MAX_READ_AUDITS = 10000
 _MAX = 2**63 - 1
 _COLUMNS = (
@@ -67,7 +68,7 @@ _READ_AUDIT_SQL = """CREATE TABLE read_admissions (
         resource_count INTEGER NOT NULL CHECK(resource_count BETWEEN 1 AND 32),
         outcome TEXT NOT NULL CHECK(outcome = 'snapshot_prepared'))"""
 _SCHEMA_V2 = {**_SCHEMA_V1, "read_admissions": _READ_AUDIT_SQL}
-_SCHEMA = {
+_SCHEMA_V3 = {
     **_SCHEMA_V2,
     "enrollments": _SCHEMA_V1["enrollments"].replace(
         "'pending','revoked'", "'pending','paused','revoked'"
@@ -76,6 +77,11 @@ _SCHEMA = {
         "'set_policy','revoke'", "'set_policy','pause','resume','revoke'"
     ),
 }
+_STOP_SQL = """CREATE TABLE emergency_stops (
+        owner_id TEXT NOT NULL, profile_id TEXT NOT NULL,
+        PRIMARY KEY(owner_id, profile_id))"""
+_SCHEMA = {**_SCHEMA_V3, "emergency_stops": _STOP_SQL}
+_LEGACY_SCHEMAS = {1: _SCHEMA_V1, 2: _SCHEMA_V2, 3: _SCHEMA_V3}
 _STATE_AFTER_EVENT = {
     "create": "pending",
     "set_policy": "pending",
@@ -110,7 +116,8 @@ class PreparedRead[T]:
     resource_count: int
 
 
-_KEYS = {"owner_id", "profile_id", "enrollment_id"}
+_ADMISSION_SCOPE = {"owner_id", "profile_id"}
+_KEYS = _ADMISSION_SCOPE | {"enrollment_id"}
 _IDENTITY = {"transport_id", "transport_receiver_id", "principal_id"}
 _SCOPE = {"operation", "target", "resource_ids", "data_scope"}
 _CAS = {"expected_revision", "expected_enrollment_revision"}
@@ -127,6 +134,16 @@ class EnrollmentError(Exception):
 
 def _revision(value: object, *, minimum: int = 1) -> bool:
     return type(value) is int and minimum <= value <= _MAX
+
+
+def _admission_scope(scope: dict) -> tuple[str, str]:
+    if (
+        type(scope) is not dict
+        or scope.keys() != _ADMISSION_SCOPE
+        or not all(_identifier(value) for value in scope.values())
+    ):
+        raise EnrollmentError("invalid_request")
+    return scope["owner_id"], scope["profile_id"]
 
 
 def _request(operation: str, payload: dict) -> dict:
@@ -193,16 +210,18 @@ class EnrollmentStore:
             conn.execute(f"PRAGMA user_version = {_SCHEMA_VERSION}")
         elif app != _APPLICATION_ID:
             raise EnrollmentError("foreign_database")
-        elif create and version in (1, 2):
-            legacy = _SCHEMA_V1 if version == 1 else _SCHEMA_V2
+        elif create and version in _LEGACY_SCHEMAS:
+            legacy = _LEGACY_SCHEMAS[version]
             if len(rows) != len(legacy) or dict(rows) != legacy:
                 raise EnrollmentError("unsupported_schema")
-            self._upgrade(version)
+            if version < 3:
+                self._upgrade_pause_schema(version)
+            conn.execute(_STOP_SQL)
             conn.execute(f"PRAGMA user_version = {_SCHEMA_VERSION}")
         elif version != _SCHEMA_VERSION or len(rows) != len(_SCHEMA) or dict(rows) != _SCHEMA:
             raise EnrollmentError("unsupported_schema")
 
-    def _upgrade(self, version: int) -> None:
+    def _upgrade_pause_schema(self, version: int) -> None:
         # Rebuild only the tables whose CHECK constraints change. Keep exact
         # identifiers, revisions, history and the existing prepared-read audit.
         conn = self._connection
@@ -239,7 +258,7 @@ class EnrollmentStore:
             raise
 
     def initialize(self) -> None:
-        """Create/validate v3 or atomically upgrade an exact owned v1/v2 schema."""
+        """Create/validate v4 or atomically upgrade an exact owned v1–v3 schema."""
         self._initialized = False
         self._transaction(lambda: self._schema(create=True))
         self._initialized = True
@@ -283,6 +302,48 @@ class EnrollmentStore:
             + (operation, record["enrollment_revision"], record["policy_revision"]),
         )
 
+    def _stopped(self, owner_id: str, profile_id: str) -> bool:
+        return (
+            self._connection.execute(
+                "SELECT 1 FROM main.emergency_stops WHERE owner_id=? AND profile_id=?",
+                (owner_id, profile_id),
+            ).fetchone()
+            is not None
+        )
+
+    def stop_admissions(self, scope: dict) -> bool:
+        """Latch the exact scope. Return True only for the transaction creating the latch.
+
+        Trusted administrative code must authorize the caller separately. The
+        immutable marker is both the admission fence and its durable record.
+        """
+        key = _admission_scope(scope)
+        if not self._initialized:
+            raise EnrollmentError("not_initialized")
+
+        def apply() -> bool:
+            self._schema()
+            result = self._connection.execute(
+                "INSERT INTO main.emergency_stops (owner_id,profile_id) VALUES (?,?) "
+                "ON CONFLICT(owner_id,profile_id) DO NOTHING",
+                key,
+            )
+            return result.rowcount == 1
+
+        return self._transaction(apply)
+
+    def admissions_stopped(self, scope: dict) -> bool:
+        """Inspect the current latch without exposing selectors or policy records."""
+        key = _admission_scope(scope)
+        if not self._initialized:
+            raise EnrollmentError("not_initialized")
+
+        def inspect() -> bool:
+            self._schema()
+            return self._stopped(*key)
+
+        return self._transaction(inspect)
+
     def with_current_record[T](
         self,
         key: dict,
@@ -292,7 +353,7 @@ class EnrollmentStore:
         expected_epoch: int,
         operation: Callable[[dict], T],
     ) -> T:
-        """Run trusted synchronous code while current policy excludes revocation.
+        """Run trusted synchronous code while policy excludes revocation and stop.
 
         Internal coordination primitive, NOT an authorization decision. A pending
         record supplies proposed constraints only. The operation must hold an
@@ -315,6 +376,8 @@ class EnrollmentStore:
 
         def apply() -> T:
             self._schema()
+            if self._stopped(request["owner_id"], request["profile_id"]):
+                raise EnrollmentError("admissions_stopped")
             record = self._get(request)
             if (
                 record["policy_revision"] != expected_revision

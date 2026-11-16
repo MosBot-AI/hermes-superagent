@@ -184,10 +184,18 @@ def test_expiry_is_exclusive(ceremony, delta):
     assert confirm(c, a, key)["state"] == "consumed"
 
 
-def test_policy_change_or_revoke_before_admission_keeps_challenge_pending(ceremony):
+@pytest.mark.parametrize("change", ["revoke", "stop"])
+def test_current_policy_denial_before_admission_keeps_challenge_pending(ceremony, change):
     c, a, _, _ = ceremony
     key = issue(c, a)
-    c.enrollment.run("revoke", {**KEY, "expected_revision": 1, "expected_enrollment_revision": 1})
+    if change == "stop":
+        assert c.enrollment.stop_admissions({"owner_id": "owner", "profile_id": "profile"})
+        with pytest.raises(CeremonyError, match="outcome_uncertain"):
+            issue(c, a)
+    else:
+        c.enrollment.run(
+            "revoke", {**KEY, "expected_revision": 1, "expected_enrollment_revision": 1}
+        )
     handle = a.issue("confirm", key)
     with pytest.raises(CeremonyError, match="outcome_uncertain"):
         confirm(c, a, key, handle=handle)
