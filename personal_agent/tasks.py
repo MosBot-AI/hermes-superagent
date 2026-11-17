@@ -14,6 +14,7 @@ from . import task_dependencies as dependencies
 from . import task_native_sync as native_sync
 from . import task_project_rename as project_rename
 from . import task_project_reschedule as project_reschedule
+from .client_api import MAX_TASK_PAGE_SIZE
 from .task_native_review import task_native_review
 from .task_review import task_review
 
@@ -644,6 +645,27 @@ class TaskStore:
             for row in rows[: request["limit"]]
         ]
         return {"items": items, "next_cursor": items[-1]["id"] if more else None, "has_more": more}
+
+    def read_shared_task_fields(self, after: str | None, limit: int) -> list[dict]:
+        """Read one bounded projection from a store already selected by trusted code."""
+        if not self._initialized:
+            raise TaskError("not_initialized")
+        if type(limit) is not int or not 1 <= limit <= MAX_TASK_PAGE_SIZE:
+            raise TaskError("invalid_request")
+        fields = ("id", "title", "revision", "state", "work_status")
+        seek = "" if after is None else "WHERE id > ? COLLATE BINARY "
+        bindings = (limit + 1,) if after is None else (after, limit + 1)
+        try:
+            if self._connection.in_transaction:
+                raise TaskError("connection_in_transaction")
+            rows = self._connection.execute(
+                f"SELECT {','.join(fields)} FROM main.tasks {seek}"
+                "ORDER BY id COLLATE BINARY LIMIT ?",
+                bindings,
+            ).fetchall()
+        except sqlite3.Error as error:
+            raise _database_error(error) from None
+        return [dict(zip(fields, row, strict=True)) for row in rows]
 
     def _agenda(self, request: dict) -> dict:
         """Read live keyset pages; edits between pages may change membership."""

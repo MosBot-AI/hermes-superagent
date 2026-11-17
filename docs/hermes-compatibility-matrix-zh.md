@@ -90,7 +90,7 @@
 | 原生 HTTP 语音配置与 SDP | `22811165` 的 `hermes_cli/web_routers/audio.py`、`tools/voice_client_config.py` 和 `tools/voice_live.py`。 | [HTTP 语音契约](20-voice-contract-simulator-zh.md#当前固定版本的原生-http-语音配置与-sdp)覆盖限定于 profile 的合成直连与 relay 响应、本地票据拒绝和模拟 GPT-Live 交换。部署环境中的凭据交付及真实 WebRTC 仍需取证。 |
 | 原生语音捕获、交接与准入 | `22811165` 的 `tools/voice_mode.py`、`hermes_cli/voice.py` 和 `gateway/session_controls.py`。 | [捕获、转写与准入](20-voice-contract-simulator-zh.md#当前固定版本的原生捕获转写交接与语音准入)覆盖合成 RMS/WAV 生命周期、文件回退和排队回执重放。设备行为、委派执行及下游副作用需另行取证。 |
 | E0.8 逐模式语音证据 | 干净宿主 `2281116525106e3c109993ccb5dc74d02bfc1427`。 | [兼容性清单](voice-compatibility-inventory-zh.md)记录五项就绪状态、已测试和跳过的路径及可复用接口。[带日期的提供方对照](voice-provider-protocol-comparison-zh.md)记录官方传输契约与部署限制。 |
-| Dashboard、客户端 API 与移动端登录 | `hermes_cli/web_server_dashboard.py`、`hermes_cli/dashboard_auth/routes.py`、`tui_gateway/contracts/canonical_sessions.py` | [传输源码审查](14-client-api-contracts-zh.md)确认回环回调及授权主体和文件边界的缺口。领域 API 层、受支持的原生手机回调、撤销和部署后的传输验收仍待完成。 |
+| Dashboard、客户端 API 与移动端登录 | `hermes_cli/web_server_dashboard.py`、`hermes_cli/dashboard_auth/routes.py`、`tui_gateway/contracts/canonical_sessions.py` | [传输源码审查](14-client-api-contracts-zh.md)记录回环回调与原生文件证据。[干净版本与候选对照](14-client-api-contracts-zh.md#23-固定版本的-dashboard-调用方身份对照)验证 dashboard ASGI 路径的提供方身份传递。宿主上游采纳与干净固定版本复验、领域授权、受支持的原生手机回调、撤销和部署后传输验收仍待完成。 |
 | 委派后端与模型、推理强度路由 | `agent/delegation_provider.py`、`tools/delegate_tool_routes.py`、`agent/reasoning_effort.py` | [路由契约](../tests/contracts/test_worker_routing_contracts.py)覆盖 schema、显式空回退列表和无效路由拒绝。[离线影子测试](../tests/unit/test_routing_shadow.py)覆盖合成约束。可信的线上路由上下文、服务商实际请求证据和持久预算准入仍待完成。 |
 
 ## 复现与源码声明

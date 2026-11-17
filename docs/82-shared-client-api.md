@@ -6,7 +6,7 @@ English | [简体中文](82-shared-client-api-zh.md)
 
 The owner's 2026-11-10 direction is one REST contract for phone and desktop clients, with Hermes or DSH as a selectable backend. Clients select a backend base URL, not a different business protocol. Native runtimes remain authoritative; this work must not create a parallel agent loop, authentication issuer or authorization shortcut.
 
-This first slice implements **versioned schemas, shared positive/negative fixtures and fail-closed Hermes metadata**, exposed inside existing local status diagnostics as `client_api`. It does **not** register an HTTP router, expose personal data, enable native-mobile sign-in, or make the two backends feature-complete. The corresponding DSH slice adds discovery through its existing authenticated mobile boundary; its implementation and acceptance are tracked independently in DSH issue #23. Legacy DSH snapshot/SSE/approval routes are not automatically shared-contract implementations.
+This first slice implements **versioned schemas, shared positive/negative fixtures and fail-closed Hermes metadata**, exposed inside existing local status diagnostics as `client_api`. It does **not** register an HTTP router, expose personal data, enable native-mobile sign-in, or make the two backends feature-complete. DSH implements discovery and task paging through its existing authenticated mobile boundary. DSH issue #23 tracks its implementation and acceptance. Its legacy snapshot, SSE and approval routes retain their existing contracts.
 
 ## Authority and versions
 
@@ -32,7 +32,7 @@ DSH vendors the exact bytes and records an immutable source commit separately. C
 | Area | Hermes observed | DSH observed | Required shared work |
 |---|---|---|---|
 | REST admission | Proposed domain API; no registered domain router | Cookie pairing and origin-checked mobile listener | Verified backend adapters; no parallel issuer |
-| Task reads | Local CLI/model tools, not HTTP authority | Redacted bounded snapshot, no full pagination | Shared task projection and scoped page/recovery tests |
+| Task reads | Local CLI, model tools and an internal live page reader | Authenticated shared pages with scoped cursors plus the separate legacy snapshot | Trusted Hermes HTTP admission and scoped endpoint acceptance |
 | Approval decisions | Domain HTTP gate not implemented | Existing exact device-bound response | Same immutable intent semantics and duplicate/race fixtures |
 | Recovery | Proposed durable JSON change feed | Existing bounded SSE task replay | Pollable shared changes, reset/ACL/revocation tests |
 | Conversation | Native runtime continuation only | Native DSH coordination | Adapter receipts; never spawn a second agent loop |
@@ -64,4 +64,14 @@ These states represent the **local task record**, not execution telemetry: `queu
 
 Only `id`, `title`, decimal-string `revision`, `state` and fixed `wait_reason` are returned in a fresh mapping. Private details, progress/resolution notes, timestamps, project/source and native observations are not copied. Input must be a plain dictionary with a canonical UUID-v4 ID, a nonblank native title of at most 240 characters with the existing native prohibited control categories excluded, an exact integer revision in `1..2**63-1`, and recognized lifecycle/progress strings. Booleans, scalar/container subclasses, missing fields and malformed/oversized values fail with a fixed redacted error; values are not truncated or coerced. The wire schema remains version 0.1.0 with unchanged artifacts.
 
-Tests exercise current records produced by the actual local store, all 12 lifecycle/progress combinations, terminal precedence, canonical schema conformance, invalid inputs, strict bounds and field minimization. This is reusable projection groundwork, not a pageable read adapter, HTTP admission, end-to-end client acceptance or completion of #29/#30.
+Tests exercise current records produced by the actual local store, all 12 lifecycle/progress combinations, terminal precedence, canonical schema conformance, invalid inputs, strict bounds and field minimization.
+
+## Internal live task pagination
+
+`SharedTaskPager(store).page(limit=32, cursor=None)` returns a `personal.api.v1` `TasksPage` from the supplied, initialized `TaskStore`. Trusted code selects the store and authorizes each read of its entire task collection before calling the pager. A future transport adapter must hold the appropriate ownership and revocation fences through response publication. Create a pager per authorized caller and store lifetime and discard it when that binding changes. The page parameters carry only the requested limit and continuation.
+
+The page uses the same live keyset semantics as DSH. Each call reads at most `limit + 1` rows in immutable task ID order using a single SQLite statement. Only the five fields required by the task projection are selected. A later page reads current task states and revisions. A new task behind the anchor is visible on a fresh traversal. The local limit is 1–64 with a default of 32.
+
+Continuations use an instance-local signing key. A changed token or one from another pager yields `cursor_invalid`. Start a new traversal without a cursor after a scope change or reader restart. Bad limits and empty or oversized cursors yield `invalid_request`. Store or projection failures yield `internal_unavailable` with no partial page. Only SQLite busy or locked cases mark the failure retryable.
+
+Synthetic tests validate the shared response schema, the 64-row boundary, current revisions across pages, blocked cross-pager and tampered continuations, minimal SQLite column reads and redacted storage errors. DSH at `fa4add96455524b55e4a1ef3ad1dd7ae4a0525e6` pins the byte-identical v0.1.0 artifacts from Hermes `48a930a2c01b2add9e349cbc1f0d65278066cc1c`. The shared artifacts keep the same version and bytes. Trusted host-principal propagation, authorization of a task collection, HTTP registration and end-to-end Hermes client acceptance remain open under #29/#30.

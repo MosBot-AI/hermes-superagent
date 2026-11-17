@@ -213,6 +213,16 @@ This file distinguishes design work, development changes, and released capabilit
 
 - Let local operators [label memory records](docs/31-explicit-local-memory.md#6-record-a-claim-or-inference) as claims, inferences or unspecified. Schema 14 carries labels through recall, projection, snapshots and repack. SDK and command JSON clients opt in to the new record format (#159).
 
+- Verify [native Webapp PKCE](docs/14-client-api-contracts.md#pinned-loopback-native-pkce-evidence) over a real loopback callback and record the native credential lifetime across browser sign-out and Gateway restart (#29).
+
+- Verify [canonical Webapp recovery](docs/14-client-api-contracts.md#pinned-browser-session-recovery) across owner loss, including durable prompt receipts, generation-checked resolution, and replay or snapshot recovery (#29).
+
+- Add a [review-only dashboard principal proposal](experiments/dashboard-http-principal/README.md) and verify provider identity propagation against the clean pinned host and a disposable candidate (#29).
+
+- Verify [native Webapp file transport](docs/14-client-api-contracts.md#pinned-loopback-webapp-file-evidence) on the pinned Gateway, including named-profile attachment and browser download ticket revocation (#29).
+
+- Add [internal live task pagination](docs/82-shared-client-api.md#internal-live-task-pagination) over selected local stores, with bounded reads and scoped cursor reset (#29).
+
 - Inspect local memory schema and capacity with `/personal-memory health` and an optional API-v1 SDK operation. The native command reads only an existing store and reports missing or incompatible storage explicitly (#43).
 
 - Inspect a versioned, profile-local route capability registry with `hermes personal-agent routing inventory`. Exact route lookup reports the freshness of individual capabilities and redacts private route bindings (#23).

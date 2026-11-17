@@ -136,9 +136,24 @@ def webapp_cli(host, env, flag, *, expected):
         pytest.fail(f"Native Webapp {flag} did not confirm the fixture operation", pytrace=False)
 
 
+def named_webapp_endpoint(home, endpoint, port):
+    from hermes_cli.gateway_runtime import discover_gateway_endpoint
+
+    assert endpoint.api_origin == f"http://127.0.0.1:{port}"
+    named = home / "profiles" / PROFILE
+    observed = discover_gateway_endpoint(named, timeout=2)
+    assert observed.state == "ready" and observed.endpoint is not None
+    selected = observed.endpoint
+    assert selected.profile_id == str(named)
+    assert (selected.instance_id, selected.api_origin) == (
+        endpoint.instance_id,
+        endpoint.api_origin,
+    )
+    return selected
+
+
 @contextmanager
 def serving_install(host, home, env, port, monkeypatch):
-    from hermes_cli.gateway_runtime import discover_gateway_endpoint
     from hermes_cli.gateway_runtime_discovery import query_identify
 
     # The shared daemon writes its planned-stop marker in the process Hermes home.
@@ -146,18 +161,9 @@ def serving_install(host, home, env, port, monkeypatch):
         for name in ("HERMES_HOME", "HERMES_RUNTIME_DIR"):
             scope.setenv(name, env[name])
         with gateway_daemon(host, home, env, "webapp-signout") as endpoint:
-            assert endpoint.api_origin == f"http://127.0.0.1:{port}"
-            named = home / "profiles" / PROFILE
-            observed = discover_gateway_endpoint(named, timeout=2)
-            assert observed.state == "ready" and observed.endpoint is not None
-            named_endpoint = observed.endpoint
-            assert named_endpoint.profile_id == str(named)
-            assert (named_endpoint.instance_id, named_endpoint.api_origin) == (
-                endpoint.instance_id,
-                endpoint.api_origin,
-            )
+            selected = named_webapp_endpoint(home, endpoint, port)
             webapp_cli(host, env, "--status", expected=f"Serving at {endpoint.api_origin}")
-            yield named_endpoint, query_identify(home, timeout=2)
+            yield selected, query_identify(home, timeout=2)
 
 
 async def browser_connection(stack, endpoint, credential):
@@ -271,7 +277,9 @@ async def verify_active_signout(host, installs):
         assert credential_unchanged("b")
 
 
-def test_native_webapp_signout_closes_only_selected_install_browser(tmp_path_factory, monkeypatch):
+@contextmanager
+def isolated_webapp_host(tmp_path_factory, monkeypatch):
+    """Prepare the pinned host and guard all fixture traffic and subprocesses."""
     assert sys.platform == "linux", "This acceptance uses the Linux private control socket"
     host = Path(os.environ["HERMES_TEST_ROOT"]).resolve(strict=True)
     pin = json.loads((REPO / "compatibility.json").read_bytes())["hermes_commit"]
@@ -321,23 +329,28 @@ def test_native_webapp_signout_closes_only_selected_install_browser(tmp_path_fac
         isolated.setattr(tempfile, "tempdir", str(root))
         deactivate = activate(root)
         try:
-            ports = distinct_ports()
-            restrict = activate(root, dial_ports=ports, dial_host="127.0.0.1")
-            try:
-                home_a, env_a = prepare_install(root / "a", env, ports[0])
-                home_b, env_b = prepare_install(root / "b", env, ports[1])
-                with (
-                    serving_install(host, home_a, env_a, ports[0], isolated) as first,
-                    serving_install(host, home_b, env_b, ports[1], isolated) as second,
-                ):
-                    assert first[0].instance_id != second[0].instance_id
-                    assert first[1]["pid"] != second[1]["pid"]
-                    asyncio.run(
-                        verify_active_signout(
-                            host, {"a": (home_a, env_a, *first), "b": (home_b, env_b, *second)}
-                        )
-                    )
-            finally:
-                restrict()
+            yield host, root, env, isolated
         finally:
             deactivate()
+
+
+def test_native_webapp_signout_closes_only_selected_install_browser(tmp_path_factory, monkeypatch):
+    with isolated_webapp_host(tmp_path_factory, monkeypatch) as (host, root, env, isolated):
+        ports = distinct_ports()
+        restrict = activate(root, dial_ports=ports, dial_host="127.0.0.1")
+        try:
+            home_a, env_a = prepare_install(root / "a", env, ports[0])
+            home_b, env_b = prepare_install(root / "b", env, ports[1])
+            with (
+                serving_install(host, home_a, env_a, ports[0], isolated) as first,
+                serving_install(host, home_b, env_b, ports[1], isolated) as second,
+            ):
+                assert first[0].instance_id != second[0].instance_id
+                assert first[1]["pid"] != second[1]["pid"]
+                asyncio.run(
+                    verify_active_signout(
+                        host, {"a": (home_a, env_a, *first), "b": (home_b, env_b, *second)}
+                    )
+                )
+        finally:
+            restrict()

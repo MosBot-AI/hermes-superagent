@@ -65,6 +65,10 @@ Hermes 将该 router 挂载到 `/api/plugins/hermes-personal-agent`。因此拟�
 
 不要为了可选 UI 而关闭隔离。未发现原生通用 `ctx.current_http_principal()` 合同。特别是，隔离宿主的 `with_hosted_admission` 只设置 `hosted_http_authenticated: true`；这个布尔值只是准入决定，**不是经过验证的 owner/principal/profile/policy 上下文** [H13]。原生请求的 `request.state.native_http_principal` 也不是通用 plugin-context API。E0.6 必须验证受支持、规范化的宿主边界，或者提出**具有本项目具体使用方的通用上游 principal 接缝**。隔离 host IPC 的可信身份透传是明确的未解决阻塞项。插件不得自行解码 cookie、接受客户端身份，或信任任意转发身份 header。若无法取得已验证的 principal/profile，受保护读写均返回 503 `host_identity_unavailable`，不得退化到默认 owner。已认证但尚未绑定的用户收到 403 `owner_binding_required`。
 
+### 2.3 固定版本的 dashboard 调用方身份对照
+
+[Dashboard 身份提案](../experiments/dashboard-http-principal/README-zh.md)对比干净固定版本和临时打补丁的宿主，使用同一个通过 manifest 挂载的合成插件。宿主认证、插件许可和 profile 路由都运行于真实 dashboard ASGI 应用，隔离请求使用真实子进程，提供方使用合成身份。干净版本通过原生准入抵达受保护探针，但没有规范化的调用方身份。评审候选为提供方 cookie 和 bearer 会话传递已验证的签发方、主体以及已解析的 profile。回环、原生同用户 grant 和部署会话令牌仍不提供提供方身份。返回值不携带领域授权。干净固定版本仍是兼容性目标，共享任务端点继续受现有准入条件约束。
+
 ## 3. 鉴权不等于领域授权
 
 ### 3.1 既有宿主鉴权路由
@@ -116,6 +120,16 @@ Canonical 本地会话有意允许**同一 profile** 中经过验证的操作员
 - 固定版本的原生登录回调只允许规范化的 `http://127.0.0.1[:port]/...` 或 `http://[::1][:port]/...`，拒绝 `localhost`、App scheme 和 claimed HTTPS 手机回调 URL。支持 PKCE 不代表 iOS/Android 客户端可用。
 - 可选 PWA 首先使用已有浏览器登录。E6.7 在支持的回调路径、目标设备恢复、安全凭据存储和设备撤权得到验证前保持 Blocked。若需要通用 callback/device-control 扩展，应放在现有宿主边界，而不是平行插件鉴权服务。
 - Webapp 注销和原生 App 凭据的生命周期不同。浏览器注销可使绑定的浏览器 socket 失效，而原生 App 登录仍然存续。没有已验证宿主机制时，不承诺“注销撤销全部设备”。插件硬撤权仍须阻止被撤销 binding 后续的领域接纳。
+
+#### 固定版本的回环原生 PKCE 验收
+
+[真实 PKCE 用例](../acceptance/live/test_native_webapp_pkce.py)在临时 Linux 回环 Gateway 上运行未经修改的 Hermes 固定版本 `2281116525106e3c109993ccb5dc74d02bfc1427`。用例通过测试用公开主机名启用普通的 Webapp 登录关卡。Gateway 和原生回调监听器均仅绑定 `127.0.0.1`。内置 Basic 提供方使用合成账户及为该临时安装生成的签名密钥。
+
+- Webapp 声明 `native_pkce`，并拒绝匿名身份读取。密码登录通过 S256 完成原生 broker 流程，HTTP 客户端随后导航到已注册的回环监听器。原有查询参数与客户端 state 均得到保留。原生分支未给浏览器设置会话 cookie。同一宿主拒绝 `localhost`、HTTPS 手机返回地址、应用 scheme 和 plain challenge 方法。
+- 回调 code 仅能以匹配的 verifier 兑换一次。错误 verifier 会消耗其独立用例中的 code。兑换得到的 access token 无需 cookie 即可认证，原生刷新路由会签发新凭据对。
+- 原生 Webapp 登出使独立登录的浏览器 cookie 会话失效。原生 bearer 仍可认证，原生刷新也仍可用。使用同一个临时提供方密钥正常重启 Gateway 后，刷新得到的 bearer 仍可认证。
+
+[手动 Native Gateway 工作流](../.github/workflows/native-gateway.yml)记录脱敏回执。测试在回环网络上使用 HTTP 客户端和真实 Basic 提供方。已部署的 HTTPS/OAuth、手机回调投递、安全设备存储和设备级撤销仍是 E6.7 的未完成项。
 
 ## 4. 拟议传输约定与限制
 
@@ -338,10 +352,10 @@ Approval decision 的授权入队和该 execute 路由，在共享 admission ser
 | 原生 canonical 方法 | 相关参数和含义 |
 |---|---|
 | `runtime.describe` | `{}` → instance/profile/authority epoch、capability、支持的会话创建字段 |
-| `session.create` | `{request_id, source, ...supported_fields}` → 持久化稳定 session 身份；同一已认证 principal/profile 重复 request ID 复用它 |
-| `session.resume` | `{session_id}` → 权威 snapshot 和当前 control 状态 |
-| `prompt.submit` | `{session_id, submission_id, text}` → 持久化 admission receipt，不是推理完成 |
-| `prompt.receipt` | `{session_id, admission_id, include_result?}` → 当前 admission 和保留结果 |
+| `session.create` | `{request_id, source, ...supported_fields}` → 持久化 session 身份。同一已认证 principal/profile 以相同 ID 重试同一冻结请求时复用 |
+| `session.resume` | `{session_id}` → 通过 `messages`、`pending` 和 `prompts` 返回权威快照与当前控制状态，以及修订号和重放水位 |
+| `prompt.submit` | `{session_id, submission_id, text}` → 持久化 admission 回执。`input_id` 是 `submission_id` 的受支持别名 |
+| `prompt.receipt` | `{session_id, admission_id, include_result?}` → 当前 admission。仅当调用方请求且终态 admission 保存了结果时附带 `result` 和 `usage` |
 | `prompt.cancel` | `{session_id, admission_id}` → 取消排队输入或中断已开始输入 |
 | `session.interrupt` | `{session_id, execution_generation}` → 绑定 generation 的控制 |
 | `session.steer` | `{session_id, execution_generation, text}` → 修正回执；queued 不等于已消费 |
@@ -356,6 +370,17 @@ Approval decision 的授权入队和该 execute 路由，在共享 admission ser
 Canonical 和旧 TUI-sidecar 合同存在相同方法名但 payload 不同。生成/使用正确 canonical 类型，不假设所有旧 RPC 或 server request 都受 canonical listener 支持。若采用旧连接，先协商 `client.capabilities({server_requests:true})` 再声称处理 server request；未知方法应回应 JSON-RPC error，而不是默许。没有经过验证的 adapter binding，原生 `approval.respond` 不能替代 domain approval decision。
 
 原生 replay event 包含 `type, session_id, payload, replay_epoch, seq`，以及可选 `authority_epoch, execution_generation, admission_id`。Replay 结果包含 `events, latest_seq, last_sequence, epoch, replay_epoch, truncated, snapshot_required, count`，可选 `open_requests`。Epoch 不匹配/截断时恢复 native snapshot 和当前待处理 control。Viewer 断开不代表 turn 被取消。对于已确认但响应丢失的输入，检查 durable receipt 前不要用新 submission ID 重提。
+
+#### 固定版本的浏览器会话恢复
+
+[真实恢复用例](../acceptance/live/test_native_canonical_session_recovery.py)使用干净的 Hermes 固定版本 `2281116525106e3c109993ccb5dc74d02bfc1427`、临时 Linux 安装与面向命名 profile 的 Webapp 同源浏览器票据。用例使用固定版本的 canonical 结果模型校验实际回包。测试在首个 Gateway 持久领取合成输入后、执行前将其暂停，终止该进程，再依次启动两个未经修改的替代 owner。测试环境禁止连接任何模型提供方。
+
+- `runtime.describe` 声明持久化准入、事件重放和创建会话能力。相同的无标题 `session.create` 请求在 owner 丢失前后复用同一个持久化会话。变更冻结请求时，`request_id` 被拒绝并返回 `invalid_params`。
+- `prompt.submit` 返回 `queued` 回执。被领取的队首变为 `started`，后续输入保持 `queued`。重复提交返回原回执。同一个 ID 对应的文本变更后返回 `admission_conflict`。替代 owner 的快照显示队首为 `unknown`，后续输入仍为 `queued`。
+- 旧的重放 epoch 要求重新取得快照。在替代 owner 的同一个 epoch 内，新的浏览器连接可从快照水位重放连续事件。`prompt.cancel` 将排队的后续输入结算为 `terminal/cancelled`。错误执行代次被拒绝并返回 `stale_generation`。解除对应队首的未知状态会得到 `terminal/interrupted`。完全相同的重试返回原回执。
+- 第三个 owner 可读回两条终态回执。使用另一个受支持的 ID 字段精确重试也会返回取消回执。创建的会话和两条 admission 都留在命名 profile。两条输入均未进入 transcript，也没有模型结果。
+
+[手动 Native Gateway 工作流](../.github/workflows/native-gateway.yml)记录脱敏用例回执。本次范围是 Linux 回环 Webapp 传输和已经测试的恢复路径。已部署的 OAuth 传输、手机登录、取消已开始输入和原生审批、澄清互动仍需各自的验收用例。
 
 ### 7.2 既有原生 HTTP API 是独立选项
 
@@ -432,6 +457,16 @@ Hermes 原生 API server 支持 inline image，但**不支持上传文档/file I
 宿主 Webapp 的 `POST /api/chat/file-upload` 接受 multipart `file` 和通过宿主边界选定的可选 profile。它在解析后的 profile uploads 目录中暂存唯一 0600 文件，返回 `{ok, path, size, staged_upload?}`，供已有 `file.attach` 流程使用。调用者不选择服务端路径，已删除 profile 不被重新创建。`POST /api/chat/image-upload` 是独立原生图片路径。这些路由受 surface gate 控制，不能假设每个 listener 都可用 [H10]。
 
 原生 `POST /api/files/ticket` 为既有 download/stream 路径产生绑定 route/resource 的 ticket。在该 pin 中，download ticket 有效 60 秒，最多允许三次 GET/HEAD；stream ticket 有效一小时。它们是进程内状态，具有依凭据而异的注销语义，不是永久 file ID，也不保证统一撤销 [H11]。
+
+#### 固定版本的回环 Webapp 文件证据
+
+手动[文件传输用例](../acceptance/live/test_native_webapp_file_transport.py)在 Hermes `2281116525106e3c109993ccb5dc74d02bfc1427` 上使用真实 Linux Gateway 及其提供的 Webapp。测试使用带命名 profile 的临时安装、原生浏览器会话凭据及合成文件，验证以下行为。
+
+- 未经认证的上传会被拒绝。认证后的上传在所选 profile 中暂存私有文件。浏览器通过绑定该 profile 的 Gateway WebSocket 恢复预置会话，并携带暂存描述符调用 `file.attach`。暂存和附件副本的权限均为 0600，内容与原文件字节一致，且保留在命名 profile 中。
+- 原生下载票据通过 `/api/fs/download` 提供附件。票据绑定具体路由、路径、profile 和会话。更改任一选择条件会被拒绝。一次 HEAD 和两次 GET 会耗尽下载票据，第四次请求会被拒绝。
+- 原生 Webapp 登出会关闭浏览器 WebSocket，并使仍有两次使用机会的票据失效。旧浏览器凭据无法签发新票据，替换后的凭据可以重新为相同文件签发票据。原 Gateway 进程、会话历史和准入记录均保持完整。
+
+[手动 Native Gateway 工作流](../.github/workflows/native-gateway.yml)以脱敏 JUnit 回执记录此用例。观察范围为 Linux 回环浏览器路径。可信主体传递到插件、跨设备文件授权、其他凭据模式和拟议的共享文件生命周期仍待验收。
 
 ### 9.2 拟议不透明 artifact adapter
 

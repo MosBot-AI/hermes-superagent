@@ -213,6 +213,16 @@
 
 - 支持本地操作员将[记忆记录标记](docs/31-explicit-local-memory-zh.md#6-记录主张或推断)为主张、推断或未指定。Schema 14 在召回、投影、快照及重整中保留标签。SDK 和命令 JSON 客户端可显式选择新记录格式（#159）。
 
+- 通过真实回环回调验证[原生 Webapp PKCE](docs/14-client-api-contracts-zh.md#固定版本的回环原生-pkce-验收)，并记录浏览器登出与 Gateway 重启后的原生凭据生命周期（#29）。
+
+- 验证 owner 丢失后的 [canonical Webapp 恢复](docs/14-client-api-contracts-zh.md#固定版本的浏览器会话恢复)，包括持久化输入回执、代次校验的未知状态解除，以及重放或快照恢复（#29）。
+
+- 添加[仅供评审的 dashboard 调用方身份提案](experiments/dashboard-http-principal/README-zh.md)，对照干净固定版本与临时候选宿主验证提供方身份传递（#29）。
+
+- 在固定版本 Gateway 上验证[原生 Webapp 文件传输](docs/14-client-api-contracts-zh.md#固定版本的回环-webapp-文件证据)，包括命名 profile 附件和浏览器下载票据撤销（#29）。
+
+- 增加[内部任务实时分页](docs/82-shared-client-api-zh.md#内部任务实时分页)，对已选定的本地存储实施有界读取及作用域游标重置（#29）。
+
 - 使用 `/personal-memory health` 和可选的 API-v1 SDK 操作检查本地记忆 schema 与容量。原生命令只读取已有存储，并明确报告存储缺失或不兼容（#43）。
 
 - 使用 `hermes personal-agent routing inventory` 检查带版本的本地 profile 路由能力登记表。精确查询报告各项能力的证据时效，并对私有路由绑定脱敏（#23）。

@@ -1,8 +1,14 @@
-"""Pure local-record projection; not an authorized reader or HTTP endpoint."""
+"""Shared task projections for trusted code holding a selected local store."""
 
+import base64
+import hmac
+import secrets
 import unicodedata
-from typing import TypedDict
+from typing import Literal, TypedDict
 from uuid import UUID
+
+from .client_api import MAX_TASK_PAGE_SIZE, SCHEMA_VERSION
+from .tasks import TaskError, TaskStore
 
 
 class ClientTask(TypedDict):
@@ -18,6 +24,80 @@ class ClientTaskProjectionError(ValueError):
 
     def __init__(self) -> None:
         super().__init__("Invalid local task record for shared projection.")
+
+
+class ClientTaskPageData(TypedDict):
+    items: list[ClientTask]
+    next_cursor: str | None
+    consistency: Literal["live"]
+
+
+class ClientTaskPage(TypedDict):
+    schema_version: str
+    data: ClientTaskPageData
+
+
+class ClientTaskPageError(ValueError):
+    """Stable, redacted failure at the shared page boundary."""
+
+    def __init__(
+        self,
+        code: Literal["invalid_request", "cursor_invalid", "internal_unavailable"],
+        *,
+        retryable: bool = False,
+    ) -> None:
+        self.code = code
+        self.retryable = retryable
+        super().__init__(f"Shared task page failed ({code}).")
+
+
+class SharedTaskPager:
+    """Bind continuations to one already-admitted store and caller scope.
+
+    The trusted caller must admit every read of the selected collection. Use one
+    pager per scope and discard it when that scope, admission or store changes.
+    """
+
+    def __init__(self, store: TaskStore) -> None:
+        self._store = store
+        self._cursor_key = secrets.token_bytes(32)
+
+    def _encode_cursor(self, task_id: str) -> str:
+        anchor = task_id.encode("ascii")
+        signature = hmac.digest(self._cursor_key, anchor, "sha256")
+        return base64.urlsafe_b64encode(anchor + signature).decode("ascii").rstrip("=")
+
+    def _decode_cursor(self, cursor: str) -> str:
+        # An ASCII UUID plus a SHA-256 tag encodes to 91 unpadded characters.
+        if len(cursor) != 91 or not cursor.isascii():
+            raise ClientTaskPageError("cursor_invalid")
+        try:
+            raw = base64.b64decode(cursor + "=", altchars=b"-_", validate=True)
+            anchor = raw[:36].decode("ascii")
+        except ValueError:
+            raise ClientTaskPageError("cursor_invalid") from None
+        if not hmac.compare_digest(self._encode_cursor(anchor), cursor):
+            raise ClientTaskPageError("cursor_invalid")
+        return anchor
+
+    def page(self, *, limit: int = 32, cursor: str | None = None) -> ClientTaskPage:
+        if type(limit) is not int or not 1 <= limit <= MAX_TASK_PAGE_SIZE:
+            raise ClientTaskPageError("invalid_request")
+        if cursor is not None and (type(cursor) is not str or not 1 <= len(cursor) <= 2048):
+            raise ClientTaskPageError("invalid_request")
+        after = None if cursor is None else self._decode_cursor(cursor)
+        try:
+            rows = self._store.read_shared_task_fields(after, limit)
+            items = [project_local_task(row) for row in rows[:limit]]
+        except TaskError as error:
+            raise ClientTaskPageError("internal_unavailable", retryable=error.retryable) from None
+        except ClientTaskProjectionError:
+            raise ClientTaskPageError("internal_unavailable") from None
+        next_cursor = self._encode_cursor(items[-1]["id"]) if len(rows) > limit else None
+        return {
+            "schema_version": SCHEMA_VERSION,
+            "data": {"items": items, "next_cursor": next_cursor, "consistency": "live"},
+        }
 
 
 def project_local_task(record: object) -> ClientTask:

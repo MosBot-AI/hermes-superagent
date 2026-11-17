@@ -65,6 +65,10 @@ Normal HTTP authentication precedes plugin handlers. An unauthenticated request 
 
 Do not turn isolation off to make an optional UI work. No native general-purpose `ctx.current_http_principal()` contract was found. In particular, the isolated host's `with_hosted_admission` stamps only `hosted_http_authenticated: true`; that boolean is an admission decision, **not a verified owner/principal/profile/policy context** [H13]. A native request's `request.state.native_http_principal` is also not a general plugin-context API. E0.6 must prove a supported, normalized host boundary, or propose a **generic upstream principal seam with this concrete consumer**. Trusted identity propagation through isolated host IPC is an explicit unresolved blocker. The plugin must never decode cookies, accept a client-supplied identity, or trust arbitrary forwarded identity headers. If the verified principal/profile cannot be obtained, return 503 `host_identity_unavailable` for protected reads and writes; do not degrade to a default owner. An authenticated but unbound user gets 403 `owner_binding_required`.
 
+### 2.3 Pinned dashboard principal comparison
+
+The [dashboard principal proposal](../experiments/dashboard-http-principal/README.md) compares one manifest-mounted synthetic plugin on the clean pin and a disposable patched host. Host authentication, consent and profile routing run on the real dashboard ASGI app, with a real child process for hosted requests and a synthetic provider. The clean pin reaches the protected probe with native admission but no normalized identity. The review candidate supplies the verified issuer, subject and resolved profile for provider cookies and bearer sessions. Loopback, native same-user grants and deployment tokens still supply no provider identity. The return value carries no domain grants. The clean pin remains the compatibility target and the shared task endpoint remains gated.
+
 ## 3. Authentication Is Not Domain Authorization
 
 ### 3.1 Existing host authentication routes
@@ -116,6 +120,16 @@ On every read and command, verify the current credential, owner binding, profile
 - The pinned native sign-in callback is only canonical `http://127.0.0.1[:port]/...` or `http://[::1][:port]/...`. It rejects `localhost`, app schemes and claimed HTTPS mobile callback URLs. PKCE support is not evidence that an iOS/Android client works.
 - Existing browser sign-in is the first optional PWA path. E6.7 is Blocked until a supported callback path, target-device recovery, secure credential storage and device revocation are proven. If a generic callback/device-control extension is needed, it belongs at the existing host boundary, not in a parallel plugin auth service.
 - Webapp sign-out and native-app credentials do not have identical lifetimes. A browser sign-out can invalidate its bound browser sockets while native-app sign-in survives. Never promise “logout revokes every device” without a verified host mechanism. Plugin hard revocation still prevents subsequent domain admissions under the revoked binding.
+
+#### Pinned loopback native PKCE evidence
+
+The [live PKCE case](../acceptance/live/test_native_webapp_pkce.py) serves the unmodified Hermes pin `2281116525106e3c109993ccb5dc74d02bfc1427` on a temporary Linux loopback Gateway. The test selects the ordinary Webapp sign-in gate using a fixture public host name. The Gateway and native callback listener bind only to `127.0.0.1`. The bundled Basic provider uses a synthetic account and a signing key generated for the temporary installation.
+
+- The Webapp advertises `native_pkce` and refuses anonymous identity reads. With S256, password sign-in completes the native broker and an HTTP client navigates to the registered loopback listener. Existing query parameters and client state survive. The native branch leaves the browser without a session cookie. The same host refuses `localhost`, an HTTPS mobile return URL, an app scheme and the plain challenge method.
+- The callback code exchanges once with its matching verifier. An incorrect verifier consumes its own separate test code. The exchanged access token authenticates without cookies and the native refresh route issues a fresh pair.
+- Native Webapp sign-out invalidates a separately signed-in browser's cookie session. The native bearer still authenticates and its native refresh still works. The refreshed bearer authenticates again after an ordinary Gateway restart with the same temporary provider key.
+
+The [manual Native Gateway workflow](../.github/workflows/native-gateway.yml) records a sanitized receipt. The test uses HTTP clients and the actual Basic provider over loopback. Deployed HTTPS/OAuth, handset callback delivery, secure device storage and device-specific revocation remain open under E6.7.
 
 ## 4. Proposed Wire Conventions and Limits
 
@@ -338,10 +352,10 @@ For continuation of native CLI/TUI/Desktop/messaging-owned sessions, use the exi
 | Native canonical method | Relevant parameters and meaning |
 |---|---|
 | `runtime.describe` | `{}` → instance/profile/authority epoch, capabilities, supported session creation fields |
-| `session.create` | `{request_id, source, ...supported_fields}` → durable stable session identity; repeat request ID reuses it for the same authenticated principal/profile |
-| `session.resume` | `{session_id}` → authoritative snapshot and current control state |
-| `prompt.submit` | `{session_id, submission_id, text}` → durable admission receipt, not finished inference |
-| `prompt.receipt` | `{session_id, admission_id, include_result?}` → current admission and retained result |
+| `session.create` | `{request_id, source, ...supported_fields}` → durable session identity. An exact frozen request with the same ID reuses it for the authenticated principal/profile |
+| `session.resume` | `{session_id}` → authoritative snapshot and current control state in `messages`, `pending` and `prompts`, with revision and replay watermark |
+| `prompt.submit` | `{session_id, submission_id, text}` → durable admission receipt. `input_id` is an accepted alias for `submission_id` |
+| `prompt.receipt` | `{session_id, admission_id, include_result?}` → current admission. `result` and `usage` are included only when requested and saved for a terminal admission |
 | `prompt.cancel` | `{session_id, admission_id}` → retire queued input or interrupt started input |
 | `session.interrupt` | `{session_id, execution_generation}` → generation-bound control |
 | `session.steer` | `{session_id, execution_generation, text}` → correction receipt; queued is not consumed |
@@ -356,6 +370,17 @@ Native admission status is `queued | started | unknown | terminal`, with `admiss
 Canonical and legacy TUI-sidecar contracts have overlapping method names but different payloads. Generate/use the correct canonical types; do not assume all legacy RPCs or server requests are supported by the canonical listener. If using a legacy connection, negotiate `client.capabilities({server_requests:true})` before claiming to handle server requests, and answer unknown methods with JSON-RPC errors rather than silently approving. Native `approval.respond` is not interchangeable with a domain approval decision without the verified adapter binding.
 
 Native replay events carry `type, session_id, payload, replay_epoch, seq` and optional `authority_epoch, execution_generation, admission_id`. Replay results include `events, latest_seq, last_sequence, epoch, replay_epoch, truncated, snapshot_required, count`, optionally `open_requests`. On epoch mismatch/truncation, recover a native snapshot and current pending controls. Viewers disconnecting does not mean a turn was cancelled. Never re-submit a lost acknowledged input with a new submission ID before checking its durable receipt.
+
+#### Pinned browser session recovery
+
+The [live recovery case](../acceptance/live/test_native_canonical_session_recovery.py) uses the clean Hermes pin `2281116525106e3c109993ccb5dc74d02bfc1427` with a temporary Linux installation and a same-origin Webapp browser ticket for a named profile. It validates actual replies with the pinned canonical result models. One test pause holds the first Gateway after it durably claims a synthetic input and before execution. The test terminates that process and starts two unmodified replacement owners. The fixture allows no provider connections.
+
+- `runtime.describe` advertises durable admission, event replay and session creation. An exact untitled `session.create` request reuses the same stored session before and after owner loss. Changing its frozen request is refused with `invalid_params` on `request_id`.
+- `prompt.submit` returns a `queued` receipt. The claimed head reaches `started` while its follower stays `queued`. The same submission returns the original receipt; changed text under the same ID returns `admission_conflict`. A replacement snapshot shows the head `unknown` and the follower still `queued`.
+- The previous replay epoch requires a fresh snapshot. Within the replacement's epoch, a new browser connection replays consecutive events from the snapshot watermark. `prompt.cancel` settles the queued follower as `terminal/cancelled`. The incorrect generation is refused with `stale_generation`. Resolving the exact lost head produces `terminal/interrupted`. Exact retries return the same receipts.
+- The third owner returns both terminal receipts. An exact submission retry using the other accepted ID field returns the cancelled receipt. The created session and exactly two admissions stay in the named profile. Neither input reaches the transcript or returns a model result.
+
+The [manual Native Gateway workflow](../.github/workflows/native-gateway.yml) records the sanitized case receipt. This scope is Linux loopback Webapp transport and the tested recovery path. It leaves deployed OAuth transport, phone sign-in, started cancellation and native approval/clarification interaction to their own acceptance cases.
 
 ### 7.2 Existing native HTTP API is a separate choice
 
@@ -432,6 +457,16 @@ Hermes's native API server supports inline images but **not uploaded document/fi
 The host Webapp's `POST /api/chat/file-upload` accepts multipart `file` and an optional profile selected through the host boundary. It stages a unique 0600 file under the resolved profile's uploads directory, returns `{ok, path, size, staged_upload?}`, and feeds the existing `file.attach` flow. The caller does not choose a server path; deleted profiles are not recreated. `POST /api/chat/image-upload` is a separate native image path. These routes are surface-gated; their availability on every listener is not assumed [H10].
 
 Native `POST /api/files/ticket` produces route/resource-bound tickets for existing download/stream paths. At this pin, a download ticket lasts 60 seconds and permits up to three GET/HEAD requests; a stream ticket lasts one hour. They are process-local and have credential-specific sign-out semantics, not permanent file IDs or universal revocation guarantees [H11].
+
+#### Pinned loopback Webapp file evidence
+
+The manual [file transport case](../acceptance/live/test_native_webapp_file_transport.py) uses a real Linux Gateway and its served Webapp at Hermes `2281116525106e3c109993ccb5dc74d02bfc1427`. The test uses a temporary installation with a named profile, a native browser session credential and a synthetic file. It checks these behaviors.
+
+- The unauthenticated upload is refused. The authenticated upload stages a private file in the selected profile. The browser's profile-scoped Gateway WebSocket resumes the seeded session and calls `file.attach` with the staged descriptor. Staged and attached copies have mode 0600, contain the original bytes and stay in the named profile.
+- The native download ticket serves the attached file at `/api/fs/download`. It matches the exact route, path, profile and session. A changed selector is rejected. One HEAD and two GET requests exhaust a download ticket. A fourth request is rejected.
+- Native Webapp sign-out closes the browser socket and invalidates a ticket that still has two uses. The old browser credential cannot mint another ticket. The replacement credential can obtain a fresh ticket for the same bytes. The original Gateway process, session history and admission rows remain intact.
+
+The [manual Native Gateway workflow](../.github/workflows/native-gateway.yml) records a sanitized JUnit receipt for this case. The observed scope is the Linux loopback browser path. Trusted principal propagation to the plugin, cross-device artifact authorization, other credential modes, and the proposed shared artifact lifecycle remain open.
 
 ### 9.2 Proposed opaque artifact adapter
 
