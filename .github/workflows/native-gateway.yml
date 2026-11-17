@@ -139,6 +139,38 @@ jobs:
               raise SystemExit("Expected both installed Bot Chat cases to pass cleanly")
           PY
           install -m 600 "$result" "$RUNNER_TEMP/native-gateway-evidence/packaged-bot.xml"
+      - name: Verify optional memory provider with a loopback model
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Keep the private native control socket under Linux's path limit.
+          sandbox="$(mktemp -d /tmp/mp.XXXXXX)"
+          trap 'rm -rf -- "$sandbox"' EXIT
+          mkdir "$sandbox/home" "$sandbox/tmp"
+          test_python="$RUNNER_TEMP/hermes-test-venv/bin/python"
+          result="$sandbox/packaged-memory-provider.xml"
+          env -i PATH="$PATH" LANG=C.UTF-8 HOME="$sandbox/home" TMPDIR="$sandbox/tmp" \
+            XDG_CONFIG_HOME="$sandbox/config" XDG_CACHE_HOME="$sandbox/cache" \
+            HERMES_TEST_ROOT="$RUNNER_TEMP/hermes" HERMES_RUNTIME_PACKAGE="$RUNNER_TEMP/live-runtime" \
+            HERMES_SOURCE_COMMIT="$GITHUB_SHA" PYTHONNOUSERSITE=1 PYTHONDONTWRITEBYTECODE=1 \
+            PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
+            "$test_python" -m pytest -q -p no:cacheprovider --show-capture=no \
+            -o junit_logging=no --basetemp="$sandbox/ptest" --junitxml="$result" \
+            acceptance/live/test_packaged_memory_provider.py
+          "$test_python" - "$result" <<'PYTHON'
+          import sys
+          from xml.etree import ElementTree
+
+          result = ElementTree.parse(sys.argv[1])
+          cases = [case.get("name") for case in result.findall(".//testcase")]
+          excluded = ("error", "failure", "skipped", "system-out", "system-err")
+          if cases != ["test_provider_wheel"] or any(
+              result.findall(f".//{tag}") for tag in excluded
+          ):
+              raise SystemExit("Expected one clean optional memory provider case")
+          PYTHON
+          install -m 600 "$result" "$RUNNER_TEMP/native-gateway-evidence/packaged-memory-provider.xml"
       - name: Upload synthetic native Gateway test receipt
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

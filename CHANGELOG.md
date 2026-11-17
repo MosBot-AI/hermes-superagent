@@ -205,6 +205,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Add manual native Gateway acceptance for the optional memory-provider wheel with a loopback model. Verify correction, forgetting, disabled recall and retained transcript context, and record the pinned host's conflicting authority label (#45).
+
 - Add internal pause and explicit resume for pending enrollment policy. Schema v3 preserves existing administrative and read audit history and invalidates pre-pause confirmations across resume (#16).
 
 - Verify Telegram command denials through the real plugin host child. The command RPC omits receiver and message provenance, and native allowlist refusals stop before IPC (#14).

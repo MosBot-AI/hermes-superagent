@@ -90,13 +90,15 @@ class SyntheticModel(BaseHTTPRequestHandler):
             and body.get("model") == MODEL
             and "input" not in body
             and authorization == f"Bearer {MODEL_KEY}"
-            and MESSAGE in json.dumps(last_user, ensure_ascii=False)
+            and self.server.expected_user_text in json.dumps(last_user, ensure_ascii=False)
         )
         if not is_completion:
             self.server.requests.append("unexpected POST")
             self.send_error(400)
             return
         self.server.requests.append("chat completion")
+        if self.server.observe_messages is not None:
+            self.server.observe_messages(messages)
         reply = {"role": "assistant", "content": REPLY}
         choice = {"index": 0, "message": reply, "finish_reason": "stop"}
         frame = {"id": "synthetic", "model": MODEL, "choices": [choice]}
@@ -115,9 +117,11 @@ class SyntheticModel(BaseHTTPRequestHandler):
 
 
 @contextmanager
-def synthetic_model():
+def synthetic_model(*, expected_user_text=MESSAGE, observe_messages=None):
     with ThreadingHTTPServer(("127.0.0.1", 0), SyntheticModel) as server:
         server.requests = []
+        server.expected_user_text = expected_user_text
+        server.observe_messages = observe_messages
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
