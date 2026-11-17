@@ -1,5 +1,5 @@
 diff --git a/cron/delivery_outcome.py b/cron/delivery_outcome.py
-index 31f27980..047c844a 100644
+index 31f2798090..4670fc01e1 100644
 --- a/cron/delivery_outcome.py
 +++ b/cron/delivery_outcome.py
 @@ -2,15 +2,12 @@
@@ -24,7 +24,7 @@ index 31f27980..047c844a 100644
  """
  from __future__ import annotations
  
-@@ -19,11 +16,7 @@ from typing import Optional
+@@ -19,71 +16,92 @@ from typing import Optional
  
  logger = logging.getLogger(__name__)
  
@@ -36,8 +36,46 @@ index 31f27980..047c844a 100644
 +_TERMINAL_OUTCOMES = frozenset({"delivered", "suppressed", "failed", "unknown"})
  
  
- def _settle_job_record(job_id: str, execution_id: str, delivery_error: Optional[str]) -> bool:
-@@ -53,37 +46,56 @@ def _settle_job_record(job_id: str, execution_id: str, delivery_error: Optional[
+-def _settle_job_record(job_id: str, execution_id: str, delivery_error: Optional[str]) -> bool:
+-    """Stamp the outcome onto the job only while *execution_id* is still its current run:
+-    the ledger's latest attempt for the job AND the job's latest recorded completion."""
++def _settle_job_record(
++    job_id: str, execution_id: str, outcome: str, delivery_error: Optional[str],
++) -> bool:
++    """Write back to the job's current completion without stamping a newer run."""
+     from cron.executions import latest_execution
+     from cron.jobs import _with_job, save_jobs
+ 
+-    latest = latest_execution(job_id)
+-    if latest is None or latest.get("id") != execution_id:
+-        return False
+-
+     def apply(jobs, _i, job):
+         completions = job.get("canonical_completions") or []
+         if not completions or completions[-1] != execution_id:
+             return False
+         status = job.get("last_status")
+         if status == "delivery_queued":
++            # A newer attempt can exist before it writes a new summary. The current
++            # canonical completion still owns this pending delivery display.
+             status = "delivery_failed" if delivery_error else "ok"
+-        if (status, delivery_error) == (job.get("last_status"), job.get("last_delivery_error")):
++        else:
++            # A summary without the queued marker may belong to a later direct
++            # run, whose completion is not recorded in canonical_completions.
++            latest = latest_execution(job_id)
++            if latest is None or latest.get("id") != execution_id:
++                return False
++        if (status, outcome, delivery_error) == (
++            job.get("last_status"), job.get("last_delivery_outcome"), job.get("last_delivery_error"),
++        ):
+             return True
+-        job["last_status"] = status
+-        job["last_delivery_error"] = delivery_error
++        job.update(last_status=status, last_delivery_outcome=outcome, last_delivery_error=delivery_error)
+         save_jobs(jobs)
+         return True
+ 
      return bool(_with_job(job_id, apply, missing=False))
  
  
@@ -75,7 +113,7 @@ index 31f27980..047c844a 100644
 +        error = str(receipt.get("error") or f"delivery {outcome}")
 +    # Keep the durable marker until the job update is done. A newer or removed
 +    # job can decline the summary write, but the exact old attempt still settles.
-+    _settle_job_record(job_id, execution_id, error)
++    _settle_job_record(job_id, execution_id, outcome, error)
 +    return settle_delivery_outcome(execution_id, outcome)
  
  
@@ -119,7 +157,7 @@ index 31f27980..047c844a 100644
  
  def settle_quietly(job_id: Optional[str], execution_id: Optional[str]) -> None:
 diff --git a/cron/delivery_queue.py b/cron/delivery_queue.py
-index fbabf1f0..b5991512 100644
+index fbabf1f0af..b5991512ce 100644
 --- a/cron/delivery_queue.py
 +++ b/cron/delivery_queue.py
 @@ -225,6 +225,28 @@ def get_status(execution_id: str) -> Optional[dict]:
@@ -185,7 +223,7 @@ index fbabf1f0..b5991512 100644
  
  
 diff --git a/cron/executions.py b/cron/executions.py
-index 26f89649..5b2705f7 100644
+index 26f89649b7..5b2705f762 100644
 --- a/cron/executions.py
 +++ b/cron/executions.py
 @@ -54,11 +54,15 @@ def _connect() -> sqlite3.Connection:
@@ -226,8 +264,21 @@ index 26f89649..5b2705f7 100644
  _OWNER_GONE_REASON = (
      "Scheduler restarted after this execution's owner exited before a durable "
      "terminal state; whether side effects ran is unknown."
+diff --git a/cron/jobs.py b/cron/jobs.py
+index 1809214b9d..65f8464261 100644
+--- a/cron/jobs.py
++++ b/cron/jobs.py
+@@ -2395,7 +2395,7 @@ def _record_run_outcome(
+     status: Optional[str], now: str,
+ ) -> None:
+     """Stamp one completed run onto *job*: status fields, failure streak, alert markers, claims."""
+-    job["last_run_at"] = now
++    job.update(last_run_at=now, last_delivery_outcome=None)
+     job.pop("manual_run_at", None)
+     job.pop("manual_run_restore_at", None)
+     # The transient manual-run context is single-fire: the run that just completed consumed it.
 diff --git a/cron/scheduler_bookkeeping.py b/cron/scheduler_bookkeeping.py
-index b6f6dcfb..b4fae634 100644
+index b6f6dcfb8f..b4fae63488 100644
 --- a/cron/scheduler_bookkeeping.py
 +++ b/cron/scheduler_bookkeeping.py
 @@ -104,10 +104,9 @@ def finish_completed_run(d, fire_owner: Optional[str], execution_id: str, *, rec
@@ -245,26 +296,20 @@ index b6f6dcfb..b4fae634 100644
          # Failure ping left the process (or had a configured target): mark the incident alerted.
          scheduler._mark_incident_alerted(d.failure_incident_id)
 diff --git a/hermes_cli/cron.py b/hermes_cli/cron.py
-index 709e018d..470d872b 100644
+index 709e018d90..a5f7d32736 100644
 --- a/hermes_cli/cron.py
 +++ b/hermes_cli/cron.py
-@@ -217,6 +217,15 @@ def _last_run_display(job: dict[str, Any]) -> str:
+@@ -217,6 +217,9 @@ def _last_run_display(job: dict[str, Any]) -> str:
      if last_status == "delivery_queued":
          return color("finished; delivery is still in progress", Colors.YELLOW)
      if last_status == "delivery_failed":
-+        execution = job.get("latest_execution") or {}
-+        completions = job.get("canonical_completions") or []
-+        if (
-+            isinstance(completions, list) and completions
-+            and execution.get("id") == completions[-1]
-+            and execution.get("delivery_outcome") == "unknown"
-+        ):
++        if job.get("last_delivery_outcome") == "unknown":
 +            return color("Run finished. Delivery outcome unknown. Check the original destination before retrying.",
 +                         Colors.YELLOW)
          # Agent succeeded but the result never reached the user — not green; last_error is None.
          return color(f"ran, but the result was not delivered ({_short_reason(job.get('last_delivery_error'))}). "
                       f"{_delivery_fix_hint(job)}", Colors.YELLOW)
-@@ -352,6 +361,12 @@ def cron_runs(job_id: Optional[str] = None, limit: int = 20):
+@@ -352,6 +355,12 @@ def cron_runs(job_id: Optional[str] = None, limit: int = 20):
          print(f"{record.get('id', '?')}  {record.get('status', '?'):<9}  "
                f"job={record.get('job_id', '?')}  source={record.get('source', '?')}  "
                f"{record.get('claimed_at', '?')}")
@@ -278,7 +323,7 @@ index 709e018d..470d872b 100644
              print(f"    {record['error']}")
  
 diff --git a/tests/cron/test_queued_delivery_fencing.py b/tests/cron/test_queued_delivery_fencing.py
-index 2141b08e..c44a0ff7 100644
+index 2141b08ec4..c44a0ff796 100644
 --- a/tests/cron/test_queued_delivery_fencing.py
 +++ b/tests/cron/test_queued_delivery_fencing.py
 @@ -43,7 +43,7 @@ def test_dead_drain_owner_settles_the_run_it_fenced_unknown(tmp_path, monkeypatc

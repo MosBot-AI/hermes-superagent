@@ -8,7 +8,7 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Fixed
 
-- Add a [review-only native cron repair](experiments/cron-delivery-writeback/README.md) that recovers terminal receipt write-back after process loss, preserves unknown delivery and shows the recorded outcome in CLI history (#19).
+- Add a [review-only native cron repair](experiments/cron-delivery-writeback/README.md) that recovers terminal receipt write-back after process loss, preserves unknown delivery and updates the current job summary while a newer attempt is running (#19).
 
 - Add an inactive native-host proposal that labels fresh and replayed memory context as untrusted evidence. Verify the legacy SQLite sidecar and preserve stored history.
 

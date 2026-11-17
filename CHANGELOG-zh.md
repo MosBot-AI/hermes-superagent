@@ -8,7 +8,7 @@
 
 ### 修复
 
-- 增加[仅供评审的原生 cron 修复](experiments/cron-delivery-writeback/README-zh.md)，在进程退出后恢复终态回执回写，保留未知投递结果，并在 CLI 历史展示已记录结果（#19）。
+- 增加[仅供评审的原生 cron 修复](experiments/cron-delivery-writeback/README-zh.md)，在进程退出后恢复终态回执回写，保留未知投递结果，并在较新的执行仍在运行时更新当前作业摘要（#19）。
 
 - 增加未启用的原生宿主提案，为新召回和历史重放中的记忆上下文标注不受信证据。验证旧 SQLite sidecar，并保留已存历史。
 

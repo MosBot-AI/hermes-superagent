@@ -3,25 +3,26 @@
   "status": "Review-only, unsubmitted and outside runtime distribution",
   "source_repository": "https://github.com/NousResearch/hermes-agent",
   "base": "2281116525106e3c109993ccb5dc74d02bfc1427",
-  "staged_tree": "5ae7431eb8a37b3fc3ef332b36d66a991334019d",
+  "staged_tree": "fb0c17aaf12e3656400b3b96306770fd017e9a00",
   "patch_file": "cron-delivery-writeback.patch",
   "patch_files": [
     "cron/delivery_outcome.py",
     "cron/delivery_queue.py",
     "cron/executions.py",
+    "cron/jobs.py",
     "cron/scheduler_bookkeeping.py",
     "hermes_cli/cron.py",
     "tests/cron/test_queued_delivery_fencing.py"
   ],
   "source_hashes": {
-    "test_writeback.py": "c489290a211614728f6b7a02ee491bf3ed6c7d2522f08ebae6bcffe8d1805b2d",
-    "cron-delivery-writeback.patch": "30ae2a3ba4ebe1924979270ee833106f07cf44746f91321ce2e5490e11cda7ea",
+    "test_writeback.py": "1b4374106a80ff4302372c11d878e151657b075a22da8509ab95dfad60d1a3d5",
+    "cron-delivery-writeback.patch": "877018e2bd1a41d25b6dbc9b528669271523c099033767bfbd94a74deac90053",
     "LICENSE.hermes-agent": "821556e6336796450ab852d375117b48a4887e71d255794fd6318d99982a5ab6"
   },
   "verification": {
     "python": "3.14.9",
     "clean_controls_passed": 2,
-    "candidate_passed": 9,
+    "candidate_passed": 11,
     "candidate_existing_regressions_passed": 89,
     "upstream_static_checks_passed": 15,
     "upstream_import_boundary_passed": true,
