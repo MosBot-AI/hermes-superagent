@@ -211,6 +211,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Verify [native Webapp file transport](docs/14-client-api-contracts.md#pinned-loopback-webapp-file-evidence) on the pinned Gateway, including named-profile attachment and browser download ticket revocation (#29).
+
 - Add [internal live task pagination](docs/82-shared-client-api.md#internal-live-task-pagination) over selected local stores, with bounded reads and scoped cursor reset (#29).
 
 - Inspect local memory schema and capacity with `/personal-memory health` and an optional API-v1 SDK operation. The native command reads only an existing store and reports missing or incompatible storage explicitly (#43).

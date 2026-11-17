@@ -433,6 +433,16 @@ The host Webapp's `POST /api/chat/file-upload` accepts multipart `file` and an o
 
 Native `POST /api/files/ticket` produces route/resource-bound tickets for existing download/stream paths. At this pin, a download ticket lasts 60 seconds and permits up to three GET/HEAD requests; a stream ticket lasts one hour. They are process-local and have credential-specific sign-out semantics, not permanent file IDs or universal revocation guarantees [H11].
 
+#### Pinned loopback Webapp file evidence
+
+The manual [file transport case](../acceptance/live/test_native_webapp_file_transport.py) uses a real Linux Gateway and its served Webapp at Hermes `2281116525106e3c109993ccb5dc74d02bfc1427`. The test uses a temporary installation with a named profile, a native browser session credential and a synthetic file. It checks these behaviors.
+
+- The unauthenticated upload is refused. The authenticated upload stages a private file in the selected profile. The browser's profile-scoped Gateway WebSocket resumes the seeded session and calls `file.attach` with the staged descriptor. Staged and attached copies have mode 0600, contain the original bytes and stay in the named profile.
+- The native download ticket serves the attached file at `/api/fs/download`. It matches the exact route, path, profile and session. A changed selector is rejected. One HEAD and two GET requests exhaust a download ticket. A fourth request is rejected.
+- Native Webapp sign-out closes the browser socket and invalidates a ticket that still has two uses. The old browser credential cannot mint another ticket. The replacement credential can obtain a fresh ticket for the same bytes. The original Gateway process, session history and admission rows remain intact.
+
+The [manual Native Gateway workflow](../.github/workflows/native-gateway.yml) records a sanitized JUnit receipt for this case. The observed scope is the Linux loopback browser path. Trusted principal propagation to the plugin, cross-device artifact authorization, other credential modes, and the proposed shared artifact lifecycle remain open.
+
 ### 9.2 Proposed opaque artifact adapter
 
 All artifact routes remain disabled until the native storage/attachment/read boundary is tested. A plugin artifact ID is **new plugin-owned metadata**, not an invented native `artifactfileID` capability. Proposed metadata:

@@ -211,6 +211,8 @@
 
 ### 新增
 
+- 在固定版本 Gateway 上验证[原生 Webapp 文件传输](docs/14-client-api-contracts-zh.md#固定版本的回环-webapp-文件证据)，包括命名 profile 附件和浏览器下载票据撤销（#29）。
+
 - 增加[内部任务实时分页](docs/82-shared-client-api-zh.md#内部任务实时分页)，对已选定的本地存储实施有界读取及作用域游标重置（#29）。
 
 - 使用 `/personal-memory health` 和可选的 API-v1 SDK 操作检查本地记忆 schema 与容量。原生命令只读取已有存储，并明确报告存储缺失或不兼容（#43）。

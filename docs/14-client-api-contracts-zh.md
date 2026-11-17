@@ -433,6 +433,16 @@ Hermes 原生 API server 支持 inline image，但**不支持上传文档/file I
 
 原生 `POST /api/files/ticket` 为既有 download/stream 路径产生绑定 route/resource 的 ticket。在该 pin 中，download ticket 有效 60 秒，最多允许三次 GET/HEAD；stream ticket 有效一小时。它们是进程内状态，具有依凭据而异的注销语义，不是永久 file ID，也不保证统一撤销 [H11]。
 
+#### 固定版本的回环 Webapp 文件证据
+
+手动[文件传输用例](../acceptance/live/test_native_webapp_file_transport.py)在 Hermes `2281116525106e3c109993ccb5dc74d02bfc1427` 上使用真实 Linux Gateway 及其提供的 Webapp。测试使用带命名 profile 的临时安装、原生浏览器会话凭据及合成文件，验证以下行为。
+
+- 未经认证的上传会被拒绝。认证后的上传在所选 profile 中暂存私有文件。浏览器通过绑定该 profile 的 Gateway WebSocket 恢复预置会话，并携带暂存描述符调用 `file.attach`。暂存和附件副本的权限均为 0600，内容与原文件字节一致，且保留在命名 profile 中。
+- 原生下载票据通过 `/api/fs/download` 提供附件。票据绑定具体路由、路径、profile 和会话。更改任一选择条件会被拒绝。一次 HEAD 和两次 GET 会耗尽下载票据，第四次请求会被拒绝。
+- 原生 Webapp 登出会关闭浏览器 WebSocket，并使仍有两次使用机会的票据失效。旧浏览器凭据无法签发新票据，替换后的凭据可以重新为相同文件签发票据。原 Gateway 进程、会话历史和准入记录均保持完整。
+
+[手动 Native Gateway 工作流](../.github/workflows/native-gateway.yml)以脱敏 JUnit 回执记录此用例。观察范围为 Linux 回环浏览器路径。可信主体传递到插件、跨设备文件授权、其他凭据模式和拟议的共享文件生命周期仍待验收。
+
 ### 9.2 拟议不透明 artifact adapter
 
 所有 artifact 路由在 native storage/attachment/read 边界通过测试前保持禁用。插件 artifact ID 是**新的插件自有元数据**，不是虚构的原生 `artifactfileID` 能力。拟议元数据：
