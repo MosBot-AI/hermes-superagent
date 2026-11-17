@@ -211,6 +211,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Verify [canonical Webapp recovery](docs/14-client-api-contracts.md#pinned-browser-session-recovery) across owner loss, including durable prompt receipts, generation-checked resolution, and replay or snapshot recovery (#29).
+
 - Add a [review-only dashboard principal proposal](experiments/dashboard-http-principal/README.md) and verify provider identity propagation against the clean pinned host and a disposable candidate (#29).
 
 - Verify [native Webapp file transport](docs/14-client-api-contracts.md#pinned-loopback-webapp-file-evidence) on the pinned Gateway, including named-profile attachment and browser download ticket revocation (#29).
