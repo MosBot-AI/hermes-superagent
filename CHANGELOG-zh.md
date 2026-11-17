@@ -211,6 +211,8 @@
 
 ### 新增
 
+- 支持本地操作员将[记忆记录标记](docs/31-explicit-local-memory-zh.md#6-记录主张或推断)为主张、推断或未指定。Schema 14 在召回、投影、快照及重整中保留标签。SDK 和命令 JSON 客户端可显式选择新记录格式（#159）。
+
 - 通过真实回环回调验证[原生 Webapp PKCE](docs/14-client-api-contracts-zh.md#固定版本的回环原生-pkce-验收)，并记录浏览器登出与 Gateway 重启后的原生凭据生命周期（#29）。
 
 - 验证 owner 丢失后的 [canonical Webapp 恢复](docs/14-client-api-contracts-zh.md#固定版本的浏览器会话恢复)，包括持久化输入回执、代次校验的未知状态解除，以及重放或快照恢复（#29）。

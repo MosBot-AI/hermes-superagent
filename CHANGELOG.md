@@ -211,6 +211,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Let local operators [label memory records](docs/31-explicit-local-memory.md#6-record-a-claim-or-inference) as claims, inferences or unspecified. Schema 14 carries labels through recall, projection, snapshots and repack. SDK and command JSON clients opt in to the new record format (#159).
+
 - Verify [native Webapp PKCE](docs/14-client-api-contracts.md#pinned-loopback-native-pkce-evidence) over a real loopback callback and record the native credential lifetime across browser sign-out and Gateway restart (#29).
 
 - Verify [canonical Webapp recovery](docs/14-client-api-contracts.md#pinned-browser-session-recovery) across owner loss, including durable prompt receipts, generation-checked resolution, and replay or snapshot recovery (#29).

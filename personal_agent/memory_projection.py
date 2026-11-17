@@ -80,7 +80,7 @@ def render(backend, conn, evaluated_at):
     rows = conn.execute(
         f"SELECT {','.join(_COLUMNS)} FROM records WHERE status='active' ORDER BY sequence"
     ).fetchall()
-    records = [backend._record(row, now) for row in rows]
+    records = [backend._record(row, now, typed=True) for row in rows]
     future = [r["expires_at"] for r in records if r["expires_at"] and not r["expired"]]
     lines = [
         "# Private local memory projection",
@@ -89,6 +89,7 @@ def render(backend, conn, evaluated_at):
         "Do not edit this managed file. Use explicit memory commands for corrections.",
         "Status can change after generation. Run /personal-memory projection-status.",
         "Expired active records remain included and labelled; expiry is not deletion.",
+        "Assertion labels are explicit classifications. Source describes the latest editing route.",
         "",
         "Namespace: " + _plain(backend._namespace),
         "Watermark: " + str(watermark(conn)),

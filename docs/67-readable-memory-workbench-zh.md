@@ -19,7 +19,7 @@
 
 ## 视图含义
 
-`/personal-memory health` 显示现有存储的 schema，以及记录数、非终态变更数和总变更数的用量与限额。使用 `/personal-memory --json health` 获取结构化输出。该命令使用当前 LOCAL 操作者作用域，以只读方式打开已有数据库。存储缺失时返回 `memory_store_missing`；需要迁移的旧版 schema 返回 `readonly_schema_unavailable`。报告仅包含容量元数据。参见 [SDK 健康检查契约](85-local-memory-sdk-zh.md#可选的本地存储健康检查)。
+`/personal-memory health` 显示现有存储的 schema，以及记录数、非终态变更数和总变更数的用量与限额。使用 `/personal-memory --json health` 获取结构化输出。该命令使用当前 LOCAL 操作者作用域，以只读方式打开已有数据库。存储缺失时返回 `memory_store_missing`。对于兼容的 schema 13 或 14，命令会报告实际版本。需要迁移的存储返回 `readonly_schema_unavailable`。报告仅包含容量元数据。参见 [SDK 健康检查契约](85-local-memory-sdk-zh.md#可选的本地存储健康检查)。
 
 - 列表/搜索/多词搜索显示返回的完整记录、状态、主题和过期时间。被遗忘记录已清除权威载荷，但不代表擦除先前历史、导出或备份。已过期记录仍在存储中，只是排除在普通新召回之外。
 - 详情还显示创建/更新时间及最后修改路径/会话引用。这些是已记录元数据，不是经验证的人类意图。

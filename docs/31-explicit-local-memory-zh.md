@@ -81,3 +81,24 @@ SQLite 是本切片唯一权威。精确自有 schema/version 检查、事务、
 参见 [79. 显式一致的本地记忆快照](79-local-memory-snapshots-zh.md)，了解私密快照创建/检查。快照保留历史明文，不提供恢复/导入。
 
 schema 11 操作人员抑制及新关联接受来源的更正/遗忘参见[精确来源抑制](80-exact-memory-source-suppression-zh.md)；历史回执不是当前状态。
+
+## 6. 记录主张或推断
+
+操作员可将一条记录标为主张（`claim`）、推断（`inference`）或未指定（`unspecified`）。标签说明如何理解记录文本，不核验事实、不确认作者，也不提供权限。记录初始来源和最近编辑入口可单独查看。
+
+```text
+/personal-memory remember "The example job ended at noon" --assertion-kind claim --request-id job-1
+/personal-memory correct RECORD_ID --assertion-kind inference --expected-revision 1 --request-id job-2
+/personal-memory show RECORD_ID
+/personal-memory --json recall "example job" --record-format epistemic_v1
+```
+
+新增记录时，省略标签即为 `unspecified`，包括已激活模型工具写入以及接受候选项或保留来源时产生的记录。更改正文且未显式指定标签时，标签重设为 `unspecified`。重新提交相同正文或仅修改主题、到期时间时保留当前标签，除非请求指定新标签。只修改标签与更改正文采用相同的 revision、事件和持久化回执规则。遗忘会同时清除标签和正文。完全相同的重试返回原操作回执；复用同一个请求 ID 并更改标签会产生冲突。
+
+可读的记录视图会显示标签。JSON 客户端可在 show、list、search、search-terms、recall、export、snapshot-list 和 snapshot-show 时传入 `--record-format epistemic_v1`。本地 SDK 公布 `epistemic_labels` 能力，支持在 get、list、search、search_terms、有界召回和 export 请求中传入 `record_format: epistemic_v1`。选择此格式的记录包含 `record_format` 标记和 `assertion_kind`，已遗忘记录的后者为 null。召回和导出的 schema 分别为 `personal.memory.epistemic_recall.v1` 和 `personal.memory.epistemic_record_page.v1`。省略格式的 SDK 调用继续使用原有 API-v1 记录结构，包括使用未提供该能力的适配器时。向此类适配器请求带标签格式会返回 `capability_unavailable`。带标签的召回将标签计入字符预算，沿用原有记录选择和排序规则。
+
+受管理的 Markdown 视图将标签作为元数据呈现。编辑预览报告当前标签和提交后标签。草稿可编辑正文和主题，正文变化时使用相同的标签重设规则。若要明确分类草稿提交后的记录，可另发一条带 revision 校验的操作员更正。
+
+既有会话模型工具沿用 v1 记录结构，并拒绝显式写入标签。单独启用的自动召回上下文使用带标签的格式。
+
+以可写方式打开 SQLite 时，在单一事务内迁移到 schema 14，并保留既有回执和请求摘要。精确匹配 schema 13 的数据库可通过现有只读入口读取；受支持的 schema 10–13 历史快照会将活跃记录显示为 `unspecified`，墓碑显示为 null。这些读取均不改变数据库字节。快照保留其水位对应的历史标签。重整沿用已有恢复协议，保留源 schema 和权威记录状态，包括标签及终态墓碑。参见[一致性快照](79-local-memory-snapshots-zh.md)。

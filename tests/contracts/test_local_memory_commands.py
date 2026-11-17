@@ -403,16 +403,40 @@ def test_invalid_commands_redact_arguments_and_do_not_open_store(host, text):
 
 def test_native_recall_command_budget_and_provider_preservation(host):
     before = (host.home / "config.yaml").read_bytes()
-    saved = command(host, 'remember "Chinese summary preference" --topic "summary" --request-id r')
+    saved = command(
+        host,
+        'remember "Chinese summary preference" --topic summary '
+        "--assertion-kind claim --request-id r",
+    )
     rid = saved["data"]["record_id"]
     data = command(host, 'recall "summary" "Chinese" --limit 1 --max-chars 1024')["data"]
     assert data["items"][0]["record_id"] == rid
     assert data["items"][0]["source"] == "explicit_local_operator"
     assert data["items"][0]["matched_queries"] == [0, 1]
+    assert "assertion_kind" not in data["items"][0]
+    classified = command(host, 'recall "summary" --record-format epistemic_v1 --max-chars 1024')[
+        "data"
+    ]
+    assert classified["items"][0]["assertion_kind"] == "claim"
+    assert classified["items_json_chars"] == len(json.dumps(classified["items"], sort_keys=True))
+    assert classified["items_json_chars"] <= 1024
     assert data["items_json_chars"] == len(json.dumps(data["items"], sort_keys=True)) <= 1024
     assert command(host, 'recall "missing"')["data"]["matched_records"] == 0
     assert command(host, 'recall "summary" --max-chars 1')["error"]["code"] == "invalid_request"
-    command(host, f"forget {rid} --expected-revision 1 --request-id f")
+    assert (
+        command(
+            host, f"correct {rid} --assertion-kind inference --expected-revision 1 --request-id c"
+        )["status"]
+        == "ok"
+    )
+    assert (
+        command(host, f"show {rid} --record-format epistemic_v1")["data"]["assertion_kind"]
+        == "inference"
+    )
+    command(host, f"forget {rid} --expected-revision 2 --request-id f")
+    assert (
+        command(host, f"show {rid} --record-format epistemic_v1")["data"]["assertion_kind"] is None
+    )
     assert command(host, 'recall "summary" "Chinese"')["data"]["items"] == []
     assert (host.home / "config.yaml").read_bytes() == before
     assert not host.manager._plugins[PLUGIN_ID].hooks_registered

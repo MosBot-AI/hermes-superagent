@@ -320,6 +320,7 @@ def test_schema11_migration_preserves_payload_and_rolls_back_on_failure(tmp_path
     with opened(path) as (sdk, _, conn):
         sdk.execute("remember", {"request_id": "seed", "content": "synthetic legacy payload"})
         conn.execute("DROP TABLE retained_source_decisions")
+        conn.execute("ALTER TABLE records DROP COLUMN assertion_kind")
         conn.execute("PRAGMA user_version=11")
         before = list(conn.iterdump())
         payload = conn.execute("SELECT * FROM records").fetchall()
@@ -327,7 +328,7 @@ def test_schema11_migration_preserves_payload_and_rolls_back_on_failure(tmp_path
     class FailMigration(sqlite3.Connection):
         def execute(self, sql, *args):
             result = super().execute(sql, *args)
-            if sql == "PRAGMA user_version=13":
+            if sql == "PRAGMA user_version=14":
                 raise sqlite3.OperationalError("synthetic migration interruption")
             return result
 
@@ -341,10 +342,11 @@ def test_schema11_migration_preserves_payload_and_rolls_back_on_failure(tmp_path
     finally:
         conn.close()
     with opened(path) as (sdk, _, conn):
-        assert conn.execute("PRAGMA user_version").fetchone() == (13,)
-        assert conn.execute("SELECT * FROM records").fetchall() == payload
+        assert conn.execute("PRAGMA user_version").fetchone() == (14,)
+        assert [row[:-1] for row in conn.execute("SELECT * FROM records")] == payload
         assert counts(conn) == (1, 1, 1, 0)
         assert cursor(sdk)["through_sequence"] == 0
+        conn.execute("ALTER TABLE records DROP COLUMN assertion_kind")
         migrated = [line for line in conn.iterdump() if "retained_source_decisions" not in line]
         assert migrated == before
 

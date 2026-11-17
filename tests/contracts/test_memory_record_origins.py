@@ -316,3 +316,18 @@ def test_health_refuses_a_stale_store_schema_without_migrating(host):
     before = canonical.read_bytes()
     memory.assert_error(memory.command(host, "health"), "readonly_schema_unavailable")
     assert canonical.read_bytes() == before
+
+
+def test_health_reports_the_compatible_v13_schema_without_migrating(host):
+    assert memory.command(host, 'remember "Synthetic" --request-id health-legacy')["status"] == "ok"
+    canonical = memory.database(host.home)
+    with sqlite3.connect(canonical) as db:
+        db.execute("ALTER TABLE records DROP COLUMN assertion_kind")
+        db.execute("PRAGMA user_version=13")
+    before = canonical.read_bytes()
+
+    report = data(host, "health")
+
+    assert report["store_schema_version"] == 13
+    assert report["capacity"]["records"] == {"used": 1, "limit": 1000}
+    assert canonical.read_bytes() == before

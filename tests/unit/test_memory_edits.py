@@ -72,7 +72,7 @@ def error(code, call):
 
 def test_complete_edit_preserves_expiry_and_receipts_never_retain_body(store):
     s, c, d = store
-    rid = seed(s, expires_at="2030-01-01T00:00:00Z")
+    rid = seed(s, expires_at="2030-01-01T00:00:00Z", assertion_kind="inference")
     did = draft(s, rid)
     assert (d / FILENAME).stat().st_mode & 0o777 == 0o600
     change_file(d)
@@ -80,12 +80,15 @@ def test_complete_edit_preserves_expiry_and_receipts_never_retain_body(store):
     preview = s.execute("edit_preview", {"draft_id": did})["data"]
     assert preview["before"]["content"] == "原正文\n第二行"
     assert preview["proposed"]["topic"] == "工作" and c.total_changes == before
+    assert preview["current_assertion_kind"] == "inference"
+    assert preview["resulting_assertion_kind"] == "unspecified"
     request = apply_request(s, did)
     result = s.execute("edit_apply", request)
     assert result["data"]["record"]["revision"] == 2
-    current = s.execute("get", {"record_id": rid})["data"]
+    current = s.execute("get", {"record_id": rid, "record_format": "epistemic_v1"})["data"]
     assert current["content"] == preview["proposed"]["content"]
     assert current["expires_at"] == "2030-01-01T00:00:00Z"
+    assert current["assertion_kind"] == "unspecified"
     assert not (d / FILENAME).exists()
     assert "更新" not in str(c.execute("SELECT * FROM memory_edits").fetchall())
     assert (
@@ -269,7 +272,7 @@ def test_schema_v8_requires_writable_migration(tmp_path):
     conn.close()
     conn = sqlite3.connect(path, isolation_level=None)
     b.open(conn, namespace_id="test", session_ref="s")
-    assert conn.execute("PRAGMA user_version").fetchone() == (13,)
+    assert conn.execute("PRAGMA user_version").fetchone() == (14,)
     assert conn.execute("SELECT * FROM memory_edits").fetchall() == []
     b.close()
     conn.close()
@@ -885,6 +888,7 @@ def test_v9_existing_drafts_migrate_without_changing_header_or_retry(store, stag
     c.execute("DROP TABLE retained_source_decisions")
     c.execute("DROP TABLE memory_source_lineage")
     c.execute("DROP TABLE memory_source_suppressions")
+    c.execute("ALTER TABLE records DROP COLUMN assertion_kind")
     c.execute("PRAGMA user_version=9")
     readonly = create_backend()
     rc = sqlite3.connect(d / "records.sqlite3", isolation_level=None)
@@ -897,7 +901,7 @@ def test_v9_existing_drafts_migrate_without_changing_header_or_retry(store, stag
     try:
         service = MemoryService(b)
         assert draft(service, rid) == did
-        assert migrated.execute("PRAGMA user_version").fetchone() == (13,)
+        assert migrated.execute("PRAGMA user_version").fetchone() == (14,)
         if stage != "discarded":
             assert (d / FILENAME).read_bytes() == original
             service.execute("edit_apply", apply_request(service, did))

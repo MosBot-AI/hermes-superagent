@@ -20,7 +20,7 @@ def test_health_reports_current_capacity_including_tombstones_across_reopen(fact
         assert first == {
             "data": {
                 "schema_version": "personal.memory.health.v1",
-                "store_schema_version": 13,
+                "store_schema_version": 14,
                 "capacity": {
                     "records": {"used": 0, "limit": 1000},
                     "nonterminal_mutations": {"used": 0, "limit": 10000},

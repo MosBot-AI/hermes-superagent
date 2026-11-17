@@ -369,8 +369,13 @@ def invalidate(backend, conn, record_id):
 
 def current_record(backend, conn, row, now):
     if row["kind"] == "new":
-        return {"content": "", "topic": "", "expires_at": row["expires_at"]}
-    record = backend._get(conn, row["record_id"], now)
+        return {
+            "content": "",
+            "topic": "",
+            "expires_at": row["expires_at"],
+            "assertion_kind": "unspecified",
+        }
+    record = backend._get(conn, row["record_id"], now, typed=True)
     if record["status"] != "active":
         raise MemoryError("record_forgotten")
     if record["revision"] != row["base_revision"]:
@@ -511,6 +516,14 @@ def execute(backend, conn, operation, request, now):
                     "operation": "remember" if row["kind"] == "new" else "correct",
                     "proposed": proposed,
                     "unchanged_expiry": record["expires_at"],
+                    "current_assertion_kind": None
+                    if row["kind"] == "new"
+                    else record["assertion_kind"],
+                    "resulting_assertion_kind": (
+                        record["assertion_kind"]
+                        if proposed["content"] == record["content"]
+                        else "unspecified"
+                    ),
                     "notice": NOTICE,
                 },
                 "replayed": False,

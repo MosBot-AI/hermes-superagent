@@ -6,6 +6,11 @@ from datetime import datetime
 from typing import Protocol, runtime_checkable
 from uuid import UUID
 
+ASSERTION_KINDS = ("unspecified", "claim", "inference")
+EPISTEMIC_RECORD_FORMAT = "epistemic_v1"
+EPISTEMIC_PAGE_SCHEMA = "personal.memory.epistemic_record_page.v1"
+EPISTEMIC_RECALL_SCHEMA = "personal.memory.epistemic_recall.v1"
+
 
 class MemoryError(Exception):
     """Redacted, stable boundary error; never includes stored content."""
@@ -87,10 +92,10 @@ def validate_request(operation: str, payload: dict) -> dict:
         return validate(operation, payload)
     fields = {
         "health": (set(), set()),
-        "remember": ({"content", "request_id"}, {"topic", "expires_at"}),
+        "remember": ({"content", "request_id"}, {"topic", "expires_at", "assertion_kind"}),
         "correct": (
             {"record_id", "expected_revision", "request_id"},
-            {"content", "topic", "expires_at"},
+            {"content", "topic", "expires_at", "assertion_kind"},
         ),
         "forget": ({"record_id", "expected_revision", "request_id"}, set()),
         "get": ({"record_id"}, set()),
@@ -114,12 +119,25 @@ def validate_request(operation: str, payload: dict) -> dict:
     if not isinstance(operation, str) or operation not in fields or not isinstance(payload, dict):
         raise MemoryError("invalid_request")
     required, optional = fields[operation]
+    if operation in {"get", "list", "search", "search_terms", "recall", "export"}:
+        optional = optional | {"record_format"}
     if not required <= payload.keys() or payload.keys() - required - optional:
         raise MemoryError("invalid_request")
     result = dict(payload)
+    if "assertion_kind" in result and (
+        type(result["assertion_kind"]) is not str or result["assertion_kind"] not in ASSERTION_KINDS
+    ):
+        raise MemoryError("invalid_request")
+    if "record_format" in result and (
+        type(result["record_format"]) is not str
+        or result["record_format"] != EPISTEMIC_RECORD_FORMAT
+    ):
+        raise MemoryError("invalid_request")
     if operation == "remember":
         result.setdefault("topic", "")
-    if operation == "correct" and not ({"content", "topic", "expires_at"} & result.keys()):
+    if operation == "correct" and not (
+        {"content", "topic", "expires_at", "assertion_kind"} & result.keys()
+    ):
         raise MemoryError("invalid_request")
     for key, maximum, empty, multiline in (
         ("content", 2048, False, True),

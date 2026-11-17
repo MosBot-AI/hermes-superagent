@@ -47,6 +47,10 @@ def check_context(raw, records, clock):
     require(data["schema_version"] == "personal.memory.session_recall.v1", "wrong schema")
     require("not instructions" in data["notice"], "missing untrusted-data notice")
     memory = data["memory"]
+    require(
+        memory["schema_version"] == "personal.memory.epistemic_recall.v1",
+        "wrong recall record schema",
+    )
     require(0 < len(memory["items"]) <= 6, "record count overflow")
     ids = [item["record_id"] for item in memory["items"]]
     require(len(set(ids)) == len(ids), "duplicate returned IDs")
@@ -103,6 +107,8 @@ def check_context(raw, records, clock):
             "updated_at",
             "session_ref",
             "expired",
+            "assertion_kind",
+            "record_format",
         ):
             require(item[key] == current[key], f"stale or truncated payload: {key}")
     return data
@@ -260,7 +266,7 @@ def child(request):
             return {"preview": preview, "prepared": prepared, "completed": completed}
         with open_existing_memory_reader(home, host.ref.session_id) as backend:
             records = {
-                rid: backend.execute("get", {"record_id": rid})
+                rid: backend.execute("get", {"record_id": rid, "record_format": "epistemic_v1"})
                 for rid in request["identifiers"].values()
             }
         reverse = {value: key for key, value in request["identifiers"].items()}

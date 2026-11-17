@@ -46,12 +46,13 @@ def test_native_recall_fresh_correction_forget_and_config_provider_preserved(hos
     config["memory"] = {"provider": "synthetic-existing-provider"}
     (host.home / "config.yaml").write_text(json.dumps(config))
     before_config = (host.home / "config.yaml").read_bytes()
-    record = save(host)
+    record = save(host, extra="--assertion-kind claim")
     enable(host)
     before_db = memory.database(host.home).read_bytes()
     with turn(host):
         first = collect(host)
     assert "coffee preference is oat milk" in first and record["record_id"] in first
+    assert json.loads(first)["memory"]["items"][0]["assertion_kind"] == "claim"
     assert memory.database(host.home).read_bytes() == before_db
     rid = record["record_id"]
     result = memory.command(
@@ -63,6 +64,7 @@ def test_native_recall_fresh_correction_forget_and_config_provider_preserved(hos
     with turn(host):
         second = collect(host)
     assert "coffee preference is soy milk" in second and "oat milk" not in second
+    assert json.loads(second)["memory"]["items"][0]["assertion_kind"] == "unspecified"
     assert (
         memory.command(host, f"forget {rid} --expected-revision 2 --request-id recall-forget")[
             "status"

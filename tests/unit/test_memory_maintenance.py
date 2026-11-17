@@ -13,6 +13,7 @@ from personal_agent import PLUGIN_ID, memory_storage
 from personal_agent import memory_maintenance as maintenance
 from personal_agent.local_memory import create_backend
 from personal_agent.memory_backend import MemoryError, MemoryService
+from personal_agent.memory_sessions import LocalBinding, managed_backend
 
 
 @pytest.fixture
@@ -29,7 +30,7 @@ def store(tmp_path, monkeypatch):
         session_ref="test",
     )
     service = MemoryService(backend)
-    request = {"content": "中文 synthetic private", "request_id": "seed"}
+    request = {"content": "中文 synthetic private", "request_id": "seed", "assertion_kind": "claim"}
     receipt = service.execute("remember", request)
     service.execute(
         "forget",
@@ -58,8 +59,11 @@ def test_repack_preserves_all_rows_tombstone_and_exact_receipt(store):
     assert run(home, "commit", name="compact")["phase"] == "completed"
     assert (path.parent / "maintenance/compact.old.sqlite3").read_bytes() == original
     with memory_storage.open_existing_memory_reader(home, "test") as backend:
-        record = backend.execute("get", {"record_id": receipt["data"]["record_id"]})
+        record = backend.execute(
+            "get", {"record_id": receipt["data"]["record_id"], "record_format": "epistemic_v1"}
+        )
         assert record["status"] == "forgotten" and record["content"] is None
+        assert record["assertion_kind"] is None
     conn = sqlite3.connect(path, isolation_level=None)
     backend = create_backend()
     backend.open(
@@ -68,7 +72,8 @@ def test_repack_preserves_all_rows_tombstone_and_exact_receipt(store):
         session_ref="new",
     )
     assert MemoryService(backend).execute(
-        "remember", {"content": "中文 synthetic private", "request_id": "seed"}
+        "remember",
+        {"content": "中文 synthetic private", "request_id": "seed", "assertion_kind": "claim"},
     ) == {"data": receipt["data"], "replayed": True}
     MemoryService(backend).execute("remember", {"content": "new generation", "request_id": "new"})
     backend.close()
@@ -83,6 +88,20 @@ def test_repack_preserves_all_rows_tombstone_and_exact_receipt(store):
 )
 def test_real_process_crash_cutpoints_finish_without_rollback(store, cut):
     home, path, _ = store
+    binding = LocalBinding(
+        "trusted-profile:" + hashlib.sha256(str(home).encode()).hexdigest(), "test"
+    )
+    factory = memory_storage.SQLiteMemoryFactory(path, path.parent)
+    with managed_backend(factory, binding, mode="writable") as (backend, _):
+        receipt = backend.execute(
+            "remember",
+            {
+                "request_id": "classified",
+                "content": "synthetic active",
+                "assertion_kind": "inference",
+            },
+        )
+    record_id = receipt["data"]["record_id"]
     original = path.read_bytes()
     script = r"""
 import os, sys
@@ -106,7 +125,7 @@ def crash_rename(source, destination):
         os._exit(73)
 m._write_json = crash_write
 m.os.rename = crash_rename
-m.maintain(home, 'maintenance_prepare', {'name':'cut','expected_watermark':2})
+m.maintain(home, 'maintenance_prepare', {'name':'cut','expected_watermark':3})
 m.maintain(home, 'maintenance_commit', {'name':'cut'})
 """
     result = subprocess.run(
@@ -118,7 +137,10 @@ m.maintain(home, 'maintenance_commit', {'name':'cut'})
     assert run(home, "recover", name="cut")["phase"] == "completed"
     assert not (path.parent / ".maintenance.json").exists()
     assert (path.parent / "maintenance/cut.old.sqlite3").read_bytes() == original
-    assert run(home, "preview")["watermark"] == 2
+    assert run(home, "preview")["watermark"] == 3
+    with memory_storage.open_existing_memory_reader(home, "test") as backend:
+        record = backend.execute("get", {"record_id": record_id, "record_format": "epistemic_v1"})
+    assert record["assertion_kind"] == "inference"
 
 
 def test_stale_source_and_changed_stage_fail_closed(store):

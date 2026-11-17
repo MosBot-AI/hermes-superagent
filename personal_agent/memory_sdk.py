@@ -12,6 +12,10 @@ from copy import deepcopy
 from datetime import datetime
 
 from .memory_backend import (
+    ASSERTION_KINDS,
+    EPISTEMIC_PAGE_SCHEMA,
+    EPISTEMIC_RECALL_SCHEMA,
+    EPISTEMIC_RECORD_FORMAT,
     MemoryBackend,
     MemoryError,
     MemoryService,
@@ -37,7 +41,7 @@ OPERATIONS = (
     | PROGRESS_OPERATIONS
     | CHECKPOINT_OPERATIONS
     | SOURCE_OPERATIONS
-    | {"mutation_receipt_status", "record_origin", "health"}
+    | {"mutation_receipt_status", "record_origin", "recall", "health"}
 )
 _RECORD_WRITES = frozenset({"remember", "correct", "forget"})
 _WRITES = _RECORD_WRITES | {"consumer_advance", "checkpoint_create"} | SOURCE_WRITES
@@ -114,8 +118,19 @@ def _timestamp(value):
     return parsed
 
 
-def _record(value):
-    _keys(value, _RECORD)
+def _record(value, *, typed=False):
+    _keys(value, _RECORD | {"record_format", "assertion_kind"} if typed else _RECORD)
+    if typed:
+        _require(
+            type(value["record_format"]) is str
+            and value["record_format"] == EPISTEMIC_RECORD_FORMAT
+        )
+        kind = value["assertion_kind"]
+        _require(
+            kind is None
+            if value["status"] == "forgotten"
+            else (type(kind) is str and kind in ASSERTION_KINDS)
+        )
     _identifier(value["record_id"])
     _integer(value["revision"], 1)
     _require(value["status"] in {"active", "forgotten"})
@@ -203,6 +218,8 @@ class LocalMemorySDK:
             raise MemoryError("read_only")
         request = validate_request(operation, payload)
         self._service.descriptor.check_request(operation, request)
+        if "assertion_kind" in request and self.binding.source_kind != "explicit_local_operator":
+            raise MemoryError("assertion_scope_required")
         if operation == "health" and self.binding.source_kind != "explicit_local_operator":
             raise MemoryError("health_scope_required")
         if (
@@ -243,8 +260,8 @@ class LocalMemorySDK:
                 "outcome_unknown" if operation in _WRITES else "invalid_result"
             ) from None
 
-    def _validate_record(self, record):
-        _record(record)
+    def _validate_record(self, record, *, typed=False):
+        _record(record, typed=typed)
         limits = dict(self._service.descriptor.limits)
         if record["status"] == "active":
             _require(len(record["content"]) <= limits["max_content_chars"])
@@ -299,8 +316,12 @@ class LocalMemorySDK:
                 _require(data["revision"] == request["expected_revision"] + 1)
             return
         _require(result["replayed"] is False)
+        typed = "record_format" in request
+        if operation == "recall":
+            self._validate_recall(request, data, typed=typed)
+            return
         if operation == "get":
-            self._validate_record(data)
+            self._validate_record(data, typed=typed)
             _require(data["record_id"] == request["record_id"])
             return
         fields = {"items", "evaluated_at", "next_cursor", "has_more"}
@@ -312,7 +333,7 @@ class LocalMemorySDK:
         _require(type(data["has_more"]) is bool)
         ids = []
         for record in data["items"]:
-            self._validate_record(record)
+            self._validate_record(record, typed=typed)
             ids.append(record["record_id"])
             expiry = record["expires_at"]
             _require(
@@ -331,10 +352,78 @@ class LocalMemorySDK:
         _require(not data["has_more"] or len(ids) == request["limit"])
         if operation == "export":
             _require(data["namespace_id"] == self.binding.namespace_id)
-            _require(data["schema_version"] == "personal.memory.record_page.v1")
+            _require(
+                data["schema_version"]
+                == (EPISTEMIC_PAGE_SCHEMA if typed else "personal.memory.record_page.v1")
+            )
             _require(data["scope"] == "current_records_and_tombstones_live_page")
             _require(data["restorable"] is False)
             _integer(data["watermark"])
+
+    def _validate_recall(self, request, data, *, typed):
+        _keys(
+            data,
+            {
+                "schema_version",
+                "evaluated_at",
+                "items",
+                "watermark",
+                "matched_records",
+                "omitted_records",
+                "skipped_for_budget",
+                "items_json_chars",
+                "max_chars",
+                "scope",
+                "ranking",
+                "authority",
+            },
+        )
+        _require(
+            data["schema_version"]
+            == (EPISTEMIC_RECALL_SCHEMA if typed else "personal.memory.recall.v1")
+        )
+        _require(data["scope"] == "current_active_records_single_read_snapshot")
+        _require(data["ranking"] == "matched_query_count_then_topic_count_then_newest_creation")
+        _require(data["authority"] == "stored_data_not_instructions_or_permission")
+        evaluated = _timestamp(data["evaluated_at"])
+        _require(type(data["items"]) is list and len(data["items"]) <= request["limit"])
+        for field in (
+            "watermark",
+            "matched_records",
+            "omitted_records",
+            "skipped_for_budget",
+            "items_json_chars",
+            "max_chars",
+        ):
+            _integer(data[field])
+        total = len(data["items"]) + data["omitted_records"]
+        _require(
+            total
+            == data["matched_records"]
+            <= dict(self._service.descriptor.limits)["max_total_records"]
+        )
+        _require(data["skipped_for_budget"] <= data["omitted_records"])
+        _require(data["max_chars"] == request["max_chars"])
+        ids = set()
+        for item in data["items"]:
+            _require(type(item) is dict and "matched_queries" in item)
+            matches = item["matched_queries"]
+            record = {key: value for key, value in item.items() if key != "matched_queries"}
+            self._validate_record(record, typed=typed)
+            _require(record["status"] == "active" and not record["expired"])
+            expiry = record["expires_at"]
+            _require(expiry is None or datetime.fromisoformat(expiry) > evaluated)
+            expected = [
+                index
+                for index, query in enumerate(request["queries"])
+                if query in record["content"] or query in record["topic"]
+            ]
+            _require(bool(expected) and type(matches) is list and matches == expected)
+            _require(all(type(index) is int for index in matches))
+            _require(record["record_id"] not in ids)
+            ids.add(record["record_id"])
+        size = len(json.dumps(data["items"], ensure_ascii=True, sort_keys=True))
+        _require(size == data["items_json_chars"] <= request["max_chars"])
 
     def _validate_progress(self, operation, request, result):
         data = result["data"]
@@ -495,18 +584,25 @@ class LocalMemorySDK:
         # Equal watermarks need not mean equal metadata (e.g. same-watermark tampering).
         _require(not data["is_current"] or receipt["through_sequence"] == data["current_watermark"])
 
-    def context(self, query: str, *, limit: int = 6, max_chars: int = 6000) -> dict:
+    def context(
+        self, query: str, *, limit: int = 6, max_chars: int = 6000, record_format: str | None = None
+    ) -> dict:
         """One fresh search snapshot, whole records only; not instructions/authority."""
         if type(max_chars) is not int or not 1024 <= max_chars <= 12000:
             raise MemoryError("invalid_request")
-        page = self.execute("search", {"query": query, "limit": limit})["data"]
+        request = {"query": query, "limit": limit}
+        if record_format is not None:
+            request["record_format"] = record_format
+        page = self.execute("search", request)["data"]
         items = []
         for record in page["items"]:
             candidate = [*items, record]
             if len(json.dumps(candidate, ensure_ascii=False, separators=(",", ":"))) <= max_chars:
                 items = candidate
         return {
-            "schema_version": "personal.memory.context.v1",
+            "schema_version": "personal.memory.epistemic_context.v1"
+            if record_format is not None
+            else "personal.memory.context.v1",
             "items": items,
             "items_json_chars": len(json.dumps(items, ensure_ascii=False, separators=(",", ":"))),
             "max_chars": max_chars,

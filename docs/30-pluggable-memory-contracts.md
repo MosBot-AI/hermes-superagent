@@ -115,6 +115,8 @@ Event sourcing means reproducible current state from the retained lawful event/p
 
 ## 6. Pluggable Backend Contract
 
+The implemented local SDK negotiates [explicit record labels](31-explicit-local-memory.md#6-record-a-claim-or-inference) with the `epistemic_labels` capability and a per-read `record_format`. Adapters advertising the capability can use `run_epistemic_label_conformance` with an empty isolated synthetic store to check typed records, fenced corrections and terminal replay.
+
 The following methods and descriptors are project-owned proposals. They are not native Hermes APIs, an HTTP specification or a sandbox for third-party Python.
 
 | Method | Required contract |

@@ -109,6 +109,7 @@ def test_readonly_older_schema_refusal_never_migrates(tmp_path, version):
             retained._legacy_layout(connection)
         else:
             connection.execute("DROP TABLE retained_source_decisions")
+            connection.execute("ALTER TABLE records DROP COLUMN assertion_kind")
             connection.execute("PRAGMA user_version=11")
     before = path.read_bytes()
     with pytest.raises(MemoryError, match="readonly_schema_unavailable"):

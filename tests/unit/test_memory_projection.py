@@ -68,8 +68,9 @@ def test_explicit_enable_private_snapshot_and_status_do_not_change_canonical(sto
 
 def test_correction_forget_and_idempotent_replay_cannot_restore_file(store):
     backend, _, directory = store
-    receipt = save(backend)
+    receipt = save(backend, assertion_kind="claim")
     backend.execute("projection_refresh", {})
+    assert '"assertion_kind": "claim"' in (directory / FILENAME).read_text()
     backend.execute(
         "correct",
         {
@@ -82,14 +83,16 @@ def test_correction_forget_and_idempotent_replay_cannot_restore_file(store):
     assert not (directory / FILENAME).exists()
     assert backend.execute("projection_status", {})["dirty"]
     backend.execute("projection_refresh", {})
-    assert "北京" not in (directory / FILENAME).read_text()
-    assert "上海" in (directory / FILENAME).read_text()
+    corrected = (directory / FILENAME).read_text()
+    assert "北京" not in corrected and "上海" in corrected
+    assert '"assertion_kind": "unspecified"' in corrected
     forget(backend, receipt["record_id"], 2)
     assert not (directory / FILENAME).exists()
-    assert save(backend) == receipt
+    assert save(backend, assertion_kind="claim") == receipt
     assert not (directory / FILENAME).exists()
     backend.execute("projection_refresh", {})
     assert "上海" not in (directory / FILENAME).read_text()
+    assert '"assertion_kind"' not in (directory / FILENAME).read_text()
     assert "Records: 0" in (directory / FILENAME).read_text()
 
 
@@ -297,7 +300,7 @@ def test_v7_migration_and_readonly_require_current_schema(tmp_path):
     conn.execute("PRAGMA query_only=OFF")
     backend = create_backend()
     backend.open(conn, namespace_id="test", session_ref="s")
-    assert conn.execute("PRAGMA user_version").fetchone() == (13,)
+    assert conn.execute("PRAGMA user_version").fetchone() == (14,)
     assert conn.execute("SELECT * FROM memory_projection").fetchall() == []
     backend.close()
     conn.close()

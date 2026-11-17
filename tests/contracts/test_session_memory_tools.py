@@ -98,7 +98,7 @@ def test_native_expiry_tools_use_existing_activation_and_current_record_revision
     saved = memory.command(
         host,
         'remember "Temporary flight plan" --expires-at 2000-01-01T00:00:00Z '
-        "--request-id expiry-direct",
+        "--assertion-kind claim --request-id expiry-direct",
     )
     assert saved["status"] == "ok"
     rid = saved["data"]["record_id"]
@@ -114,15 +114,23 @@ def test_native_expiry_tools_use_existing_activation_and_current_record_revision
         assert call(host)["data"]["items"] == []
         expired = call(host, {"action": "list", "include_expired": True})["data"]["items"][0]
         assert expired["expired"] and expired["record_id"] == rid
+        assert {"assertion_kind", "record_format"}.isdisjoint(expired)
         assert call(host, clear, write=True)["error"]["code"] == "session_write_not_activated"
     activate(host, "enable-write")
     with turn(host):
+        assert call(host, {**clear, "assertion_kind": "inference"}, write=True)["error"][
+            "code"
+        ] == ("assertion_scope_required")
         changed = call(host, clear, write=True)
         assert changed["data"]["revision"] == 2
         assert call(host, clear, write=True)["replayed"]
-        current = call(host, {"action": "recall", "queries": ["flight"]})["data"]["items"][0]
+        recall = call(host, {"action": "recall", "queries": ["flight"]})["data"]
+        assert recall["schema_version"] == "personal.memory.recall.v1"
+        current = recall["items"][0]
         assert current["expires_at"] is None and current["expired"] is False
         assert current["source"] == "activated_session_model"
+    operator = memory.command(host, f"show {rid} --record-format epistemic_v1")
+    assert operator["data"]["assertion_kind"] == "claim"
 
 
 def test_native_slash_activation_to_real_model_dispatch_lifecycle(host):

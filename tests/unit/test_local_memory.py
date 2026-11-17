@@ -231,8 +231,8 @@ def test_record_cap_counts_tombstones(opened):
     backend, conn = opened
     # Populate fixture efficiently; production writes enforce the same total cap.
     conn.executemany(
-        "INSERT INTO records(record_id,revision,status,created_at,updated_at) "
-        "VALUES (?,1,'forgotten','t','t')",
+        "INSERT INTO records(record_id,revision,status,created_at,updated_at,assertion_kind) "
+        "VALUES (?,1,'forgotten','t','t',NULL)",
         [(str(uuid4()),) for _ in range(1000)],
     )
     conn.commit()
@@ -279,12 +279,12 @@ def test_reopen_replay_is_session_independent_and_metadata_only(tmp_path):
 def test_exact_schema_rejects_trigger_and_future_version(opened):
     backend, conn = opened
     backend.close()
-    conn.execute("PRAGMA user_version=14")
+    conn.execute("PRAGMA user_version=15")
     assert_error(
         "unsupported_schema",
         lambda: backend.open(conn, namespace_id="profile:test", session_ref="s"),
     )
-    conn.execute("PRAGMA user_version=13")
+    conn.execute("PRAGMA user_version=14")
     conn.execute("CREATE TRIGGER surprise AFTER INSERT ON events BEGIN SELECT 1; END")
     assert_error(
         "unsupported_schema",
@@ -457,14 +457,14 @@ def test_legacy_upgrade_preserves_data_receipt_bytes_and_replay(tmp_path):
     backend.open(
         conn, namespace_id="legacy", session_ref="new", source_kind="activated_session_model"
     )
-    assert conn.execute("PRAGMA user_version").fetchone() == (13,)
+    assert conn.execute("PRAGMA user_version").fetchone() == (14,)
     assert (
         dict(conn.execute("SELECT name,sql FROM sqlite_master WHERE name NOT GLOB 'sqlite_*'"))
         == _SCHEMA
     )
     after = snapshot_legacy(conn)
     for name in before:
-        assert sorted(row[:-1] if name == "records" else row for row in after[name]) == sorted(
+        assert sorted(row[:-2] if name == "records" else row for row in after[name]) == sorted(
             before[name]
         )
     assert remember(backend, "legacy text", "old") == {"data": receipt, "replayed": True}
@@ -524,7 +524,7 @@ def test_migration_failure_rolls_back_schema_data_and_version():
     assert conn.execute("PRAGMA user_version").fetchone() == (1,)
     assert list(conn.iterdump()) == before
     backend.open(conn, namespace_id="legacy", session_ref="s")
-    assert conn.execute("PRAGMA user_version").fetchone() == (13,)
+    assert conn.execute("PRAGMA user_version").fetchone() == (14,)
     conn.close()
 
 
@@ -551,7 +551,7 @@ def test_concurrent_legacy_open_serializes_upgrade(tmp_path):
         results = list(pool.map(lambda _: open_legacy(), range(2)))
     for after in results:
         for name in before:
-            assert sorted(row[:-1] if name == "records" else row for row in after[name]) == sorted(
+            assert sorted(row[:-2] if name == "records" else row for row in after[name]) == sorted(
                 before[name]
             )
 

@@ -8,7 +8,7 @@ crash safety, authenticated remote ownership, or complete SDK certification.
 
 from dataclasses import dataclass
 
-from .memory_backend import MemoryError
+from .memory_backend import EPISTEMIC_RECORD_FORMAT, MemoryError
 
 
 @dataclass(frozen=True)
@@ -29,6 +29,53 @@ def _reject(service, operation, payload, code):
         _check(error.code == code)
     else:
         raise MemoryError("conformance_failed")
+
+
+def run_epistemic_label_conformance(factory, *, isolated_synthetic=False):
+    """Verify negotiated labels and terminal deletion across independent sessions."""
+    if isolated_synthetic is not True:
+        raise MemoryError("synthetic_store_required")
+    typed = {"record_format": EPISTEMIC_RECORD_FORMAT}
+    with factory() as sdk:
+        page = sdk.execute("export", {"limit": 1})["data"]
+        if page["items"] or page["has_more"] or page["watermark"] != 0:
+            raise MemoryError("empty_store_required")
+        request = {
+            "request_id": "labels-new",
+            "content": "推断 synthetic",
+            "assertion_kind": "claim",
+        }
+        record_id = sdk.execute("remember", request)["data"]["record_id"]
+    with factory() as sdk:
+        key = {"record_id": record_id}
+        legacy = sdk.execute("get", key)["data"]
+        classified = sdk.execute("get", {**key, **typed})["data"]
+        _check(classified == {**legacy, **typed, "assertion_kind": "claim"})
+        _reject(sdk, "remember", {**request, "assertion_kind": "inference"}, "idempotency_conflict")
+        correction = {
+            **key,
+            "request_id": "labels-correct",
+            "expected_revision": 1,
+            "assertion_kind": "inference",
+        }
+        saved = sdk.execute("correct", correction)
+        _check(sdk.execute("correct", correction) == {**saved, "replayed": True})
+        _check(
+            sdk.execute("search", {"query": "推断", **typed})["data"]["items"][0]["assertion_kind"]
+            == "inference"
+        )
+        sdk.execute("forget", {**key, "request_id": "labels-forget", "expected_revision": 2})
+    with factory() as sdk:
+        _check(sdk.execute("remember", request)["replayed"])
+        row = sdk.execute("export", typed)["data"]["items"][0]
+        _check(
+            row["status"] == "forgotten"
+            and row["assertion_kind"] is None
+            and row["content"] is None
+        )
+    return ConformanceReport(
+        1, ("opt_in_record_shape", "durable_label_cas", "terminal_label_clear")
+    )
 
 
 def run_conformance(factory, *, isolated_synthetic: bool = False) -> ConformanceReport:

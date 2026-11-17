@@ -4,7 +4,7 @@ import json
 import shlex
 import unicodedata
 
-from .memory_backend import _identifier
+from .memory_backend import ASSERTION_KINDS, _identifier
 
 _ERRORS = {
     "memory_store_missing": (
@@ -161,7 +161,8 @@ def _record(record: dict, *, full: bool) -> list[str]:
     lines = [f"- Memory {rid} | revision {revision} | {state}"]
     if status == "forgotten":
         if any(
-            record.get(key) is not None for key in ("content", "topic", "source", "session_ref")
+            record.get(key) is not None
+            for key in ("content", "topic", "source", "session_ref", "assertion_kind")
         ):
             raise ValueError("unexpected forgotten payload")
         lines.append(
@@ -173,6 +174,11 @@ def _record(record: dict, *, full: bool) -> list[str]:
         lines.append(
             "  Expiry: " + (_quoted(record["expires_at"]) if record["expires_at"] else "none")
         )
+        if "assertion_kind" in record:
+            kind = record["assertion_kind"]
+            if kind not in ASSERTION_KINDS:
+                raise ValueError("invalid assertion kind")
+            lines.append("  Assertion label: " + kind)
         if record["expired"]:
             lines.append("  Excluded from ordinary fresh recall, not deleted.")
         if full:

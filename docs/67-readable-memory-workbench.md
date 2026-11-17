@@ -19,7 +19,7 @@ Candidate review/acceptance, export, changes and checkpoints deliberately retain
 
 ## What the views mean
 
-`/personal-memory health` shows the existing store's schema and used/limit counts for records, nonterminal mutations and total mutations. Use `/personal-memory --json health` for structured output. It uses the current LOCAL operator scope and opens the existing database read-only. A missing store returns `memory_store_missing`; an old supported schema that needs migration returns `readonly_schema_unavailable`. The report contains capacity metadata only. See the [SDK health contract](85-local-memory-sdk.md#optional-local-store-health).
+`/personal-memory health` shows the existing store's schema and used/limit counts for records, nonterminal mutations and total mutations. Use `/personal-memory --json health` for structured output. It uses the current LOCAL operator scope and opens the existing database read-only. A missing store returns `memory_store_missing`. The command reports the actual version for compatible schema 13 or 14. A store that needs migration returns `readonly_schema_unavailable`. The report contains capacity metadata only. See the [SDK health contract](85-local-memory-sdk.md#optional-local-store-health).
 
 - List/search/search-terms show whole returned records, status, topic and expiry. A forgotten record has cleared canonical payload, but this does not erase prior history, exports or backups. An expired record remains stored and is excluded from ordinary fresh recall.
 - Show additionally displays creation/update times and the latest editing route/session reference. These identify recorded metadata, not verified human intent.

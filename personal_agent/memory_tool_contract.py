@@ -171,6 +171,10 @@ def normalize_memory_tool_request(tool_name: str, arguments: dict) -> tuple[str,
     """Return validated backend arguments without accepting caller authority."""
     if not isinstance(tool_name, str) or not isinstance(arguments, dict):
         raise MemoryError("invalid_request")
+    if "assertion_kind" in arguments:
+        raise MemoryError("assertion_scope_required")
+    if "record_format" in arguments:
+        raise MemoryError("invalid_request")
     if tool_name == "personal_memory_read":
         allowed = _READ_ACTIONS
     elif tool_name == "personal_memory_write":
