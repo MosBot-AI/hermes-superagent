@@ -313,7 +313,7 @@ def test_exact_legacy_upgrade_preserves_rows_and_audits(tmp_path, version):
         )
         store = EnrollmentStore(connection)
         store.initialize()
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 3
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 4
         assert before == (
             connection.execute("SELECT * FROM enrollments").fetchall(),
             connection.execute("SELECT * FROM events").fetchall(),
@@ -370,7 +370,7 @@ def test_failed_upgrade_is_atomic(failure, version):
                         failure == "version"
                         and action == sqlite3.SQLITE_PRAGMA
                         and name == "user_version"
-                        and arg == "3"
+                        and arg == "4"
                     )
                     or (
                         failure == "commit"

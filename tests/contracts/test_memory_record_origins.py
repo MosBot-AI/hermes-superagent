@@ -258,3 +258,76 @@ def test_disabled_foreign_remote_and_model_origin_denied(host):
     with pytest.raises(RuntimeStoreError):
         memory.command(host, "origin " + rid)
     assert not memory.database(host.home).exists()
+
+
+def test_health_uses_existing_readonly_storage_and_does_not_read_payload(host, monkeypatch):
+    canonical = memory.database(host.home)
+    memory.assert_error(memory.command(host, "health"), "memory_store_missing")
+    assert not canonical.exists()
+    record = memory.command(host, 'remember "Private synthetic text" --request-id health-add')
+    assert record["status"] == "ok"
+    config_before = (host.home / "config.yaml").read_bytes()
+    canonical_before = canonical.read_bytes()
+    storage = module(host, "memory_storage")
+    acquire = storage.SQLiteMemoryFactory.acquire
+    reads = []
+
+    def guarded(self, resources, binding, mode):
+        assert mode == "readonly"
+        reads.append(mode)
+        backend = acquire(self, resources, binding, mode)
+        assert backend._connection.execute("PRAGMA query_only").fetchone() == (1,)
+
+        def authorize(action, table, column, database, trigger):
+            if action == sqlite3.SQLITE_READ:
+                assert column not in {"content", "topic", "session_ref", "quote", "receipt"}
+            assert action not in {
+                sqlite3.SQLITE_INSERT,
+                sqlite3.SQLITE_UPDATE,
+                sqlite3.SQLITE_DELETE,
+            }
+            return sqlite3.SQLITE_OK
+
+        backend._connection.set_authorizer(authorize)
+        return backend
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("Health must not open the native transcript or writable memory")
+
+    monkeypatch.setattr(SessionDB, "__init__", forbidden)
+    monkeypatch.setattr(module(host, "conversation_memory"), "open_memory_backend", forbidden)
+    monkeypatch.setattr(storage.SQLiteMemoryFactory, "acquire", guarded)
+    report = data(host, "health")
+    view = human(host, "health")
+    assert report["capacity"]["records"] == {"used": 1, "limit": 1000}
+    assert "Records including tombstones 1/1000" in view
+    assert "Private synthetic text" not in json.dumps(report) + view
+    assert str(host.home) not in json.dumps(report) + view
+    assert reads == ["readonly", "readonly"]
+    assert canonical.read_bytes() == canonical_before
+    assert (host.home / "config.yaml").read_bytes() == config_before
+
+
+def test_health_refuses_a_stale_store_schema_without_migrating(host):
+    assert memory.command(host, 'remember "Synthetic" --request-id health-schema')["status"] == "ok"
+    canonical = memory.database(host.home)
+    with sqlite3.connect(canonical) as db:
+        db.execute("PRAGMA user_version=12")
+    before = canonical.read_bytes()
+    memory.assert_error(memory.command(host, "health"), "readonly_schema_unavailable")
+    assert canonical.read_bytes() == before
+
+
+def test_health_reports_the_compatible_v13_schema_without_migrating(host):
+    assert memory.command(host, 'remember "Synthetic" --request-id health-legacy')["status"] == "ok"
+    canonical = memory.database(host.home)
+    with sqlite3.connect(canonical) as db:
+        db.execute("ALTER TABLE records DROP COLUMN assertion_kind")
+        db.execute("PRAGMA user_version=13")
+    before = canonical.read_bytes()
+
+    report = data(host, "health")
+
+    assert report["store_schema_version"] == 13
+    assert report["capacity"]["records"] == {"used": 1, "limit": 1000}
+    assert canonical.read_bytes() == before

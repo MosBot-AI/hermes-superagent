@@ -103,6 +103,10 @@ A direct human DM on either receiver, a forwarded DM, and an edited DM produce e
 
 Group and bot-authored commands admitted by the synthetic allowlists receive the corresponding diagnostic denials. Owner claims in command text are invalid. A disallowed sender is stopped by adapter intake. A separate case changes the Gateway allowlist while the adapter still permits the sender. The command reaches the Gateway and stops before the plugin callback. Neither allowlist refusal makes a hosted command invocation. All cases fence Gateway model dispatch and personal plugin storage. The child launcher also restricts the test environment and checks for attempted socket and private storage operations. Live Telegram authentication and verified receiver, owner and device authority remain release gates.
 
+### Review-only original command observation
+
+The [current-pin candidate](../experiments/telegram-command-observation/README.md) verifies a one-shot in-process observation against original Telegram SDK messages. It reports the actor and receiving account to an explicitly named command parameter and checks the live adapter and Gateway allowlist at consumption. It rejects edited, forwarded and copied events, private topics and messages marked with a Business connection, and leaves the independent hosting process on its existing context. The clean control and candidate use the same synthetic SDK input. Verified owner and device authority, monotonic invalidation and the production ceremony still require separate work.
+
 ## 7. Pinned Evidence
 
 - I1: [Public slash context and authorization caveat](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/website/docs/developer-guide/plugins/index.md#L1796-L1816).

@@ -41,7 +41,7 @@ OPERATIONS = (
     | PROGRESS_OPERATIONS
     | CHECKPOINT_OPERATIONS
     | SOURCE_OPERATIONS
-    | {"mutation_receipt_status", "record_origin", "recall"}
+    | {"mutation_receipt_status", "record_origin", "recall", "health"}
 )
 _RECORD_WRITES = frozenset({"remember", "correct", "forget"})
 _WRITES = _RECORD_WRITES | {"consumer_advance", "checkpoint_create"} | SOURCE_WRITES
@@ -220,6 +220,8 @@ class LocalMemorySDK:
         self._service.descriptor.check_request(operation, request)
         if "assertion_kind" in request and self.binding.source_kind != "explicit_local_operator":
             raise MemoryError("assertion_scope_required")
+        if operation == "health" and self.binding.source_kind != "explicit_local_operator":
+            raise MemoryError("health_scope_required")
         if (
             operation in {"consumer_advance", "checkpoint_create"}
             and self.binding.source_kind != "explicit_local_operator"
@@ -269,6 +271,10 @@ class LocalMemorySDK:
         _keys(result, {"data", "replayed"})
         _require(type(result["replayed"]) is bool)
         data = result["data"]
+        if operation == "health":
+            _require(result["replayed"] is False)
+            self._service.descriptor.validate_health(data)
+            return
         if operation == "record_origin":
             from .memory_record_origin import validate_result
 

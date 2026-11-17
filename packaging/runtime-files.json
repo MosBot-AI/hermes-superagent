@@ -66,6 +66,7 @@
     "personal_agent/retained_sources.py",
     "personal_agent/routing_cli.py",
     "personal_agent/routing_inspection.py",
+    "personal_agent/routing_inventory.py",
     "personal_agent/routing_shadow.py",
     "personal_agent/schedule_preview.py",
     "personal_agent/session_memory_candidates.py",

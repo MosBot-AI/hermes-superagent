@@ -8,6 +8,12 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Fixed
 
+- Discard routing diagnostic results when the profile changes or the native plugin unloads during evaluation (#23).
+
+- Add a [review-only native cron repair](experiments/cron-delivery-writeback/README.md) that recovers terminal receipt write-back after process loss, preserves unknown delivery and updates the current job summary while a newer attempt is running (#19).
+
+- Add an inactive native-host proposal that labels fresh and replayed memory context as untrusted evidence. Verify the legacy SQLite sidecar and preserve stored history.
+
 - Manage local memory resources across constructor, admission and cleanup failures, preserving primary errors, reporting deferred cleanup failures on successful exit and attempting all registered cleanup. Add explicit reviewed factory SDK sessions with readonly enforcement and durable synthetic conformance (#155).
 
 - Refresh the inactive checkpoint-source proposal’s reviewed canonical source bindings for retained-source discovery and add unit checks that catch stale experiment checksums before host testing; patch/tree integrity guards remain unchanged.
@@ -206,6 +212,22 @@ This file distinguishes design work, development changes, and released capabilit
 ### Added
 
 - Let local operators [label memory records](docs/31-explicit-local-memory.md#6-record-a-claim-or-inference) as claims, inferences or unspecified. Schema 14 carries labels through recall, projection, snapshots and repack. SDK and command JSON clients opt in to the new record format (#159).
+
+- Inspect local memory schema and capacity with `/personal-memory health` and an optional API-v1 SDK operation. The native command reads only an existing store and reports missing or incompatible storage explicitly (#43).
+
+- Inspect a versioned, profile-local route capability registry with `hermes personal-agent routing inventory`. Exact route lookup reports the freshness of individual capabilities and redacts private route bindings (#23).
+
+- Add a [review-only current-pin Telegram command observation](experiments/telegram-command-observation/README.md) with clean and candidate SDK controls. The native probe distinguishes the original sender and receiving Bot account from forwarded, edited, private-topic, marked Business and stale events (#14).
+
+- Bind [internal ActionIntent approval evidence](docs/64-action-intent-drafts.md#bind-exact-approval-evidence) to the exact draft and validity window. Schema 3 preserves receipt lookup after cancellation or restart. Execution requires separate admission (#15).
+
+- Persist a scoped emergency stop in the internal enrollment store. Schema v4 preserves existing records and audits and blocks new read and ceremony admissions for the stopped owner/profile, including after reopen (#16).
+
+- Verify installed Kanban handoff recovery after abrupt Gateway exit at the claim and native commit boundaries. Exact retries preserve the original record and reconciliation reports the observed outcome (#18).
+
+- Verify installed-package Gateway recovery immediately before and after committing a local multi-task dependency plan. The manual suite checks one successful application or exact receipt replay after restart (#21).
+
+- Add manual native Gateway acceptance for the optional memory-provider wheel with a loopback model. Verify correction, forgetting, disabled recall and retained transcript context, and record the pinned host's conflicting authority label (#45).
 
 - Add internal pause and explicit resume for pending enrollment policy. Schema v3 preserves existing administrative and read audit history and invalidates pre-pause confirmations across resume (#16).
 

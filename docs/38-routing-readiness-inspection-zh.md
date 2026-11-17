@@ -39,10 +39,54 @@ hermes personal-agent routing inspect
 
 输出只由固定分类、原因码和已识别的 effort 枚举构成。不包含调用者提供的 provider/model/backend/profile 名称、URL、API mode、路径、密钥值、哈希、任意字段名或异常明细。不递归检查未知嵌套设置和 fallback 项。与离线样例报告允许调用者提供不透明 ID 不同，此诊断不输出原始身份引用。
 
-命令仍会读取可能包含密钥的本地配置文档。它只最小化输出，不能替代宿主密钥存储、文件权限、日志脱敏或可信代码审查。注册时绑定当前解析后的 profile，读取前后均核验一致性。卸载会关闭保留的检查器。不写入审计文件或持久化快照。
+命令仍会读取可能包含密钥的本地配置文档。它只最小化输出，不能替代宿主密钥存储、文件权限、日志脱敏或可信代码审查。注册时绑定解析后的 profile。两个命令在读取前、读取后及计算报告后均核验 profile 和注册状态。如果操作期间发生 profile 切换或插件卸载，命令会丢弃结果。不写入审计文件或持久化快照。
+
+## 已保存的能力登记表
+
+运行 `hermes personal-agent routing inventory` 校验已保存的登记表并查看路由数。追加 `--route synthetic-text` 可按区分大小写的精确路由 ID 查看单条路由的能力观测结果。此诊断沿用上述已保存用户层、profile 与卸载检查，并读取以下规范的 `settings` 配置位置。
+
+```yaml
+plugins:
+  entries:
+    hermes-personal-agent:
+      settings:
+        routing_inventory:
+          schema_version: personal.routing.registry.v1
+          routes:
+            synthetic-text:
+              binding:
+                provider: synthetic-provider
+                model: synthetic/text-v1
+                account_ref: synthetic-account
+                api_mode: synthetic-mode
+                transport: https
+                endpoint_ref: synthetic-endpoint
+                recipient_scope_ref: synthetic-recipient
+                data_scope_ref: synthetic-scope
+              evidence:
+                synthetic-observation:
+                  source: native_contract_test
+                  observed_at: "2026-11-16T12:00:00Z"
+                  valid_until: "2026-11-17T12:00:00Z"
+              capabilities:
+                text: {state: supported, evidence: synthetic-observation}
+                image_input: {state: unsupported, evidence: synthetic-observation}
+                context_tokens: {state: supported, evidence: synthetic-observation, value: 8192}
+                health: {state: unknown}
+```
+
+每条路由均声明完整绑定。账号、端点、接收方范围与数据范围均使用不透明引用。路由 ID、证据引用及绑定标签使用 1 至 96 个 ASCII 字母、数字、点、下划线或连字符，首字符为字母或数字。模型标识还可使用斜杠或冒号作为分隔符，长度上限为 128 个字符。传输类型为 `in_process`、`local_process`、`local_http` 或 `https`。密钥应存放在 Hermes 凭据存储中。清单无法验证所引用的身份、权益或隐私范围。
+
+登记表最多包含 64 条路由，每条路由最多 64 条证据记录。证据归属特定路由，并声明来源类别（`provider_documentation`、`account_configuration`、`native_contract_test` 或 `operator_observation`）以及加引号、精确到秒的 UTC 观测与到期时间。每项 `supported` 或 `unsupported` 能力引用一条证据。有效期包含观测时刻，排除到期时刻。已过期和尚未到观测时间的记录均显示为 `unknown` 并附带时效原因。省略某项与显式声明 `unknown` 等价。
+
+可声明存在性的能力包括 `text`、`image_input`、`audio_input`、`tool_calling`、`structured_output`、`reasoning_effort`、`reasoning_token_budget`、`reasoning_toggle`、`reasoning_disable`、`service_tiers`、`cache_metering`、`usage_metering` 和 `pricing`。价格项记录证据来源。受支持的 `context_tokens` 或 `output_tokens` 提供不超过十亿的正整数。受支持的 `health` 提供上次观测得到的 `available`、`degraded` 或 `unavailable`。
+
+`personal.routing.inventory.v1` 报告返回声明的登记表版本和路由数。精确查询还返回固定能力名、证据类别、时效状态及可识别的当前值。报告省略路由 ID、绑定内容、证据引用和时间戳。未配置登记表时报告 `not_configured`。任一记录无效时会阻止整个登记表并返回固定原因码。精确查询不存在的路由也会以退出码 1 返回。即使存在当前有效的证据，就绪与执行标志也保持为 false。登记表条目属于本地操作员声明。
 
 ## 验证与限制
 
-单元测试覆盖错误声明、字面路由结构、环境变量引用、请求/实际 effort 区别、fallback 状态、无效 tier/超时警告、封闭错误码和输出最小化。原生契约覆盖真实注册和顶层 CLI dispatch、读取最新保存配置但不修改缓存、损坏文档、卸载/profile 改变、非文件 backend 拒绝、未知 backend 错误、冻结/safe worker 拒绝，以及默认 backend 对 service tier 的固定版本行为。测试使用合成临时 home 和网络阻断，不使用真实账号、provider 请求或 socket 绕过。
+登记表测试覆盖能力状态、观测与到期边界、同一路由内的证据和脱敏失败。Hermes `2281116525106e3c109993ccb5dc74d02bfc1427` 上的离线集成测试通过真实本地配置 backend 调用已注册的 CLI，并验证卸载后或使用非文件 backend 时拒绝操作。[原生路由契约测试](../tests/contracts/test_worker_routing_contracts.py)覆盖该固定版本的 delegation provider 注册、路由解析与会话 schema 行为。
+
+单元测试覆盖错误声明、字面路由结构、环境变量引用、请求/实际 effort 区别、fallback 状态、无效 tier/超时警告、封闭错误码和输出最小化。原生契约覆盖真实注册和顶层 CLI dispatch、读取最新保存配置但不修改缓存、损坏文档、读取和计算期间的卸载与 profile 切换、非文件 backend 拒绝、未知 backend 错误、冻结/safe worker 拒绝，以及默认 backend 对 service tier 的固定版本行为。测试使用合成临时 home 和网络阻断，不使用真实账号、provider 请求或 socket 绕过。
 
 使用固定 Python 3.14 环境，按 [README](../README-zh.md#开发验证) 运行完整检查器。此命令不测试实际 worker 执行、hosted-plugin IPC、在线 backend 健康、provider 编码、权限、预算或生产配置验收。不能把其成功退出码作为启用路由的准入凭证，仍须通过[路由设计](11-worker-model-routing-zh.md)和[路线图](08-roadmap-and-acceptance-zh.md)门禁。

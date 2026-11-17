@@ -89,3 +89,13 @@ The broader [#43](https://github.com/MosBot-AI/hermes-superagent/issues/43) rema
 ## Record origin inspection
 
 [108](108-memory-record-origins.md) adds explicit local-operator `record_origin` metadata inspection, separating historical acceptance, current state and latest editing route. The optional capability requires `explicit_records`; shared REST, schema and recall semantics are unchanged. SDK export admission can still read payload; metadata-only applies to this operation and the native readonly path.
+
+## Optional local store health
+
+An already admitted explicit-local-operator SDK session can call `sdk.execute("health", {})` when the backend advertises `local_health` and `explicit_records`. The request accepts an empty object. Unsupported adapters return `capability_unavailable` before backend dispatch. A model-source binding receives `health_scope_required`. An invalid report returns `invalid_result`; an unexpected backend failure returns `backend_failure`.
+
+The result has `replayed: false`. The `data` object has `schema_version: personal.memory.health.v1`, the negotiated integer `store_schema_version` and a `capacity` object. Capacity contains `records`, `nonterminal_mutations` and `mutations`, each with integer `used` and `limit`. The SDK validates the exact shape, count relationships and agreement with declared limits.
+
+The bundled SQLite adapter checks the format and journal mode verified at attachment and samples those counts in one bounded read transaction. A trusted SDK opener can also use its admitted in-memory connection for synthetic tests. The native existing-only reader requires a file in DELETE journal mode. It returns the sampled store's actual version for compatible schema 13 and 14 without migrating the store. Records include expired entries and tombstones. Nonterminal mutations count canonical event rows except `forget`. Total mutations include those terminal events. Point-in-time counts can change immediately after the read. Index parity, free disk space, write admission and remote/provider health require separate checks.
+
+The health probe reads storage metadata and returns counts and versions only. SDK session admission can still perform its existing bounded export read. The [native `/personal-memory health` command](67-readable-memory-workbench.md#what-the-views-mean) uses the existing-only reader without SDK export admission.

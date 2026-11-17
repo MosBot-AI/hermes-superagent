@@ -214,6 +214,25 @@ def test_live_worker_rechecks_persistent_policy_on_both_dispatch_paths(worker, c
         assert history(path) == rows
 
 
+def test_frozen_worker_observes_scope_stop_before_model_or_registry_read(worker):
+    client, path, ready = worker
+    client.issue()
+    allowed(client.call("model"))
+    client.issue()
+    with connection(path) as (_, store):
+        before = store.run("get", KEY)
+        assert store.stop_admissions({"owner_id": KEY["owner_id"], "profile_id": KEY["profile_id"]})
+        assert store.run("get", KEY) == before
+    (path.parent / "config.yaml").write_text("[broken YAML")
+    model = client.call("model")
+    client.issue()  # Fresh confirmation with matching record versions still denies.
+    registry = client.call("registry")
+    for result in (model, registry):
+        denied(result)
+        assert result["pid"] == ready["pid"] and result["reads"] == 1
+    assert len(history(path)) == 1
+
+
 @pytest.mark.parametrize("missing", ["host", "resource"])
 def test_pending_record_and_model_claims_do_not_replace_adapters(worker, missing):
     """E04-WP-02: stored pending labels plus approved/draft arguments are not authority."""

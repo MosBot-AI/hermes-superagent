@@ -109,8 +109,10 @@ def test_profile_switch_rejects_stale_bound_home_before_creating_any_database(
 
 def test_two_native_profiles_keep_same_prospective_ids_separate(native, tmp_path, monkeypatch, api):
     home, _ = native
+    scope = {"owner_id": lookup()["owner_id"], "profile_id": lookup()["profile_id"]}
     with api.open_enrollment_store(home, enabled=True) as store:
         first = store.run("create", create_payload())
+        assert store.stop_admissions(scope) is True
     other = tmp_path / "other-profile"
     other.mkdir()
     monkeypatch.setenv("HERMES_HOME", str(other))
@@ -118,8 +120,21 @@ def test_two_native_profiles_keep_same_prospective_ids_separate(native, tmp_path
         with pytest.raises(api.EnrollmentError, match="not_found"):
             store.run("get", lookup())
         second = store.run("create", create_payload())
+        assert store.admissions_stopped(scope) is False
     assert first == second  # Equal prospective metadata does not mean shared authority.
     assert location(home).stat().st_ino != location(other).stat().st_ino
+    monkeypatch.setenv("HERMES_HOME", str(home))
+    with api.open_enrollment_store(home, enabled=True) as store:
+        assert store.admissions_stopped(scope) is True
+        with pytest.raises(api.EnrollmentError, match="admissions_stopped"):
+            store.with_current_record(
+                lookup(),
+                expected_revision=1,
+                expected_enrollment_revision=1,
+                expected_epoch=0,
+                operation=lambda _: pytest.fail("Stopped native profile admitted a callback"),
+            )
+        assert store.policy_history(lookup())["current_state"] == "pending"
 
 
 @pytest.mark.parametrize("suffix", ["", "-journal", "-wal", "-shm"])

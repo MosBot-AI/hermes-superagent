@@ -82,6 +82,7 @@ HELP = (
     "origin ID inspects metadata-only original accepted lineage separately from current state. "
     "Source availability is not checked; no native source or record text is opened. "
     "Source roles do not verify authorship, truth or authority; suppression is not forgetting. "
+    "health shows the saved store schema and capacity use through the existing-only reader. "
     "changes [--after-sequence N --through-sequence N --limit N]; "
     "checkpoint --expected-watermark N [--request-id KEY]; checkpoint-status ID; "
     'correct ID [--text "Replacement"] [--topic LABEL] [--expires-at UTC | --clear-expiry] '
@@ -179,6 +180,7 @@ def parse_command(raw_args: str) -> tuple[str, dict]:
         return "help", {}
     parser = _Parser(prog="/personal-memory")
     commands = parser.add_subparsers(dest="operation", required=True)
+    commands.add_parser("health")
     remember = commands.add_parser("remember")
     remember.add_argument("content")
     remember.add_argument("--topic", default="")
@@ -502,7 +504,7 @@ class LocalMemoryCommands:
                 request_id = payload.get("request_id")
                 if operation == "help":
                     result = {"data": {"help": HELP}, "replayed": False}
-                elif operation == "record_origin":
+                elif operation in ("record_origin", "health"):
                     with open_existing_memory_reader(self._home, session_id) as backend:
                         result = MemoryService(backend).execute(operation, payload)
                 elif operation in SOURCE_RETENTION_OPERATIONS:

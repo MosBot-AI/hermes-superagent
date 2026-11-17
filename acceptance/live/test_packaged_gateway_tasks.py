@@ -18,6 +18,7 @@ from contextlib import closing
 from pathlib import Path
 
 import pytest
+from native_task_commit_crash_daemon import CRASH_EXIT
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -721,22 +722,28 @@ async def wait_for_committed_task_receipt(database, request_id, *, timeout=30):
     raise AssertionError("Committed synthetic task receipt not observed within deadline")
 
 
+async def send_task_command(ws, sid, raw, request_id):
+    message_id = "unobserved-" + request_id
+    await ws.send(
+        json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": message_id,
+                "method": "slash.exec",
+                "params": {"session_id": sid, "command": raw},
+            }
+        )
+    )
+    return message_id
+
+
 async def submit_unobserved_then_crash(ws, sid, raw, request_id, database, proc, live):
     """Send normally, deliberately never consume this RPC's application reply.
 
     The reply might already have reached the socket/library buffer. We do not
     claim network packet loss or a crash before the database transaction commits.
     """
-    await ws.send(
-        json.dumps(
-            {
-                "jsonrpc": "2.0",
-                "id": "unobserved-" + request_id,
-                "method": "slash.exec",
-                "params": {"session_id": sid, "command": raw},
-            }
-        )
-    )
+    await send_task_command(ws, sid, raw, request_id)
     receipt = await wait_for_committed_task_receipt(database, request_id)
     assert proc.poll() is None
     # Official helper guards the PID with its process-start identity. Only this
@@ -879,3 +886,156 @@ def test_packaged_client_unobserved_create_and_update_survive_abrupt_gateway_dea
         sqlite3.connect((home / "state.db").as_uri() + "?mode=ro", uri=True)
     ) as connection:
         assert connection.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+
+
+@pytest.mark.parametrize("boundary", ["before_commit", "after_commit"])
+def test_packaged_plan_reconciles_at_gateway_commit_boundary(installed, boundary):
+    from websockets.exceptions import ConnectionClosed
+
+    home, env, live = installed
+    database = home / "plugin-data/hermes-personal-agent/tasks.sqlite3"
+    driver = Path(__file__).with_name("native_task_commit_crash_daemon.py")
+    env = {**env, "HERMES_BOT_ACCEPTANCE_ROOT": str(home.parent)}
+    request_id = "live-project-plan"
+    plan = project_plan_command()
+    ready = 'personal-tasks --json ready --project "中文项目验收"'
+
+    def snapshot():
+        with closing(sqlite3.connect(database.as_uri() + "?mode=ro", uri=True)) as db:
+            assert db.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+            assert db.execute("PRAGMA foreign_key_check").fetchall() == []
+            return {
+                "tasks": db.execute("SELECT * FROM tasks ORDER BY id").fetchall(),
+                "events": db.execute("SELECT * FROM events ORDER BY task_id,revision").fetchall(),
+                "edges": db.execute(
+                    "SELECT task_id,dependency_id FROM task_dependencies ORDER BY 1,2"
+                ).fetchall(),
+                "receipts": db.execute("SELECT * FROM receipts ORDER BY request_id").fetchall(),
+            }
+
+    async def command(ws, sid, raw):
+        result = await live.ok(ws, "slash.exec", session_id=sid, command=raw)
+        assert result["type"] == "exec"
+        payload = json.loads(result["output"])
+        assert payload["schema_version"] == "personal.local-conversation-tasks.v1"
+        return payload
+
+    async def crash(desc):
+        async with live.websocket(home, desc) as ws:
+            created = await live.ok(
+                ws,
+                "session.create",
+                request_id="plan-commit-session",
+                source="cli",
+                cwd=str(home),
+                toolsets=[],
+            )
+            sid = created["session_id"]
+            await live.ok(ws, "session.resume", session_id=sid)
+            seed = await command(
+                ws, sid, 'personal-tasks --json add "Unrelated seed" --request-id plan-crash-seed'
+            )
+            assert seed["status"] == "ok"
+            baseline = snapshot()
+            assert {key: len(value) for key, value in baseline.items()} == {
+                "tasks": 1,
+                "events": 1,
+                "edges": 0,
+                "receipts": 1,
+            }
+            message_id = await send_task_command(ws, sid, plan, request_id)
+            with pytest.raises(ConnectionClosed):
+                async with asyncio.timeout(30):
+                    while True:
+                        reply = json.loads(await ws.recv())
+                        assert reply.get("id") != message_id, (
+                            "Task RPC replied before process death"
+                        )
+            return sid, baseline
+
+    crash_env = {
+        **env,
+        "HERMES_TASK_ACCEPTANCE_COMMIT": boundary,
+        "HERMES_TASK_ACCEPTANCE_REQUEST": request_id,
+    }
+    with live.daemon(home, crash_env, "plan-commit-crash.log", fixture=driver) as (proc, first, _):
+        assert (home.parent / f"socket-guard-{proc.pid}").is_file()
+        sid, baseline = asyncio.run(crash(first))
+        assert proc.wait(timeout=15) == CRASH_EXIT
+    assert not live.port_open(live.api_port(first))
+    marker = json.loads((home.parent / "task-commit-boundary.json").read_text())
+    assert marker["boundary"] == boundary
+    committed = boundary == "after_commit"
+    assert marker["in_transaction"] is (not committed)
+    after_exit = snapshot()
+    if not committed:
+        assert after_exit == baseline
+
+    async def recover(desc):
+        async with live.websocket(home, desc) as ws:
+            resumed = await live.ok(ws, "session.resume", session_id=sid)
+            assert resumed["session_id"] == sid
+            initial_ready = await command(ws, sid, ready)
+            assert initial_ready["status"] == "ok"
+            expected_ready = [marker["receipt"]["items"][1]["id"]] if committed else []
+            assert [item["id"] for item in initial_ready["data"]["items"]] == expected_ready
+            applied = await command(ws, sid, plan)
+            assert applied["status"] == "ok" and applied["replayed"] is committed
+            if committed:
+                assert applied["data"] == marker["receipt"] and snapshot() == after_exit
+            receipt = applied["data"]
+            review, draft, finish = receipt["items"]
+            assert [item["title"] for item in (review, draft, finish)] == [
+                "审核中文草稿",
+                "整理中文草稿",
+                "确认项目记录",
+            ]
+            expected_edges = {
+                (review["id"], draft["id"]),
+                (finish["id"], review["id"]),
+                (finish["id"], draft["id"]),
+            }
+            assert all(
+                item["revision"] == 1 and item["state"] == "captured" for item in receipt["items"]
+            )
+            current_ready = await command(ws, sid, ready)
+            assert [item["id"] for item in current_ready["data"]["items"]] == [draft["id"]]
+            current = snapshot()
+            assert set(current["edges"]) == expected_edges
+            for table in ("tasks", "events", "receipts"):
+                assert set(baseline[table]) <= set(current[table])
+            assert {key: len(value) for key, value in current.items()} == {
+                "tasks": 4,
+                "events": 4,
+                "edges": 3,
+                "receipts": 2,
+            }
+            with closing(sqlite3.connect(database.as_uri() + "?mode=ro", uri=True)) as db:
+                assert set(
+                    db.execute(
+                        "SELECT id,title,revision,state FROM tasks WHERE project=?",
+                        ("中文项目验收",),
+                    )
+                ) == {(item["id"], item["title"], 1, "captured") for item in receipt["items"]}
+                assert set(
+                    db.execute("SELECT task_id,revision FROM events WHERE operation='capture_plan'")
+                ) == {(item["id"], 1) for item in receipt["items"]}
+                stored = db.execute(
+                    "SELECT receipt FROM receipts WHERE request_id=?", (request_id,)
+                ).fetchone()
+                assert stored is not None and json.loads(stored[0]) == receipt
+            replay = await command(ws, sid, plan)
+            assert replay["replayed"] is True and replay["data"] == receipt
+            conflict = await command(ws, sid, plan.replace("审核中文草稿", "改写同键请求"))
+            assert conflict["status"] == "error"
+            assert conflict["error"]["code"] == "idempotency_conflict"
+            assert snapshot() == current
+            return current
+
+    with live.daemon(home, env, "plan-commit-recovery.log", fixture=driver) as (proc, second, _):
+        assert (home.parent / f"socket-guard-{proc.pid}").is_file()
+        assert second["instance_id"] != first["instance_id"]
+        settled = asyncio.run(recover(second))
+        assert live.planned_stop(home, proc, second) == 0
+    assert live.control_absent(home) and not live.port_open(live.api_port(second))
+    assert snapshot() == settled

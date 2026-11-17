@@ -89,3 +89,13 @@ with TemporaryDirectory() as directory:
 ## 记录来源检查
 
 [108](108-memory-record-origins-zh.md) 新增显式本地操作者 `record_origin` 元数据检查，区分历史接受、当前状态与最近编辑路径。可选能力要求 `explicit_records`；不改变共享 REST、模式或召回语义。SDK 导出准入仍可能读取载荷，仅元数据保证限于该操作与原生只读路径。
+
+## 可选的本地存储健康检查
+
+已准入的显式本地操作者 SDK 会话可在后端声明 `local_health` 和 `explicit_records` 时调用 `sdk.execute("health", {})`。请求接受空对象。不支持的适配器在后端派发前返回 `capability_unavailable`。模型来源绑定收到 `health_scope_required`。报告无效时返回 `invalid_result`，后端意外失败时返回 `backend_failure`。
+
+结果的 `replayed` 为 `false`。`data` 对象包含 `schema_version: personal.memory.health.v1`、协商得到的整数 `store_schema_version` 和 `capacity` 对象。容量包含 `records`、`nonterminal_mutations` 与 `mutations`，各项均具有整数 `used` 和 `limit`。SDK 校验精确结构、计数关系和声明限额的一致性。
+
+内置 SQLite 适配器在一次有界只读事务中核对存储格式和连接打开时已核验的日志模式，并读取计数。受信 SDK 打开器也可使用已经准入的内存连接执行合成测试。原生仅现有库读取要求使用 DELETE 日志模式的文件。对于兼容的 schema 13 和 14，它返回本次采样的实际存储版本，且不会迁移存储。记录计数包含过期记录和墓碑。非终态变更统计除 `forget` 外的规范事件行，总变更计数也包含这些终态事件。读取后的计数随时可能变化。索引一致性、磁盘余量、写入准入和远程或提供方健康需单独检查。
+
+健康探测读取存储元数据，仅返回计数和版本。SDK 会话准入仍可能执行现有的有界导出读取。[原生 `/personal-memory health` 命令](67-readable-memory-workbench-zh.md#视图含义)直接读取已有存储，不执行 SDK 导出准入。

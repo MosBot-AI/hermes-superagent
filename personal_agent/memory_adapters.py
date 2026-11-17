@@ -13,6 +13,12 @@ from typing import Any, cast
 from .memory_backend import MemoryError
 
 ENTRY_POINT_GROUP = "hermes_personal_agent.memory_backends"
+HEALTH_SCHEMA = "personal.memory.health.v1"
+HEALTH_LIMITS = {
+    "records": "max_total_records",
+    "nonterminal_mutations": "max_nonterminal_mutations",
+    "mutations": "max_total_mutations",
+}
 _CAPABILITIES = frozenset(
     {
         "private_markdown_projection",
@@ -22,6 +28,7 @@ _CAPABILITIES = frozenset(
         "record_expiry",
         "reviewed_expired_cleanup",
         "explicit_records",
+        "local_health",
         "durable_write",
         "cas",
         "idempotency",
@@ -90,6 +97,7 @@ _OPERATION_CAPABILITIES = {
     "source_status": {"retained_source_acceptance", "explicit_records"},
     "source_cursor": {"retained_source_acceptance", "explicit_records"},
     "record_origin": {"explicit_records", "record_origin"},
+    "health": {"explicit_records", "local_health"},
     "mutation_receipt_status": {"explicit_records", "mutation_receipt_status"},
     "expired_preview": {"explicit_records", "record_expiry", "reviewed_expired_cleanup"},
     "forget_expired": {
@@ -201,6 +209,46 @@ class BackendDescriptor:
             for query in [*payload.get("queries", []), *payload.get("terms", [])]
         ):
             raise MemoryError("backend_limit_exceeded")
+
+    def validate_health(self, raw: object) -> None:
+        if type(raw) is not dict or raw.keys() != {
+            "schema_version",
+            "store_schema_version",
+            "capacity",
+        }:
+            raise MemoryError("invalid_result")
+        value = cast(dict[str, Any], raw)
+        if (
+            type(value["schema_version"]) is not str
+            or value["schema_version"] != HEALTH_SCHEMA
+            or type(value["store_schema_version"]) is not int
+            or value["store_schema_version"] != self.schema_version
+        ):
+            raise MemoryError("invalid_result")
+        capacity = value["capacity"]
+        if type(capacity) is not dict or capacity.keys() != HEALTH_LIMITS.keys():
+            raise MemoryError("invalid_result")
+        capacity = cast(dict[str, object], capacity)
+        limits = dict(self.limits)
+        counts: dict[str, int] = {}
+        for name, field in HEALTH_LIMITS.items():
+            quota = capacity[name]
+            if type(quota) is not dict or quota.keys() != {"used", "limit"}:
+                raise MemoryError("invalid_result")
+            used, limit = quota.get("used"), quota.get("limit")
+            if (
+                type(used) is not int
+                or not 0 <= used <= limits[field]
+                or type(limit) is not int
+                or limit != limits[field]
+            ):
+                raise MemoryError("invalid_result")
+            counts[name] = used
+        records = counts["records"]
+        nonterminal = counts["nonterminal_mutations"]
+        total = counts["mutations"]
+        if not records <= nonterminal <= total <= nonterminal + records:
+            raise MemoryError("invalid_result")
 
 
 def validate_backend_descriptor(raw: object) -> BackendDescriptor:

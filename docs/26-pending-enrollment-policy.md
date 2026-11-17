@@ -27,7 +27,7 @@ The file is not encrypted or tamper-evident. Record IDs are not secrets or beare
 
 ## 3. Internal contract
 
-`EnrollmentStore(connection)` requires a dedicated standard SQLite connection. The caller owns the connection and access controls. `initialize()` creates the schema in an empty database, verifies v3, or atomically upgrades an exact owned v1 or v2 database. Existing records, administrative events and any prepared-read audit rows retain their values. Earlier implementations that support schemas through v1 or v2 refuse v3. `run(operation, payload)` accepts only these operations and exact fields:
+`EnrollmentStore(connection)` requires a dedicated standard SQLite connection. The caller owns the connection and access controls. `initialize()` creates the schema in an empty database, verifies v4, or atomically upgrades an exact owned v1, v2 or v3 database. The upgrade preserves existing records, administrative events and prepared-read audit rows. v4 adds one table for scoped emergency stops. Implementations supporting schemas through v3 refuse v4. `run(operation, payload)` accepts only these operations and exact fields:
 
 | Operation | Required fields | Result |
 |---|---|---|
@@ -56,9 +56,15 @@ The commit is the linearization point for **this administrative state change**, 
 
 A committed pause prevents the fenced coordinator from entering the resource callback even when a supplied confirmation matches the paused record's versions. An already admitted bounded read can finish before a waiting pause commits, and its prepared-snapshot audit remains historical. Paused proposals remain inspectable and revocable. Editing the scope requires a pending record. Explicit resume needs both current versions and restores the pending proposal. Both transitions advance the policy revision and epoch, so earlier confirmations remain stale after resume. Repeated pause or resume with current versions returns `invalid_transition` when the record is already in the requested state.
 
-Retries are CAS-only, with no replay receipts. The caller selects a stable enrollment ID before creation. If the outcome is uncertain, use the same owner/profile/ID to read current state and reconcile; do not blindly create a new ID or replay a stale edit. Duplicate creation returns `already_exists`, never the appearance of a new authority. A returned snapshot can become stale immediately after commit and is not reusable authorization.
+Per-record mutation retries use CAS. The caller selects a stable enrollment ID before creation. If the outcome is uncertain, use the same owner/profile/ID to read current state and reconcile; do not blindly create a new ID or replay a stale edit. Duplicate creation returns `already_exists`, never the appearance of a new authority. A returned snapshot can become stale immediately after commit and is not reusable authorization.
 
 Epochs are monotonic **within one record in this database history**. They are not a host-instance fence, profile incarnation, restore detector or distributed lease. Copying or restoring a database can copy old revisions. No restart, restore or clone may treat these records as authenticated active authority. Revocation here cancels a proposal only: no live request, issued grant, task read or remote effect exists to cancel.
+
+### Owner/profile emergency stop
+
+Trusted internal administration can call `stop_admissions(scope)` with exactly `owner_id` and `profile_id`. The first call for that scope commits a terminal stop and returns `True`. Subsequent calls return `False`. `admissions_stopped(scope)` returns the current Boolean for inspection after reopen or an uncertain outcome. Both use the same SQLite transaction and scope validation. The stop row is both the admission fence and the durable operation record. It stores the scope selectors only.
+
+After a stop commits, `with_current_record` raises `admissions_stopped` before invoking the callback for any enrollment in that scope, including records created later. The current read and ceremony coordinators use that boundary. An already admitted callback can complete and commit before a waiting stop. Diagnostic history and per-record administrative operations such as revoke remain available. Per-record resume cannot clear the stop. The stop covers one owner/profile in the current store. Authenticated recovery, cross-store continuity, production owner controls, future-job and outbox cancellation, and in-flight effect handling require separate integration.
 
 ## 5. Storage safeguards and limits
 
@@ -75,6 +81,8 @@ Unit coverage exercises strict field/scope/type validation, persistence, owner/p
 Pinned Hermes contracts load the actual directory plugin and use its actual public profile/storage APIs in temporary synthetic homes. They verify persistence/reopen, separate profiles with equal prospective IDs, rejected stale profile paths, unsafe files/sidecars/directories, unchanged foreign task databases, closed connections and denial diagnostics after metadata is stored. This is native storage integration evidence, **not a real Bot identity or owner enrollment test**.
 
 The slice passed 654 unit tests and 301 pinned-host contracts (955 total), including 81 new unit cases and 37 new host cases. Ruff, type checks and the bilingual documentation checker passed. Those counts describe the original persistence slice. The v3 tests exercise exact v1/v2 migration, pause versus read commit order, stale confirmations after resume, and fresh-process recovery before and after pause COMMIT. They also reopen the store through the pinned native profile helper. Power-loss behavior and production enrollment require separate evidence.
+
+The v4 stop tests exercise exact v3 migration, both SQLite commit orderings, rollback on stop commit failure, and process exit before and after COMMIT. Native storage tests on Hermes `2281116525106e3c109993ccb5dc74d02bfc1427` reopen the stop through the pinned profile helper and verify that a second profile with identical prospective selectors remains independent. A fixture worker on that pin retains its frozen configuration but observes the committed stop before resource access on both model and direct registry dispatch. It uses synthetic authority and resource adapters.
 
 Run the repository's aggregate `scripts/check.py` with the compatibility-pinned Hermes checkout and its PM-built interpreter. Tests use no real identities or keys. Historical blocked identity socket tests remain unresolved and are not retried by this slice. No upstream patch is applied.
 

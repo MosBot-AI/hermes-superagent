@@ -17,6 +17,9 @@ provides_tools:
   - personal_memory_candidate
   - personal_task_plan_preview
 config_schema:
+  routing_inventory:
+    type: dict
+    description: Profile-local capability evidence registry for the read-only routing inventory CLI. No backend selection or execution authority.
   mode:
     type: str
     default: read_only

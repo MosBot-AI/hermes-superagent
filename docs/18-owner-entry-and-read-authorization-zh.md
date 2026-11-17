@@ -103,6 +103,10 @@ Context 缺失或不受支持时，插件必须 fail closed。私有 adapter 导
 
 由合成允许名单放行的群组命令和机器人命令收到相应的诊断拒绝。命令文本中的 owner 声明无效。适配器入口会拦截不在允许名单内的发送者。另一个用例修改 Gateway 允许名单，同时保持适配器允许该发送者。命令到达 Gateway 后在插件回调前被拦截。两种允许名单拒绝均未发起托管命令调用。所有用例均阻断 Gateway 模型派发和插件个人数据存储访问。子进程启动器还限制测试环境，并检查是否尝试套接字操作或访问私人存储。真实 Telegram 认证和经验证的接收端、owner 及设备权限仍是发布门禁。
 
+### 仅供评审的原始命令观察
+
+[当前固定版本候选](../experiments/telegram-command-observation/README-zh.md)使用 Telegram SDK 原始消息验证一次性进程内观察。它向显式声明的命令参数提供发送者和接收账号，并在读取时检查在线适配器和 Gateway 允许名单。它拒绝编辑、转发及复制事件、私聊话题和带 Business 连接标记的消息，独立宿主进程继续使用现有上下文。干净版本对照与候选使用相同的合成 SDK 输入。经验证的 owner 和设备权限、单调失效机制及生产登记流程仍需单独推进。
+
 ## 7. 固定源码证据
 
 - I1：[公开 slash context 与授权注意事项](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/website/docs/developer-guide/plugins/index.md#L1796-L1816)。

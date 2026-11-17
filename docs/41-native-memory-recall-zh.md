@@ -8,7 +8,7 @@
 
 后续：[45](45-explicit-memory-expiry-zh.md)要求 schema v5，并按每次新召回捕获的 UTC 墙上时钟时间排除已到期记录。只读 provider 永远不迁移。恢复召回前，获准打开存储的命令或已经激活的模型工具操作均可升级自有旧存储；建议操作员使用 /personal-memory list 主动完成升级。评估时间在实际取得 SQLite 快照后采样，而非在等待锁之前。不更改 provider 选择或配置。到期无法撤回已进入原生历史或模型上下文的召回包。
 
-状态：可选的真实 Hermes `MemoryProvider` 已把现有本地记忆存储接入原生 prefetch 和会话生命周期。它对**规范记录只读**，不执行摄取，仍声明 checkpoint API v1。不支持必需的原生 checkpoint-v2。这是经过离线测试的实现，不是真实在线提供方验收或生产启用。
+状态：可选的真实 Hermes `MemoryProvider` 已把现有本地记忆存储接入原生 prefetch 和会话生命周期。它对**规范记录只读**，不执行摄取，仍声明 checkpoint API v1。不支持必需的原生 checkpoint-v2。离线契约及使用回环模型的隔离原生 Gateway 验收均已通过。生产启用仍待完成。
 
 ## 1. 显式选择与数据披露
 
@@ -65,10 +65,21 @@ Prefetch 必须提供完全一致的当前会话 ID。原生 `on_session_switch`
 
 ## 5. 验证与剩余工作
 
-合成单元测试覆盖启用／禁用／撤回、配置目录／会话不匹配、非主上下文拒绝、关闭、字符预算、字面查询、注入内容仅作为数据、更正／遗忘后的新鲜读取、只读操作拒绝、缺失存储、不安全文件、旧 schema 及外部 WAL 切换竞争。原生契约使用真实入口点加载器和 `MemoryManager`，仅提供合成入口点清单，验证独立实例、外部提供方槽位、prefetch／sync／switch／shutdown、配置目录拒绝、规范数据库及配置不变，以及严格检查点失败。另行验证本地构建的 wheel，不会安装进实际运行的 Hermes 环境。
+合成单元测试覆盖启用／禁用／撤回、配置目录／会话不匹配、非主上下文拒绝、关闭、字符预算、字面查询、注入内容仅作为数据、更正／遗忘后的新鲜读取、只读操作拒绝、缺失存储、不安全文件、旧 schema 及外部 WAL 切换竞争。原生契约使用真实入口点加载器和 `MemoryManager`，仅提供合成入口点清单，验证独立实例、外部提供方槽位、prefetch／sync／switch／shutdown、配置目录拒绝、规范数据库及配置不变，以及严格检查点失败。原有离线契约还单独验证了本地构建的 wheel。
 
-没有使用真实 LLM、个人数据、Gateway 监听器、凭据、生产配置或远程写入。自动摄取、会话证据检查点、提供方设置界面、隔离／受管理兼容、中文语义召回评测及经过授权的在线验收仍待完成。所有真实提供方验收都必须保留用户已选模型／提供方，不能静默替换。
+离线契约使用合成数据，未启动 Gateway 监听器。自动摄取、会话证据检查点、提供方设置界面、隔离／受管理兼容、中文语义召回评测及经过授权的在线验收仍待完成。所有真实提供方验收都必须保留用户已选模型／提供方，不能静默替换。
 
 固定版本源码证据：[提供方 ABC](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/agent/memory_provider.py)、[加载器](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/plugins/memory/__init__.py)、[manager 与检查点门禁](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/agent/memory_manager.py)、[prefetch 持久化及重放](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/agent/turn_context.py#L1030-L1072)。
 
 后续：[经审核候选](50-reviewed-memory-candidates-zh.md)新增独立选择的草稿流程，并非自动正式摄取。当前可写存储升级到 schema v6；只读召回从不迁移 v1–v5 store，在经授权的普通打开完成升级前不可用。
+
+
+## 6. 已安装软件包与 wheel 验收
+
+在 Hermes `2281116525106e3c109993ccb5dc74d02bfc1427` 上，手动触发的 Native Gateway 工作流从提交构建并验证运行时软件包，然后经 Hermes 标准安装器和安全扫描安装独立插件。测试验证可选 wheel 中的 Python 文件与已安装软件包的已验证源码一致。只有临时 Gateway 进程在导入路径中加入 wheel，由 Hermes 发现真实的发行包入口点。测试使用临时的 Linux 进程内配置目录、原生 Gateway 会话票据，以及套接字访问受限的回环 HTTP 模型夹具。
+
+真实的 `/personal-memory remember` 命令创建一条合成记录。新 CLI 会话的首个模型请求携带第 1 版。更正并重启 Gateway 后，新会话收到第 2 版。遗忘后，另一个新会话未收到召回包。第二次重启时关闭召回，即使仍有匹配的有效对照记录，新会话也未收到召回包。四轮请求各完成一次，规范数据库的字节均未因召回改变。遗忘后，早先成功的召回包仍保留在各自会话的原生 `api_content` 中。[议题 #45](https://github.com/MosBot-AI/hermes-superagent/issues/45)
+
+固定版本的主机会在 JSON 外层提示模型将其视为权威参考数据，而 JSON 将其中记录标记为不受信的已存证据。两种表述同时出现在实际模型请求中。确保安全处理召回内容、checkpoint-v2 和经授权的在线模型验收仍是发布门槛。测试使用合成记录和回环模拟端点，验证的是本地协议行为，未修改真实操作员配置、向受管理环境安装软件包或评估任何模型的行为。[固定版本的主机封装](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/agent/memory_context.py#L169-L185)
+
+[仅供评审的原生宿主提案](../experiments/native-memory-context-trust/README-zh.md)验证新召回使用不受信证据标注，并在重放时为旧 sidecar 投影相同标注。它需要使用暂存了补丁的一次性宿主检出。

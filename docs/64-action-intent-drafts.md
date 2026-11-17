@@ -4,7 +4,7 @@ English | [简体中文](64-action-intent-drafts-zh.md)
 
 ## Scope and authority boundary
 
-This E1.2 precursor implements internal `ActionIntentStore.prepare`, `inspect` and `cancel` on a dedicated, caller-secured SQLite connection. It provides durable request identity and exact metadata binding for future approval integration. It does not approve, authorize, send, execute, enroll a person, infer resource ownership or adapt a host approval. No CLI, model tool, hook, HTTP route or automatic storage opener exposes this store. E1.1 and complete E0.4 coverage remain prerequisites for production controlled effects; #15 remains incomplete.
+The internal `ActionIntentStore` provides durable drafts and exact binding of historical approval evidence on a dedicated, caller-secured SQLite connection. Production controlled effects require verified owner context, a trusted host receipt issuer and current execution admission under #15.
 
 Owner/profile/request identifiers and the operation name are bounded opaque administrative selectors, not verified identities or permissions. The caller must independently establish the connection, scope, policy/resource versions and trusted clock. Arbitrary in-process Python and direct database modification are outside this precursor's trust boundary. A restored or cloned database is not evidence of current authority. There is no `approved: true`, grant issuance, effect callback, execution state or retry engine.
 
@@ -64,7 +64,7 @@ Under one transaction and clock sample the store validates the old binding, requ
 
 An exact retry validates the durable link and both records, then returns `previous` and `replacement` metadata in their current terminal-aware states. It may commit expiry of the new draft. A different replacement ID or changed bound field conflicts. A replacement subsequently cancelled, expired or itself replaced is not revived. Independently preparing a new record and cancelling the old record is not adopted as a completed replacement. This is not an approval transfer, execution retry, withdrawal of a sent operation or freshness guarantee after whole-database rollback.
 
-Schema version 2 adds the metadata-only replacement link table. Explicit initialization upgrades only the exact owned version-1 schema in the same transaction; unknown schema additions are refused and failed commits leave v1 intact. Raw payload/target bytes remain absent, existing intent/event records stay unchanged, and the 1,000 retained-intent cap also bounds replacement links. There is no automatic production opener or downgrade support; older code refuses the v2 schema.
+Schema version 2 introduced the metadata-only replacement link table. Since schema version 3, explicit initialization upgrades either exact historical schema in one transaction. Each migration checks the exact schema object count and owned DDL before writing. A schema with an extra object that shares an owned table name is refused without changing the database. Failed migrations roll back. The 1,000-intent cap also bounds the replacement links.
 
 Synthetic tests cover exact replay across reopen, changed bindings, no adoption/resurrection, chain replacement, expiry/capacity, concurrency, migration rollback, and abrupt exits during writes and around COMMIT. These are local bookkeeping tests, not real approval or effect acceptance.
 
@@ -79,3 +79,13 @@ that watermark, the flag is true. Terminal retries remain stable during clock
 correction and never revive records. All fields share the review transaction.
 This is not a global monotonic clock, a freshness token, clone/rollback detection
 or execution authority. No schema migration is required.
+
+## Bind exact approval evidence
+
+`record_approval(key, expected_binding_digest=..., expected_revision=1, receipt_ref=...)` records evidence from the verifier explicitly supplied to the store by trusted local code. The verifier resolves the reference in its trusted source and returns a typed `VerifiedIntentApproval` with the same reference, draft binding, revision and UTC approval timestamps. A missing verifier, unknown reference or verifier failure returns `approval_unavailable`. The verifier must be bounded, local and read-only while the ledger holds its write transaction.
+
+The existing binding digest covers the owner/profile namespace, draft request ID, operation, policy revision, epoch, resource revision, exact target and payload digests, and draft deadline. One SQLite transaction checks the selected draft and records at most one approval receipt per intent. The store samples the clock after lookup and requires the receipt to be current at that instant. Its approval time must fall between draft creation and the clock sample, and its deadline must be at or before the draft's deadline. Duplicate receipt references across intents and changed references for the same intent conflict.
+
+`inspect_approval` returns historical evidence separately from draft state. An exact retry recovers the original evidence after cancellation, expiry, verifier loss or process restart. Replacement drafts need their own receipt. The table retains a domain-separated reference digest, the binding digest, the draft revision and timestamps. Raw references and action bytes stay out of the table. Explicit initialization migrates exact v1 and v2 schemas to v3 and preserves existing drafts, events and replacement links. The existing intent limit bounds this table.
+
+The receipt records the verifier's attestation for the proposed policy and resource versions. Production execution still requires issuing trusted receipts from authenticated host context, confirming current authority and versions, and committing admission in the authoritative transaction at execution time. Synthetic tests cover altered bindings, expiry during lookup, migration, redaction, concurrent cancellation and real process exit on both sides of COMMIT. The pinned native package contract reopens an isolated ledger and verifies default host denial.

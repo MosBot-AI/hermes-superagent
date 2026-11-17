@@ -9,6 +9,7 @@ from .enforcement import build_enforcement_inventory
 from .identity import build_access_diagnostic
 from .routing_cli import RoutingInspector, setup_routing_cli
 from .routing_inspection import inspection_failure
+from .routing_inventory import inventory_failure
 from .schedule_preview import SchedulePreview, failure, setup_schedule_cli
 from .status import build_status, validate_kanban_configuration
 from .task_backup import run_backup_cli, setup_backup_cli
@@ -147,7 +148,10 @@ def run_cli(args: argparse.Namespace) -> int | None:
         print(json.dumps({"status": "error", "error": {"code": "host_context_unavailable"}}))
         return 1
     if args.personal_command == "routing":
-        print(json.dumps(inspection_failure("host_inspection_unavailable"), sort_keys=True))
+        report_failure = (
+            inventory_failure if args.routing_command == "inventory" else inspection_failure
+        )
+        print(json.dumps(report_failure("host_inspection_unavailable"), sort_keys=True))
         return 1
     if args.personal_command == "voice":
         return run_voice_cli(args)

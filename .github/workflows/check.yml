@@ -45,6 +45,17 @@ jobs:
           git -C "$proposed" apply --index "$artifact/native-checkpoint-sources.patch"
           "$RUNNER_TEMP/hermes-test-venv/bin/python" "$artifact/run_tests.py" \
             --checkout "$proposed" --python "$RUNNER_TEMP/hermes-test-venv/bin/python"
+      - name: Verify recall trust labels on a disposable proposed host
+        shell: bash
+        run: |
+          set -euo pipefail
+          proposed="$RUNNER_TEMP/hermes-memory-context-trust"
+          artifact="$GITHUB_WORKSPACE/experiments/native-memory-context-trust"
+          git -C "$RUNNER_TEMP/hermes" worktree add --detach "$proposed" 2281116525106e3c109993ccb5dc74d02bfc1427
+          git -C "$proposed" apply --check "$artifact/native-memory-context-trust.patch"
+          git -C "$proposed" apply --index "$artifact/native-memory-context-trust.patch"
+          "$RUNNER_TEMP/hermes-test-venv/bin/python" "$artifact/run_tests.py" \
+            --checkout "$proposed" --python "$RUNNER_TEMP/hermes-test-venv/bin/python"
   native-contracts:
     runs-on: ubuntu-latest
     timeout-minutes: 20

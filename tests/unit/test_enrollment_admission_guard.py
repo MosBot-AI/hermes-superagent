@@ -132,7 +132,9 @@ def test_commit_failure_prevents_summary_return(store):
     assert not store._connection.in_transaction
 
 
-@pytest.mark.parametrize(("operation", "state"), [("revoke", "revoked"), ("pause", "paused")])
+@pytest.mark.parametrize(
+    ("operation", "state"), [("revoke", "revoked"), ("pause", "paused"), ("stop", "pending")]
+)
 def test_independent_policy_change_waits_for_admitted_operation_to_finish(
     tmp_path, operation, state
 ):
@@ -143,6 +145,7 @@ def test_independent_policy_change_waits_for_admitted_operation_to_finish(
         instance.run("create", CREATE)
     ready = Barrier(2)
     callback_entered, revoke_attempted, revoke_finished = Event(), Event(), Event()
+    scope = {"owner_id": KEY["owner_id"], "profile_id": KEY["profile_id"]}
 
     def reader():
         connection = sqlite3.connect(path)
@@ -177,7 +180,11 @@ def test_independent_policy_change_waits_for_admitted_operation_to_finish(
             connection.set_trace_callback(
                 lambda statement: revoke_attempted.set() if statement == "BEGIN IMMEDIATE" else None
             )
-            result = instance.run(operation, CAS)
+            if operation == "stop":
+                assert instance.stop_admissions(scope) is True
+                result = instance.run("get", KEY)
+            else:
+                result = instance.run(operation, CAS)
             audit = instance.read_admission_history(KEY)["items"]
             assert [(item["epoch"], item["outcome"]) for item in audit] == [
                 (0, "snapshot_prepared")
@@ -196,12 +203,13 @@ def test_independent_policy_change_waits_for_admitted_operation_to_finish(
     with sqlite3.connect(path) as connection:
         instance = EnrollmentStore(connection)
         instance.initialize()
-        with pytest.raises(EnrollmentError, match="revision_conflict"):
+        reason = "admissions_stopped" if operation == "stop" else "revision_conflict"
+        with pytest.raises(EnrollmentError, match=reason):
             guarded(instance, forbidden)
         if operation == "pause":
             with pytest.raises(EnrollmentError, match="paused"):
                 guarded(instance, forbidden, expected_revision=2, expected_epoch=1)
-        assert connection.execute("SELECT operation FROM events ORDER BY epoch").fetchall() == [
-            ("create",),
-            (operation,),
-        ]
+        events = [("create",)] if operation == "stop" else [("create",), (operation,)]
+        assert (
+            connection.execute("SELECT operation FROM events ORDER BY epoch").fetchall() == events
+        )
