@@ -64,7 +64,7 @@ Under one transaction and clock sample the store validates the old binding, requ
 
 An exact retry validates the durable link and both records, then returns `previous` and `replacement` metadata in their current terminal-aware states. It may commit expiry of the new draft. A different replacement ID or changed bound field conflicts. A replacement subsequently cancelled, expired or itself replaced is not revived. Independently preparing a new record and cancelling the old record is not adopted as a completed replacement. This is not an approval transfer, execution retry, withdrawal of a sent operation or freshness guarantee after whole-database rollback.
 
-Schema version 2 introduced the metadata-only replacement link table. Since schema version 3, explicit initialization upgrades either exact historical schema in one transaction. Each migration checks owned DDL before writing and rolls back on failure. The 1,000-intent cap also bounds the replacement links.
+Schema version 2 introduced the metadata-only replacement link table. Since schema version 3, explicit initialization upgrades either exact historical schema in one transaction. Each migration checks the exact schema object count and owned DDL before writing. A schema with an extra object that shares an owned table name is refused without changing the database. Failed migrations roll back. The 1,000-intent cap also bounds the replacement links.
 
 Synthetic tests cover exact replay across reopen, changed bindings, no adoption/resurrection, chain replacement, expiry/capacity, concurrency, migration rollback, and abrupt exits during writes and around COMMIT. These are local bookkeeping tests, not real approval or effect acceptance.
 
