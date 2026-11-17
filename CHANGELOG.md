@@ -211,6 +211,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Add [internal live task pagination](docs/82-shared-client-api.md#internal-live-task-pagination) over selected local stores, with bounded reads and scoped cursor reset (#29).
+
 - Inspect local memory schema and capacity with `/personal-memory health` and an optional API-v1 SDK operation. The native command reads only an existing store and reports missing or incompatible storage explicitly (#43).
 
 - Inspect a versioned, profile-local route capability registry with `hermes personal-agent routing inventory`. Exact route lookup reports the freshness of individual capabilities and redacts private route bindings (#23).
