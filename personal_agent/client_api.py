@@ -7,6 +7,7 @@ unimplemented shared endpoints, even when local capabilities are active.
 
 CONTRACT_VERSION = "0.1.0"
 SCHEMA_VERSION = "personal.api.v1"
+MAX_TASK_PAGE_SIZE = 64
 CAPABILITY_IDS = (
     "tasks.list",
     "approvals.read",
@@ -43,6 +44,6 @@ def build_client_capabilities() -> dict[str, object]:
                 for capability in CAPABILITY_IDS
             ],
             "transport": {"polling": False, "sse": False},
-            "limits": {"max_page_size": 64},
+            "limits": {"max_page_size": MAX_TASK_PAGE_SIZE},
         },
     }
