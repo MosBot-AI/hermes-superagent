@@ -21,7 +21,7 @@
     "test_recovery.py": "aec695c126f6d4d0e92f5861511cb1ba61c2f0d977612a91793a60426713fd80",
     "test_source_reads.py": "37b9331d1321d545265399e819bebe7f7dc17af3283f683d78400ba30978d8e5",
     "test_acceptance.py": "6e9a50439828c1c6fa16246a68a5a37adbf8c45c01b8e87f588542ed85e2a50c",
-    "../../personal_agent/local_memory.py": "8d6d920983acd23b3cefc91ea3b1255656204e11c04420da6f98f4164950fdb0",
+    "../../personal_agent/local_memory.py": "61805575aeb9a24fead3b819373e8a6b6cabadda9a3dcc18b804a4cc79b5a70c",
     "../../personal_agent/retained_sources.py": "c6badfe96c17d3c4321f0d58064b01ead8d5f05444b6acc7225fb8f91e6e7640",
     "../../personal_agent/memory_sources.py": "aee6ed1a3bbfbc157902154149748614dfd6b22113acdd24e748b3b3aea82b6a",
     "../../personal_agent/memory_sdk.py": "68c22a9fcfd43a7d17474d4ad1ecd3a08af9000bbf92a18c524aa060828962e5",

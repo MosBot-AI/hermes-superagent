@@ -1,14 +1,17 @@
 """Optional SDK capacity report with bounded, redacted failure semantics."""
 
 import json
+import sqlite3
+from contextlib import closing
 from dataclasses import replace
 
 import pytest
 from test_memory_sdk import CorruptBackend
 from test_memory_sdk import factory as factory
 
+from personal_agent.local_memory import create_backend
 from personal_agent.memory_backend import MemoryError
-from personal_agent.memory_sdk import LocalMemorySDK
+from personal_agent.memory_sdk import LocalBinding, LocalMemorySDK
 
 
 def test_health_reports_current_capacity_including_tombstones_across_reopen(factory):
@@ -46,6 +49,19 @@ def test_health_reports_current_capacity_including_tombstones_across_reopen(fact
         encoded = json.dumps(result)
         for value in ("private", "synthetic-sdk", "synthetic-session", record["record_id"]):
             assert value not in encoded
+
+
+def test_health_supports_an_admitted_in_memory_sqlite_connection():
+    with closing(sqlite3.connect(":memory:")) as connection:
+        backend = create_backend()
+        binding = LocalBinding("synthetic-sdk", "synthetic-session")
+        backend.open(connection, namespace_id=binding.namespace_id, session_ref=binding.session_ref)
+        with closing(LocalMemorySDK(backend, binding)) as sdk:
+            sdk.execute("remember", {"content": "synthetic note", "request_id": "add"})
+            capacity = sdk.execute("health", {})["data"]["capacity"]
+            assert capacity["records"] == {"used": 1, "limit": 1000}
+            assert capacity["mutations"] == {"used": 1, "limit": 11000}
+        assert connection.execute("PRAGMA journal_mode").fetchone() == ("memory",)
 
 
 def test_capability_operator_scope_and_request_validation_precede_dispatch(factory):
