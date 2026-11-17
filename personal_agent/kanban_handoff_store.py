@@ -392,6 +392,18 @@ class HandoffStore:
             self._expire(now)
             return self._get(id)
 
+    def get_by_request_id(self, request_id, now):
+        _matching(request_id, _KEY)
+        _integer(now)
+        with self._transaction():
+            self._expire(now)
+            row = self.connection.execute(
+                "SELECT id FROM handoffs WHERE request_id=?", (request_id,)
+            ).fetchone()
+            if row is None:
+                _fail("not_found")
+            return self._get(row[0])
+
     def list(self, limit, after, now):
         _integer(limit, 1)
         if limit > 100:

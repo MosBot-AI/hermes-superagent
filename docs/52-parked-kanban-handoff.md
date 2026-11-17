@@ -12,7 +12,8 @@ This is an explicit local-task-to-native-card handoff, not a worker launch, univ
 
 - `prepare TASK --expected-revision N --request-id KEY` previews one exact task snapshot. Only title/details and task ID/revision are included; the exact approved native root, board and database path are shown.
 - `commit ID --expected-digest SHA` approves that preview, not a newer task. The preview expires after 15 minutes; source revision is rechecked and a durable single-use claim is committed before the native write.
-- `list [--limit N --after ID]` returns metadata only, never preview title/body. Use `show ID` or the original `prepare` response to inspect the exact payload and destination before approving its digest.
+- `list [--limit N --after ID]` returns metadata only, never preview title/body.
+- `show ID` and `show --request-id KEY` inspect the same retained record. Use the exact, case-sensitive `prepare` request key if its reply was lost. The lookup works after restart, source edits or changes to native handoff configuration under the same LOCAL profile admission. It reads the profile ledger without opening the task store or native board. Expect `not_found` for a valid key absent from this profile. The payload follows the usual retention rules.
 - `cancel ID --expected-digest SHA` cancels an unclaimed preview; it does not undo a native card or prove remote cancellation.
 - `reconcile ID` performs a bounded read-only lookup of the exact handoff key, including archived cards. Missing, duplicate and conflicting observations remain explicit. It never creates another card.
 

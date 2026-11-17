@@ -145,6 +145,35 @@ def commit(flow, record):
     return flow.invoke(f"commit {record['id']} --expected-digest {record['intent_digest']}")
 
 
+def test_show_by_prepare_key_recovers_original_preview_after_source_edit(flow, monkeypatch):
+    record = prepare(flow)
+    with flow.tasks(flow.tmp_path) as tasks:
+        tasks.run(
+            "update",
+            dict(task_id=flow.task["id"], expected_revision=1, request_id="edit", title="changed"),
+        )
+    retry = f"prepare {flow.task['id']} --expected-revision 1 --request-id key"
+    assert flow.invoke(retry)["error"]["code"] == "source_changed"
+    flow.config["kanban_handoff"] = False
+    flow.calls.clear()
+
+    def unavailable(home):
+        pytest.fail("Retained handoff lookup opened the task store")
+
+    monkeypatch.setattr(service, "open_task_store", unavailable)
+    lookup = "show --request-id key"
+    assert flow.invoke(lookup) == flow.invoke(f"show {record['id']}")
+    assert flow.invoke(lookup)["data"] == record
+    assert flow.invoke("show --request-id Key")["error"]["code"] == "not_found"
+    assert flow.invoke("show --request-id 'invalid key'")["error"]["code"] == "invalid_request"
+    flow.clock[0] = record["expires_at"]
+    expired = flow.invoke(lookup)["data"]
+    assert expired["state"] == "expired" and expired["payload"] is None
+    assert not flow.calls
+    flow.config["local_conversation"] = False
+    assert flow.invoke(lookup)["error"]["code"] == "handoff_disabled"
+
+
 def test_preview_then_one_attempt_and_reconcile_never_resubmits(flow):
     record = prepare(flow)
     assert "PRIVATE PROJECT" not in json.dumps(record)
@@ -251,6 +280,7 @@ def test_receipt_failure_after_attempt_leaves_claimed_no_resubmit(flow, monkeypa
 )
 def test_origin_refusal_before_storage_or_native_probe(flow, context):
     assert flow.invoke("list", **context)["error"]["code"] == "unsupported_origin"
+    assert flow.invoke("show --request-id key", **context)["error"]["code"] == "unsupported_origin"
     assert not (flow.tmp_path / "ledger.db").exists() and not flow.calls
 
 
@@ -274,7 +304,11 @@ def test_default_off_help_metadata_and_malformed_do_not_probe_native(flow):
         "prepare \x00",
         "commit a --expected-dig x",
         "prepare a --expected-revision 1",
+        "show",
         "show a extra",
+        "show a --request-id key",
+        "show --request-id key --request-id other",
+        "show --request key",
         "'bad",
     ],
 )

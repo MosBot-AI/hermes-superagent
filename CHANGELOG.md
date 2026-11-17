@@ -215,6 +215,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Recover a [retained LOCAL Kanban handoff](docs/100-native-handoff-workbench.md#resume-without-recreating-work) by its original prepare request ID after losing the response (#18).
+
 - Preview [relative one-shot schedules](docs/62-native-schedule-preview.md) such as `in 30m` from an explicit reference with native duration parsing and elapsed-time handling across daylight saving transitions (#19).
 
 - Verify that restarting an installed Gateway with local task conversations disabled blocks task reads, writes and receipt replay after a crash. Re-enabling and restarting recovers the original committed plan without duplication (#21).

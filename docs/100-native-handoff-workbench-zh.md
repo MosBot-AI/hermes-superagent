@@ -33,13 +33,16 @@
 
 ```text
 /personal-handoff --text list --limit 20
+/personal-handoff --text show --request-id checklist-handoff
 /personal-handoff --text show HANDOFF
 /personal-handoff --text reconcile HANDOFF
 /personal-tasks show TASK
 /personal-handoff --text sync HANDOFF --task TASK --expected-revision N --request-id checklist-observation
 ```
 
-响应丢失或重启后，检查原始交接。Reconcile 核对其准确创建身份，绝不创建替代卡片。缺失、重复、变化或不可用的观察，不代表可以准备另一次尝试。历史上的已确认创建，不保证卡片当前仍存在、仍停放或已完成工作。应将观察结果与交接保存状态分开阅读。
+如果 prepare 响应丢失，用原始 prepare 请求 ID 从同一 profile 找回交接 ID、摘要和留存状态。源任务修订变更或原生创建已关闭时仍可查询。未过期的已准备记录包含原始预览。其他状态仅显示留存的元数据和已记录的观察结果。
+
+Reconcile 核对交接的准确创建身份，绝不创建替代卡片。缺失、重复、变化或不可用的观察，不代表可以准备另一次尝试。历史上的已确认创建，不保证卡片当前仍存在、仍停放或已完成工作。应将观察结果与交接保存状态分开阅读。
 
 Sync 只保存参考性原生状态观察，并增加本地任务修订号。后续操作前使用 `show TASK` 获取当前修订号。原生 `done` 不会完成本地任务。精确 sync 重试在不访问原生存储的情况下返回原始历史回执，并非重新读取看板。参见 [53](53-native-progress-observation-zh.md)。
 
