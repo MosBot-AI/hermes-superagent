@@ -107,6 +107,8 @@ Context 缺失或不受支持时，插件必须 fail closed。私有 adapter 导
 
 [当前固定版本候选](../experiments/telegram-command-observation/README-zh.md)使用 Telegram SDK 原始消息验证一次性进程内观察。它向显式声明的命令参数提供发送者和接收账号，并在读取时检查在线适配器和 Gateway 允许名单。它拒绝编辑、转发及复制事件、私聊话题和带 Business 连接标记的消息，独立宿主进程继续使用现有上下文。干净版本对照与候选使用相同的合成 SDK 输入。经验证的 owner 和设备权限、单调失效机制及生产登记流程仍需单独推进。
 
+生命周期后续将观察绑定到捕获时的适配器连接与原生轮询代次。轮询被封闭或替换、连接更换后，旧句柄不可用。受保护操作仍须单独验证路由和设备的失效状态。
+
 ## 7. 固定源码证据
 
 - I1：[公开 slash context 与授权注意事项](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/website/docs/developer-guide/plugins/index.md#L1796-L1816)。

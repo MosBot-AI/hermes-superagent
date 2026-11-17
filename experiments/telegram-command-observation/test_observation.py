@@ -62,6 +62,7 @@ def packet(
     chat_type="private",
     actor_id=ACTOR,
     actor_is_bot=False,
+    update_id=131,
     **fields,
 ):
     message = {
@@ -72,7 +73,7 @@ def packet(
         "from": {"id": actor_id, "first_name": "Synthetic", "is_bot": actor_is_bot},
         **fields,
     }
-    return Update.de_json({"update_id": 131, origin: message}, bot)
+    return Update.de_json({"update_id": update_id, origin: message}, bot)
 
 
 @pytest.fixture
@@ -126,9 +127,18 @@ def native_probe(native, monkeypatch, request):
         assert not (home / "test-forbidden-host-effect").exists()
 
 
-async def dispatch(runner, receiver=RECEIVERS[0], *, bot=None, **fields):
+def connected_adapter(runner, receiver=RECEIVERS[0], *, webhook=False):
     adapter, _ = wire_adapter(runner, receiver)
     adapter._bot = make_bot(receiver)
+    adapter._webhook_mode = webhook
+    if not webhook:
+        adapter._begin_polling_generation()
+    adapter._mark_connected()
+    return adapter
+
+
+async def dispatch(runner, receiver=RECEIVERS[0], *, bot=None, **fields):
+    adapter = connected_adapter(runner, receiver)
     await deliver(adapter, packet(bot or adapter._bot, **fields))
     adapter.send.assert_awaited_once()
     return json.loads(adapter.send.await_args.kwargs["content"])
@@ -195,8 +205,7 @@ def test_candidate_fabricated_command_event_has_no_adapter_observation(native_pr
     runner, module = native_probe
 
     async def fabricate():
-        adapter, _ = wire_adapter(runner, RECEIVERS[0])
-        adapter._bot = make_bot(RECEIVERS[0])
+        adapter = connected_adapter(runner)
         data = packet(adapter._bot)
         event = adapter._build_message_event(data.message, MessageType.COMMAND, update_id=131)
         await adapter.handle_message(event)
@@ -223,8 +232,7 @@ def test_candidate_requires_live_exact_event_and_transport(native_probe, monkeyp
     from gateway.config import Platform
 
     runner, module = native_probe
-    adapter, _ = wire_adapter(runner, RECEIVERS[0])
-    adapter._bot = make_bot(RECEIVERS[0])
+    adapter = connected_adapter(runner)
     if change == "expires":
         clock = observation.monotonic
 
@@ -273,6 +281,75 @@ def test_candidate_legacy_kwargs_remain_the_documented_context(native_probe):
     assert asyncio.run(dispatch(runner, command="telegram_legacy")) == {
         "keywords": ["platform", "session_id", "session_key", "source"]
     }
+
+
+@pytest.mark.parametrize("stage", ["before_callback", "before_read"])
+@pytest.mark.parametrize("transition", ["poll_fenced", "poll_restarted", "webhook_reconnected"])
+def test_candidate_lifecycle_rejects_old_observation_and_accepts_new_input(
+    native_probe, monkeypatch, stage, transition
+):
+    from gateway.config import Platform
+
+    runner, module = native_probe
+    adapter = connected_adapter(runner, webhook=transition == "webhook_reconnected")
+    bot = adapter._bot
+
+    def transition_transport():
+        if transition == "webhook_reconnected":
+            adapter._mark_disconnected()
+            adapter._mark_connected()
+        else:
+            adapter._fence_polling()
+            if transition == "poll_restarted":
+                adapter._begin_polling_generation()
+        assert adapter._bot is bot and runner.adapters[Platform.TELEGRAM] is adapter
+
+    with monkeypatch.context() as change:
+        if stage == "before_callback":
+            original = adapter.handle_message
+
+            async def deliver_after_transition(event):
+                transition_transport()
+                await original(event)
+
+            change.setattr(adapter, "handle_message", deliver_after_transition)
+        else:
+            change.setattr(module, "before_read", transition_transport)
+        asyncio.run(deliver(adapter, packet(bot)))
+    assert module.results == [{"observation": None, "replayed": False}]
+    assert (module.retained[0] is None) is (stage == "before_callback")
+    if transition == "poll_fenced":
+        adapter._begin_polling_generation()
+    asyncio.run(deliver(adapter, packet(bot, update_id=132, message_id=72)))
+    assert module.results[-1] == {
+        "observation": {
+            "actor_id": ACTOR,
+            "receiver_id": RECEIVERS[0],
+            "profile": "default",
+            "command": "telegram-probe",
+        },
+        "replayed": False,
+    }
+    assert adapter.send.await_count == 2
+
+
+def test_candidate_lifecycle_rechecks_after_authorization(native_probe, monkeypatch):
+    runner, module = native_probe
+    adapter = connected_adapter(runner)
+    authorize = runner._is_user_authorized_for_source
+
+    def change_during_authorization(source):
+        allowed = authorize(source)
+        adapter._fence_polling()
+        adapter._begin_polling_generation()
+        return allowed
+
+    module.before_read = lambda: monkeypatch.setattr(
+        runner, "_is_user_authorized_for_source", change_during_authorization
+    )
+    asyncio.run(deliver(adapter, packet(adapter._bot)))
+    assert module.retained[0] is not None
+    assert module.results == [{"observation": None, "replayed": False}]
 
 
 @pytest.mark.parametrize("native_probe", ["hosted"], indirect=True)

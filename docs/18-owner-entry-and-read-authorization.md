@@ -107,6 +107,8 @@ Group and bot-authored commands admitted by the synthetic allowlists receive the
 
 The [current-pin candidate](../experiments/telegram-command-observation/README.md) verifies a one-shot in-process observation against original Telegram SDK messages. It reports the actor and receiving account to an explicitly named command parameter and checks the live adapter and Gateway allowlist at consumption. It rejects edited, forwarded and copied events, private topics and messages marked with a Business connection, and leaves the independent hosting process on its existing context. The clean control and candidate use the same synthetic SDK input. Verified owner and device authority, monotonic invalidation and the production ceremony still require separate work.
 
+The lifecycle follow-up binds that observation to the captured adapter connection and native polling generation. A fenced or replaced poller and a successor connection make an old handle unavailable. Verified routing and device invalidation for a protected operation remain separate requirements.
+
 ## 7. Pinned Evidence
 
 - I1: [Public slash context and authorization caveat](https://github.com/NousResearch/hermes-agent/blob/90d6b98fd86d20981ee06ddd5b7d93e4320f26a4/website/docs/developer-guide/plugins/index.md#L1796-L1816).
