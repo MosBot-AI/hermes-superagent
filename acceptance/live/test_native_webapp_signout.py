@@ -271,7 +271,9 @@ async def verify_active_signout(host, installs):
         assert credential_unchanged("b")
 
 
-def test_native_webapp_signout_closes_only_selected_install_browser(tmp_path_factory, monkeypatch):
+@contextmanager
+def isolated_webapp_host(tmp_path_factory, monkeypatch):
+    """Prepare the pinned host and guard all fixture traffic and subprocesses."""
     assert sys.platform == "linux", "This acceptance uses the Linux private control socket"
     host = Path(os.environ["HERMES_TEST_ROOT"]).resolve(strict=True)
     pin = json.loads((REPO / "compatibility.json").read_bytes())["hermes_commit"]
@@ -321,23 +323,28 @@ def test_native_webapp_signout_closes_only_selected_install_browser(tmp_path_fac
         isolated.setattr(tempfile, "tempdir", str(root))
         deactivate = activate(root)
         try:
-            ports = distinct_ports()
-            restrict = activate(root, dial_ports=ports, dial_host="127.0.0.1")
-            try:
-                home_a, env_a = prepare_install(root / "a", env, ports[0])
-                home_b, env_b = prepare_install(root / "b", env, ports[1])
-                with (
-                    serving_install(host, home_a, env_a, ports[0], isolated) as first,
-                    serving_install(host, home_b, env_b, ports[1], isolated) as second,
-                ):
-                    assert first[0].instance_id != second[0].instance_id
-                    assert first[1]["pid"] != second[1]["pid"]
-                    asyncio.run(
-                        verify_active_signout(
-                            host, {"a": (home_a, env_a, *first), "b": (home_b, env_b, *second)}
-                        )
-                    )
-            finally:
-                restrict()
+            yield host, root, env, isolated
         finally:
             deactivate()
+
+
+def test_native_webapp_signout_closes_only_selected_install_browser(tmp_path_factory, monkeypatch):
+    with isolated_webapp_host(tmp_path_factory, monkeypatch) as (host, root, env, isolated):
+        ports = distinct_ports()
+        restrict = activate(root, dial_ports=ports, dial_host="127.0.0.1")
+        try:
+            home_a, env_a = prepare_install(root / "a", env, ports[0])
+            home_b, env_b = prepare_install(root / "b", env, ports[1])
+            with (
+                serving_install(host, home_a, env_a, ports[0], isolated) as first,
+                serving_install(host, home_b, env_b, ports[1], isolated) as second,
+            ):
+                assert first[0].instance_id != second[0].instance_id
+                assert first[1]["pid"] != second[1]["pid"]
+                asyncio.run(
+                    verify_active_signout(
+                        host, {"a": (home_a, env_a, *first), "b": (home_b, env_b, *second)}
+                    )
+                )
+        finally:
+            restrict()
