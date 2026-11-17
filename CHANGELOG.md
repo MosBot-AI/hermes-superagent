@@ -8,6 +8,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Fixed
 
+- Add an inactive native-host proposal that labels fresh and replayed memory context as untrusted evidence. Verify the legacy SQLite sidecar and preserve stored history.
+
 - Manage local memory resources across constructor, admission and cleanup failures, preserving primary errors, reporting deferred cleanup failures on successful exit and attempting all registered cleanup. Add explicit reviewed factory SDK sessions with readonly enforcement and durable synthetic conformance (#155).
 
 - Refresh the inactive checkpoint-source proposal’s reviewed canonical source bindings for retained-source discovery and add unit checks that catch stale experiment checksums before host testing; patch/tree integrity guards remain unchanged.
