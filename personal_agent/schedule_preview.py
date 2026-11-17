@@ -2,7 +2,7 @@
 
 import argparse
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -21,7 +21,7 @@ def failure(code):
     return {"status": "error", "error": {"code": code}, "scheduled": False}
 
 
-def preview_schedule(schedule, timezone, after, count, *, parse, next_run):
+def preview_schedule(schedule, timezone, after, count, *, parse, parse_duration, next_run):
     """Reuse host computation with explicit anchors, returning no execution guarantee."""
     if (
         type(schedule) is not str
@@ -40,10 +40,13 @@ def preview_schedule(schedule, timezone, after, count, *, parse, next_run):
         anchor = datetime.fromisoformat(after)
         if anchor.tzinfo is None or anchor.utcoffset() is None:
             return failure("offset_required")
-        # Host relative one-shots use its real clock; never pretend --after controls it.
         text = schedule.strip()
         if text.lower().startswith("in "):
-            return failure("relative_oneshot_unsupported")
+            # Resolve the native duration from the explicit anchor. Parsing the
+            # relative form directly would use the host's current clock.
+            minutes = parse_duration(text[3:].strip())
+            instant = anchor.astimezone(UTC) + timedelta(minutes=minutes)
+            text = instant.astimezone(zone).isoformat()
         try:
             instant = datetime.fromisoformat(text)
         except ValueError:
@@ -139,7 +142,11 @@ class SchedulePreview:
                 return failure("profile_context_changed")
             if type(get_config_backend()) is not FileBackend:
                 return failure("unsupported_config_backend")
-            from cron.jobs import compute_next_run, parse_schedule  # ty: ignore[unresolved-import]
+            from cron.jobs import (  # ty: ignore[unresolved-import]
+                compute_next_run,
+                parse_duration,
+                parse_schedule,
+            )
 
             result = preview_schedule(
                 args.schedule,
@@ -147,6 +154,7 @@ class SchedulePreview:
                 args.after,
                 args.count,
                 parse=parse_schedule,
+                parse_duration=parse_duration,
                 next_run=compute_next_run,
             )
             if self.closed or current_profile_home() != self.home:

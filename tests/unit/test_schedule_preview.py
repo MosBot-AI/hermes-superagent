@@ -12,11 +12,14 @@ def call(**kwargs):
     )
     defaults.update(kwargs)
     parse = defaults.pop("parse", lambda _: {"kind": "interval", "minutes": 30})
+    parse_duration = defaults.pop("parse_duration", Mock(side_effect=AssertionError))
     next_run = defaults.pop(
         "next_run",
         lambda _, last, **kw: (datetime.fromisoformat(last) + timedelta(minutes=30)).isoformat(),
     )
-    return preview_schedule(**defaults, parse=parse, next_run=next_run)
+    return preview_schedule(
+        **defaults, parse=parse, parse_duration=parse_duration, next_run=next_run
+    )
 
 
 def test_bounded_explicit_reference():
@@ -37,7 +40,6 @@ def test_bounded_explicit_reference():
         {"timezone": "no/such-zone"},
         {"after": "bad"},
         {"after": "2026-11-08T09:00:00"},
-        {"schedule": "in 30m"},
         {"schedule": "2026-11-08T09:00:00"},
         {"schedule": "20270101T090000"},
         {"schedule": "2027-W01-1T09:00:00"},
@@ -59,6 +61,41 @@ def test_absolute_once_is_not_evaluated_against_real_clock():
     assert result["boundary"] == "one_shot"
     assert len(result["occurrences"]) == 1
     next_run.assert_not_called()
+
+
+def test_relative_once_resolves_elapsed_time_before_native_schedule_parsing():
+    parse_duration = Mock(return_value=30)
+    parse = Mock(side_effect=lambda text: {"kind": "once", "run_at": text})
+    next_run = Mock(side_effect=AssertionError)
+    result = call(
+        schedule="IN  30m",
+        timezone="America/New_York",
+        after="2027-11-07T05:45:00+00:00",
+        parse=parse,
+        parse_duration=parse_duration,
+        next_run=next_run,
+    )
+    parse_duration.assert_called_once_with("30m")
+    parse.assert_called_once_with("2027-11-07T01:15:00-05:00")
+    next_run.assert_not_called()
+    assert result["kind"] == "once" and result["boundary"] == "one_shot"
+    assert result["occurrences"] == [
+        {
+            "native_time": "2027-11-07T01:15:00-05:00",
+            "local": "2027-11-07T01:15:00-05:00",
+            "utc": "2027-11-07T06:15:00+00:00",
+            "fold": 1,
+            "wall_time_valid": True,
+        }
+    ]
+
+
+def test_invalid_relative_duration_never_reaches_native_schedule_parser():
+    parse_duration = Mock(side_effect=ValueError("synthetic private diagnostic"))
+    parse = Mock()
+    result = call(schedule="in invalid", parse=parse, parse_duration=parse_duration)
+    assert result == {"status": "error", "error": {"code": "invalid_schedule"}, "scheduled": False}
+    parse.assert_not_called()
 
 
 def test_spring_gap_is_reported_not_silently_normalized():
