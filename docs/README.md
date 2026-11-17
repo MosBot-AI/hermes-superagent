@@ -25,7 +25,7 @@ Extend Hermes into a long-lived personal agent for one user: one main agent unde
 11. [Worker model routing plugin](11-worker-model-routing.md): select authorized provider/model/effort routes, starting in shadow mode.
 12. [First development slice](12-foundation-progress.md): the native read-only plugin, real contract tests, and remaining gates.
 13. [Enforcement contracts and write-path inventory](13-enforcement-contracts.md): observed failure boundaries and still-blocked write paths.
-14. [Client, authorization, and connector API contracts](14-client-api-contracts.md): proposed HTTP routes, canonical session transport, recovery, and explicit native-mobile blockers.
+14. [Client, authorization, and connector API contracts](14-client-api-contracts.md): proposed HTTP routes, canonical session transport, recovery, explicit native-mobile blockers, and the [dashboard principal proposal](../experiments/dashboard-http-principal/README.md).
 15. [Primary Bot binding and continuity](15-primary-bot-binding.md): proposed selection of an existing native Bot, verified roles, recovery and fencing.
 16. [Opt-in local task inbox](16-local-task-inbox.md): implemented local CLI persistence, replay/revision checks and explicit limits.
 17. [Local due dates and agenda](17-local-task-agenda.md): date semantics, bounded queries and transactional schema upgrades.

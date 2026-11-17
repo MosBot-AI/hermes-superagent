@@ -25,7 +25,7 @@
 11. [Worker 模型路由插件](11-worker-model-routing-zh.md)：按任务需求选择已许可 provider/model/effort，先 shadow 再启用。
 12. [第一开发切片](12-foundation-progress-zh.md)：原生只读插件、实际合同测试与剩余门槛。
 13. [执行边界契约与写路径清单](13-enforcement-contracts-zh.md)：实测失败边界与仍被阻断的写路径。
-14. [客户端、授权与连接器 API 契约](14-client-api-contracts-zh.md)：拟议 HTTP 路由、canonical 会话传输、恢复和明确的原生手机阻断。
+14. [客户端、授权与连接器 API 契约](14-client-api-contracts-zh.md)：拟议 HTTP 路由、canonical 会话传输、恢复、明确的原生手机阻断，以及 [dashboard 调用方身份提案](../experiments/dashboard-http-principal/README-zh.md)。
 15. [主 Bot 绑定与连续性](15-primary-bot-binding-zh.md)：选择既有原生 Bot、验证角色、恢复与 fencing 的拟议方案。
 16. [显式启用的本地任务收件箱](16-local-task-inbox-zh.md)：已实现的本地 CLI 持久化、重放/revision 校验及明确限制。
 17. [本地截止日期与 agenda](17-local-task-agenda-zh.md)：日期语义、有界查询与事务式 schema 升级。

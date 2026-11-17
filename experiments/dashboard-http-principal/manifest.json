@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "status": "Review-only, unsubmitted and inactive",
+  "base": "2281116525106e3c109993ccb5dc74d02bfc1427",
+  "staged_tree": "ad532b8ba83ce274b865691c17c674fa7686eff9",
+  "sha256": {
+    "dashboard-http-principal.patch": "bc7d9eba96e46f8ab094fbf423413fe51d756334c99254bd65d64f760668af9e",
+    "test_http_principal.py": "a499b048dbdbdbf6c8fc937c5fa227c9313a3fcd170123633546e896956c9b07",
+    "run_tests.py": "e0dbb2b7bad0571ba51cb90002b39dd1846cf872c3a09b2b4f04a92fc097dc3e",
+    "../../acceptance/live/native_bot_socket_guard.py": "a395c9d30fb277711b4903cd1a06164fa62e39a4b9183339dbab57c4a6276092"
+  },
+  "comparison_cases_per_checkout": 7,
+  "native_regression_files": [
+    "tests/hermes_cli/test_plugin_host_route_auth.py",
+    "tests/hermes_cli/test_plugin_api_consent_gate.py",
+    "tests/hermes_cli/test_plugin_secondary_profile_host.py",
+    "tests/hermes_cli/test_plugin_runtime_disable_gate.py",
+    "tests/hermes_cli/test_dashboard_auth_middleware.py",
+    "tests/hermes_cli/test_dashboard_auth_native_cookie_writes.py",
+    "tests/hermes_cli/test_dashboard_auth_session_token_header.py",
+    "tests/hermes_cli/test_dashboard_auth_native_flow.py",
+    "tests/hermes_cli/test_dashboard_token_auth.py",
+    "tests/gateway/test_native_http_auth.py"
+  ],
+  "python": "3.14.9",
+  "production_activated": false,
+  "submitted_upstream": false,
+  "live_provider_calls": false,
+  "verification": {
+    "clean_comparison_passed": 7,
+    "proposed_comparison_passed": 7,
+    "proposed_native_regression_passed": 132,
+    "upstream_static_passed": 15,
+    "import_boundary_passed": true
+  }
+}

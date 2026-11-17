@@ -211,6 +211,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Add a [review-only dashboard principal proposal](experiments/dashboard-http-principal/README.md) and verify provider identity propagation against the clean pinned host and a disposable candidate (#29).
+
 - Verify [native Webapp file transport](docs/14-client-api-contracts.md#pinned-loopback-webapp-file-evidence) on the pinned Gateway, including named-profile attachment and browser download ticket revocation (#29).
 
 - Add [internal live task pagination](docs/82-shared-client-api.md#internal-live-task-pagination) over selected local stores, with bounded reads and scoped cursor reset (#29).

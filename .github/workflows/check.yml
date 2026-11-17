@@ -56,6 +56,19 @@ jobs:
           git -C "$proposed" apply --index "$artifact/native-memory-context-trust.patch"
           "$RUNNER_TEMP/hermes-test-venv/bin/python" "$artifact/run_tests.py" \
             --checkout "$proposed" --python "$RUNNER_TEMP/hermes-test-venv/bin/python"
+      - name: Compare dashboard HTTP principals on clean and proposed hosts
+        shell: bash
+        run: |
+          set -euo pipefail
+          upstream="$RUNNER_TEMP/hermes"
+          proposed="$RUNNER_TEMP/hermes-dashboard-http-principal"
+          artifact="$GITHUB_WORKSPACE/experiments/dashboard-http-principal"
+          test_python="$RUNNER_TEMP/hermes-test-venv/bin/python"
+          git -C "$upstream" worktree add --detach "$proposed" 2281116525106e3c109993ccb5dc74d02bfc1427
+          git -C "$proposed" apply --check "$artifact/dashboard-http-principal.patch"
+          git -C "$proposed" apply --index "$artifact/dashboard-http-principal.patch"
+          "$test_python" "$artifact/run_tests.py" --clean "$upstream" --proposed "$proposed" \
+            --python "$test_python"
   native-contracts:
     runs-on: ubuntu-latest
     timeout-minutes: 20
