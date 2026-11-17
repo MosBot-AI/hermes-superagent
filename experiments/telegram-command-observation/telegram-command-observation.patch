@@ -1,5 +1,5 @@
 diff --git a/gateway/run_inbound_hooks.py b/gateway/run_inbound_hooks.py
-index c403aae6..12d78a80 100644
+index c403aae69f..12d78a8094 100644
 --- a/gateway/run_inbound_hooks.py
 +++ b/gateway/run_inbound_hooks.py
 @@ -252,15 +252,19 @@ class GatewayInboundHooksMixin:
@@ -62,10 +62,10 @@ index c403aae6..12d78a80 100644
          return str(result) if result else None
 diff --git a/gateway/run_telegram_command_observation.py b/gateway/run_telegram_command_observation.py
 new file mode 100644
-index 00000000..e19dc171
+index 0000000000..675e68eada
 --- /dev/null
 +++ b/gateway/run_telegram_command_observation.py
-@@ -0,0 +1,114 @@
+@@ -0,0 +1,122 @@
 +"""Command-local Telegram transport observations for in-process callbacks."""
 +
 +from __future__ import annotations
@@ -131,7 +131,7 @@ index 00000000..e19dc171
 +    stamp = vars(event).pop("_telegram_direct_command", None)
 +    if stamp is None or not _declares_observation(handler):
 +        return None
-+    event_ref, adapter_ref, original, text, actor, receiver, captured = stamp
++    event_ref, adapter_ref, original, text, actor, receiver, captured, transport = stamp
 +    command = event.get_command()
 +    if event_ref() is not event or command is None or command.replace("_", "-") != registered_name:
 +        return None
@@ -139,7 +139,13 @@ index 00000000..e19dc171
 +    if identity is None or identity.runtime_profile != identity.transport_profile:
 +        return None
 +    registered = runner._transport_owner(source)
-+    if registered is None or registered[0] is not adapter_ref():
++    adapter = adapter_ref()
++    if (
++        adapter is None
++        or registered is None
++        or registered[0] is not adapter
++        or adapter._direct_command_transport() != transport
++    ):
 +        return None
 +
 +    def read():
@@ -177,11 +183,13 @@ index 00000000..e19dc171
 +            return None
 +        if not runner._is_user_authorized_for_source(source):
 +            return None
++        if adapter._direct_command_transport() != transport:
++            return None
 +        return TelegramCommandObservation(actor, receiver, identity.transport_profile, registered_name)
 +
 +    return _ObservationHandle(read)
 diff --git a/plugins/platforms/telegram/adapter.py b/plugins/platforms/telegram/adapter.py
-index 94e19720..b93b9282 100644
+index 94e19720dd..cc33c90e38 100644
 --- a/plugins/platforms/telegram/adapter.py
 +++ b/plugins/platforms/telegram/adapter.py
 @@ -12,6 +12,7 @@ import os
@@ -192,16 +200,61 @@ index 94e19720..b93b9282 100644
  from contextvars import ContextVar
  from datetime import datetime, timezone, UTC
  from typing import Any, Awaitable, Callable, Dict, Iterator, List, Optional, Set
-@@ -6526,8 +6527,53 @@ class TelegramAdapter(TelegramHeldInboundMixin, TelegramTopicRoutingMixin, BaseP
+@@ -641,6 +642,7 @@ class TelegramAdapter(TelegramHeldInboundMixin, TelegramTopicRoutingMixin, BaseP
+             "HERMES_TELEGRAM_TEXT_BATCH_SPLIT_DELAY_SECONDS", self._TEXT_BATCH_DEFAULT_SPLIT_DELAY_S,
+             min_value=self._text_batch_delay_seconds, max_value=self._TEXT_BATCH_MAX_SPLIT_DELAY_S)
+         self._drop_delayed_deliveries = False
++        self._direct_command_connection: object | None = None
+         # Held across disconnect: PTB advances the offset before our drop-guard runs, so Telegram won't
+         # redeliver — dropping is permanent loss (see _hold_inbound_event).
+         self._held_inbound_events: list[MessageEvent] = []
+@@ -736,13 +738,16 @@ class TelegramAdapter(TelegramHeldInboundMixin, TelegramTopicRoutingMixin, BaseP
+     def _mark_connected(self) -> None:
+         self._drop_delayed_deliveries = False
+         super()._mark_connected()
++        self._direct_command_connection = object()
+         self._schedule_held_inbound_redispatch()  # PTB will not redeliver these events
+ 
+     def _mark_disconnected(self) -> None:
++        self._direct_command_connection = None
+         self._drop_delayed_deliveries = True
+         super()._mark_disconnected()
+ 
+     def _set_fatal_error(self, code: str, message: str, *, retryable: bool) -> None:
++        self._direct_command_connection = None
+         self._drop_delayed_deliveries = True
+         super()._set_fatal_error(code, message, retryable=retryable)
+         # Permanent fatal: no reconnect will drain, so discard the hold queue (later holds are refused).
+@@ -3179,6 +3184,7 @@ class TelegramAdapter(TelegramHeldInboundMixin, TelegramTopicRoutingMixin, BaseP
+         queued updates, else every message sent during the outage is lost). Webhook env:
+         TELEGRAM_WEBHOOK_URL, TELEGRAM_WEBHOOK_PORT (8443), TELEGRAM_WEBHOOK_HOST,
+         TELEGRAM_WEBHOOK_SECRET."""
++        self._direct_command_connection = None
+         # Explicit connect() is the only operation allowed to reopen polling after a completed teardown.
+         self._polling_teardown_started = False
+         self._webhook_mode = False  # re-evaluated on every explicit connection
+@@ -6526,8 +6532,65 @@ class TelegramAdapter(TelegramHeldInboundMixin, TelegramTopicRoutingMixin, BaseP
          if len(event.text or "") >= self._SPLIT_THRESHOLD:
              self._enqueue_text_event(event)
              return
 +        self._stamp_direct_command(update, event)
          await self.handle_message(event)
  
++    def _direct_command_transport(self) -> tuple[object, int | None] | None:
++        """Sample the active connection and native polling generation for a command."""
++        connection = self._direct_command_connection
++        if connection is None or not self._running or self._teardown_started:
++            return None
++        if self._webhook_mode:
++            return connection, None
++        if not self._polling_progress_accepting:
++            return None
++        return connection, self._polling_generation
++
 +    def _stamp_direct_command(self, update: Update, event: MessageEvent) -> None:
 +        """Keep original SDK provenance on the immediate event only."""
-+        if not TELEGRAM_AVAILABLE or type(update) is not Update:
++        transport = self._direct_command_transport()
++        if transport is None or not TELEGRAM_AVAILABLE or type(update) is not Update:
 +            return
 +        message = event.raw_message
 +        if type(message) is not Message or update.message is not message:
@@ -240,7 +293,7 @@ index 94e19720..b93b9282 100644
 +            return
 +        event._telegram_direct_command = (
 +            weakref.ref(event), weakref.ref(self), message, event.text,
-+            user.id, receiver, time.monotonic(),
++            user.id, receiver, time.monotonic(), transport,
 +        )
 +
      async def _handle_location_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

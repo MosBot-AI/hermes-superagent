@@ -8,6 +8,8 @@
 
 ### 修复
 
+- 在仅供评审的 Hermes 候选中，连接或轮询代次变更后使旧的 [Telegram 命令观察](experiments/telegram-command-observation/README-zh.md)失效（#14）。
+
 - [内部登记挑战签发](docs/78-enrollment-ceremony-zh.md#签发结果未被观察时的恢复)结果丢失后，可用原定位符和新的独立可信观察恢复，并保留原截止时间（#14）。
 
 - 路由诊断在计算过程中遇到 profile 切换或原生插件卸载时丢弃结果（#23）。
