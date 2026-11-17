@@ -96,6 +96,6 @@ with TemporaryDirectory() as directory:
 
 结果的 `replayed` 为 `false`。`data` 对象包含 `schema_version: personal.memory.health.v1`、协商得到的整数 `store_schema_version` 和 `capacity` 对象。容量包含 `records`、`nonterminal_mutations` 与 `mutations`，各项均具有整数 `used` 和 `limit`。SDK 校验精确结构、计数关系和声明限额的一致性。
 
-内置 SQLite 适配器在一次有界只读事务中校验当前存储格式并读取计数。记录计数包含过期记录和墓碑。非终态变更统计除 `forget` 外的规范事件行，总变更计数也包含这些终态事件。读取后的计数随时可能变化。索引一致性、磁盘余量、写入准入和远程或提供方健康需单独检查。
+内置 SQLite 适配器在一次有界只读事务中核对存储格式和连接打开时已核验的日志模式，并读取计数。受信 SDK 打开器也可使用已经准入的内存连接执行合成测试。原生仅现有库读取仍要求使用 DELETE 日志模式的文件。记录计数包含过期记录和墓碑。非终态变更统计除 `forget` 外的规范事件行，总变更计数也包含这些终态事件。读取后的计数随时可能变化。索引一致性、磁盘余量、写入准入和远程或提供方健康需单独检查。
 
 健康探测读取存储元数据，仅返回计数和版本。SDK 会话准入仍可能执行现有的有界导出读取。[原生 `/personal-memory health` 命令](67-readable-memory-workbench-zh.md#视图含义)直接读取已有存储，不执行 SDK 导出准入。

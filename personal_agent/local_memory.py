@@ -109,6 +109,7 @@ class LocalMemoryBackend:
         self._session = None
         self._source_kind = None
         self._read_only = False
+        self._journal_mode = "delete"
         self._projection = None
         self._edits = None
 
@@ -316,6 +317,7 @@ class LocalMemoryBackend:
             raise
         self._connection, self._namespace, self._session = connection, namespace_id, session_ref
         self._source_kind = source_kind
+        self._journal_mode = mode
         self._projection = projection
         self._edits = edits
 
@@ -385,11 +387,13 @@ class LocalMemoryBackend:
         self._read_only = True
 
     @staticmethod
-    def _validate_readonly(connection, namespace_id, *, historical_snapshot=False):
+    def _validate_readonly(
+        connection, namespace_id, *, historical_snapshot=False, journal_mode="delete"
+    ):
         """Caller owns a read transaction; establish its snapshot before mode admission."""
         if connection.execute("PRAGMA application_id").fetchone()[0] != _APPLICATION_ID:
             raise MemoryError("foreign_database")
-        if connection.execute("PRAGMA journal_mode").fetchone()[0] != "delete":
+        if connection.execute("PRAGMA journal_mode").fetchone()[0] != journal_mode:
             raise MemoryError("memory_reader_format_unsupported")
         version = connection.execute("PRAGMA user_version").fetchone()[0]
         rows = connection.execute(
@@ -413,6 +417,7 @@ class LocalMemoryBackend:
         """Detach, without closing the host-owned connection."""
         self._connection = self._namespace = self._session = self._source_kind = None
         self._read_only = False
+        self._journal_mode = "delete"
         self._projection = None
         self._edits = None
 
@@ -483,7 +488,7 @@ class LocalMemoryBackend:
             )
             began = True
             if operation == "health":
-                self._validate_readonly(conn, self._namespace)
+                self._validate_readonly(conn, self._namespace, journal_mode=self._journal_mode)
                 result = self._health(conn)
                 conn.execute("COMMIT")
                 return result
