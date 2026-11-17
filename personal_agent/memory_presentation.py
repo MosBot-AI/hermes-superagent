@@ -233,6 +233,19 @@ def _render(envelope: dict, operation: str | None, payload: dict) -> str:
     if envelope["status"] != "ok" or type(envelope["replayed"]) is not bool:
         raise ValueError("unsupported result")
     data = envelope["data"]
+    if operation == "health":
+        capacity = data["capacity"]
+        lines = [
+            "Memory storage is readable (schema " + _integer(data["store_schema_version"]) + ")"
+        ]
+        for key, label in (
+            ("records", "Records including tombstones"),
+            ("nonterminal_mutations", "Nonterminal mutations"),
+            ("mutations", "Total mutations"),
+        ):
+            used, limit = capacity[key]["used"], capacity[key]["limit"]
+            lines.append(f"{label} {_integer(used)}/{_integer(limit)}")
+        return "\n".join(lines)
     if operation == "record_origin":
         current, origin = data["current"], data["origin"]
         lines = [

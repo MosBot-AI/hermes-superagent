@@ -86,6 +86,7 @@ def validate_request(operation: str, payload: dict) -> dict:
 
         return validate(operation, payload)
     fields = {
+        "health": (set(), set()),
         "remember": ({"content", "request_id"}, {"topic", "expires_at"}),
         "correct": (
             {"record_id", "expected_revision", "request_id"},

@@ -211,6 +211,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Inspect local memory schema and capacity with `/personal-memory health` and an optional API-v1 SDK operation. The native command reads only an existing store and reports missing or incompatible storage explicitly (#43).
+
 - Inspect a versioned, profile-local route capability registry with `hermes personal-agent routing inventory`. Exact route lookup reports the freshness of individual capabilities and redacts private route bindings (#23).
 
 - Add a [review-only current-pin Telegram command observation](experiments/telegram-command-observation/README.md) with clean and candidate SDK controls. The native probe distinguishes the original sender and receiving Bot account from forwarded, edited, private-topic, marked Business and stale events (#14).
