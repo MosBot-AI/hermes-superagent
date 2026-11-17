@@ -33,13 +33,16 @@ A successful commit creates an unassigned sticky-blocked scratch card. The plugi
 
 ```text
 /personal-handoff --text list --limit 20
+/personal-handoff --text show --request-id checklist-handoff
 /personal-handoff --text show HANDOFF
 /personal-handoff --text reconcile HANDOFF
 /personal-tasks show TASK
 /personal-handoff --text sync HANDOFF --task TASK --expected-revision N --request-id checklist-observation
 ```
 
-After a lost reply or restart, inspect the original handoff. Reconcile checks its exact creation identity and never creates a replacement card. A missing, duplicate, changed or unavailable observation is not permission to prepare another attempt. Historical confirmed creation does not promise that the card currently exists, remains parked or has completed work. Read the observation separately from the handoff's stored state.
+After a lost prepare reply, use the original prepare request ID to recover the handoff ID, digest and retained state from the same profile. The lookup still works if the source revision changed or native creation is disabled. An unexpired prepared record includes its original preview. Other states display only the retained metadata and any recorded observation.
+
+Reconcile checks the handoff's exact creation identity and never creates a replacement card. A missing, duplicate, changed or unavailable observation is not permission to prepare another attempt. Historical confirmed creation does not promise that the card currently exists, remains parked or has completed work. Read the observation separately from the handoff's stored state.
 
 Sync saves only an advisory native-state observation and increments the local task revision. Use `show TASK` for the current revision before later actions. A native `done` status does not complete the local task. Exact sync retries return the original historical receipt without native access; they are not fresh board reads. See [53](53-native-progress-observation.md).
 

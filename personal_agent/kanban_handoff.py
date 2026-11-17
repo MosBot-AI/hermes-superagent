@@ -22,7 +22,7 @@ from .tasks import TaskError
 
 HELP = (
     "prepare TASK --expected-revision N --request-id KEY; "
-    "commit ID --expected-digest SHA; reconcile ID; show ID; "
+    "commit ID --expected-digest SHA; reconcile ID; show ID; show --request-id KEY; "
     "sync ID --task TASK --expected-revision N --request-id KEY; "
     "review ID --task TASK --expected-revision N; "
     "accept-review ID --task TASK --expected-revision N --expected-digest SHA "
@@ -96,7 +96,10 @@ def parse_command(raw):
     prepare.add_argument("task_id")
     prepare.add_argument("--expected-revision", type=int, required=True)
     prepare.add_argument("--request-id", required=True)
-    for verb in ("show", "commit", "cancel", "reconcile"):
+    show = subs.add_parser("show").add_mutually_exclusive_group(required=True)
+    show.add_argument("id", nargs="?")
+    show.add_argument("--request-id", action=_Once)
+    for verb in ("commit", "cancel", "reconcile"):
         command = subs.add_parser(verb)
         command.add_argument("id")
         if verb in ("commit", "cancel"):
@@ -335,6 +338,8 @@ class LocalKanbanHandoff:
             if operation == "list":
                 return ledger.list(request["limit"], request["after"], now)
             if operation == "show":
+                if request["request_id"] is not None:
+                    return ledger.get_by_request_id(request["request_id"], now)
                 return ledger.get(request["id"], now)
             if operation == "cancel":
                 return ledger.cancel(request["id"], request["expected_digest"], now)

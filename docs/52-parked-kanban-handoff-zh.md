@@ -12,7 +12,8 @@
 
 - `prepare TASK --expected-revision N --request-id KEY` 预览一份准确的任务快照。仅包含标题、详情、任务 ID 和修订，并展示批准的原生根目录、看板及数据库路径。
 - `commit ID --expected-digest SHA` 批准该预览而非更新后的任务。预览 15 分钟后过期；重新检查来源修订，并在原生写入前持久提交单次领取记录。
-- `list [--limit N --after ID]` 仅返回元数据，不含预览标题或正文。批准摘要之前，须用 `show ID` 或原始 `prepare` 响应检查准确正文及目标。
+- `list [--limit N --after ID]` 仅返回元数据，不含预览标题或正文。
+- `show ID` 和 `show --request-id KEY` 查阅同一条留存记录。如果响应丢失，请使用区分大小写的原始 `prepare` 请求键。重启、源任务编辑或原生交接配置变更后，在同一 LOCAL profile 的准入条件下仍可查询。查询读取该 profile 的交接账本，无需打开任务存储或原生看板。此 profile 中没有匹配的有效键时返回 `not_found`。正文遵循常规保留规则。
 - `cancel ID --expected-digest SHA` 取消尚未领取的预览，不撤销原生卡片，也不证明远端取消。
 - `reconcile ID` 有界只读查询准确交接键，包含已归档卡片。缺失、重复和冲突都明确保留，绝不再创建卡片。
 

@@ -179,7 +179,9 @@ def test_installed_handoff_review_accept_and_restart(installed_handoff):
         assert preview["source"]["task_id"] == task["id"]
         assert preview["destination"]["board"] == BOARD
         assert Path(preview["destination"]["root"]) == Path(gateway.env["HERMES_KANBAN_HOME"])
-        readable = await call(f"personal-handoff --text show {preview['id']}", readable=True)
+        readable = await call(
+            "personal-handoff --text show --request-id handoff-prepare", readable=True
+        )
         for value in (task["title"], preview["id"], preview["intent_digest"], BOARD):
             assert value in readable
         await call(
@@ -335,7 +337,10 @@ def test_installed_handoff_review_accept_and_restart(installed_handoff):
             error="handoff_disabled",
         )
         await call(f"personal-handoff --json reconcile {hid}", error="handoff_disabled")
-        assert (await call(f"personal-handoff --json show {hid}"))["data"]["state"] == "confirmed"
+        retained = (await call("personal-handoff --json show --request-id handoff-prepare"))["data"]
+        assert retained == (await call(f"personal-handoff --json show {hid}"))["data"]
+        assert retained["state"] == "confirmed" and retained["native_identity"] == identity
+        assert retained["intent_digest"] == preview["intent_digest"] and retained["payload"] is None
         assert (await call(f"personal-tasks --json show {tid}"))["data"] == accepted["task"]
 
     gateway.phase(sid, disabled_replay)
@@ -399,7 +404,7 @@ def test_installed_handoff_reconciles_abrupt_gateway_exit(
         f"personal-handoff --json commit {handoff_id} --expected-digest {preview['intent_digest']}"
     )
     reconcile = f"personal-handoff --json reconcile {handoff_id}"
-    show = f"personal-handoff --json show {handoff_id}"
+    show = "personal-handoff --json show --request-id crash-prepare"
     home = gateway.home
     assert native_db == Path(preview["destination"]["path"])
     ledger = home / "plugin-data/hermes-personal-agent/kanban-handoff/receipts.sqlite3"
@@ -489,6 +494,7 @@ def test_installed_handoff_reconciles_abrupt_gateway_exit(
 
     async def recover(call):
         held = (await call(show))["data"]
+        assert held["id"] == handoff_id and held["intent_digest"] == preview["intent_digest"]
         assert held["state"] == "claimed" and held["native_identity"] == identity
         assert held["payload"] is None and held["observation"] is None
         assert (await call(commit))["data"] == held
