@@ -65,6 +65,10 @@ Hermes 将该 router 挂载到 `/api/plugins/hermes-personal-agent`。因此拟�
 
 不要为了可选 UI 而关闭隔离。未发现原生通用 `ctx.current_http_principal()` 合同。特别是，隔离宿主的 `with_hosted_admission` 只设置 `hosted_http_authenticated: true`；这个布尔值只是准入决定，**不是经过验证的 owner/principal/profile/policy 上下文** [H13]。原生请求的 `request.state.native_http_principal` 也不是通用 plugin-context API。E0.6 必须验证受支持、规范化的宿主边界，或者提出**具有本项目具体使用方的通用上游 principal 接缝**。隔离 host IPC 的可信身份透传是明确的未解决阻塞项。插件不得自行解码 cookie、接受客户端身份，或信任任意转发身份 header。若无法取得已验证的 principal/profile，受保护读写均返回 503 `host_identity_unavailable`，不得退化到默认 owner。已认证但尚未绑定的用户收到 403 `owner_binding_required`。
 
+### 2.3 固定版本的 dashboard 调用方身份对照
+
+[Dashboard 身份提案](../experiments/dashboard-http-principal/README-zh.md)对比干净固定版本和临时打补丁的宿主，使用同一个通过 manifest 挂载的合成插件。宿主认证、插件许可和 profile 路由都运行于真实 dashboard ASGI 应用，隔离请求使用真实子进程，提供方使用合成身份。干净版本通过原生准入抵达受保护探针，但没有规范化的调用方身份。评审候选为提供方 cookie 和 bearer 会话传递已验证的签发方、主体以及已解析的 profile。回环、原生同用户 grant 和部署会话令牌仍不提供提供方身份。返回值不携带领域授权。干净固定版本仍是兼容性目标，共享任务端点继续受现有准入条件约束。
+
 ## 3. 鉴权不等于领域授权
 
 ### 3.1 既有宿主鉴权路由

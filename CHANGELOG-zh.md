@@ -211,6 +211,8 @@
 
 ### 新增
 
+- 添加[仅供评审的 dashboard 调用方身份提案](experiments/dashboard-http-principal/README-zh.md)，对照干净固定版本与临时候选宿主验证提供方身份传递（#29）。
+
 - 在固定版本 Gateway 上验证[原生 Webapp 文件传输](docs/14-client-api-contracts-zh.md#固定版本的回环-webapp-文件证据)，包括命名 profile 附件和浏览器下载票据撤销（#29）。
 
 - 增加[内部任务实时分页](docs/82-shared-client-api-zh.md#内部任务实时分页)，对已选定的本地存储实施有界读取及作用域游标重置（#29）。

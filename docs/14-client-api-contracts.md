@@ -65,6 +65,10 @@ Normal HTTP authentication precedes plugin handlers. An unauthenticated request 
 
 Do not turn isolation off to make an optional UI work. No native general-purpose `ctx.current_http_principal()` contract was found. In particular, the isolated host's `with_hosted_admission` stamps only `hosted_http_authenticated: true`; that boolean is an admission decision, **not a verified owner/principal/profile/policy context** [H13]. A native request's `request.state.native_http_principal` is also not a general plugin-context API. E0.6 must prove a supported, normalized host boundary, or propose a **generic upstream principal seam with this concrete consumer**. Trusted identity propagation through isolated host IPC is an explicit unresolved blocker. The plugin must never decode cookies, accept a client-supplied identity, or trust arbitrary forwarded identity headers. If the verified principal/profile cannot be obtained, return 503 `host_identity_unavailable` for protected reads and writes; do not degrade to a default owner. An authenticated but unbound user gets 403 `owner_binding_required`.
 
+### 2.3 Pinned dashboard principal comparison
+
+The [dashboard principal proposal](../experiments/dashboard-http-principal/README.md) compares one manifest-mounted synthetic plugin on the clean pin and a disposable patched host. Host authentication, consent and profile routing run on the real dashboard ASGI app, with a real child process for hosted requests and a synthetic provider. The clean pin reaches the protected probe with native admission but no normalized identity. The review candidate supplies the verified issuer, subject and resolved profile for provider cookies and bearer sessions. Loopback, native same-user grants and deployment tokens still supply no provider identity. The return value carries no domain grants. The clean pin remains the compatibility target and the shared task endpoint remains gated.
+
 ## 3. Authentication Is Not Domain Authorization
 
 ### 3.1 Existing host authentication routes
