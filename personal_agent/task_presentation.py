@@ -83,6 +83,7 @@ _ERRORS = {
     "invalid_configuration": "Task configuration is invalid. Review the trusted local task setup.",
     "local_tasks_disabled": "Local tasks are disabled in this profile.",
     "local_conversation_disabled": "Local task conversation commands are disabled in this profile.",
+    "local_conversation_unloaded": "This local task command registration has been unloaded.",
     "unsupported_origin": "This command is unavailable from this session origin.",
     ("storage_error"): (
         "The task operation failed. Do not assume a write succeeded; inspect the "

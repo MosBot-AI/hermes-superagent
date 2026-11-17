@@ -8,8 +8,10 @@ Host internals below are test observations only, never plugin dependencies.
 import asyncio
 import json
 import sqlite3
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from datetime import UTC, datetime
+from threading import Event
 from types import SimpleNamespace
 
 import pytest
@@ -273,6 +275,75 @@ def test_reload_unload_and_retained_callback_rechecks_config(native):
     assert "personal-tasks" in manager._plugin_commands
     manager.unload()
     assert "personal-tasks" not in manager._plugin_commands
+    assert not (home / "plugin-data").exists()
+
+
+def test_retained_callback_cannot_read_replay_or_write_after_reload(host):
+    manager = host.manager
+    previous = manager._plugin_commands["personal-tasks"]["handler"]
+    add = 'add "Existing local task" --request-id retained-original'
+    original = command(host, add)
+    assert original["status"] == "ok"
+
+    manager.discover_and_load(force=True)
+    assert manager._plugin_commands["personal-tasks"]["handler"] is not previous
+
+    for raw in (
+        f"show {original['data']['id']}",
+        add,
+        'add "Stale registration" --request-id retained-new',
+    ):
+        output = previous(
+            "--json " + raw,
+            platform="cli",
+            source=None,
+            session_id="synthetic",
+            session_key="synthetic",
+        )
+        denied = json.loads(output)
+        assert denied["error"] == {"code": "local_conversation_unloaded", "retryable": False}
+        assert denied["data"] is None and denied["request_id"] is None
+
+    replayed = command(host, add)
+    assert replayed["replayed"] is True and replayed["data"] == original["data"]
+    added = command(host, 'add "Successor registration" --request-id retained-new')
+    assert added["status"] == "ok" and added["replayed"] is False
+    assert added["data"]["title"] == "Successor registration"
+
+
+def test_native_unload_during_settings_lookup_refuses_before_storage(native, monkeypatch):
+    from hermes_cli.plugins_context import PluginContext
+
+    home, manager = native
+    callback = load(manager)
+    entered, resume = Event(), Event()
+    original = PluginContext.get_config
+
+    def pause_after_settings(context, key, default=None):
+        value = original(context, key, default)
+        if key == "local_conversation":
+            entered.set()
+            assert resume.wait(10)
+        return value
+
+    monkeypatch.setattr(PluginContext, "get_config", pause_after_settings)
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        pending = executor.submit(
+            callback,
+            '--json add "Unloaded during settings" --request-id lost-admission',
+            platform="cli",
+            session_id="synthetic",
+            session_key="synthetic",
+        )
+        try:
+            assert entered.wait(5)
+            assert manager.unload(PLUGIN_ID)
+            assert "personal-tasks" not in manager._plugin_commands
+        finally:
+            resume.set()
+        denied = json.loads(pending.result(timeout=5))
+    assert denied["error"] == {"code": "local_conversation_unloaded", "retryable": False}
+    assert denied["data"] is None and denied["request_id"] is None
     assert not (home / "plugin-data").exists()
 
 

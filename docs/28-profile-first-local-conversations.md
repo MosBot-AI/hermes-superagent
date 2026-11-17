@@ -70,7 +70,9 @@ All mutations reuse the existing schema-v3 task transaction, request digest and 
 
 Writes accept `--request-id`. If omitted, a fresh key is generated and returned as `request_id`, including after a storage failure once parsing succeeded. Reusing the same key and same payload returns the saved receipt; changing the payload conflicts. A new key can create a duplicate task. For an uncertain result, retry manually with the returned key and identical command, not with a fresh key. No automatic retry is performed. If the response was lost before its generated key was observed, inspect the task list before deciding to submit again; explicit keys avoid that ambiguity.
 
-The command rechecks the currently visible mode/flag and the bound profile home before opening task storage. Config disable observed by the callback denies subsequent calls. This is not a cross-process immediate-revocation protocol: native workers may hold configuration snapshots, and an already-admitted transaction can finish. Reload/restart the affected runtime to apply settings consistently. Plugin disable/unload removes registration; it does not erase tasks or receipts.
+The command rechecks the currently visible mode/flag and the bound profile home before opening task storage. Config disable observed by the callback denies subsequent calls. Native unload also revokes callbacks from that registration before or during settings resolution. A retained callback returns `local_conversation_unloaded` even after a successor registers with enabled settings. The successor can read the original task and replay its exact receipt.
+
+Already-admitted transactions can finish. Native workers may hold separate configuration snapshots, so reload or restart the affected runtime to apply settings consistently across processes. Stored tasks and receipts persist through plugin unload.
 
 Reusing schema v3 preserves the historical task `source: local_cli` label. It identifies the explicit local-operator path, not authenticated session/Bot provenance audit. No new source-authorization field is added.
 
@@ -92,7 +94,7 @@ Success and failure use `personal.local-conversation-tasks.v1`, with `scope: tru
 }
 ```
 
-Unsupported origin is checked before configuration, parsing or storage. Supported calls can still return `profile_context_changed`, `invalid_configuration`, `local_conversation_disabled`, normal task validation/conflict errors or a redacted `local_tasks_unavailable`. Exceptions do not echo private arguments, database paths or stack traces. A denied command is not a successful write or owner-authentication event.
+Unsupported origin is checked before configuration, parsing or storage. Supported calls can still return `profile_context_changed`, `invalid_configuration`, `local_conversation_disabled`, `local_conversation_unloaded`, normal task validation/conflict errors or a redacted `local_tasks_unavailable`. Exceptions do not echo private arguments, database paths or stack traces. A denied command is not a successful write or owner-authentication event.
 
 ## 6. Verification and remaining gates
 

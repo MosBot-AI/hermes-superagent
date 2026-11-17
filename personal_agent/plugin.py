@@ -3,6 +3,7 @@
 import argparse
 import inspect
 import json
+from threading import Event
 from typing import Any, Protocol
 
 from .enforcement import build_enforcement_inventory
@@ -340,6 +341,8 @@ def register(ctx: PluginContext) -> None:
             args_hint="prepare | commit | reconcile | sync | show | list | cancel",
         )
 
+        tasks_unloaded = Event()
+
         def local_tasks_command(
             raw_args: str,
             *,
@@ -357,6 +360,7 @@ def register(ctx: PluginContext) -> None:
                 session_id=session_id,
                 session_key=session_key,
                 default_format="text",
+                unloaded=tasks_unloaded,
             )
 
         ctx.register_command(
@@ -367,6 +371,8 @@ def register(ctx: PluginContext) -> None:
             ),
             args_hint="[--json] <command> [arguments]",
         )
+        # The native ledger disposes registrations in reverse order.
+        ctx.on_unload(tasks_unloaded.set)
 
     if memory_enabled:
         from .conversation_memory import LocalMemoryCommands

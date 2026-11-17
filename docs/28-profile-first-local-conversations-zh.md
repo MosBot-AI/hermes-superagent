@@ -70,7 +70,9 @@ plugins:
 
 写入支持 `--request-id`。省略时生成新 key，并以 `request_id` 返回；解析成功后即使存储失败，也返回该 key。同 key 同 payload 返回已保存回执，变更 payload 会冲突。新 key 可能创建重复任务。结果不确定时，使用返回 key 和完全相同的命令手动重试，不要换新 key；不会自动重试。若响应丢失，尚未看到自动生成 key，应先查看任务列表再决定是否重提；显式 key 可避免这种含糊。
 
-打开任务存储前，命令重新检查当前可见的 mode/flag 和绑定 profile home。回调观察到禁用配置后，会拒绝后续调用。这不是跨进程即时撤权协议：原生 worker 可能保留配置快照，已准入事务也可能完成。应重载/重启相关运行进程，使设置一致生效。禁用/卸载插件会移除注册，不删除任务或回执。
+打开任务存储前，命令重新检查当前可见的 mode/flag 和绑定 profile home。回调观察到禁用配置后，会拒绝后续调用。原生卸载也会在设置读取前或读取期间撤销该次注册的回调。即使新的回调以启用设置注册，留存的旧回调仍返回 `local_conversation_unloaded`。新的回调可以读取原任务，并按原请求准确重放回执。
+
+已经准入的事务可以完成。原生 worker 可能保留独立的设置快照，请重载或重启相关运行进程，使设置在各进程一致生效。插件卸载后，已保存的任务和回执仍保留。
 
 复用 schema-v3 后，任务的历史 `source: local_cli` 标签保持不变；它表示显式本地操作路径，不是经过认证的会话/Bot 来源审计。没有新增来源授权字段。
 
@@ -92,7 +94,7 @@ plugins:
 }
 ```
 
-在读取配置、解析或存储之前检查不支持的来源。通过来源检查的调用仍可能返回 `profile_context_changed`、`invalid_configuration`、`local_conversation_disabled`、正常任务校验/冲突错误或经过脱敏的 `local_tasks_unavailable`。异常不回显私人参数、数据库路径或堆栈。命令拒绝不等于写入成功，也不等于 owner 认证事件。
+在读取配置、解析或存储之前检查不支持的来源。通过来源检查的调用仍可能返回 `profile_context_changed`、`invalid_configuration`、`local_conversation_disabled`、`local_conversation_unloaded`、正常任务校验/冲突错误或经过脱敏的 `local_tasks_unavailable`。异常不回显私人参数、数据库路径或堆栈。命令拒绝不等于写入成功，也不等于 owner 认证事件。
 
 ## 6. 验证与剩余门禁
 
