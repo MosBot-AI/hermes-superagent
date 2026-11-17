@@ -211,6 +211,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Verify [native Webapp PKCE](docs/14-client-api-contracts.md#pinned-loopback-native-pkce-evidence) over a real loopback callback and record the native credential lifetime across browser sign-out and Gateway restart (#29).
+
 - Verify [canonical Webapp recovery](docs/14-client-api-contracts.md#pinned-browser-session-recovery) across owner loss, including durable prompt receipts, generation-checked resolution, and replay or snapshot recovery (#29).
 
 - Add a [review-only dashboard principal proposal](experiments/dashboard-http-principal/README.md) and verify provider identity propagation against the clean pinned host and a disposable candidate (#29).

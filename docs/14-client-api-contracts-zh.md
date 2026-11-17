@@ -121,6 +121,16 @@ Canonical 本地会话有意允许**同一 profile** 中经过验证的操作员
 - 可选 PWA 首先使用已有浏览器登录。E6.7 在支持的回调路径、目标设备恢复、安全凭据存储和设备撤权得到验证前保持 Blocked。若需要通用 callback/device-control 扩展，应放在现有宿主边界，而不是平行插件鉴权服务。
 - Webapp 注销和原生 App 凭据的生命周期不同。浏览器注销可使绑定的浏览器 socket 失效，而原生 App 登录仍然存续。没有已验证宿主机制时，不承诺“注销撤销全部设备”。插件硬撤权仍须阻止被撤销 binding 后续的领域接纳。
 
+#### 固定版本的回环原生 PKCE 验收
+
+[真实 PKCE 用例](../acceptance/live/test_native_webapp_pkce.py)在临时 Linux 回环 Gateway 上运行未经修改的 Hermes 固定版本 `2281116525106e3c109993ccb5dc74d02bfc1427`。用例通过测试用公开主机名启用普通的 Webapp 登录关卡。Gateway 和原生回调监听器均仅绑定 `127.0.0.1`。内置 Basic 提供方使用合成账户及为该临时安装生成的签名密钥。
+
+- Webapp 声明 `native_pkce`，并拒绝匿名身份读取。密码登录通过 S256 完成原生 broker 流程，HTTP 客户端随后导航到已注册的回环监听器。原有查询参数与客户端 state 均得到保留。原生分支未给浏览器设置会话 cookie。同一宿主拒绝 `localhost`、HTTPS 手机返回地址、应用 scheme 和 plain challenge 方法。
+- 回调 code 仅能以匹配的 verifier 兑换一次。错误 verifier 会消耗其独立用例中的 code。兑换得到的 access token 无需 cookie 即可认证，原生刷新路由会签发新凭据对。
+- 原生 Webapp 登出使独立登录的浏览器 cookie 会话失效。原生 bearer 仍可认证，原生刷新也仍可用。使用同一个临时提供方密钥正常重启 Gateway 后，刷新得到的 bearer 仍可认证。
+
+[手动 Native Gateway 工作流](../.github/workflows/native-gateway.yml)记录脱敏回执。测试在回环网络上使用 HTTP 客户端和真实 Basic 提供方。已部署的 HTTPS/OAuth、手机回调投递、安全设备存储和设备级撤销仍是 E6.7 的未完成项。
+
 ## 4. 拟议传输约定与限制
 
 本节所有数值都是**项目设计值**，不是观测到的 Hermes 默认值。

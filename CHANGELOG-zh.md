@@ -211,6 +211,8 @@
 
 ### 新增
 
+- 通过真实回环回调验证[原生 Webapp PKCE](docs/14-client-api-contracts-zh.md#固定版本的回环原生-pkce-验收)，并记录浏览器登出与 Gateway 重启后的原生凭据生命周期（#29）。
+
 - 验证 owner 丢失后的 [canonical Webapp 恢复](docs/14-client-api-contracts-zh.md#固定版本的浏览器会话恢复)，包括持久化输入回执、代次校验的未知状态解除，以及重放或快照恢复（#29）。
 
 - 添加[仅供评审的 dashboard 调用方身份提案](experiments/dashboard-http-principal/README-zh.md)，对照干净固定版本与临时候选宿主验证提供方身份传递（#29）。

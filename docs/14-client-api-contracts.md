@@ -121,6 +121,16 @@ On every read and command, verify the current credential, owner binding, profile
 - Existing browser sign-in is the first optional PWA path. E6.7 is Blocked until a supported callback path, target-device recovery, secure credential storage and device revocation are proven. If a generic callback/device-control extension is needed, it belongs at the existing host boundary, not in a parallel plugin auth service.
 - Webapp sign-out and native-app credentials do not have identical lifetimes. A browser sign-out can invalidate its bound browser sockets while native-app sign-in survives. Never promise “logout revokes every device” without a verified host mechanism. Plugin hard revocation still prevents subsequent domain admissions under the revoked binding.
 
+#### Pinned loopback native PKCE evidence
+
+The [live PKCE case](../acceptance/live/test_native_webapp_pkce.py) serves the unmodified Hermes pin `2281116525106e3c109993ccb5dc74d02bfc1427` on a temporary Linux loopback Gateway. The test selects the ordinary Webapp sign-in gate using a fixture public host name. The Gateway and native callback listener bind only to `127.0.0.1`. The bundled Basic provider uses a synthetic account and a signing key generated for the temporary installation.
+
+- The Webapp advertises `native_pkce` and refuses anonymous identity reads. With S256, password sign-in completes the native broker and an HTTP client navigates to the registered loopback listener. Existing query parameters and client state survive. The native branch leaves the browser without a session cookie. The same host refuses `localhost`, an HTTPS mobile return URL, an app scheme and the plain challenge method.
+- The callback code exchanges once with its matching verifier. An incorrect verifier consumes its own separate test code. The exchanged access token authenticates without cookies and the native refresh route issues a fresh pair.
+- Native Webapp sign-out invalidates a separately signed-in browser's cookie session. The native bearer still authenticates and its native refresh still works. The refreshed bearer authenticates again after an ordinary Gateway restart with the same temporary provider key.
+
+The [manual Native Gateway workflow](../.github/workflows/native-gateway.yml) records a sanitized receipt. The test uses HTTP clients and the actual Basic provider over loopback. Deployed HTTPS/OAuth, handset callback delivery, secure device storage and device-specific revocation remain open under E6.7.
+
 ## 4. Proposed Wire Conventions and Limits
 
 Everything in this section is a **project design value**, not an observed Hermes default.
