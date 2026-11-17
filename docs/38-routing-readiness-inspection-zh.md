@@ -39,7 +39,7 @@ hermes personal-agent routing inspect
 
 输出只由固定分类、原因码和已识别的 effort 枚举构成。不包含调用者提供的 provider/model/backend/profile 名称、URL、API mode、路径、密钥值、哈希、任意字段名或异常明细。不递归检查未知嵌套设置和 fallback 项。与离线样例报告允许调用者提供不透明 ID 不同，此诊断不输出原始身份引用。
 
-命令仍会读取可能包含密钥的本地配置文档。它只最小化输出，不能替代宿主密钥存储、文件权限、日志脱敏或可信代码审查。注册时绑定当前解析后的 profile，读取前后均核验一致性。卸载会关闭保留的检查器。不写入审计文件或持久化快照。
+命令仍会读取可能包含密钥的本地配置文档。它只最小化输出，不能替代宿主密钥存储、文件权限、日志脱敏或可信代码审查。注册时绑定解析后的 profile。两个命令在读取前、读取后及计算报告后均核验 profile 和注册状态。如果操作期间发生 profile 切换或插件卸载，命令会丢弃结果。不写入审计文件或持久化快照。
 
 ## 已保存的能力登记表
 
@@ -87,6 +87,6 @@ plugins:
 
 登记表测试覆盖能力状态、观测与到期边界、同一路由内的证据和脱敏失败。Hermes `2281116525106e3c109993ccb5dc74d02bfc1427` 上的离线集成测试通过真实本地配置 backend 调用已注册的 CLI，并验证卸载后或使用非文件 backend 时拒绝操作。[原生路由契约测试](../tests/contracts/test_worker_routing_contracts.py)覆盖该固定版本的 delegation provider 注册、路由解析与会话 schema 行为。
 
-单元测试覆盖错误声明、字面路由结构、环境变量引用、请求/实际 effort 区别、fallback 状态、无效 tier/超时警告、封闭错误码和输出最小化。原生契约覆盖真实注册和顶层 CLI dispatch、读取最新保存配置但不修改缓存、损坏文档、卸载/profile 改变、非文件 backend 拒绝、未知 backend 错误、冻结/safe worker 拒绝，以及默认 backend 对 service tier 的固定版本行为。测试使用合成临时 home 和网络阻断，不使用真实账号、provider 请求或 socket 绕过。
+单元测试覆盖错误声明、字面路由结构、环境变量引用、请求/实际 effort 区别、fallback 状态、无效 tier/超时警告、封闭错误码和输出最小化。原生契约覆盖真实注册和顶层 CLI dispatch、读取最新保存配置但不修改缓存、损坏文档、读取和计算期间的卸载与 profile 切换、非文件 backend 拒绝、未知 backend 错误、冻结/safe worker 拒绝，以及默认 backend 对 service tier 的固定版本行为。测试使用合成临时 home 和网络阻断，不使用真实账号、provider 请求或 socket 绕过。
 
 使用固定 Python 3.14 环境，按 [README](../README-zh.md#开发验证) 运行完整检查器。此命令不测试实际 worker 执行、hosted-plugin IPC、在线 backend 健康、provider 编码、权限、预算或生产配置验收。不能把其成功退出码作为启用路由的准入凭证，仍须通过[路由设计](11-worker-model-routing-zh.md)和[路线图](08-roadmap-and-acceptance-zh.md)门禁。

@@ -362,3 +362,37 @@ def test_unload_during_read_discards_inspection(native, capsys, monkeypatch):
     code, report = invoke(command, capsys, "routing", "inspect")
     assert code == 1 and report["reason"] == "inspector_closed"
     assert "private" not in json.dumps(report)
+
+
+@pytest.mark.parametrize(
+    ("diagnostic", "reason"),
+    [("inspect", "profile_context_changed"), ("inventory", "inspector_closed")],
+)
+def test_context_change_during_evaluation_discards_diagnostic(
+    native, capsys, monkeypatch, tmp_path, diagnostic, reason
+):
+    home, manager = native
+    update(home, model="private-model")
+    command = entry(manager)
+    package = command["handler_fn"].__module__.rsplit(".", 1)[0]
+    cli = sys.modules[f"{package}.routing_cli"]
+    evaluate_name = {"inspect": "inspect_saved_routing", "inventory": "inspect_saved_inventory"}[
+        diagnostic
+    ]
+    evaluate = getattr(cli, evaluate_name)
+    other = tmp_path / "changed-profile"
+    other.mkdir()
+
+    def invalidated(*args):
+        result = evaluate(*args)
+        assert result["status"] == "ok"
+        if reason == "inspector_closed":
+            manager.unload()
+        else:
+            monkeypatch.setenv("HERMES_HOME", str(other))
+        return result
+
+    monkeypatch.setattr(cli, evaluate_name, invalidated)
+    code, report = invoke(command, capsys, "routing", diagnostic)
+    assert code == 1 and report["reason"] == reason
+    assert "selected_capabilities" not in report and "saved_route_shape" not in report
