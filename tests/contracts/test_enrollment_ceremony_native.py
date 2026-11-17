@@ -22,13 +22,15 @@ def test_current_source_roundtrip_drops_live_routing_identity():
     assert not hasattr(restored, "_identity")
 
 
-def test_public_command_source_and_claims_cannot_enable_ceremony():
+@pytest.mark.parametrize("enabled", [False, True])
+def test_public_command_source_and_claims_cannot_enable_ceremony(enabled):
     from gateway.config import Platform
     from gateway.session import SessionSource
     from hermes_cli.plugin_command_dispatch import invoke_plugin_command
 
     source = SessionSource(platform=Platform.TELEGRAM, chat_id="123", user_id="123")
-    c = EnrollmentCeremony(None, None)  # no authority, never touch either store
+    c = EnrollmentCeremony(None, None, enabled=enabled)  # no independent authority
+    candidate = "2359dab789cb4e2193d123f57d61adcd"
 
     def handler(raw_args, **context):
         return c.run(
@@ -37,6 +39,7 @@ def test_public_command_source_and_claims_cannot_enable_ceremony():
             expected_revision=1,
             expected_enrollment_revision=1,
             expected_epoch=0,
+            challenge_id=candidate,
             live_handle={"approved": raw_args, **context},
         )
 

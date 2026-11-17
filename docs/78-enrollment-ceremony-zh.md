@@ -30,6 +30,12 @@
 
 Challenge 审计/提交失败会回滚该数据库事务。独立消费的 host handle 仍保持已消费，因此重试需要新的可信观察/确认。当前策略准入前失败可使数据库 challenge 保持 pending；API 不虚称 challenge 已持久消费。未知异常经过脱敏。数据库回滚及恢复副本不证明 live host 新鲜度，证据绝不能作为可复用许可。
 
+### 签发结果未被观察时的恢复
+
+可信内部调用方可以在首次 `issue` 前生成并保留小写十六进制随机 UUID4，再把它作为 `challenge_id` 传入。省略此参数时仍由存储生成 ID。进程退出或收到 `outcome_uncertain` 后，使用同一 ID 和新的独立观察重试 `issue`。调用方仍须提供当前策略版本、登记版本和 epoch。存储将同一 ID 的尝试串行化，并核对保存的 owner、profile、enrollment、会话、宿主实例、路由、设备和作用域。
+
+如果首个事务已经提交，且匹配的挑战仍在原有效期内处于 pending，重试返回原 ID 和 `authority: false`。挑战行、截止时间和签发审计事件保持原样。如果首个事务已回滚，新的合格尝试可以为该 ID 写入首条记录。绑定发生变化、挑战到期或进入终态时封闭拒绝。终态证据可通过历史 `inspect` 查看。挑战 ID 只用于关联。挑战存储仍使用 schema v1，也支持此选项出现前写入的记录。
+
 ## 当前 host 边界与验证
 
 当前兼容性 pin：Hermes `2281116525106e3c109993ccb5dc74d02bfc1427`。不同于 [18](18-owner-entry-and-read-authorization-zh.md)/[23](23-host-command-context-experiment-zh.md) 的历史来源，此 host 已有 `gateway.session_identity.RoutingIdentity`，含 transport/runtime profile 和 live adapter weakref。它仍是 wire-invisible 动态来源观察。公开插件 command context 不提供本流程所需的独立一次性确认、当前 device/session/route 栅栏或 owner 签发器。插件不导入私有 routing identity helper，也不把序列化 source 变为 authority。
