@@ -51,7 +51,7 @@
 
 Hermes 已有 cron 执行、occurrence、delivery 等可靠性机制；本项目先测并复用，不重复实现其 tick lock、worker reclaim 和 next_run_at 算法。
 
-[原生回执回写候选](../experiments/cron-delivery-writeback/README-zh.md)验证原生队列提交终态回执后、更新执行账本前的中断窗口。两个干净版本对照展示了回写丢失及未知发送被记为失败的问题。候选在下一轮原生队列处理时对账原执行，并在 CLI 历史中明确展示未知投递。
+[原生回执回写候选](../experiments/cron-delivery-writeback/README-zh.md)验证原生队列提交终态回执后、更新执行账本前的中断窗口。两个干净版本对照展示了回写丢失及未知发送被记为失败的问题。候选在下一轮原生队列处理时对账原执行，并在 CLI 中明确展示未知投递。即使较新的执行已经开始，只要排队摘要仍是当前摘要，候选仍会结算该摘要。
 
 ## 6. 提醒去重与打扰预算
 

@@ -200,6 +200,45 @@ def test_candidate_updates_old_execution_without_replacing_newer_job_summary(run
     assert accepted_count(home) == 1
 
 
+@pytest.mark.parametrize(
+    ("cut", "outcome", "status"),
+    [
+        ("after_queue_commit", "delivered", "ok"),
+        ("after_acceptance", "unknown", "delivery_failed"),
+    ],
+)
+def test_candidate_recovers_current_summary_while_newer_attempt_is_running(
+    run, monkeypatch, cut, outcome, status
+):
+    from hermes_cli.cron import _last_run_display
+
+    home, job, old = run
+    cut_process(home, cut)
+    new = executions.create_execution(job["id"], source="scheduler")
+    assert executions.mark_execution_running(new["id"])
+
+    resume(monkeypatch)
+
+    assert executions.get_execution(old["id"])["delivery_outcome"] == outcome
+    assert executions.latest_execution(job["id"])["id"] == new["id"]
+    saved = next(item for item in jobs.list_jobs() if item["id"] == job["id"])
+    assert saved["canonical_completions"][-1] == old["id"]
+    assert saved["last_status"] == status
+    assert saved["last_delivery_outcome"] == outcome
+    if outcome == "unknown":
+        assert "delivery outcome unknown" in _last_run_display(saved).lower()
+    assert accepted_count(home) == 1
+
+    assert jobs.mark_job_run(job["id"], True, execution_id=new["id"])
+    assert executions.finish_execution(new["id"], success=True, delivery_outcome="suppressed")
+    resume(monkeypatch)
+    saved = next(item for item in jobs.list_jobs() if item["id"] == job["id"])
+    assert saved["canonical_completions"][-1] == new["id"]
+    assert saved["last_status"] == "ok"
+    assert saved["last_delivery_outcome"] is None
+    assert "delivery outcome unknown" not in _last_run_display(saved).lower()
+
+
 def test_candidate_reconciles_a_wait_timeout_after_claim(run, monkeypatch):
     home, _, record = run
     claimed = delivery_queue.claim_next()
