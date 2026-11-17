@@ -8,6 +8,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Fixed
 
+- Recover [internal enrollment challenge issuance](docs/78-enrollment-ceremony.md#recovering-issuance-after-an-unobserved-result) with the original locator, fresh authority and the original expiry after a lost result (#14).
+
 - Discard routing diagnostic results when the profile changes or the native plugin unloads during evaluation (#23).
 
 - Add a [review-only native cron repair](experiments/cron-delivery-writeback/README.md) that recovers terminal receipt write-back after process loss, preserves unknown delivery and updates the current job summary while a newer attempt is running (#19).

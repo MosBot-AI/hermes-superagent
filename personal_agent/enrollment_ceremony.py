@@ -95,6 +95,21 @@ _SCHEMA = {
     "CHECK(outcome IN ('issued','denied','confirmed')))",
 }
 _APP = 1212502862
+_VALIDITY = timedelta(minutes=5)
+
+
+def _issue_locator(value: object) -> bool:
+    if type(value) is not str or len(value) != 32:
+        return False
+    try:
+        parsed = uuid.UUID(value)
+    except ValueError:
+        return False
+    return parsed.version == 4 and parsed.hex == value
+
+
+def _valid_at(expires: datetime, sampled: datetime) -> bool:
+    return expires - _VALIDITY <= sampled < expires
 
 
 def _now(value: object) -> datetime:
@@ -193,14 +208,34 @@ class CeremonyStore:
     def initialize(self):
         self._transaction(lambda: self._schema(create=True))
 
-    def issue(self, binding, now, *, enrollment_key: str) -> str:
+    def _challenge(self, key: str):
+        return self.connection.execute(
+            "SELECT binding,expires,state,enrollment_key FROM main.ceremonies WHERE id=?", (key,)
+        ).fetchone()
+
+    def issue(self, binding, now, *, enrollment_key: str, challenge_id: str | None = None) -> str:
+        """Create or recover an exact pending challenge under the caller's current fences."""
+        if challenge_id is not None and not _issue_locator(challenge_id):
+            raise CeremonyError("invalid_request")
+        key = uuid.uuid4().hex if challenge_id is None else challenge_id
+
         def action():
             self._schema()
+            existing = self._challenge(key) if challenge_id is not None else None
+            if existing is not None:
+                saved_binding, expires, state, saved_key = existing
+                if (
+                    state != "pending"
+                    or saved_key != enrollment_key
+                    or saved_binding != binding()
+                    or not _valid_at(datetime.fromisoformat(expires), now())
+                ):
+                    raise CeremonyError("challenge_unavailable")
+                return key
             if self.connection.execute("SELECT count(*) FROM ceremonies").fetchone()[0] >= 10000:
                 raise CeremonyError("capacity")
-            key = uuid.uuid4().hex
             current = binding()
-            expires = now() + timedelta(minutes=5)
+            expires = now() + _VALIDITY
             self.connection.execute(
                 "INSERT INTO ceremonies VALUES (?,?,?,?,'pending')",
                 (key, enrollment_key, current, expires.isoformat()),
@@ -231,9 +266,7 @@ class CeremonyStore:
     def confirm(self, key: str, binding, now, *, enrollment_key: str) -> bool:
         def action():
             self._schema()
-            row = self.connection.execute(
-                "SELECT binding,expires,state,enrollment_key FROM ceremonies WHERE id=?", (key,)
-            ).fetchone()
+            row = self._challenge(key)
             if row is None or row[2] != "pending" or row[3] != enrollment_key:
                 raise CeremonyError("challenge_unavailable")
             # Re-sample AFTER the SQLite wait, inside all invalidation fences.
@@ -242,7 +275,7 @@ class CeremonyStore:
                 current = binding()
                 expires = datetime.fromisoformat(row[1])
                 sampled = now()
-                allowed = current == row[0] and expires - timedelta(minutes=5) <= sampled < expires
+                allowed = current == row[0] and _valid_at(expires, sampled)
             except CeremonyError:
                 pass
             self.connection.execute(
@@ -290,7 +323,11 @@ class EnrollmentCeremony:
         if (
             type(operation) is not str
             or operation not in ("issue", "confirm")
-            or (operation == "issue" and challenge_id is not None)
+            or (
+                operation == "issue"
+                and challenge_id is not None
+                and not _issue_locator(challenge_id)
+            )
             or (operation == "confirm" and not _identifier(challenge_id))
         ):
             raise CeremonyError("invalid_request")
@@ -319,6 +356,7 @@ class EnrollmentCeremony:
                             binding,
                             lambda: _now(guard.validate_and_now()),
                             enrollment_key=enrollment_key,
+                            challenge_id=challenge_id,
                         )
                         challenge_committed = True
                         return {"challenge_id": result, "state": "pending", "authority": False}

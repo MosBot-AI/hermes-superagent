@@ -30,6 +30,12 @@ There is **no atomic commit across the two databases**. The inner challenge comm
 
 A challenge audit/commit failure rolls back that database transaction. The independently consumed host handle stays consumed, so retry requires a fresh trusted observation/confirmation. A failure before current-policy admission can leave the database challenge pending; the API does not falsely claim durable challenge consumption. Unknown exceptions are redacted. Database rollback and restored copies do not establish live host freshness, and evidence must never be used as a reusable permit.
 
+### Recovering issuance after an unobserved result
+
+A trusted internal caller can generate and retain a random UUID4 in lowercase hex before the first `issue`, then pass it as `challenge_id`. Omitting it still asks the store to generate the ID. After process exit or `outcome_uncertain`, retry `issue` with the same ID and a fresh independent observation. The caller still needs the current policy, enrollment revision and epoch. The store serializes attempts for that ID and checks the exact saved owner, profile, enrollment, session, host incarnation, route, device and scope.
+
+If the first transaction committed and the matching challenge is pending within its original validity window, the retry returns the existing ID and `authority: false`. The row, deadline and issued audit event stay the same. If the first transaction rolled back, a fresh admissible attempt can write the first row for that ID. Changed bindings, expired challenges or terminal states fail closed. Use historical `inspect` for terminal evidence. A challenge ID supplies correlation only. The challenge store still uses schema v1, including rows written before this option.
+
 ## Current host boundary and verification
 
 Current compatibility pin: Hermes `2281116525106e3c109993ccb5dc74d02bfc1427`. Unlike the historical sources in [18](18-owner-entry-and-read-authorization.md)/[23](23-host-command-context-experiment.md), this host has `gateway.session_identity.RoutingIdentity` with transport/runtime profiles and a live adapter weakref. It remains a wire-invisible dynamic source observation. The public plugin command context does not provide the independent one-shot confirmation, current device/session/route fences or owner issuer required here. The plugin does not import private routing identity helpers or turn a serialized source into authority.
