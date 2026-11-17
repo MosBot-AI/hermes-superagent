@@ -8,6 +8,8 @@
 
 ### 修复
 
+- 插件卸载或重载时撤销留存的 [LOCAL 任务命令回调](docs/28-profile-first-local-conversations-zh.md)，包括仍在读取配置的命令（#21）。
+
 - 在仅供评审的 Hermes 候选中，连接或轮询代次变更后使旧的 [Telegram 命令观察](experiments/telegram-command-observation/README-zh.md)失效（#14）。
 
 - [内部登记挑战签发](docs/78-enrollment-ceremony-zh.md#签发结果未被观察时的恢复)结果丢失后，可用原定位符和新的独立可信观察恢复，并保留原截止时间（#14）。

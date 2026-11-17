@@ -17,6 +17,7 @@ import unicodedata
 from collections.abc import Callable
 from enum import Enum
 from pathlib import Path
+from threading import Event
 from uuid import uuid4
 
 from .task_cli import command_request, current_profile_home, open_task_store, setup_tasks_cli
@@ -209,6 +210,7 @@ def run_conversation_tasks(
     session_id: str = "",
     session_key: str = "",
     default_format: str = "json",
+    unloaded: Event | None = None,
 ) -> str:
     """Reply once without model calls, transcript injection, or external effects.
 
@@ -232,11 +234,15 @@ def run_conversation_tasks(
         # Reject origin before parsing private arguments or consulting config.
         if not _supported_origin(platform, source, session_id, session_key):
             raise TaskError("unsupported_origin")
+        if unloaded is not None and unloaded.is_set():
+            raise TaskError("local_conversation_unloaded")
         # Host configuration reads may recreate a removed profile.
         if not bound_home.is_dir() or current_profile_home() != bound_home:
             raise TaskError("profile_context_changed")
         mode = read_config("mode", "read_only")
         enabled = read_config("local_conversation", False)
+        if unloaded is not None and unloaded.is_set():
+            raise TaskError("local_conversation_unloaded")
         if (
             mode not in ("read_only", "local_tasks")
             or type(enabled) is not bool

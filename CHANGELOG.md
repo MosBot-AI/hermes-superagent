@@ -8,6 +8,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Fixed
 
+- Revoke retained [LOCAL task command callbacks](docs/28-profile-first-local-conversations.md) on plugin unload and reload, including commands still resolving settings (#21).
+
 - Retire stale [Telegram command observations](experiments/telegram-command-observation/README.md) across connection and polling changes in the review-only Hermes candidate (#14).
 
 - Recover [internal enrollment challenge issuance](docs/78-enrollment-ceremony.md#recovering-issuance-after-an-unobserved-result) with the original locator, fresh authority and the original expiry after a lost result (#14).
