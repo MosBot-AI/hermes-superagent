@@ -218,14 +218,10 @@ class ActionIntentStore:
                 conn.execute(sql)
             conn.execute(f"PRAGMA application_id={_APPLICATION_ID}")
             conn.execute(f"PRAGMA user_version={_VERSION}")
-        elif (
-            create
-            and app == _APPLICATION_ID
-            and (
-                (version == 1 and dict(rows) == _V1_SCHEMA)
-                or (version == 2 and dict(rows) == _V2_SCHEMA)
-            )
-        ):
+        elif create and app == _APPLICATION_ID and version in (1, 2):
+            legacy = _V1_SCHEMA if version == 1 else _V2_SCHEMA
+            if len(rows) != len(legacy) or dict(rows) != legacy:
+                raise IntentError("unsupported_schema")
             if version == 1:
                 conn.execute(_SCHEMA["replacements"])
             conn.execute(_SCHEMA["approval_evidence"])

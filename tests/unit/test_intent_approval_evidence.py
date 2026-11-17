@@ -184,6 +184,29 @@ def test_migration_from_v2_preserves_cancelled_draft_and_replacement(ledger):
     assert store.inspect_approval(KEY) is None
 
 
+@pytest.mark.parametrize("version", [1, 2])
+def test_migration_refuses_extra_schema_object_with_owned_name(ledger, version):
+    conn, store, _, _ = ledger
+    events_sql = conn.execute(
+        "SELECT sql FROM main.sqlite_master WHERE type='table' AND name='events'"
+    ).fetchone()[0]
+    events = conn.execute("SELECT * FROM main.events").fetchall()
+    conn.execute("DROP TABLE main.approval_evidence")
+    if version == 1:
+        conn.execute("DROP TABLE main.replacements")
+    conn.execute("DROP TABLE main.events")
+    conn.execute("CREATE TRIGGER events AFTER INSERT ON intents BEGIN SELECT 1; END")
+    conn.execute(events_sql)
+    conn.executemany("INSERT INTO main.events VALUES (?,?,?,?,?,?)", events)
+    conn.execute(f"PRAGMA user_version={version}")
+    before = list(conn.iterdump())
+
+    fail("unsupported_schema", store.initialize)
+
+    assert conn.execute("PRAGMA user_version").fetchone() == (version,)
+    assert list(conn.iterdump()) == before
+
+
 def test_corrupt_stored_receipt_refuses_retry(ledger):
     conn, store, draft, _ = ledger
     record(store, draft)
