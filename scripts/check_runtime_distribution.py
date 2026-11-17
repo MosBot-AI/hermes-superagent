@@ -251,6 +251,12 @@ else:
     assert status["mode"] == "read_only"
     assert not status["capabilities"]["personal_data_storage"]
     assert not status["capabilities"]["worker_model_routing"]
+    relative = cli(manager, "schedule-preview", "--schedule", "in 30m",
+                   "--timezone", "Asia/Shanghai", "--after", "2027-01-01T08:00:00+08:00",
+                   "--count", "2", expected=0)
+    assert relative["scheduled"] is False and relative["delivery_verified"] is False
+    assert relative["kind"] == "once" and relative["boundary"] == "one_shot"
+    assert [item["local"] for item in relative["occurrences"]] == ["2027-01-01T08:30:00+08:00"]
     assert not (home / "plugin-data").exists()
     manager.unload()
     configure("local_tasks")
