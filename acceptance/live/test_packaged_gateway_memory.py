@@ -181,6 +181,8 @@ def test_retained_memory_survives_native_text_loss_and_suppresses_fresh_sources(
     originals = gateway.seed(sid, rows)
 
     async def retain(call):
+        await call("health", error="memory_store_missing")
+        assert not (gateway.home / "plugin-data/hermes-personal-agent/memory").exists()
         accepted = []
         for index in range(2):
             args, p = await preview(call, index, f"accepted-{index}", expiry=index == 1)
@@ -228,6 +230,14 @@ def test_retained_memory_survives_native_text_loss_and_suppresses_fresh_sources(
     assert {r["message_uid"] for r in fresh}.isdisjoint(r["message_uid"] for r in originals)
 
     async def reconcile(call):
+        health = await call("health")
+        assert health["schema_version"] == "personal.memory.health.v1"
+        assert health["capacity"] == {
+            "records": {"used": 2, "limit": 1000},
+            "nonterminal_mutations": {"used": 3, "limit": 10000},
+            "mutations": {"used": 4, "limit": 11000},
+        }
+        assert "synthetic" not in json.dumps(health)
         for index, (p, decision) in enumerate(accepted):
             status = await call("source-status " + query(p))
             assert status["decision"] == decision  # historical acceptance, not restoration

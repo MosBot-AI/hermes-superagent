@@ -21,6 +21,7 @@ from . import (
     memory_sources,
     retained_sources,
 )
+from .memory_adapters import HEALTH_LIMITS, HEALTH_SCHEMA, validate_backend_descriptor
 from .memory_backend import MemoryError, _text, validate_expiry, validate_request
 from .memory_candidate_store import SCHEMA as CANDIDATE_SCHEMA
 from .memory_candidate_store import execute as execute_candidate
@@ -126,6 +127,7 @@ class LocalMemoryBackend:
                 "record_expiry",
                 "reviewed_expired_cleanup",
                 "explicit_records",
+                "local_health",
                 "durable_write",
                 "cas",
                 "idempotency",
@@ -399,7 +401,12 @@ class LocalMemoryBackend:
         if connection.execute("SELECT id FROM namespace").fetchall() != [(namespace_id,)]:
             raise MemoryError("namespace_mismatch")
         memory_fts.validate_index_config(connection)
-        if connection.execute("SELECT count(*) FROM records").fetchone()[0] > 1000:
+        if (
+            connection.execute(
+                "SELECT count(*) FROM (SELECT 1 FROM main.records LIMIT 1001)"
+            ).fetchone()[0]
+            > 1000
+        ):
             raise MemoryError("record_limit")
 
     def close(self) -> None:
@@ -416,6 +423,8 @@ class LocalMemoryBackend:
             and self._source_kind == "activated_session_model"
         ):
             raise MemoryError("source_scope_required")
+        if operation == "health" and self._source_kind == "activated_session_model":
+            raise MemoryError("health_scope_required")
         if operation.startswith("index_"):
             raise MemoryError("index_maintenance_required")
         if self._read_only and (
@@ -473,6 +482,11 @@ class LocalMemoryBackend:
                 else "BEGIN"
             )
             began = True
+            if operation == "health":
+                self._validate_readonly(conn, self._namespace)
+                result = self._health(conn)
+                conn.execute("COMMIT")
+                return result
             if self._read_only:
                 self._validate_readonly(conn, self._namespace)
             # BEGIN is deferred for reads. Establish the SQLite snapshot before
@@ -545,6 +559,33 @@ class LocalMemoryBackend:
             if isinstance(error, sqlite3.Error):
                 raise _storage_error(error) from None
             raise
+
+    def _health(self, connection):
+        descriptor = validate_backend_descriptor(self.describe())
+        limits = dict(descriptor.limits)
+        records = connection.execute(
+            "SELECT count(*) FROM (SELECT 1 FROM main.records LIMIT ?)",
+            (limits["max_total_records"] + 1,),
+        ).fetchone()[0]
+        total, nonterminal = connection.execute(
+            "SELECT count(*), count(CASE WHEN operation != 'forget' THEN 1 END) "
+            "FROM (SELECT operation FROM main.events LIMIT ?)",
+            (limits["max_total_mutations"] + 1,),
+        ).fetchone()
+        counts = {"records": records, "nonterminal_mutations": nonterminal, "mutations": total}
+        result = {
+            "schema_version": HEALTH_SCHEMA,
+            "store_schema_version": _SCHEMA_VERSION,
+            "capacity": {
+                name: {"used": counts[name], "limit": limits[field]}
+                for name, field in HEALTH_LIMITS.items()
+            },
+        }
+        try:
+            descriptor.validate_health(result)
+        except MemoryError:
+            raise MemoryError("storage_corrupt") from None
+        return result
 
     @staticmethod
     def _record(row, now):

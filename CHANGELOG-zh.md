@@ -211,6 +211,8 @@
 
 ### 新增
 
+- 使用 `/personal-memory health` 和可选的 API-v1 SDK 操作检查本地记忆 schema 与容量。原生命令只读取已有存储，并明确报告存储缺失或不兼容（#43）。
+
 - 使用 `hermes personal-agent routing inventory` 检查带版本的本地 profile 路由能力登记表。精确查询报告各项能力的证据时效，并对私有路由绑定脱敏（#23）。
 
 - 增加[仅供评审的固定版本 Telegram 命令观察](experiments/telegram-command-observation/README-zh.md)，包含干净版本和候选版本的 SDK 对照。原生探针可识别原始发送者与接收 Bot 账号，并拒绝转发、编辑、私聊话题、带 Business 连接标记及已失效的事件（#14）。
