@@ -14,9 +14,9 @@ An observation establishes local transport provenance at the time of the read in
 
 ## Results
 
-Python 3.14.9 with the exact Telegram SDK 22.8 wheel locked by Hermes was used on both trees. One clean control confirmed that the existing handler sees no observation for the same direct SDK input. All 17 candidate cases and 36 existing native regression tests passed. The upstream command found no new blocking or advisory code health findings, all 15 static checks passed, and the import boundary check passed. The nine socket cases in the [historical experiment](../command-context/README.md) were outside this selection.
+Python 3.14.9 with the exact Telegram SDK 22.8 wheel locked by Hermes was used on both trees. One clean control confirmed that the existing handler sees no observation for the same direct SDK input. All 19 candidate cases and 36 existing native regression tests passed. The upstream command found no new blocking or advisory code health findings, all 15 static checks passed, and the import boundary check passed. The nine socket cases in the [historical experiment](../command-context/README.md) were outside this selection.
 
-The candidate cases exercise two synthetic receiving accounts, one-shot read and scope expiry, forwarding, edits, group and bot messages, inline-bot mediation, a different SDK Bot with the same numeric ID, a manufactured event, an exact event copy, deadline expiry, adapter disconnect or reassignment, SDK Bot replacement and loss of initialization, allowlist changes, legacy callback shape and an independent hosted process. SDK initialization is synthesized and network calls are absent.
+The candidate cases exercise two synthetic receiving accounts, one-shot read and scope expiry, forwarding, edits, group and bot messages, private topics, marked Business connections, inline-bot mediation, a different SDK Bot with the same numeric ID, a manufactured event, an exact event copy, deadline expiry, adapter disconnect or reassignment, SDK Bot replacement and loss of initialization, allowlist changes, legacy callback shape and an independent hosted process. SDK initialization is synthesized and network calls are absent.
 
 ## Reproduce in a disposable checkout
 

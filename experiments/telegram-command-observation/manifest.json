@@ -11,7 +11,7 @@
     "plugins/platforms/telegram/adapter.py"
   ],
   "source_hashes": {
-    "test_observation.py": "c11e1057a1ad30ce8cdd4396016cf2a961cbb6da222ec0616e9a400d774ed84a",
+    "test_observation.py": "ef92365d6047a159741808a70c2447f00ee9f916fb29df70932f50a898e8c01f",
     "telegram-command-observation.patch": "d1eb37a9d1346915393186547a5a5bd66bc726f30937475c77921aeeca679723",
     "LICENSE.hermes-agent": "821556e6336796450ab852d375117b48a4887e71d255794fd6318d99982a5ab6",
     "../../tests/contracts/test_owner_telegram_ingress.py": "1f524f89b94444e0c939e37033428d51f89378a919991d22f3b3f14d1ce40a97",
@@ -25,7 +25,7 @@
   "verification": {
     "python": "3.14.9",
     "clean_control_passed": 1,
-    "candidate_passed": 17,
+    "candidate_passed": 19,
     "candidate_existing_regressions_passed": 36,
     "upstream_static_checks_passed": 15,
     "upstream_import_boundary_passed": true,

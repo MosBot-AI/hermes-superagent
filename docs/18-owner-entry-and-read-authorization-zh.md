@@ -105,7 +105,7 @@ Context 缺失或不受支持时，插件必须 fail closed。私有 adapter 导
 
 ### 仅供评审的原始命令观察
 
-[当前固定版本候选](../experiments/telegram-command-observation/README-zh.md)使用 Telegram SDK 原始消息验证一次性进程内观察。它向显式声明的命令参数提供发送者和接收账号，并在读取时检查在线适配器和 Gateway 允许名单。它拒绝编辑、转发及复制事件，独立宿主进程继续使用现有上下文。干净版本对照与候选使用相同的合成 SDK 输入。经验证的 owner 和设备权限、单调失效机制及生产登记流程仍需单独推进。
+[当前固定版本候选](../experiments/telegram-command-observation/README-zh.md)使用 Telegram SDK 原始消息验证一次性进程内观察。它向显式声明的命令参数提供发送者和接收账号，并在读取时检查在线适配器和 Gateway 允许名单。它拒绝编辑、转发及复制事件、私聊话题和带 Business 连接标记的消息，独立宿主进程继续使用现有上下文。干净版本对照与候选使用相同的合成 SDK 输入。经验证的 owner 和设备权限、单调失效机制及生产登记流程仍需单独推进。
 
 ## 7. 固定源码证据
 
