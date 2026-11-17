@@ -342,10 +342,10 @@ For continuation of native CLI/TUI/Desktop/messaging-owned sessions, use the exi
 | Native canonical method | Relevant parameters and meaning |
 |---|---|
 | `runtime.describe` | `{}` → instance/profile/authority epoch, capabilities, supported session creation fields |
-| `session.create` | `{request_id, source, ...supported_fields}` → durable stable session identity; repeat request ID reuses it for the same authenticated principal/profile |
-| `session.resume` | `{session_id}` → authoritative snapshot and current control state |
-| `prompt.submit` | `{session_id, submission_id, text}` → durable admission receipt, not finished inference |
-| `prompt.receipt` | `{session_id, admission_id, include_result?}` → current admission and retained result |
+| `session.create` | `{request_id, source, ...supported_fields}` → durable session identity. An exact frozen request with the same ID reuses it for the authenticated principal/profile |
+| `session.resume` | `{session_id}` → authoritative snapshot and current control state in `messages`, `pending` and `prompts`, with revision and replay watermark |
+| `prompt.submit` | `{session_id, submission_id, text}` → durable admission receipt. `input_id` is an accepted alias for `submission_id` |
+| `prompt.receipt` | `{session_id, admission_id, include_result?}` → current admission. `result` and `usage` are included only when requested and saved for a terminal admission |
 | `prompt.cancel` | `{session_id, admission_id}` → retire queued input or interrupt started input |
 | `session.interrupt` | `{session_id, execution_generation}` → generation-bound control |
 | `session.steer` | `{session_id, execution_generation, text}` → correction receipt; queued is not consumed |
@@ -360,6 +360,17 @@ Native admission status is `queued | started | unknown | terminal`, with `admiss
 Canonical and legacy TUI-sidecar contracts have overlapping method names but different payloads. Generate/use the correct canonical types; do not assume all legacy RPCs or server requests are supported by the canonical listener. If using a legacy connection, negotiate `client.capabilities({server_requests:true})` before claiming to handle server requests, and answer unknown methods with JSON-RPC errors rather than silently approving. Native `approval.respond` is not interchangeable with a domain approval decision without the verified adapter binding.
 
 Native replay events carry `type, session_id, payload, replay_epoch, seq` and optional `authority_epoch, execution_generation, admission_id`. Replay results include `events, latest_seq, last_sequence, epoch, replay_epoch, truncated, snapshot_required, count`, optionally `open_requests`. On epoch mismatch/truncation, recover a native snapshot and current pending controls. Viewers disconnecting does not mean a turn was cancelled. Never re-submit a lost acknowledged input with a new submission ID before checking its durable receipt.
+
+#### Pinned browser session recovery
+
+The [live recovery case](../acceptance/live/test_native_canonical_session_recovery.py) uses the clean Hermes pin `2281116525106e3c109993ccb5dc74d02bfc1427` with a temporary Linux installation and a same-origin Webapp browser ticket for a named profile. It validates actual replies with the pinned canonical result models. One test pause holds the first Gateway after it durably claims a synthetic input and before execution. The test terminates that process and starts two unmodified replacement owners. The fixture allows no provider connections.
+
+- `runtime.describe` advertises durable admission, event replay and session creation. An exact untitled `session.create` request reuses the same stored session before and after owner loss. Changing its frozen request is refused with `invalid_params` on `request_id`.
+- `prompt.submit` returns a `queued` receipt. The claimed head reaches `started` while its follower stays `queued`. The same submission returns the original receipt; changed text under the same ID returns `admission_conflict`. A replacement snapshot shows the head `unknown` and the follower still `queued`.
+- The previous replay epoch requires a fresh snapshot. Within the replacement's epoch, a new browser connection replays consecutive events from the snapshot watermark. `prompt.cancel` settles the queued follower as `terminal/cancelled`. The incorrect generation is refused with `stale_generation`. Resolving the exact lost head produces `terminal/interrupted`. Exact retries return the same receipts.
+- The third owner returns both terminal receipts. An exact submission retry using the other accepted ID field returns the cancelled receipt. The created session and exactly two admissions stay in the named profile. Neither input reaches the transcript or returns a model result.
+
+The [manual Native Gateway workflow](../.github/workflows/native-gateway.yml) records the sanitized case receipt. This scope is Linux loopback Webapp transport and the tested recovery path. It leaves deployed OAuth transport, phone sign-in, started cancellation and native approval/clarification interaction to their own acceptance cases.
 
 ### 7.2 Existing native HTTP API is a separate choice
 

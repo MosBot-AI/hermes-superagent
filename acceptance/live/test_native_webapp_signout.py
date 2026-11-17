@@ -136,9 +136,24 @@ def webapp_cli(host, env, flag, *, expected):
         pytest.fail(f"Native Webapp {flag} did not confirm the fixture operation", pytrace=False)
 
 
+def named_webapp_endpoint(home, endpoint, port):
+    from hermes_cli.gateway_runtime import discover_gateway_endpoint
+
+    assert endpoint.api_origin == f"http://127.0.0.1:{port}"
+    named = home / "profiles" / PROFILE
+    observed = discover_gateway_endpoint(named, timeout=2)
+    assert observed.state == "ready" and observed.endpoint is not None
+    selected = observed.endpoint
+    assert selected.profile_id == str(named)
+    assert (selected.instance_id, selected.api_origin) == (
+        endpoint.instance_id,
+        endpoint.api_origin,
+    )
+    return selected
+
+
 @contextmanager
 def serving_install(host, home, env, port, monkeypatch):
-    from hermes_cli.gateway_runtime import discover_gateway_endpoint
     from hermes_cli.gateway_runtime_discovery import query_identify
 
     # The shared daemon writes its planned-stop marker in the process Hermes home.
@@ -146,18 +161,9 @@ def serving_install(host, home, env, port, monkeypatch):
         for name in ("HERMES_HOME", "HERMES_RUNTIME_DIR"):
             scope.setenv(name, env[name])
         with gateway_daemon(host, home, env, "webapp-signout") as endpoint:
-            assert endpoint.api_origin == f"http://127.0.0.1:{port}"
-            named = home / "profiles" / PROFILE
-            observed = discover_gateway_endpoint(named, timeout=2)
-            assert observed.state == "ready" and observed.endpoint is not None
-            named_endpoint = observed.endpoint
-            assert named_endpoint.profile_id == str(named)
-            assert (named_endpoint.instance_id, named_endpoint.api_origin) == (
-                endpoint.instance_id,
-                endpoint.api_origin,
-            )
+            selected = named_webapp_endpoint(home, endpoint, port)
             webapp_cli(host, env, "--status", expected=f"Serving at {endpoint.api_origin}")
-            yield named_endpoint, query_identify(home, timeout=2)
+            yield selected, query_identify(home, timeout=2)
 
 
 async def browser_connection(stack, endpoint, credential):

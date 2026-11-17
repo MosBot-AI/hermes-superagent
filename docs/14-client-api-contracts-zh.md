@@ -342,10 +342,10 @@ Approval decision 的授权入队和该 execute 路由，在共享 admission ser
 | 原生 canonical 方法 | 相关参数和含义 |
 |---|---|
 | `runtime.describe` | `{}` → instance/profile/authority epoch、capability、支持的会话创建字段 |
-| `session.create` | `{request_id, source, ...supported_fields}` → 持久化稳定 session 身份；同一已认证 principal/profile 重复 request ID 复用它 |
-| `session.resume` | `{session_id}` → 权威 snapshot 和当前 control 状态 |
-| `prompt.submit` | `{session_id, submission_id, text}` → 持久化 admission receipt，不是推理完成 |
-| `prompt.receipt` | `{session_id, admission_id, include_result?}` → 当前 admission 和保留结果 |
+| `session.create` | `{request_id, source, ...supported_fields}` → 持久化 session 身份。同一已认证 principal/profile 以相同 ID 重试同一冻结请求时复用 |
+| `session.resume` | `{session_id}` → 通过 `messages`、`pending` 和 `prompts` 返回权威快照与当前控制状态，以及修订号和重放水位 |
+| `prompt.submit` | `{session_id, submission_id, text}` → 持久化 admission 回执。`input_id` 是 `submission_id` 的受支持别名 |
+| `prompt.receipt` | `{session_id, admission_id, include_result?}` → 当前 admission。仅当调用方请求且终态 admission 保存了结果时附带 `result` 和 `usage` |
 | `prompt.cancel` | `{session_id, admission_id}` → 取消排队输入或中断已开始输入 |
 | `session.interrupt` | `{session_id, execution_generation}` → 绑定 generation 的控制 |
 | `session.steer` | `{session_id, execution_generation, text}` → 修正回执；queued 不等于已消费 |
@@ -360,6 +360,17 @@ Approval decision 的授权入队和该 execute 路由，在共享 admission ser
 Canonical 和旧 TUI-sidecar 合同存在相同方法名但 payload 不同。生成/使用正确 canonical 类型，不假设所有旧 RPC 或 server request 都受 canonical listener 支持。若采用旧连接，先协商 `client.capabilities({server_requests:true})` 再声称处理 server request；未知方法应回应 JSON-RPC error，而不是默许。没有经过验证的 adapter binding，原生 `approval.respond` 不能替代 domain approval decision。
 
 原生 replay event 包含 `type, session_id, payload, replay_epoch, seq`，以及可选 `authority_epoch, execution_generation, admission_id`。Replay 结果包含 `events, latest_seq, last_sequence, epoch, replay_epoch, truncated, snapshot_required, count`，可选 `open_requests`。Epoch 不匹配/截断时恢复 native snapshot 和当前待处理 control。Viewer 断开不代表 turn 被取消。对于已确认但响应丢失的输入，检查 durable receipt 前不要用新 submission ID 重提。
+
+#### 固定版本的浏览器会话恢复
+
+[真实恢复用例](../acceptance/live/test_native_canonical_session_recovery.py)使用干净的 Hermes 固定版本 `2281116525106e3c109993ccb5dc74d02bfc1427`、临时 Linux 安装与面向命名 profile 的 Webapp 同源浏览器票据。用例使用固定版本的 canonical 结果模型校验实际回包。测试在首个 Gateway 持久领取合成输入后、执行前将其暂停，终止该进程，再依次启动两个未经修改的替代 owner。测试环境禁止连接任何模型提供方。
+
+- `runtime.describe` 声明持久化准入、事件重放和创建会话能力。相同的无标题 `session.create` 请求在 owner 丢失前后复用同一个持久化会话。变更冻结请求时，`request_id` 被拒绝并返回 `invalid_params`。
+- `prompt.submit` 返回 `queued` 回执。被领取的队首变为 `started`，后续输入保持 `queued`。重复提交返回原回执。同一个 ID 对应的文本变更后返回 `admission_conflict`。替代 owner 的快照显示队首为 `unknown`，后续输入仍为 `queued`。
+- 旧的重放 epoch 要求重新取得快照。在替代 owner 的同一个 epoch 内，新的浏览器连接可从快照水位重放连续事件。`prompt.cancel` 将排队的后续输入结算为 `terminal/cancelled`。错误执行代次被拒绝并返回 `stale_generation`。解除对应队首的未知状态会得到 `terminal/interrupted`。完全相同的重试返回原回执。
+- 第三个 owner 可读回两条终态回执。使用另一个受支持的 ID 字段精确重试也会返回取消回执。创建的会话和两条 admission 都留在命名 profile。两条输入均未进入 transcript，也没有模型结果。
+
+[手动 Native Gateway 工作流](../.github/workflows/native-gateway.yml)记录脱敏用例回执。本次范围是 Linux 回环 Webapp 传输和已经测试的恢复路径。已部署的 OAuth 传输、手机登录、取消已开始输入和原生审批、澄清互动仍需各自的验收用例。
 
 ### 7.2 既有原生 HTTP API 是独立选项
 
