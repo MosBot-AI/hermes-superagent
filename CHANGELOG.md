@@ -8,6 +8,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Fixed
 
+- Discard routing diagnostic results when the profile changes or the native plugin unloads during evaluation (#23).
+
 - Add a [review-only native cron repair](experiments/cron-delivery-writeback/README.md) that recovers terminal receipt write-back after process loss, preserves unknown delivery and updates the current job summary while a newer attempt is running (#19).
 
 - Add an inactive native-host proposal that labels fresh and replayed memory context as untrusted evidence. Verify the legacy SQLite sidecar and preserve stored history.

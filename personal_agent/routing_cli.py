@@ -40,6 +40,13 @@ class RoutingInspector:
     def inventory(self, route_id: str | None) -> dict:
         return self._read(lambda raw: inspect_saved_inventory(raw, route_id), inventory_failure)
 
+    def _inactive_reason(self) -> str | None:
+        if self.closed:
+            return "inspector_closed"
+        if not self.bound_home.is_dir() or current_profile_home() != self.bound_home:
+            return "profile_context_changed"
+        return None
+
     def _read(self, evaluate: Callable[[object], dict], failure: Callable[[str], dict]) -> dict:
         if self.closed:
             return failure("inspector_closed")
@@ -54,8 +61,8 @@ class RoutingInspector:
 
             if worker_config_snapshot() is not None:
                 return failure("unsupported_runtime")
-            if not self.bound_home.is_dir() or current_profile_home() != self.bound_home:
-                return failure("profile_context_changed")
+            if (reason := self._inactive_reason()) is not None:
+                return failure(reason)
             # Select through the host's supported backend API. Do not bypass a
             # remote backend by opening its local config.yaml shadow directly.
             backend = get_config_backend()
@@ -65,11 +72,12 @@ class RoutingInspector:
                 raw = backend.read_user_doc(self.bound_home)
             except FileNotFoundError:
                 raw = {}
-            if self.closed:
-                return failure("inspector_closed")
-            if current_profile_home() != self.bound_home:
-                return failure("profile_context_changed")
-            return evaluate({} if raw is None else raw)
+            if (reason := self._inactive_reason()) is not None:
+                return failure(reason)
+            result = evaluate({} if raw is None else raw)
+            # Evaluation can outlive the registration or the active profile.
+            reason = self._inactive_reason()
+            return failure(reason) if reason is not None else result
         except SystemExit:
             return failure("unsupported_config_backend")
         except ImportError:
