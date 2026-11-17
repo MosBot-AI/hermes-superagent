@@ -888,8 +888,17 @@ def test_packaged_client_unobserved_create_and_update_survive_abrupt_gateway_dea
         assert connection.execute("PRAGMA integrity_check").fetchone() == ("ok",)
 
 
-@pytest.mark.parametrize("boundary", ["before_commit", "after_commit"])
-def test_packaged_plan_reconciles_at_gateway_commit_boundary(installed, boundary):
+@pytest.mark.parametrize(
+    ("boundary", "disable_before_replay"),
+    [
+        pytest.param("before_commit", False, id="before_commit"),
+        pytest.param("after_commit", False, id="after_commit"),
+        pytest.param("after_commit", True, id="after_commit_disabled_then_reenabled"),
+    ],
+)
+def test_packaged_plan_reconciles_at_gateway_commit_boundary(
+    installed, boundary, disable_before_replay
+):
     from websockets.exceptions import ConnectionClosed
 
     home, env, live = installed
@@ -971,6 +980,42 @@ def test_packaged_plan_reconciles_at_gateway_commit_boundary(installed, boundary
     if not committed:
         assert after_exit == baseline
 
+    instance_ids = {first["instance_id"]}
+    if disable_before_replay:
+        import yaml
+
+        async def verify_disabled(desc):
+            async with live.websocket(home, desc) as ws:
+                resumed = await live.ok(ws, "session.resume", session_id=sid)
+                assert resumed["session_id"] == sid
+                task_id = marker["receipt"]["items"][0]["id"]
+                for raw in (
+                    f"personal-tasks --json show {task_id}",
+                    plan,
+                    'personal-tasks --json add "Disabled write" --request-id plan-disabled-write',
+                ):
+                    reply = await live.rpc(ws, "slash.exec", session_id=sid, command=raw)
+                    assert "result" not in reply
+                    assert reply["error"]["data"] == {"reason": "unsupported_command"}
+
+        config_path = home / "config.yaml"
+        enabled_config = config_path.read_text(encoding="utf-8")
+        config = yaml.safe_load(enabled_config)
+        settings = config["plugins"]["entries"]["hermes-personal-agent"]["settings"]
+        # Turning off conversations also requires turning off the dependent model tools.
+        settings.update(local_conversation=False, local_model_tools=False)
+        config_path.write_text(yaml.safe_dump(config), encoding="utf-8")
+        with live.daemon(home, env, "plan-disabled.log", fixture=driver) as (proc, disabled, _):
+            assert (home.parent / f"socket-guard-{proc.pid}").is_file()
+            assert disabled["instance_id"] not in instance_ids
+            instance_ids.add(disabled["instance_id"])
+            asyncio.run(verify_disabled(disabled))
+            assert snapshot() == after_exit
+            assert live.planned_stop(home, proc, disabled) == 0
+        assert live.control_absent(home) and not live.port_open(live.api_port(disabled))
+        assert snapshot() == after_exit
+        config_path.write_text(enabled_config, encoding="utf-8")
+
     async def recover(desc):
         async with live.websocket(home, desc) as ws:
             resumed = await live.ok(ws, "session.resume", session_id=sid)
@@ -1034,7 +1079,7 @@ def test_packaged_plan_reconciles_at_gateway_commit_boundary(installed, boundary
 
     with live.daemon(home, env, "plan-commit-recovery.log", fixture=driver) as (proc, second, _):
         assert (home.parent / f"socket-guard-{proc.pid}").is_file()
-        assert second["instance_id"] != first["instance_id"]
+        assert second["instance_id"] not in instance_ids
         settled = asyncio.run(recover(second))
         assert live.planned_stop(home, proc, second) == 0
     assert live.control_absent(home) and not live.port_open(live.api_port(second))

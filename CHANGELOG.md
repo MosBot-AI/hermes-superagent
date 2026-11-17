@@ -211,6 +211,8 @@ This file distinguishes design work, development changes, and released capabilit
 
 ### Added
 
+- Verify that restarting an installed Gateway with local task conversations disabled blocks task reads, writes and receipt replay after a crash. Re-enabling and restarting recovers the original committed plan without duplication (#21).
+
 - Verify [native Webapp PKCE](docs/14-client-api-contracts.md#pinned-loopback-native-pkce-evidence) over a real loopback callback and record the native credential lifetime across browser sign-out and Gateway restart (#29).
 
 - Verify [canonical Webapp recovery](docs/14-client-api-contracts.md#pinned-browser-session-recovery) across owner loss, including durable prompt receipts, generation-checked resolution, and replay or snapshot recovery (#29).

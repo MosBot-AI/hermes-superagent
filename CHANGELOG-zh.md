@@ -211,6 +211,8 @@
 
 ### 新增
 
+- 验证 Gateway 崩溃后，在关闭本地任务对话的情况下重启已安装运行包的 Gateway 会拒绝任务读取、写入和回执重放。重新启用并重启后，可恢复原已提交的计划且不会产生重复记录（#21）。
+
 - 通过真实回环回调验证[原生 Webapp PKCE](docs/14-client-api-contracts-zh.md#固定版本的回环原生-pkce-验收)，并记录浏览器登出与 Gateway 重启后的原生凭据生命周期（#29）。
 
 - 验证 owner 丢失后的 [canonical Webapp 恢复](docs/14-client-api-contracts-zh.md#固定版本的浏览器会话恢复)，包括持久化输入回执、代次校验的未知状态解除，以及重放或快照恢复（#29）。
