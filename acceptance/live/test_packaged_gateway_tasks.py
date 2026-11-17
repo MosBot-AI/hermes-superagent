@@ -982,7 +982,7 @@ def test_packaged_plan_reconciles_at_gateway_commit_boundary(
 
     instance_ids = {first["instance_id"]}
     if disable_before_replay:
-        import yaml
+        from ruamel.yaml import YAML
 
         async def verify_disabled(desc):
             async with live.websocket(home, desc) as ws:
@@ -1000,11 +1000,12 @@ def test_packaged_plan_reconciles_at_gateway_commit_boundary(
 
         config_path = home / "config.yaml"
         enabled_config = config_path.read_text(encoding="utf-8")
-        config = yaml.safe_load(enabled_config)
+        yaml = YAML(typ="safe")
+        config = yaml.load(enabled_config)
         settings = config["plugins"]["entries"]["hermes-personal-agent"]["settings"]
         # Turning off conversations also requires turning off the dependent model tools.
         settings.update(local_conversation=False, local_model_tools=False)
-        config_path.write_text(yaml.safe_dump(config), encoding="utf-8")
+        yaml.dump(config, config_path)
         with live.daemon(home, env, "plan-disabled.log", fixture=driver) as (proc, disabled, _):
             assert (home.parent / f"socket-guard-{proc.pid}").is_file()
             assert disabled["instance_id"] not in instance_ids
