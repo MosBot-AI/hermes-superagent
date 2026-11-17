@@ -105,7 +105,7 @@ Group and bot-authored commands admitted by the synthetic allowlists receive the
 
 ### Review-only original command observation
 
-The [current-pin candidate](../experiments/telegram-command-observation/README.md) verifies a one-shot in-process observation against original Telegram SDK messages. It reports the actor and receiving account to an explicitly named command parameter and checks the live adapter and Gateway allowlist at consumption. It rejects edited, forwarded and copied events, and leaves the independent hosting process on its existing context. The clean control and candidate use the same synthetic SDK input. Verified owner and device authority, monotonic invalidation and the production ceremony still require separate work.
+The [current-pin candidate](../experiments/telegram-command-observation/README.md) verifies a one-shot in-process observation against original Telegram SDK messages. It reports the actor and receiving account to an explicitly named command parameter and checks the live adapter and Gateway allowlist at consumption. It rejects edited, forwarded and copied events, private topics and messages marked with a Business connection, and leaves the independent hosting process on its existing context. The clean control and candidate use the same synthetic SDK input. Verified owner and device authority, monotonic invalidation and the production ceremony still require separate work.
 
 ## 7. Pinned Evidence
 

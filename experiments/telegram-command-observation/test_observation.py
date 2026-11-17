@@ -171,6 +171,8 @@ def test_candidate_original_update_identifies_the_actual_receiving_account(nativ
         },
         {"chat_id": -100000123, "chat_type": "group"},
         {"actor_is_bot": True},
+        pytest.param({"message_thread_id": 41, "is_topic_message": True}, id="private_topic"),
+        pytest.param({"business_connection_id": "synthetic-business"}, id="business_context"),
         {"via_bot": {"id": 137246802, "is_bot": True, "first_name": "Synthetic inline bot"}},
     ],
 )
