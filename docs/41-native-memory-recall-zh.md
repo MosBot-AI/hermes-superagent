@@ -81,3 +81,5 @@ Prefetch 必须提供完全一致的当前会话 ID。原生 `on_session_switch`
 真实的 `/personal-memory remember` 命令创建一条合成记录。新 CLI 会话的首个模型请求携带第 1 版。更正并重启 Gateway 后，新会话收到第 2 版。遗忘后，另一个新会话未收到召回包。第二次重启时关闭召回，即使仍有匹配的有效对照记录，新会话也未收到召回包。四轮请求各完成一次，规范数据库的字节均未因召回改变。遗忘后，早先成功的召回包仍保留在各自会话的原生 `api_content` 中。[议题 #45](https://github.com/MosBot-AI/hermes-superagent/issues/45)
 
 固定版本的主机会在 JSON 外层提示模型将其视为权威参考数据，而 JSON 将其中记录标记为不受信的已存证据。两种表述同时出现在实际模型请求中。确保安全处理召回内容、checkpoint-v2 和经授权的在线模型验收仍是发布门槛。测试使用合成记录和回环模拟端点，验证的是本地协议行为，未修改真实操作员配置、向受管理环境安装软件包或评估任何模型的行为。[固定版本的主机封装](https://github.com/NousResearch/hermes-agent/blob/2281116525106e3c109993ccb5dc74d02bfc1427/agent/memory_context.py#L169-L185)
+
+[仅供评审的原生宿主提案](../experiments/native-memory-context-trust/README-zh.md)验证新召回使用不受信证据标注，并在重放时为旧 sidecar 投影相同标注。它需要使用暂存了补丁的一次性宿主检出。

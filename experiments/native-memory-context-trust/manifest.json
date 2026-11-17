@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "status": "Review-only, unsubmitted and inactive",
+  "base": "2281116525106e3c109993ccb5dc74d02bfc1427",
+  "staged_tree": "028685537b2510a9dee565bbe684825eed308a48",
+  "patch_sha256": "8bd0504d946aec0cb31aad4668c4cf35190168bd81098d0c944f99877423a0e5",
+  "source_hashes": {
+    "run_tests.py": "84360c57acde1e61ed348c1153e7b7277d2f47e46c935ee109dd304a9f4cf12e",
+    "../../acceptance/live/native_bot_socket_guard.py": "a59c353b1607d7c146feffbf44cf466a59f7c62a491c4720c432e6a2f6c0bc79"
+  },
+  "native_test_files": [
+    "tests/agent/test_api_content_sidecar.py",
+    "tests/agent/test_gateway_turn_sidecar.py",
+    "tests/agent/test_memory_context_dedupe.py",
+    "tests/agent/test_streaming_context_scrubber.py",
+    "tests/agent/test_memory_provider.py",
+    "tests/agent/test_replay_cleanup.py",
+    "tests/agent/test_replay_budget_accounting.py",
+    "tests/agent/test_model_metadata.py",
+    "tests/agent/test_iteration_summary_reasoning_details.py",
+    "tests/agent/test_image_rejection_fallback.py",
+    "tests/agent/test_pre_compress_memory_context_handoff.py"
+  ],
+  "production_activated": false,
+  "submitted_upstream": false,
+  "live_model_calls": false,
+  "verification": {
+    "python": "3.14.9",
+    "passed": 285,
+    "failed": 0,
+    "skipped": 0,
+    "full_upstream_suite": false,
+    "loopback_request_test": true,
+    "stock_control": {
+      "base": "2281116525106e3c109993ccb5dc74d02bfc1427",
+      "failed_as_expected": 2,
+      "staged_candidate_guard_refused": true
+    },
+    "local_process_restart": {
+      "runtime_source": "e52b450ea3b9f5cf9efba3dacc76600e6cb080be",
+      "wheel_fixture_source": "640097f3ce89fb5a4217e107dd591d7ca4a5a1d9",
+      "passing_cases": 1,
+      "fixture": "Local adaptation of the installed wheel acceptance, separate from the repeatable host suite",
+      "junit_sha256": "54291b71bbd565627e4bf8f34f1b5e5dbcfab1e8d719f53c5e66ff1402b82c13"
+    }
+  }
+}
